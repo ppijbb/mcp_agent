@@ -1,2 +1,3 @@
 *.secrets.yaml
 logs
+browser-state-*.json

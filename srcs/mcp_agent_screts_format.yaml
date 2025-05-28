@@ -1,0 +1,7 @@
+$schema: .mcp-agent.config.schema.json
+
+openai:
+  api_key: {API-KEY}
+
+google:
+  api_key: {API-KEY}

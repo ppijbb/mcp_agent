@@ -22,38 +22,7 @@ from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.context import get_current_context
 
 
-# settings = Settings(
-#     execution_engine="asyncio",
-#     logger=LoggerSettings(type="file", level="info"),
-#     mcp=MCPSettings(
-#         servers={
-#             "fetch": MCPServerSettings(
-#                 command="uvx",
-#                 args=["mcp-server-fetch"],
-#             ),
-#             "filesystem": MCPServerSettings(
-#                 command="npx",
-#                 args=["-y", "@modelcontextprotocol/server-filesystem"],
-#             ),
-#         }
-#     ),
-#     openai=OpenAISettings(
-#         api_key=api_key,
-#         default_model="gpt-4o-mini",
-#     ),
-#     # anthropic=AnthropicSettings(
-#     #     api_key=api_key,
-#     # ),
-#     google=GoogleSettings(
-#         api_key=api_key,
-#         default_model="gemini-2.0-flash-001",
-#     ),
-# )
-
-# Settings can either be specified programmatically,
-# or loaded from mcp_agent.config.yaml/mcp_agent.secrets.yaml
 app = MCPApp(name="mcp_basic_agent")
-
 
 async def example_usage():
     async with app.run() as agent_app:

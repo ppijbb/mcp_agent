@@ -15,10 +15,47 @@ mcp:
     fetch:
       command: "uvx"
       args: ["mcp-server-fetch"]
+    g-search: # Google Search MCP server
+      command: "npx"
+      args: ["-y", "g-search-mcp"]
     filesystem:
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem"]
-
+    pubmed:
+      command: "uvx"
+      args: ["-y", "pubmedmcp@0.1.3"]
+    puppeteer:
+      command: "npx"
+      args: [
+        "-y", 
+        "@modelcontextprotocol/server-puppeteer"
+      ]
+    slack:
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-slack"]
+      # consider defining sensitive values in a separate mcp_agent.secrets.yaml file
+      # env:
+      #   SLACK_BOT_TOKEN: "xoxb-your-bot-token"
+      #   SLACK_TEAM_ID": "T01234567"
+    brave:
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-brave-search"]
+    interpreter:
+      command: "docker"
+      args:
+        [
+          "run",
+          "-i",
+          "--rm",
+          "--pull=always",
+          "-v",
+          "./agent_folder:/mnt/data/",
+          "ghcr.io/evalstate/mcp-py-repl:latest",
+        ]
+      roots:
+        - uri: "file://./agent_folder/"
+          name: "agent_folder"
+          server_uri_alias: "file:///mnt/data/"
 openai:
   # Secrets (API keys, etc.) are stored in an mcp_agent.secrets.yaml file which can be gitignored
   #  default_model: "o3-mini"

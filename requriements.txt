@@ -1,5 +1,6 @@
 # Core framework dependency
 mcp-agent
+a2a-sdk
 
 # Additional dependencies specific to this example
 anthropic

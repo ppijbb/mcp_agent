@@ -1,0 +1,162 @@
+# Enhanced Data Generator Configuration
+# Meta Synthetic Data Kit Integration Settings
+
+# LLM Backend Configuration
+llm:
+  provider: "vllm"  # Options: vllm, api-endpoint, openai
+
+# vLLM Configuration (if using local vLLM server)
+vllm:
+  api_base: "http://localhost:8000/v1"
+  model: "meta-llama/Llama-3.3-70B-Instruct"
+  # Alternative models:
+  # - "meta-llama/Llama-3.1-8B-Instruct"
+  # - "meta-llama/Llama-3.1-70B-Instruct"
+
+# API Endpoint Configuration (if using external API)
+api-endpoint:
+  api_base: "https://api.llama.com/v1"
+  api_key: "your-api-key-here"  # Or set LLAMA_API_KEY environment variable
+  model: "Llama-4-Maverick-17B-128E-Instruct-FP8"
+
+# OpenAI Configuration (if using OpenAI)
+openai:
+  api_key: "your-openai-key-here"  # Or set OPENAI_API_KEY environment variable
+  model: "gpt-4o-mini"
+
+# Data Generation Settings
+generation:
+  temperature: 0.7
+  max_tokens: 2048
+  chunk_size: 4000  # Text chunk size for processing
+  num_pairs: 25     # Default number of QA pairs per chunk
+  
+# Quality Curation Settings
+curate:
+  threshold: 7.5    # Quality threshold (1-10 scale)
+  batch_size: 8     # Batch size for curation
+  max_retries: 3    # Max retries for failed generations
+
+# Output Format Settings
+output:
+  formats:
+    - "alpaca"      # Alpaca instruction format
+    - "ft"          # OpenAI fine-tuning format
+    - "chatml"      # ChatML conversation format
+  storage:
+    - "json"        # JSON files
+    - "hf"          # HuggingFace datasets
+  
+# Document Processing Settings
+document:
+  supported_formats:
+    - "pdf"
+    - "html"
+    - "docx"
+    - "pptx"
+    - "txt"
+    - "youtube"
+  max_file_size: "100MB"
+  
+# Prompt Templates
+prompts:
+  qa_generation: |
+    You are creating high-quality question-answer pairs for fine-tuning a language model.
+    
+    Based on the following text, create {num_pairs} diverse and educational question-answer pairs.
+    
+    Requirements:
+    - Questions should be clear, specific, and answerable from the text
+    - Answers should be accurate, complete, and well-structured
+    - Include a mix of factual, analytical, and conceptual questions
+    - Ensure educational value and real-world applicability
+    
+    Text:
+    ---
+    {text}
+    ---
+    
+    Return ONLY valid JSON formatted as:
+    [
+      {
+        "question": "Your question here?",
+        "answer": "Your detailed answer here."
+      }
+    ]
+    
+  cot_generation: |
+    You are creating Chain of Thought reasoning examples for training a language model.
+    
+    Based on the following text, create {num_pairs} examples that demonstrate step-by-step reasoning.
+    
+    Requirements:
+    - Show clear logical progression
+    - Break down complex problems into steps
+    - Explain the reasoning process explicitly
+    - Include intermediate conclusions
+    - Demonstrate problem-solving methodology
+    
+    Text:
+    ---
+    {text}
+    ---
+    
+    Return ONLY valid JSON formatted as:
+    [
+      {
+        "problem": "Problem statement or question",
+        "reasoning": "Step-by-step reasoning process with clear steps",
+        "conclusion": "Final answer or conclusion"
+      }
+    ]
+    
+  summary_generation: |
+    You are creating text summarization examples for training a language model.
+    
+    Based on the following text, create {num_pairs} high-quality summary examples.
+    
+    Requirements:
+    - Summaries should capture key information
+    - Maintain factual accuracy
+    - Use clear, concise language
+    - Include different summary lengths (brief, detailed)
+    - Preserve important context and nuances
+    
+    Text:
+    ---
+    {text}
+    ---
+    
+    Return ONLY valid JSON formatted as:
+    [
+      {
+        "original_text": "Excerpt from the original text",
+        "summary": "Concise summary of the excerpt"
+      }
+    ]
+
+# Logging and Monitoring
+logging:
+  level: "INFO"
+  file: "logs/enhanced_data_generator.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Performance Settings
+performance:
+  max_concurrent_agents: 3
+  timeout_seconds: 300
+  retry_delays: [1, 2, 4]  # Exponential backoff delays
+  
+# Quality Metrics
+quality_metrics:
+  min_question_length: 10
+  min_answer_length: 20
+  max_question_length: 200
+  max_answer_length: 1000
+  required_fields: ["question", "answer"]
+  
+# File Management
+files:
+  cleanup_temp_files: true
+  backup_original_data: true
+  compression: "gzip"  # Options: none, gzip, bz2 
