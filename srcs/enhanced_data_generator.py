@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -26,7 +27,10 @@ RECORD_COUNT = 100 if len(sys.argv) <= 2 else int(sys.argv[2])
 SOURCE_FILE = None if len(sys.argv) <= 3 else sys.argv[3]  # Optional source document
 
 # Initialize app
-app = MCPApp(name="enhanced_data_generator")
+app = MCPApp(
+    name="enhanced_data_generator",
+    settings=get_settings("configs/mcp_agent.config.yaml")
+)
 
 
 class SyntheticDataKitIntegration:

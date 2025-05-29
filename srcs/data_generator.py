@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -23,7 +24,10 @@ DATA_TYPE = "customer" if len(sys.argv) <= 1 else sys.argv[1]  # customer, produ
 RECORD_COUNT = 100 if len(sys.argv) <= 2 else int(sys.argv[2])
 
 # Initialize app
-app = MCPApp(name="data_generator_agent")
+app = MCPApp(
+    name="data_generator_agent", 
+    settings=get_settings("configs/mcp_agent.config.yaml")
+)
 
 
 async def main():

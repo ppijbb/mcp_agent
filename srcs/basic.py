@@ -4,6 +4,7 @@ import time
 
 from mcp_agent.app import MCPApp
 from mcp_agent.config import (
+    get_settings,
     Settings,
     LoggerSettings,
     MCPSettings,
@@ -22,7 +23,10 @@ from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.context import get_current_context
 
 
-app = MCPApp(name="mcp_basic_agent")
+app = MCPApp(
+    name="mcp_basic_agent",
+    settings=get_settings("configs/mcp_agent.config.yaml")
+    )
 
 async def example_usage():
     async with app.run() as agent_app:

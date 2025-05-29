@@ -6,13 +6,14 @@ decorators, and how to run it using the Temporal executor.
 
 import asyncio
 
+from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.executor.temporal import TemporalExecutor
 from mcp_agent.executor.workflow import Workflow, WorkflowResult
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.parallel.parallel_llm import ParallelLLM
 
-from main import app
 
 SHORT_STORY = """
 The Battle of Glimmerwood
@@ -36,24 +37,15 @@ However, not all was as it seemed. The Glimmerstones true power was never confir
 and whispers of a hidden agenda linger among the villagers.
 """
 
+app = MCPApp(
+    name="mcp_parallel_workflow",
+    settings=get_settings("configs/mcp_agent.config.yaml")
+)
 
-@app.workflow
-class ParallelWorkflow(Workflow[str]):
-    """
-    A simple workflow that demonstrates the basic structure of a Temporal workflow.
-    """
 
-    @app.workflow_run
-    async def run(self, input: str) -> WorkflowResult[str]:
-        """
-        Run the workflow, processing the input data.
-
-        Args:
-            input_data: The data to process
-
-        Returns:
-            A WorkflowResult containing the processed data
-        """
+async def example_usage():
+    async with app.run() as short_story_grader:
+        logger = short_story_grader.logger
 
         proofreader = Agent(
             name="proofreader",
@@ -88,27 +80,21 @@ class ParallelWorkflow(Workflow[str]):
             fan_in_agent=grader,
             fan_out_agents=[proofreader, fact_checker, style_enforcer],
             llm_factory=OpenAIAugmentedLLM,
-            context=app.context,
         )
 
         result = await parallel.generate_str(
-            message=f"Student short story submission: {input}",
+            message=f"Student short story submission: {SHORT_STORY}",
         )
 
-        return WorkflowResult(value=result)
-
-
-async def main():
-    async with app.run() as orchestrator_app:
-        executor: TemporalExecutor = orchestrator_app.executor
-
-        handle = await executor.start_workflow(
-            "ParallelWorkflow",
-            SHORT_STORY,
-        )
-        a = await handle.result()
-        print(a)
+        logger.info(f"{result}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import time
+
+    start = time.time()
+    asyncio.run(example_usage())
+    end = time.time()
+    t = end - start
+
+    print(f"Total run time: {t:.2f}s")

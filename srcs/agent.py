@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -25,7 +26,11 @@ COMPANY_NAME = "Apple" if len(sys.argv) <= 1 else sys.argv[1]
 MAX_ITERATIONS = 3
 
 # Initialize app
-app = MCPApp(name="unified_stock_analyzer", human_input_callback=None)
+app = MCPApp(
+    name="unified_stock_analyzer", 
+    settings=get_settings("configs/mcp_agent.config.yaml"),
+    human_input_callback=None
+)
 
 
 async def main():
