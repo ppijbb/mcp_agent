@@ -1,4 +1,4 @@
-$schema: .mcp-agent.config.schema.json
+$schema: configs/mcp-agent.config.schema.json
 
 openai:
   api_key: {API-KEY}
