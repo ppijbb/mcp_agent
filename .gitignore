@@ -1,3 +1,5 @@
 *.secrets.yaml
 logs
 browser-state-*.json
+__pycache__
+mental_care_reports
