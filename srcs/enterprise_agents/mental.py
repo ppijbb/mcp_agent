@@ -29,7 +29,7 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
 )
 
 # Import visualization module
-from mental_visualization import MentalStateVisualizer
+from srcs.utils.mental_visualization import MentalStateVisualizer
 
 
 class EmotionType(Enum):
