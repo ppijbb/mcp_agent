@@ -18,7 +18,8 @@ def list_agents():
     print("📝 Basic Agents:")
     basic_agents = {
         "basic": "Basic functionality and testing agent",
-        "researcher": "Research and information gathering agent", 
+        "researcher": "Research and information gathering agent",
+        "researcher_v2": "Enhanced research agent using common modules",
         "parallel": "Parallel processing demonstration agent",
         "streamlit": "Streamlit web interface agent",
         "data_generator": "Data generation and synthesis agent",
@@ -54,12 +55,23 @@ def list_agents():
     
     for util, description in utils.items():
         print(f"  • {util:20} - {description}")
+    
+    print("\n🔧 Development Examples:")
+    examples = {
+        "common_demo": "Demonstration of common modules usage",
+        "template_basic": "Basic agent template example",
+        "template_enterprise": "Enterprise agent template example"
+    }
+    
+    for example, description in examples.items():
+        print(f"  • {example:20} - {description}")
 
 def run_basic_agent(agent_name):
     """Run a basic agent"""
     agent_map = {
         "basic": "basic_agents.basic",
-        "researcher": "basic_agents.researcher", 
+        "researcher": "basic_agents.researcher",
+        "researcher_v2": "basic_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
@@ -115,10 +127,10 @@ def run_enterprise_agent(agent_name):
 def run_utility(util_name):
     """Run a utility script"""
     util_map = {
-        "mental": "utils.mental",
+        "mental": "enterprise_agents.mental",
         "mental_viz": "utils.mental_visualization", 
-        "swarm": "utils.swarm",
-        "workflow": "utils.workflow_orchestration"
+        "swarm": "basic_agents.swarm",
+        "workflow": "basic_agents.workflow_orchestration"
     }
     
     if util_name not in util_map:
@@ -134,6 +146,77 @@ def run_utility(util_name):
         print(f"❌ Error running utility {util_name}: {str(e)}")
         return False
 
+def run_development_example(example_name):
+    """Run development examples and demonstrations"""
+    if example_name == "common_demo":
+        print("🔧 Common Modules Demonstration")
+        print("\nThe common modules provide shared functionality across all agents:")
+        print("📦 common/imports.py - Standardized imports")
+        print("⚙️  common/config.py - Shared configurations and constants")
+        print("🛠️  common/utils.py - Common utility functions")
+        print("📋 common/templates.py - Agent base templates")
+        print("\nExample usage:")
+        print("from common import *")
+        print("class MyAgent(BasicAgentTemplate):")
+        print("    # Your agent implementation...")
+        print("\nSee basic_agents/researcher_v2.py for a complete example!")
+        return True
+    
+    elif example_name == "template_basic":
+        print("🔧 Basic Agent Template Example")
+        print("\nTo create a new basic agent using templates:")
+        print("""
+from common import BasicAgentTemplate
+
+class MyAgent(BasicAgentTemplate):
+    def __init__(self):
+        super().__init__(
+            agent_name="my_agent",
+            task_description="Your agent's main task description"
+        )
+    
+    # Override methods as needed
+    def create_agents(self):
+        # Return list of specialized agents
+        pass
+        
+    def create_evaluator(self):
+        # Return quality evaluator
+        pass
+""")
+        return True
+    
+    elif example_name == "template_enterprise":
+        print("🔧 Enterprise Agent Template Example")
+        print("\nTo create a new enterprise agent using templates:")
+        print("""
+from common import EnterpriseAgentTemplate
+
+class MyEnterpriseAgent(EnterpriseAgentTemplate):
+    def __init__(self):
+        super().__init__(
+            agent_name="my_enterprise_agent",
+            business_scope="Global Operations"
+        )
+    
+    def create_agents(self):
+        # Return list of specialized enterprise agents
+        pass
+        
+    def create_evaluator(self):
+        evaluation_criteria = [
+            ("Business Impact", 40, "ROI and value creation"),
+            ("Implementation", 30, "Feasibility and execution"),
+            ("Innovation", 30, "Technology and process innovation")
+        ]
+        return self.create_standard_evaluator(evaluation_criteria)
+""")
+        return True
+    
+    else:
+        print(f"❌ Unknown development example: {example_name}")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(
         description="MCP Agent System Runner",
@@ -142,8 +225,10 @@ def main():
 Examples:
   python run_agent.py --list                    # List all available agents
   python run_agent.py --basic researcher        # Run research agent
+  python run_agent.py --basic researcher_v2     # Run enhanced research agent
   python run_agent.py --enterprise supply_chain # Run supply chain agent
   python run_agent.py --utility mental          # Run mental model utility
+  python run_agent.py --dev common_demo         # Show common modules demo
         """
     )
     
@@ -151,6 +236,7 @@ Examples:
     parser.add_argument("--basic", metavar="AGENT", help="Run a basic agent")
     parser.add_argument("--enterprise", metavar="AGENT", help="Run an enterprise agent")
     parser.add_argument("--utility", metavar="UTIL", help="Run a utility script")
+    parser.add_argument("--dev", metavar="EXAMPLE", help="Run development examples")
     
     args = parser.parse_args()
     
@@ -168,6 +254,10 @@ Examples:
     
     if args.utility:
         success = run_utility(args.utility)
+        sys.exit(0 if success else 1)
+    
+    if args.dev:
+        success = run_development_example(args.dev)
         sys.exit(0 if success else 1)
     
     # If no arguments provided, show help
