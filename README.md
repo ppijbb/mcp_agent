@@ -80,6 +80,7 @@ python run_agent.py --basic rag
 python run_agent.py --enterprise supply_chain
 python run_agent.py --enterprise customer_clv
 python run_agent.py --enterprise workplace
+python run_agent.py --enterprise personal_finance
 
 # Run utilities
 python run_agent.py --utility mental
@@ -173,6 +174,7 @@ See `COMMON_MODULES.md` for comprehensive usage guide and examples.
 - **esg_carbon** - ESG and carbon neutrality management
 - **workplace** - Hybrid workplace optimization and management
 - **innovation** - Product innovation acceleration and development
+- **personal_finance** - Personal finance health diagnosis & auto investment (Korean market)
 
 ### Utilities
 - **mental_viz** - Mental model interactive visualization
