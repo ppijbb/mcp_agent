@@ -52,6 +52,28 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
+    # 다크모드 대응 CSS
+    st.markdown("""
+    <style>
+        .stButton > button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 0.75rem 1.5rem !important;
+            font-weight: 600 !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
+        
+        .stButton > button:hover {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # 홈으로 돌아가기 버튼
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")

@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS
+# 커스텀 CSS - 다크모드 대응
 st.markdown("""
 <style>
     .main-header {
@@ -34,13 +34,14 @@ st.markdown("""
     }
     
     .agent-card {
-        background: white;
+        background: var(--background-color);
         padding: 1.5rem;
         border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         border-left: 4px solid #667eea;
         margin: 1rem 0;
         transition: transform 0.2s;
+        border: 1px solid var(--secondary-background-color);
     }
     
     .agent-card:hover {
@@ -58,18 +59,67 @@ st.markdown("""
     }
     
     .stats-container {
-        background: #f8f9fa;
+        background: var(--secondary-background-color);
         padding: 1rem;
         border-radius: 8px;
         text-align: center;
+        border: 1px solid var(--secondary-background-color);
     }
     
     .feature-highlight {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        color: white !important;
         padding: 1rem;
         border-radius: 8px;
         margin: 0.5rem 0;
+    }
+    
+    /* 버튼 다크모드 대응 */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    .stButton > button:hover {
+        background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    .stButton > button:active {
+        transform: translateY(0) !important;
+    }
+    
+    /* 홈 버튼 특별 스타일 */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%) !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #38a169 0%, #2f855a 100%) !important;
+    }
+    
+    /* 메트릭 카드 다크모드 대응 */
+    .metric-card {
+        background: var(--secondary-background-color);
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--secondary-background-color);
+    }
+    
+    /* 다크모드에서 텍스트 색상 보정 */
+    [data-testid="stMarkdownContainer"] h1,
+    [data-testid="stMarkdownContainer"] h2,
+    [data-testid="stMarkdownContainer"] h3,
+    [data-testid="stMarkdownContainer"] h4,
+    [data-testid="stMarkdownContainer"] p {
+        color: var(--text-color) !important;
     }
 </style>
 """, unsafe_allow_html=True)
