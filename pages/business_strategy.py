@@ -12,6 +12,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# 공통 스타일 및 유틸리티 임포트
+from srcs.common.styles import get_common_styles, get_page_header
+from srcs.common.page_utils import setup_page, render_home_button
+
 # Business Strategy Agent 모듈 임포트
 try:
     from srcs.business_strategy_agents.streamlit_app import main as bs_main
@@ -22,57 +26,21 @@ except ImportError as e:
     import_error = str(e)
 
 # 페이지 설정
-st.set_page_config(
-    page_title="🎯 Business Strategy Agent",
-    page_icon="🎯",
-    layout="wide"
-)
+setup_page("🎯 Business Strategy Agent", "🎯")
 
 def main():
     """Business Strategy Agent 메인 페이지"""
     
-    # 헤더
-    st.markdown("""
-    <div style="
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        text-align: center;
-        color: white;
-        margin-bottom: 2rem;
-    ">
-        <h1>🎯 Business Strategy Agent</h1>
-        <p style="font-size: 1.2rem; margin: 0;">
-            AI 기반 비즈니스 전략 수립 및 시장 분석 플랫폼
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    # 공통 스타일 적용
+    st.markdown(get_common_styles(), unsafe_allow_html=True)
     
-    # 다크모드 대응 CSS
-    st.markdown("""
-    <style>
-        .stButton > button {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%) !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 0.75rem 1.5rem !important;
-            font-weight: 600 !important;
-            transition: all 0.3s ease !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-        }
-        
-        .stButton > button:hover {
-            background: linear-gradient(135deg, #38a169 0%, #2f855a 100%) !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    # 헤더 렌더링
+    header_html = get_page_header("business", "🎯 Business Strategy Agent", 
+                                 "AI 기반 비즈니스 전략 수립 및 시장 분석 플랫폼")
+    st.markdown(header_html, unsafe_allow_html=True)
     
     # 홈으로 돌아가기 버튼
-    if st.button("🏠 홈으로 돌아가기", key="home"):
-        st.switch_page("main.py")
+    render_home_button()
     
     st.markdown("---")
     

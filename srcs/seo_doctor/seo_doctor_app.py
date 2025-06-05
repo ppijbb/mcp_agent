@@ -128,12 +128,16 @@ MOBILE_CSS = """
 
 def init_mobile_app():
     """모바일 앱 초기화"""
-    st.set_page_config(
-        page_title="🏥 SEO Doctor",
-        page_icon="🏥",
-        layout="centered",  # 모바일에 최적화된 중앙 정렬
-        initial_sidebar_state="collapsed"  # 사이드바 숨김
-    )
+    try:
+        st.set_page_config(
+            page_title="🏥 SEO Doctor",
+            page_icon="🏥",
+            layout="centered",  # 모바일에 최적화된 중앙 정렬
+            initial_sidebar_state="collapsed"  # 사이드바 숨김
+        )
+    except Exception:
+        # 이미 page config가 설정된 경우 무시
+        pass
     
     # 모바일 CSS 적용
     st.markdown(MOBILE_CSS, unsafe_allow_html=True)

@@ -21,12 +21,7 @@ except ImportError as e:
     SEO_DOCTOR_AVAILABLE = False
     import_error = str(e)
 
-# 페이지 설정
-st.set_page_config(
-    page_title="🏥 SEO Doctor",
-    page_icon="🏥",
-    layout="centered"  # SEO Doctor는 모바일 최적화
-)
+# 페이지 설정 (SEO Doctor 자체가 page config를 설정하므로 생략)
 
 def main():
     """SEO Doctor 메인 페이지"""
