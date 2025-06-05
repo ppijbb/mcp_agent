@@ -176,7 +176,7 @@ def show_fallback_interface():
     demo_url = st.text_input(
         "🌐 사이트 URL을 입력해보세요 (데모용)",
         placeholder="https://example.com",
-        help="실제 분석은 아니지만 인터페이스를 체험할 수 있습니다"
+        help="분석은 아니지만 인터페이스를 체험할 수 있습니다"
     )
     
     if st.button("🚨 응급 진단 시작 (데모)", use_container_width=True):

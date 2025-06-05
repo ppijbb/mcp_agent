@@ -402,7 +402,7 @@ async def main():
         try:
             await orchestrator.generate_str(
                 message=orchestrated_task,
-                request_params=RequestParams(model="gpt-4o")
+                request_params=RequestParams(model="gpt-4o-mini")
             )
 
             # Check final outputs

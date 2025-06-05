@@ -19,43 +19,109 @@ OUTPUT_DIR = "recruitment_reports"
 POSITION_NAME = "Senior Software Engineer"
 COMPANY_NAME = "TechCorp Inc."
 
-app = MCPApp(
-    name="hr_recruitment_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
 
-
-async def main():
-    """
-    HR Recruitment Agent System
+class HRRecruitmentAgent:
+    """HR Recruitment Agent for Streamlit integration"""
     
-    Handles the complete recruitment lifecycle:
-    1. Job description creation and posting
-    2. Resume screening and candidate evaluation
-    3. Interview question generation
-    4. Reference checking automation
-    5. Offer letter generation
-    6. Onboarding checklist creation
-    """
+    def __init__(self):
+        self.app = MCPApp(
+            name="hr_recruitment_system",
+            settings=get_settings("configs/mcp_agent.config.yaml"),
+            human_input_callback=None
+        )
+        self.output_dir = OUTPUT_DIR
     
-    # Create output directory
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    async with app.run() as hr_app:
-        context = hr_app.context
-        logger = hr_app.logger
+    def run_recruitment_workflow(self, position=None, company=None, workflows=None, save_to_file=False):
+        """
+        Run recruitment workflow synchronously for Streamlit
         
-        # Configure servers
-        if "filesystem" in context.config.mcp.servers:
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured")
+        Args:
+            position: Position name to recruit for
+            company: Company name
+            workflows: List of workflows to execute
+            save_to_file: Whether to save results to files (default: False)
         
-        # --- HR RECRUITMENT AGENTS ---
+        Returns:
+            dict: Results of the execution with actual content
+        """
+        if position:
+            global POSITION_NAME
+            POSITION_NAME = position
+        if company:
+            global COMPANY_NAME
+            COMPANY_NAME = company
+            
+        try:
+            # Run the async main function
+            result = asyncio.run(self._async_workflow(workflows, save_to_file))
+            return {
+                'success': True,
+                'message': 'HR recruitment workflow completed successfully',
+                'output_dir': self.output_dir if save_to_file else None,
+                'workflows_executed': workflows or ['all'],
+                'content': result,  # 실제 생성된 콘텐츠
+                'save_to_file': save_to_file
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error during HR workflow execution: {str(e)}',
+                'error': str(e),
+                'save_to_file': save_to_file
+            }
+    
+    async def _async_workflow(self, workflows=None, save_to_file=False):
+        """Internal async workflow execution"""
+        
+        # Create output directory only if saving to file
+        if save_to_file:
+            os.makedirs(self.output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        async with self.app.run() as hr_app:
+            context = hr_app.context
+            logger = hr_app.logger
+            
+            # Configure servers
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                logger.info("Filesystem server configured")
+            
+            # Create all HR agents
+            agents = self._create_hr_agents()
+            
+            # Create orchestrator
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=list(agents.values()),
+                plan_type="full",
+            )
+            
+            # Define task based on requested workflows
+            task = self._create_task(workflows, timestamp, save_to_file)
+            
+            # Execute the workflow
+            logger.info("Starting HR recruitment workflow")
+            result = await orchestrator.generate_str(
+                message=task,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            
+            logger.info("HR recruitment workflow completed successfully")
+            if save_to_file:
+                logger.info(f"All deliverables saved in {self.output_dir}/")
+            else:
+                logger.info("Results returned for display (not saved to file)")
+            
+            return result
+    
+    def _create_hr_agents(self):
+        """Create all HR recruitment agents"""
+        
+        agents = {}
         
         # Job Description Creator
-        job_creator_agent = Agent(
+        agents['job_creator'] = Agent(
             name="job_description_creator",
             instruction=f"""You are an expert HR professional specializing in job description creation.
             
@@ -80,7 +146,7 @@ async def main():
         )
         
         # Resume Screener
-        resume_screener_agent = Agent(
+        agents['resume_screener'] = Agent(
             name="resume_screener",
             instruction=f"""You are an experienced technical recruiter specializing in resume screening.
             
@@ -116,7 +182,7 @@ async def main():
         )
         
         # Interview Question Generator
-        interview_agent = Agent(
+        agents['interview_generator'] = Agent(
             name="interview_question_generator",
             instruction=f"""You are a senior technical interviewer with expertise in behavioral and technical assessments.
             
@@ -151,7 +217,7 @@ async def main():
         )
         
         # Reference Checker
-        reference_agent = Agent(
+        agents['reference_checker'] = Agent(
             name="reference_checker",
             instruction="""You are a professional reference checker with experience in candidate verification.
             
@@ -183,7 +249,7 @@ async def main():
         )
         
         # Offer Letter Generator
-        offer_agent = Agent(
+        agents['offer_generator'] = Agent(
             name="offer_letter_generator",
             instruction=f"""You are an HR legal expert specializing in employment offers and contracts.
             
@@ -216,7 +282,7 @@ async def main():
         )
         
         # Onboarding Coordinator
-        onboarding_agent = Agent(
+        agents['onboarding_coordinator'] = Agent(
             name="onboarding_coordinator",
             instruction=f"""You are an HR onboarding specialist focused on new hire success.
             
@@ -257,7 +323,7 @@ async def main():
         )
         
         # Quality Evaluator for HR processes
-        hr_evaluator = Agent(
+        agents['hr_evaluator'] = Agent(
             name="hr_process_evaluator",
             instruction="""You are an HR quality assurance expert evaluating recruitment processes.
             
@@ -292,33 +358,28 @@ async def main():
         )
         
         # Create quality controller
-        hr_quality_controller = EvaluatorOptimizerLLM(
-            optimizer=job_creator_agent,
-            evaluator=hr_evaluator,
+        agents['quality_controller'] = EvaluatorOptimizerLLM(
+            optimizer=agents['job_creator'],
+            evaluator=agents['hr_evaluator'],
             llm_factory=OpenAIAugmentedLLM,
             min_rating=QualityRating.GOOD,
         )
         
-        # --- CREATE ORCHESTRATOR ---
-        logger.info(f"Initializing HR recruitment workflow for {POSITION_NAME}")
+        return agents
+    
+    def _create_task(self, workflows, timestamp, save_to_file):
+        """Create task description based on requested workflows"""
         
-        orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
-            available_agents=[
-                hr_quality_controller,
-                resume_screener_agent,
-                interview_agent,
-                reference_agent,
-                offer_agent,
-                onboarding_agent,
-            ],
-            plan_type="full",
-        )
+        if not workflows:
+            workflows = [
+                "채용공고 생성", "이력서 스크리닝 가이드", "면접 질문 세트",
+                "레퍼런스 체크 프로세스", "오퍼레터 템플릿", "온보딩 프로그램"
+            ]
         
-        # Define comprehensive recruitment task
+        # Base task for content generation
         task = f"""Execute a complete HR recruitment process for {POSITION_NAME} at {COMPANY_NAME}:
 
-        1. Use the hr_quality_controller to create a high-quality job description that is:
+        1. Use the quality_controller to create a high-quality job description that is:
            - Legally compliant and inclusive
            - Technically accurate for the role
            - Attractive to top candidates
@@ -330,7 +391,7 @@ async def main():
            - Cultural fit indicators
            - Overall candidate ranking system
         
-        3. Use the interview_question_generator to develop:
+        3. Use the interview_generator to develop:
            - Technical interview questions with solutions
            - Behavioral interview framework
            - Assessment criteria and scoring guides
@@ -341,7 +402,7 @@ async def main():
            - Verification processes and documentation
            - Red flag identification guidelines
         
-        5. Use the offer_letter_generator to create:
+        5. Use the offer_generator to create:
            - Professional offer letter template
            - Compensation and benefits summary
            - Legal compliance documentation
@@ -352,7 +413,14 @@ async def main():
            - 30-60-90 day integration plan
            - Resources and support materials
         
-        Save all deliverables in the {OUTPUT_DIR} directory with appropriate naming:
+        Focus on workflows: {', '.join(workflows)}
+        
+        """
+        
+        # Add file saving instructions only if save_to_file is True
+        if save_to_file:
+            task += f"""
+        Save all deliverables in the {self.output_dir} directory with appropriate naming:
         - job_description_{timestamp}.md
         - resume_screening_guide_{timestamp}.md
         - interview_questions_{timestamp}.md
@@ -360,13 +428,69 @@ async def main():
         - offer_letter_template_{timestamp}.md
         - onboarding_program_{timestamp}.md
         """
+        else:
+            task += """
+        Return the complete content for immediate display. Do not save to files.
+        Provide comprehensive, detailed results that can be displayed directly.
+        """
+        
+        return task
+
+
+async def main():
+    """
+    HR Recruitment Agent System
+    
+    Handles the complete recruitment lifecycle:
+    1. Job description creation and posting
+    2. Resume screening and candidate evaluation
+    3. Interview question generation
+    4. Reference checking automation
+    5. Offer letter generation
+    6. Onboarding checklist creation
+    """
+    
+    # Create output directory
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    app = MCPApp(
+        name="hr_recruitment_system",
+        settings=get_settings("configs/mcp_agent.config.yaml"),
+        human_input_callback=None
+    )
+    
+    async with app.run() as hr_app:
+        context = hr_app.context
+        logger = hr_app.logger
+        
+        # Configure servers
+        if "filesystem" in context.config.mcp.servers:
+            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+            logger.info("Filesystem server configured")
+        
+        # Create agent instance and run workflow
+        agent = HRRecruitmentAgent()
+        agents = agent._create_hr_agents()
+        
+        # --- CREATE ORCHESTRATOR ---
+        logger.info(f"Initializing HR recruitment workflow for {POSITION_NAME}")
+        
+        orchestrator = Orchestrator(
+            llm_factory=OpenAIAugmentedLLM,
+            available_agents=list(agents.values()),
+            plan_type="full",
+        )
+        
+        # Define comprehensive recruitment task
+        task = agent._create_task(None, timestamp, False)
         
         # Execute the workflow
         logger.info("Starting HR recruitment workflow")
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o")
+                request_params=RequestParams(model="gpt-4o-mini")
             )
             
             logger.info("HR recruitment workflow completed successfully")

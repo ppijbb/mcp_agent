@@ -161,7 +161,7 @@ async def example_usage():
         )
 
         result = await orchestrator.generate_str(
-            message=task, request_params=RequestParams(model="gpt-4o")
+            message=task, request_params=RequestParams(model="gpt-4o-mini")
         )
         logger.info(f"{result}")
 

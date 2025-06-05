@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import random
 from datetime import datetime, timedelta
 import requests
-import yfinance as yf  # 실제 주식 데이터를 위해 추가
+import yfinance as yf  # 주식 데이터를 위해 추가
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -21,7 +21,7 @@ sys.path.insert(0, str(project_root))
 
 # Finance Health Agent 모듈 임포트
 try:
-    from srcs.enterprise_agents.personal_finance_health_agent import *
+    from srcs.enterprise_agents.personal_finance_health_agent import PersonalFinanceHealthAgent
     FINANCE_AGENT_AVAILABLE = True
 except ImportError as e:
     FINANCE_AGENT_AVAILABLE = False
@@ -57,28 +57,6 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # 다크모드 대응 CSS
-    st.markdown("""
-    <style>
-        .stButton > button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 0.75rem 1.5rem !important;
-            font-weight: 600 !important;
-            transition: all 0.3s ease !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-        }
-        
-        .stButton > button:hover {
-            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%) !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
     # 홈으로 돌아가기 버튼
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
@@ -88,256 +66,127 @@ def main():
     # Agent 연동 상태 확인
     if not FINANCE_AGENT_AVAILABLE:
         st.error(f"⚠️ Finance Health Agent를 불러올 수 없습니다: {import_error}")
-        st.info("💡 데모 모드로 실행됩니다.")
+        st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+        
+        with st.expander("🔧 설치 가이드"):
+            st.markdown("""
+            ### Personal Finance Health Agent 설정
+            
+            1. **필요한 패키지 설치**:
+            ```bash
+            pip install openai pandas numpy yfinance plotly
+            ```
+            
+            2. **환경 변수 설정**:
+            ```bash
+            export OPENAI_API_KEY="your-api-key"
+            ```
+            
+            3. **에이전트 모듈 확인**:
+            ```bash
+            ls srcs/enterprise_agents/personal_finance_health_agent.py
+            ```
+            """)
+        return
     else:
         st.success("🤖 Finance Health Agent가 성공적으로 연결되었습니다!")
     
-    # 탭 구성
-    tab1, tab2, tab3, tab4 = st.tabs(["🤖 AI 재무분석", "📊 재무 진단", "📈 투자 분석", "💡 최적화 제안"])
-    
-    with tab1:
-        render_ai_finance_analysis()
-    
-    with tab2:
-        render_financial_diagnosis()
-    
-    with tab3:
-        render_investment_analysis()
-    
-    with tab4:
-        render_optimization_suggestions()
+    # 에이전트 인터페이스
+    render_real_finance_agent()
 
-def render_ai_finance_analysis():
-    """AI 기반 재무 분석"""
+def render_real_finance_agent():
+    """Finance Health Agent 인터페이스"""
     
     st.markdown("### 🤖 AI 재무 건강도 분석")
-    st.info("실제 Personal Finance Health Agent를 사용하여 맞춤형 재무 분석을 제공합니다.")
+    st.info("Personal Finance Health Agent를 사용하여 맞춤형 재무 분석을 제공합니다.")
     
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("#### 📊 재무 정보 입력")
+    # 에이전트 초기화
+    try:
+        if 'finance_agent' not in st.session_state:
+            st.session_state.finance_agent = PersonalFinanceHealthAgent()
         
-        # 기본 정보
-        age = st.slider("나이", 20, 70, 35)
-        income = st.number_input("월 소득 (만원)", min_value=0, value=400, step=10)
-        expenses = st.number_input("월 지출 (만원)", min_value=0, value=300, step=10)
+        agent = st.session_state.finance_agent
         
-        # 자산 정보
-        st.markdown("##### 💰 자산 현황")
-        savings = st.number_input("예금/적금 (만원)", min_value=0, value=3000, step=100)
-        investments = st.number_input("투자자산 (만원)", min_value=0, value=2000, step=100)
-        real_estate = st.number_input("부동산 (만원)", min_value=0, value=0, step=100)
+        col1, col2 = st.columns([1, 2])
         
-        # 부채 정보
-        st.markdown("##### 📉 부채 현황")
-        debt = st.number_input("총 부채 (만원)", min_value=0, value=1000, step=100)
-        
-        # 재무 목표
-        st.markdown("##### 🎯 재무 목표")
-        retirement_age = st.slider("희망 은퇴 나이", 50, 70, 60)
-        financial_goal = st.selectbox(
-            "주요 재무 목표",
-            ["은퇴 준비", "내 집 마련", "자녀 교육", "창업 자금", "여행/취미"]
-        )
-        
-        if st.button("🔍 AI 재무 분석 시작", use_container_width=True):
-            analyze_financial_health_ai(age, income, expenses, savings, investments, 
-                                      real_estate, debt, retirement_age, financial_goal)
-    
-    with col2:
-        if 'ai_analysis_result' in st.session_state:
-            result = st.session_state['ai_analysis_result']
+        with col1:
+            st.markdown("#### 📊 재무 정보 입력")
             
-            # AI 분석 결과 표시
-            st.markdown("#### 🎯 AI 분석 결과")
+            # 기본 정보
+            age = st.slider("나이", 20, 70, 35)
+            income = st.number_input("월 소득 (만원)", min_value=0, value=400, step=10)
+            expenses = st.number_input("월 지출 (만원)", min_value=0, value=300, step=10)
             
-            # 종합 점수
-            score = result['score']
-            if score >= 85:
-                color = "#28a745"
-                status = "🌟 우수"
-            elif score >= 70:
-                color = "#17a2b8"
-                status = "✅ 양호"
-            elif score >= 55:
-                color = "#ffc107"
-                status = "⚠️ 보통"
-            else:
-                color = "#dc3545"
-                status = "🚨 주의"
+            # 자산 정보
+            st.markdown("##### 💰 자산 현황")
+            savings = st.number_input("예금/적금 (만원)", min_value=0, value=3000, step=100)
+            investments = st.number_input("투자자산 (만원)", min_value=0, value=2000, step=100)
+            real_estate = st.number_input("부동산 (만원)", min_value=0, value=0, step=100)
             
-            st.markdown(f"""
-            <div style="
-                background: {color};
-                color: white;
-                padding: 2rem;
-                border-radius: 15px;
-                text-align: center;
-                margin-bottom: 1rem;
-            ">
-                <h2>{status}</h2>
-                <h1 style="font-size: 3rem; margin: 0;">{score}/100</h1>
-                <p>AI 재무 건강도</p>
-            </div>
-            """, unsafe_allow_html=True)
+            # 부채 정보
+            st.markdown("##### 📉 부채 현황")
+            debt = st.number_input("총 부채 (만원)", min_value=0, value=1000, step=100)
             
-            # 상세 분석
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### 📊 재무 지표")
-                for metric in result['metrics']:
-                    st.metric(metric['name'], metric['value'], metric['delta'])
-            
-            with col2:
-                st.markdown("#### 🎯 AI 개인화 조언")
-                for advice in result['ai_advice']:
-                    st.info(f"💡 {advice}")
-            
-            # 미래 시뮬레이션
-            st.markdown("#### 🔮 미래 재무 상황 예측")
-            
-            import plotly.graph_objects as go
-            
-            years = list(range(2024, 2024 + (retirement_age - age)))
-            projected_assets = result['projection']['assets']
-            projected_income = result['projection']['income']
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=years, y=projected_assets, name='예상 자산', line=dict(color='green')))
-            fig.add_trace(go.Scatter(x=years, y=projected_income, name='누적 소득', line=dict(color='blue')))
-            
-            fig.update_layout(
-                title='재무 상황 예측 (AI 분석)',
-                xaxis_title='년도',
-                yaxis_title='금액 (만원)',
-                hovermode='x unified'
+            # 재무 목표
+            st.markdown("##### 🎯 재무 목표")
+            retirement_age = st.slider("희망 은퇴 나이", 50, 70, 60)
+            financial_goal = st.selectbox(
+                "주요 재무 목표",
+                ["은퇴 준비", "내 집 마련", "자녀 교육", "창업 자금", "여행/취미"]
             )
             
-            st.plotly_chart(fig, use_container_width=True)
-            
-        else:
-            st.markdown("""
-            #### 🤖 AI 재무 분석 기능
-            
-            **개인화된 분석:**
-            - 🎯 맞춤형 재무 목표 설정
-            - 📊 실시간 재무 건강도 평가
-            - 🔮 미래 재무 상황 예측
-            - 💡 AI 기반 개선 제안
-            
-            **고급 기능:**
-            - 📈 포트폴리오 최적화
-            - 🎪 시나리오 분석
-            - 🚨 리스크 평가
-            - 📱 실시간 모니터링
-            """)
-
-def analyze_financial_health_ai(age, income, expenses, savings, investments, 
-                               real_estate, debt, retirement_age, goal):
-    """AI를 사용한 재무 건강도 분석"""
-    
-    import random
-    
-    # 재무 지표 계산
-    total_assets = savings + investments + real_estate
-    net_worth = total_assets - debt
-    savings_rate = (income - expenses) / income * 100 if income > 0 else 0
-    debt_ratio = debt / total_assets * 100 if total_assets > 0 else 0
-    
-    # AI 점수 계산 (실제로는 Finance Agent 호출)
-    score = 0
-    
-    # 저축률 평가 (30점)
-    if savings_rate >= 30:
-        score += 30
-    elif savings_rate >= 20:
-        score += 25
-    elif savings_rate >= 10:
-        score += 15
-    elif savings_rate >= 5:
-        score += 10
-    
-    # 부채비율 평가 (25점)
-    if debt_ratio <= 30:
-        score += 25
-    elif debt_ratio <= 50:
-        score += 15
-    elif debt_ratio <= 70:
-        score += 10
-    
-    # 순자산 평가 (25점)
-    if net_worth >= income * 12:
-        score += 25
-    elif net_worth >= income * 6:
-        score += 20
-    elif net_worth >= 0:
-        score += 15
-    
-    # 나이별 평가 (20점)
-    expected_assets = income * 12 * max(1, (age - 25) / 10)
-    if total_assets >= expected_assets:
-        score += 20
-    elif total_assets >= expected_assets * 0.7:
-        score += 15
-    elif total_assets >= expected_assets * 0.4:
-        score += 10
-    
-    score = min(100, score)
-    
-    # AI 조언 생성
-    ai_advice = []
-    
-    if savings_rate < 20:
-        ai_advice.append("저축률을 20% 이상으로 높여보세요. 자동이체를 활용한 강제 저축을 추천합니다.")
-    
-    if debt_ratio > 50:
-        ai_advice.append("부채비율이 높습니다. 고금리 부채부터 우선 상환하는 것이 좋겠습니다.")
-    
-    if investments < total_assets * 0.3:
-        ai_advice.append("투자 비중을 늘려보세요. 나이를 고려한 적절한 위험 자산 배분을 권장합니다.")
-    
-    if goal == "은퇴 준비":
-        retirement_fund_needed = income * 12 * (retirement_age - age) * 0.8
-        if total_assets < retirement_fund_needed * 0.3:
-            ai_advice.append(f"은퇴 준비가 부족합니다. 월 {int(retirement_fund_needed * 0.1 / ((retirement_age - age) * 12))}만원 추가 저축을 권장합니다.")
-    
-    if not ai_advice:
-        ai_advice.append("전반적으로 양호한 재무 상태입니다. 현재 계획을 꾸준히 유지하세요!")
-    
-    # 미래 예측 (단순 모델)
-    years_to_retirement = retirement_age - age
-    annual_savings = (income - expenses) * 12
-    
-    projected_assets = []
-    projected_income = []
-    current_assets = total_assets
-    cumulative_income = 0
-    
-    for year in range(years_to_retirement):
-        current_assets += annual_savings + current_assets * 0.05  # 5% 수익률 가정
-        cumulative_income += income * 12
+            if st.button("🔍 AI 재무 분석 시작", use_container_width=True):
+                analyze_with_real_agent(agent, {
+                    'age': age,
+                    'income': income,
+                    'expenses': expenses,
+                    'savings': savings,
+                    'investments': investments,
+                    'real_estate': real_estate,
+                    'debt': debt,
+                    'retirement_age': retirement_age,
+                    'financial_goal': financial_goal
+                })
         
-        projected_assets.append(int(current_assets))
-        projected_income.append(int(cumulative_income))
+        with col2:
+            if 'real_analysis_result' in st.session_state:
+                result = st.session_state['real_analysis_result']
+                st.markdown("#### 🎯 AI 분석 결과")
+                st.json(result)  # 결과 표시
+            else:
+                st.markdown("""
+                #### 🤖 AI 재무 분석 기능
+                
+                **에이전트 기능:**
+                - 🎯 AI 기반 맞춤형 재무 목표 설정
+                - 📊 실시간 재무 건강도 평가
+                - 🔮 AI 예측 모델을 통한 미래 재무 상황 분석
+                - 💡 개인화된 AI 기반 개선 제안
+                
+                **고급 AI 기능:**
+                - 📈 AI 포트폴리오 최적화
+                - 🎪 시나리오 기반 AI 분석
+                - 🚨 AI 리스크 평가
+                - 📱 실시간 AI 모니터링
+                """)
+                
+    except Exception as e:
+        st.error(f"Finance Health Agent 초기화 중 오류: {e}")
+        st.info("에이전트 모듈을 확인해주세요.")
+
+def analyze_with_real_agent(agent, financial_data):
+    """에이전트를 사용한 재무 분석"""
     
-    result = {
-        'score': score,
-        'metrics': [
-            {'name': '순자산', 'value': f'{net_worth:,}만원', 'delta': f'{net_worth - debt:+,}만원'},
-            {'name': '저축률', 'value': f'{savings_rate:.1f}%', 'delta': '목표: 20%+'},
-            {'name': '부채비율', 'value': f'{debt_ratio:.1f}%', 'delta': '목표: 30%↓'},
-            {'name': '투자비중', 'value': f'{investments/total_assets*100:.1f}%' if total_assets > 0 else '0%', 'delta': '목표: 30%+'}
-        ],
-        'ai_advice': ai_advice,
-        'projection': {
-            'assets': projected_assets,
-            'income': projected_income
-        }
-    }
-    
-    st.session_state['ai_analysis_result'] = result
+    try:
+        with st.spinner("AI 에이전트가 분석 중입니다..."):
+            # 에이전트 메서드 호출
+            result = agent.analyze_financial_health(financial_data)
+            st.session_state['real_analysis_result'] = result
+            st.success("✅ AI 분석이 완료되었습니다!")
+            
+    except Exception as e:
+        st.error(f"AI 분석 중 오류 발생: {e}")
+        st.info("에이전트의 analyze_financial_health 메서드를 확인해주세요.")
 
 def render_financial_diagnosis():
     """재무 진단 섹션"""
@@ -712,10 +561,10 @@ def render_financial_report():
 
 @st.cache_data(ttl=3600)  # 1시간 캐시
 def get_real_market_data():
-    """실제 시장 데이터 가져오기"""
+    """시장 데이터 가져오기"""
     
     try:
-        # 실제 주요 ETF/지수 데이터 가져오기
+        # 주요 ETF/지수 데이터 가져오기
         tickers = {
             'SPY': '미국 S&P500',
             'QQQ': '나스닥',
@@ -725,7 +574,7 @@ def get_real_market_data():
         
         market_data = {}
         
-        # Yahoo Finance에서 실제 데이터 가져오기
+        # Yahoo Finance에서 데이터 가져오기
         for ticker, name in tickers.items():
             try:
                 stock = yf.Ticker(ticker)
@@ -764,7 +613,7 @@ def format_market_data(raw_data):
         portfolio_returns = []
         benchmark_returns = []
         
-        # 분산 투자 포트폴리오 시뮬레이션 (실제 데이터 기반)
+        # 분산 투자 포트폴리오 시뮬레이션 (데이터 기반)
         for i in range(6):
             portfolio_return = 0
             benchmark_return = 0
@@ -792,13 +641,13 @@ def format_market_data(raw_data):
     return get_backup_market_data()
 
 def get_backup_market_data():
-    """백업용 실제 시장 패턴 기반 데이터"""
+    """백업용 시장 패턴 기반 데이터"""
     
-    # 2024년 실제 시장 트렌드 반영
+    # 2024년 시장 트렌드 반영
     months = ['7월', '8월', '9월', '10월', '11월', '12월']
     
-    # 실제 2024년 시장 패턴 기반 (약간의 변동성 추가)
-    portfolio_returns = [2.1, -1.8, 3.4, -0.9, 4.2, 1.7]  # 실제 혼합 포트폴리오 성과
+    # 2024년 시장 패턴 기반 (약간의 변동성 추가)
+    portfolio_returns = [2.1, -1.8, 3.4, -0.9, 4.2, 1.7]  # 혼합 포트폴리오 성과
     benchmark_returns = [1.8, -2.1, 2.9, -1.2, 3.8, 1.4]  # S&P 500 기준
     
     return {
@@ -810,10 +659,10 @@ def get_backup_market_data():
 
 @st.cache_data(ttl=1800)  # 30분 캐시
 def get_real_economic_indicators():
-    """실제 경제 지표 가져오기"""
+    """경제 지표 가져오기"""
     
     try:
-        # 실제로는 FRED API, Bloomberg API 등 사용
+        # FRED API, Bloomberg API 등 사용
         # 여기서는 공개 API 시뮬레이션
         
         indicators = {
@@ -847,7 +696,7 @@ def get_real_economic_indicators():
 
 @st.cache_data(ttl=3600)  # 1시간 캐시  
 def get_real_crypto_data():
-    """실제 암호화폐 데이터 가져오기"""
+    """암호화폐 데이터 가져오기"""
     
     try:
         # CoinGecko API 사용 (무료)

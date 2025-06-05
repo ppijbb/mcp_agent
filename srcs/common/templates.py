@@ -75,7 +75,7 @@ class AgentTemplate(ABC):
             try:
                 result = await orchestrator.generate_str(
                     message=task,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-4o-mini")
                 )
                 
                 logger.info(f"{self.agent_name} workflow completed successfully")

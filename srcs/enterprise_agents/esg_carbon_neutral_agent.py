@@ -497,8 +497,8 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o")
-            )
+                request_params=RequestParams(model="gpt-4o-mini")
+            )  
             
             logger.info("ESG and carbon neutrality workflow completed successfully")
             logger.info(f"All deliverables saved in {OUTPUT_DIR}/")

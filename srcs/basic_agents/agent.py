@@ -193,7 +193,7 @@ async def main():
         logger.info("Starting the stock analysis workflow")
         try:
             await orchestrator.generate_str(
-                message=task, request_params=RequestParams(model="gpt-4o")
+                message=task, request_params=RequestParams(model="gpt-4o-mini")
             )
 
             # Check if report was successfully created

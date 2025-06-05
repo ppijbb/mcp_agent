@@ -7,31 +7,159 @@ Demonstrates how to use the common modules for cleaner, more maintainable agent 
 
 import sys
 import os
+import asyncio
+from datetime import datetime
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from common import *
+# Define fallback constants first
+DEFAULT_SERVERS = ["filesystem", "fetch"]
+DEFAULT_COMPANY_NAME = "TechCorp Inc."
 
-class ResearcherAgent(BasicAgentTemplate):
-    """Research agent using common template"""
+def get_output_dir(prefix, name):
+    return f"{prefix}_{name}_reports"
+
+def get_timestamp():
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Import common modules
+try:
+    from srcs.common import *
+    # Override with common module values if available
+    if 'DEFAULT_SERVERS' in globals():
+        pass  # Use the one from common
+    if 'DEFAULT_COMPANY_NAME' in globals():
+        pass  # Use the one from common
+except ImportError:
+    # Fallback direct imports
+    from mcp_agent.app import MCPApp
+    from mcp_agent.agents.agent import Agent
+    from mcp_agent.config import get_settings
+    from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+    from mcp_agent.workflows.llm.augmented_llm import RequestParams
+    from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+    from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
+        EvaluatorOptimizerLLM,
+        QualityRating,
+    )
+
+class ResearcherAgent:
+    """Research agent for comprehensive information gathering and analysis"""
     
     def __init__(self, research_topic="AI and machine learning trends"):
-        super().__init__(
-            agent_name="researcher_v2",
-            task_description=f"""You are a research specialist focused on gathering comprehensive information.
-            
-            Research the topic: {research_topic}
-            
-            Your research should include:
-            1. Current state and trends analysis
-            2. Key players and organizations
-            3. Recent developments and innovations
-            4. Future projections and implications
-            5. Actionable insights and recommendations
-            
-            Provide well-structured, accurate, and insightful research findings.
-            """
-        )
+        self.agent_name = "researcher_v2"
         self.research_topic = research_topic
+        self.company_name = DEFAULT_COMPANY_NAME
+        self.output_dir = get_output_dir("research", "reports")
+        self.timestamp = get_timestamp()
+        
+        # Ensure output directory exists
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        self.task_description = f"""You are a research specialist focused on gathering comprehensive information.
+        
+        Research the topic: {research_topic}
+        
+        Your research should include:
+        1. Current state and trends analysis
+        2. Key players and organizations
+        3. Recent developments and innovations
+        4. Future projections and implications
+        5. Actionable insights and recommendations
+        
+        Provide well-structured, accurate, and insightful research findings.
+        """
+    
+    def run_research_workflow(self, topic=None, focus=None, save_to_file=False):
+        """
+        Run research workflow synchronously for Streamlit integration
+        
+        Args:
+            topic: Research topic to investigate
+            focus: Research focus area
+            save_to_file: Whether to save results to files (default: False)
+        
+        Returns:
+            dict: Results of the execution with actual content
+        """
+        if topic:
+            self.research_topic = topic
+            
+        try:
+            # Run the async main function
+            result = asyncio.run(self._async_workflow(topic, focus, save_to_file))
+            return {
+                'success': True,
+                'message': 'Research workflow completed successfully',
+                'topic': self.research_topic,
+                'focus': focus or 'comprehensive analysis',
+                'output_dir': self.output_dir if save_to_file else None,
+                'timestamp': self.timestamp,
+                'content': result,  # 실제 생성된 콘텐츠
+                'save_to_file': save_to_file
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error during research workflow execution: {str(e)}',
+                'error': str(e),
+                'topic': self.research_topic,
+                'focus': focus,
+                'save_to_file': save_to_file
+            }
+    
+    async def _async_workflow(self, topic, focus, save_to_file=False):
+        """Internal async workflow execution"""
+        
+        # Setup MCP application
+        app = MCPApp(
+            name=f"{self.agent_name}_system",
+            settings=get_settings("configs/mcp_agent.config.yaml"),
+            human_input_callback=None
+        )
+        
+        async with app.run() as research_app:
+            context = research_app.context
+            logger = research_app.logger
+            
+            # Configure servers only if saving to file
+            if save_to_file and "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                logger.info("Filesystem server configured")
+            
+            # Create agents
+            agents = self.create_agents()
+            evaluator = self.create_evaluator()
+            
+            # Create orchestrator
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=agents + [evaluator],
+                plan_type="full",
+            )
+            
+            # Update task description if focus is specified
+            task = self.define_task(focus, save_to_file)
+            
+            # Execute the workflow
+            logger.info(f"Starting {self.agent_name} workflow for topic: {self.research_topic}")
+            
+            result = await orchestrator.generate_str(
+                message=task,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            
+            logger.info(f"{self.agent_name} workflow completed successfully")
+            if save_to_file:
+                logger.info(f"Research deliverables saved in {self.output_dir}/")
+            else:
+                logger.info("Results returned for display (not saved to file)")
+            
+            return result
     
     def create_agents(self):
         """Create research-specific agents"""
@@ -109,11 +237,25 @@ class ResearcherAgent(BasicAgentTemplate):
             
             Provide EXCELLENT, GOOD, FAIR, or POOR rating with specific improvement recommendations.
             """,
+            server_names=DEFAULT_SERVERS,
         )
     
-    def define_task(self):
+    def define_task(self, focus=None, save_to_file=False):
         """Define comprehensive research task"""
-        return f"""Execute comprehensive research project on: {self.research_topic}
+        
+        focus_instruction = ""
+        if focus and focus != 'comprehensive analysis':
+            focus_instruction = f"\n\nSpecial focus on: {focus}"
+            if focus == "트렌드 분석":
+                focus_instruction += "\nEmphasize current trends, emerging patterns, and future directions."
+            elif focus == "경쟁 분석":
+                focus_instruction += "\nEmphasize competitive landscape, market positioning, and strategic advantages."
+            elif focus == "미래 전망":
+                focus_instruction += "\nEmphasize future projections, potential disruptions, and strategic implications."
+            elif focus == "시장 조사":
+                focus_instruction += "\nEmphasize market size, growth rates, customer segments, and opportunities."
+        
+        task = f"""Execute comprehensive research project on: {self.research_topic}{focus_instruction}
 
         1. Use trend_researcher to analyze:
            - Current state and latest developments
@@ -133,104 +275,48 @@ class ResearcherAgent(BasicAgentTemplate):
            - Long-term market projections
            - Strategic implications and recommendations
         
-        Compile findings into comprehensive research report saved in {self.output_dir}/:
+        """
+        
+        # Add file saving instructions only if save_to_file is True
+        if save_to_file:
+            task += f"""Compile findings into comprehensive research report saved in {self.output_dir}/:
         - trend_analysis_{self.timestamp}.md
         - competitive_landscape_{self.timestamp}.md
         - future_projections_{self.timestamp}.md
         - research_executive_summary_{self.timestamp}.md
-        
-        Provide actionable insights and strategic recommendations for decision-makers.
         """
-    
-    def create_summary(self):
-        """Create research-specific executive summary"""
-        summary_data = {
-            "title": f"Research Analysis: {self.research_topic}",
-            "overview": {
-                "title": "Research Overview",
-                "content": f"Comprehensive research analysis on {self.research_topic} completed with trend analysis, competitive intelligence, and future projections."
-            },
-            "impact_metrics": {
-                "Information Coverage": "95%+ comprehensive analysis",
-                "Source Reliability": "High-quality, verified sources",
-                "Future Insights": "5-10 year strategic projections",
-                "Actionable Recommendations": "Executive-level strategic guidance"
-            },
-            "initiatives": {
-                "Trend Analysis": "Current state and development patterns",
-                "Competitive Intelligence": "Market landscape and player analysis", 
-                "Future Projections": "Strategic implications and opportunities"
-            },
-            "action_items": [
-                "Review comprehensive research findings and recommendations",
-                "Evaluate strategic implications for organizational planning",
-                "Consider competitive positioning and market opportunities",
-                "Develop action plan based on future projections"
-            ],
-            "next_steps": [
-                "Executive review of research findings and strategic implications",
-                "Cross-functional team discussion on market opportunities",
-                "Strategic planning integration based on research insights",
-                "Regular monitoring of identified trends and developments"
-            ]
-        }
+        else:
+            task += """Return the complete research findings for immediate display. Do not save to files.
+        Provide comprehensive, detailed results that can be displayed directly including:
+        - Executive Summary with key findings
+        - Trend Analysis with current developments
+        - Competitive Landscape analysis
+        - Future Projections and strategic recommendations
+        """
         
-        return create_executive_summary(
-            output_dir=self.output_dir,
-            agent_name="research",
-            company_name=self.company_name,
-            timestamp=self.timestamp,
-            **summary_data
-        )
-    
-    def create_kpis(self):
-        """Create research-specific KPI template"""
-        kpi_structure = {
-            "research_quality_metrics": {
-                "information_coverage": {
-                    "source_diversity_score": "0/100",
-                    "information_recency": "0% within 6 months",
-                    "factual_accuracy_rate": "0%",
-                    "bias_detection_score": "0/100"
-                },
-                "analysis_depth": {
-                    "trend_identification_count": 0,
-                    "competitive_insights_count": 0,
-                    "future_projections_count": 0,
-                    "actionable_recommendations": 0
-                },
-                "research_efficiency": {
-                    "research_completion_time": "0 hours",
-                    "source_validation_rate": "0%", 
-                    "insight_per_hour_ratio": "0",
-                    "stakeholder_satisfaction": "0/10"
-                }
-            }
-        }
+        task += "\nProvide actionable insights and strategic recommendations for decision-makers."
         
-        return create_kpi_template(
-            output_dir=self.output_dir,
-            agent_name="research",
-            kpi_structure=kpi_structure,
-            timestamp=self.timestamp
-        )
+        return task
+    
+    async def main(self):
+        """Main execution method"""
+        return await self._async_workflow(None, None)
+
 
 async def main():
-    """Main execution function"""
-    # You can customize the research topic here
-    research_topic = input("Enter research topic (or press Enter for default): ").strip() or "AI and machine learning trends"
+    """
+    Researcher Agent v2 Main Function
     
-    researcher = ResearcherAgent(research_topic)
-    success = await researcher.run()
+    Demonstrates comprehensive research capabilities for:
+    - Trend analysis and market research
+    - Competitive intelligence gathering
+    - Future projections and strategic insights
+    - Structured output generation
+    """
     
-    if success:
-        print(f"\n✅ Research completed successfully!")
-        print(f"📁 Results saved in: {researcher.output_dir}/")
-        print(f"🔍 Research topic: {research_topic}")
-    else:
-        print("\n❌ Research failed. Check logs for details.")
-    
-    return success
+    agent = ResearcherAgent()
+    await agent.main()
+
 
 if __name__ == "__main__":
     asyncio.run(main()) 
