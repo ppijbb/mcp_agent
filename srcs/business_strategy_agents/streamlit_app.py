@@ -21,6 +21,9 @@ from .ai_engine import get_orchestrator, AgentRole
 from .architecture import RegionType, BusinessOpportunityLevel
 from .config import get_config, validate_config
 
+# 재미있는 확장 기능들 임포트
+from .fun_extensions import get_fun_extensions
+
 # Streamlit 설정
 st.set_page_config(
     page_title="Most Hooking Business Strategy Agent",
@@ -75,6 +78,12 @@ def initialize_session_state():
         st.session_state.agent_status = None
     if 'analysis_history' not in st.session_state:
         st.session_state.analysis_history = []
+    if 'user_achievements' not in st.session_state:
+        st.session_state.user_achievements = []
+    if 'fun_mode' not in st.session_state:
+        st.session_state.fun_mode = True
+    if 'story_mode' not in st.session_state:
+        st.session_state.story_mode = False
 
 
 def render_header():
@@ -233,24 +242,37 @@ def run_analysis_internal(keywords: List[str], regions: List[str], mode: str):
 
 def run_analysis(keywords: List[str], regions: List[RegionType], mode: str):
     """분석 실행 및 결과 표시"""
+    fun_extensions = get_fun_extensions()
+    personality = fun_extensions['personality']
+    achievements = fun_extensions['achievements']
+    music = fun_extensions['music']
+    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
+    # 🎭 에이전트 개성 표시
+    if st.session_state.fun_mode:
+        agent_chat = st.empty()
+    
     try:
-        # 진행 상황 시뮬레이션
-        progress_steps = [
-            "Initializing agents...",
-            "Collecting data from MCP servers...",
-            "Analyzing trends and patterns...",
-            "Detecting hooking opportunities...",
-            "Generating business strategies...",
-            "Finalizing results..."
+        # 진행 상황 시뮬레이션 (개성 있는 메시지들)
+        agent_steps = [
+            ("DATA_SCOUT", "working", "Initializing agents..."),
+            ("DATA_SCOUT", "excited", "Collecting data from MCP servers..."),
+            ("TREND_ANALYZER", "working", "Analyzing trends and patterns..."),
+            ("HOOKING_DETECTOR", "excited", "Detecting hooking opportunities..."),
+            ("STRATEGY_PLANNER", "working", "Generating business strategies..."),
+            ("STRATEGY_PLANNER", "excited", "Finalizing results...")
         ]
         
-        for i, step in enumerate(progress_steps):
+        for i, (agent_role, emotion, step) in enumerate(agent_steps):
+            if st.session_state.fun_mode:
+                reaction = personality.get_reaction(agent_role, emotion)
+                agent_chat.info(f"**{agent_role}**: {reaction}")
+            
             status_text.text(step)
-            progress_bar.progress((i + 1) / len(progress_steps))
-            time.sleep(0.5)  # UI 반응성을 위한 지연
+            progress_bar.progress((i + 1) / len(agent_steps))
+            time.sleep(0.8)  # 개성 메시지를 볼 시간
         
         # 실제 분석 실행
         region_strings = [region.value for region in regions]
@@ -258,6 +280,21 @@ def run_analysis(keywords: List[str], regions: List[RegionType], mode: str):
         
         progress_bar.progress(1.0)
         status_text.text("Analysis completed!")
+        
+        # 🎵 음악 생성
+        if st.session_state.fun_mode and 'error' not in results:
+            soundtrack = music.generate_soundtrack_description(results)
+            st.info(soundtrack)
+        
+        # 🏆 성취 확인
+        if 'error' not in results:
+            user_id = "streamlit_user"  # 실제로는 사용자 세션 ID 사용
+            new_achievements = achievements.check_achievements(user_id, results)
+            
+            for achievement in new_achievements:
+                st.balloons()
+                st.success(f"🎉 새로운 성취 달성! {achievement['name']}")
+                st.session_state.user_achievements.extend(new_achievements)
         
         # 결과 저장
         st.session_state.analysis_results = results
@@ -280,6 +317,8 @@ def run_analysis(keywords: List[str], regions: List[RegionType], mode: str):
     finally:
         progress_bar.empty()
         status_text.empty()
+        if st.session_state.fun_mode:
+            agent_chat.empty()
 
 
 def create_mock_results(keywords: List[str], regions: List[RegionType]) -> Dict[str, Any]:
@@ -396,8 +435,22 @@ def render_results():
             f"{top_score:.2f}"
         )
     
-    # 탭으로 결과 구분
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", "📊 Analytics"])
+    # 🌤️ 재미있는 확장 기능들
+    fun_extensions = get_fun_extensions()
+    
+    # 트렌드 날씨 표시
+    if st.session_state.fun_mode and results.get('enhanced_insights'):
+        weather = fun_extensions['analytics'].generate_trend_weather(results['enhanced_insights'])
+        st.info(f"📡 **트렌드 날씨 예보**: {weather}")
+    
+    # 탭으로 결과 구분 (재미있는 탭 추가)
+    if st.session_state.fun_mode:
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            "🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", 
+            "📊 Analytics", "🎪 Circus Show", "📖 Story Mode"
+        ])
+    else:
+        tab1, tab2, tab3, tab4 = st.tabs(["🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", "📊 Analytics"])
     
     with tab1:
         render_top_opportunities(results)
@@ -410,6 +463,14 @@ def render_results():
     
     with tab4:
         render_analytics(results)
+    
+    # 🎪 재미있는 탭들
+    if st.session_state.fun_mode:
+        with tab5:
+            render_circus_show(results, fun_extensions)
+        
+        with tab6:
+            render_story_mode(results, fun_extensions)
 
 
 def render_top_opportunities(results: Dict[str, Any]):
@@ -621,11 +682,194 @@ def render_analytics(results: Dict[str, Any]):
         st.dataframe(history_df, use_container_width=True)
 
 
+def render_circus_show(results: Dict[str, Any], fun_extensions: Dict[str, Any]):
+    """🎪 서커스 쇼 모드 - 인사이트를 서커스 퍼포먼스로 표현"""
+    st.subheader("🎪 Welcome to the Business Insight Circus!")
+    
+    insights = results.get('enhanced_insights', [])
+    if not insights:
+        st.info("🎭 No performances available - need insights to start the show!")
+        return
+    
+    st.write("### 🎊 Tonight's Main Performances:")
+    
+    # 각 인사이트를 서커스 퍼포먼스로 변환
+    for i, insight in enumerate(insights[:5], 1):
+        performance = fun_extensions['analytics'].create_circus_performance(insight)
+        
+        with st.container():
+            # 퍼포먼스 카드
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #f9ca24);
+                background-size: 400% 400%;
+                animation: gradient 3s ease infinite;
+                border-radius: 15px;
+                padding: 1.5rem;
+                margin: 1rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            ">
+                <h3>🎪 Performance #{i}: {performance['performance']}</h3>
+                <p style="font-size: 1.1em;">{performance['description']}</p>
+                <p style="font-size: 1.5em;">{performance['effect']}</p>
+                <p><strong>Hooking Score:</strong> {insight.hooking_score:.2f}</p>
+                <p><strong>Topics:</strong> {', '.join(insight.key_topics[:3])}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 박수 버튼
+            if st.button(f"👏 Applause for Performance #{i}!", key=f"applause_{i}"):
+                st.balloons()
+                st.success(f"🎉 The crowd goes wild! Performance #{i} was spectacular!")
+    
+    # 서커스 통계
+    st.write("### 🎭 Tonight's Show Statistics:")
+    
+    perf_stats = {
+        "🔥 Fire Shows": len([i for i in insights if i.hooking_score >= 0.9]),
+        "🎪 Acrobatics": len([i for i in insights if 0.7 <= i.hooking_score < 0.9]),
+        "🤹 Juggling": len([i for i in insights if 0.5 <= i.hooking_score < 0.7]),
+        "🎭 Mime Acts": len([i for i in insights if i.hooking_score < 0.5])
+    }
+    
+    cols = st.columns(4)
+    for col, (show_type, count) in zip(cols, perf_stats.items()):
+        with col:
+            st.metric(show_type, count)
+
+
+def render_story_mode(results: Dict[str, Any], fun_extensions: Dict[str, Any]):
+    """📖 스토리 모드 - 분석 결과를 이야기로 변환"""
+    st.subheader("📖 Business Adventure Story")
+    
+    insights = results.get('enhanced_insights', [])
+    if not insights:
+        st.info("📚 No story to tell yet - run an analysis to begin the adventure!")
+        return
+    
+    # 스토리 스타일 선택
+    story_type = st.selectbox(
+        "Choose Your Adventure Style:",
+        ["hero_journey", "detective"],
+        format_func=lambda x: {
+            "hero_journey": "🏰 Epic Hero's Journey",
+            "detective": "🔍 Mystery Detective Story"
+        }[x]
+    )
+    
+    # 스토리 생성
+    story_lines = fun_extensions['story'].create_analysis_story(results, story_type)
+    
+    st.write("### 📜 Your Business Adventure:")
+    
+    # 스토리를 한 줄씩 애니메이션처럼 표시
+    story_container = st.container()
+    
+    with story_container:
+        for i, line in enumerate(story_lines):
+            time.sleep(0.1)  # 약간의 딜레이로 스토리텔링 효과
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 1rem;
+                margin: 0.5rem 0;
+                border-radius: 10px;
+                border-left: 4px solid #ffd700;
+                font-size: 1.1em;
+                line-height: 1.6;
+            ">
+                <p>{line}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # 인터랙티브 요소
+    st.write("### 🎯 Your Role in the Story:")
+    
+    # 플레이어 액션 선택
+    if story_type == "hero_journey":
+        action = st.selectbox(
+            "What will you do next in your business quest?",
+            [
+                "⚔️ Attack the market with aggressive expansion",
+                "🛡️ Defend your position with solid strategies", 
+                "🏃 Scout for new opportunities",
+                "🤝 Form strategic alliances"
+            ]
+        )
+    else:
+        action = st.selectbox(
+            "How will you solve this business mystery?",
+            [
+                "🔍 Investigate deeper market trends",
+                "📊 Analyze the evidence more carefully",
+                "🤔 Interview key stakeholders",
+                "💡 Follow your business intuition"
+            ]
+        )
+    
+    if st.button("🚀 Take Action!", type="primary"):
+        st.success(f"📖 Excellent choice! {action}")
+        st.balloons()
+        
+        # 액션 결과 생성
+        action_results = [
+            "💎 You discovered a hidden market opportunity!",
+            "🎯 Your strategy perfectly hit the target market!",
+            "🏆 Success! You've unlocked a new business level!",
+            "✨ Plot twist! Your action revealed unexpected insights!"
+        ]
+        
+        import random
+        result = random.choice(action_results)
+        st.info(f"📜 **Story continues...** {result}")
+
+
+def render_sidebar_extensions():
+    """사이드바에 재미있는 기능들 추가"""
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🎮 Fun Features")
+    
+    # 재미 모드 토글
+    st.session_state.fun_mode = st.sidebar.toggle(
+        "🎪 Fun Mode", 
+        value=st.session_state.fun_mode,
+        help="Enable personality, circus show, and story mode"
+    )
+    
+    # 성취 표시
+    if st.session_state.user_achievements:
+        st.sidebar.subheader("🏆 Your Achievements")
+        for achievement in st.session_state.user_achievements[-3:]:  # 최근 3개만
+            st.sidebar.success(f"{achievement['name']}")
+    
+    # 트렌드 배틀 섹션
+    st.sidebar.subheader("⚔️ Trend Battle")
+    if st.sidebar.button("🎯 Create Prediction Challenge"):
+        fun_extensions = get_fun_extensions()
+        challenge = fun_extensions['battle'].create_prediction_challenge()
+        st.sidebar.success(f"Challenge created: {challenge['topic']}")
+        st.sidebar.write(f"Reward: {challenge['reward_points']} points")
+    
+    # 음악 컨트롤
+    if st.session_state.analysis_results and st.session_state.fun_mode:
+        st.sidebar.subheader("🎵 Trend Music")
+        if st.sidebar.button("🎼 Generate Soundtrack"):
+            fun_extensions = get_fun_extensions()
+            soundtrack = fun_extensions['music'].generate_soundtrack_description(
+                st.session_state.analysis_results
+            )
+            st.sidebar.info(soundtrack)
+
+
 def main():
     """메인 함수"""
     initialize_session_state()
     render_header()
     render_sidebar()
+    render_sidebar_extensions()  # 🎮 재미있는 사이드바 기능 추가
     
     # 메인 컨텐츠
     render_analysis_input()
