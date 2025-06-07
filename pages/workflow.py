@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 # Workflow Orchestrator 임포트 시도
 try:
+    from srcs.basic_agents.workflow_orchestration import app, example_usage
     from mcp_agent.app import MCPApp
     from mcp_agent.agents.agent import Agent
     from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -115,15 +116,15 @@ def render_agent_info():
         - **적응형 워크플로우**: 실행 결과 기반 자동 최적화
         - **병렬 처리**: 독립적 작업의 동시 실행
         - **조건부 분기**: 상황별 다른 경로 실행
-        - **리소스 관리**: 자동 부하 분산 및 리소스 할당
+        - **파일시스템 연동**: 문서 읽기/쓰기 자동화
         - **감사 추적**: 모든 실행 과정 기록 및 분석
         """)
     
     st.markdown("""
     #### 🎯 사용 사례
-    - 대규모 데이터 처리 파이프라인
-    - 고객 서비스 자동화 시스템
-    - 콘텐츠 생성 및 배포 워크플로우
+    - 문서 검토 및 피드백 생성 워크플로우
+    - 콘텐츠 분석 및 요약 자동화
+    - 다중 에이전트 협업 시스템
     - 비즈니스 프로세스 최적화
     """)
 
@@ -198,421 +199,306 @@ def render_workflow_interface():
                 height=100,
                 help="처리할 입력 데이터를 입력하세요"
             )
-        
-        # 추가 설정
-        st.markdown("##### ⚙️ 실행 설정")
+    
+    with col2:
+        st.markdown("#### 🎛️ 실행 옵션")
         
         model_type = st.selectbox(
-            "LLM 모델",
+            "AI 모델",
             ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-            help="사용할 언어 모델을 선택하세요"
+            index=0,
+            help="사용할 AI 모델을 선택하세요"
         )
         
         plan_type = st.selectbox(
-            "플랜 타입",
-            ["full", "step"],
-            help="full: 전체 계획 수립 후 실행, step: 단계별 계획 수립"
+            "플래닝 방식",
+            ["full", "step", "none"],
+            index=0,
+            help="워크플로우 플래닝 방식을 선택하세요"
         )
         
         save_results = st.checkbox(
-            "결과 파일로 저장",
-            value=False,
-            help="실행 결과를 임시 파일로 저장합니다"
+            "결과 파일 저장",
+            value=True,
+            help="워크플로우 실행 결과를 파일로 저장할지 선택하세요"
         )
         
+        st.markdown("---")
+        
+        # 실행 버튼
         if st.button("🚀 워크플로우 실행", type="primary", use_container_width=True):
-            if input_text.strip():
+            if workflow_type and input_text:
                 execute_workflow(workflow_type, input_text, model_type, plan_type, save_results)
             else:
-                st.error("입력 데이터를 입력해주세요.")
+                st.error("⚠️ 모든 필수 필드를 입력해주세요!")
     
-    with col2:
-        if 'workflow_execution_result' in st.session_state:
-            result = st.session_state['workflow_execution_result']
-            
-            if result['success']:
-                st.success("✅ 워크플로우 실행 완료!")
-                
-                # 실행 정보
-                st.markdown("#### 📊 실행 결과")
-                
-                col_r1, col_r2, col_r3 = st.columns(3)
-                with col_r1:
-                    st.metric("실행 시간", f"{result['execution_time']:.2f}초")
-                with col_r2:
-                    st.metric("에이전트 수", result.get('agent_count', 'N/A'))
-                with col_r3:
-                    st.metric("작업 단계", result.get('step_count', 'N/A'))
-                
-                # 워크플로우 결과
-                if 'output' in result and result['output']:
-                    st.markdown("#### 📄 생성된 결과")
-                    
-                    output = result['output']
-                    
-                    # 결과가 길면 확장 가능한 형태로 표시
-                    if len(output) > 1000:
-                        with st.expander("📋 전체 결과 보기", expanded=True):
-                            st.markdown(output)
-                    else:
-                        st.markdown(output)
-                    
-                    # 결과 다운로드 버튼
-                    st.download_button(
-                        label="📥 결과 다운로드",
-                        data=output,
-                        file_name=f"workflow_result_{result['timestamp']}.md",
-                        mime="text/markdown"
-                    )
-                
-                # 파일 저장 정보 표시
-                if result.get('save_results') and result.get('saved_files'):
-                    st.markdown("#### 💾 저장된 파일들")
-                    
-                    output_dir = result.get('output_directory', 'Unknown')
-                    st.success(f"📁 **저장 위치**: `{output_dir}`")
-                    
-                    saved_files = result.get('saved_files', [])
-                    st.info(f"💾 **저장된 파일 수**: {len(saved_files)}개")
-                    
-                    # 저장된 파일 목록
-                    with st.expander("📂 저장된 파일 목록", expanded=False):
-                        for i, file_path in enumerate(saved_files, 1):
-                            file_name = Path(file_path).name
-                            file_type = "📄 입력 파일" if "input" in file_name or "content_to_analyze" in file_name or "custom_input" in file_name else \
-                                       "📊 실행 로그" if "execution_log" in file_name else \
-                                       "📋 결과 파일"
-                            st.markdown(f"{i}. {file_type}: `{file_name}`")
-                            st.text(f"   전체 경로: {file_path}")
-                    
-                    # 디렉토리 열기 안내
-                    st.markdown(f"""
-                    **💡 파일 확인 방법:**
-                    ```bash
-                    # 디렉토리로 이동
-                    cd {output_dir}
-                    
-                    # 파일 목록 확인
-                    ls -la
-                    
-                    # 결과 파일 확인 (예시)
-                    cat *.md
-                    ```
-                    """)
-                
-                # 상세 실행 정보
-                with st.expander("🔍 상세 실행 정보"):
-                    st.markdown("#### 워크플로우 상세")
-                    st.json({
-                        'workflow_type': result['workflow_type'],
-                        'model_type': result['model_type'],
-                        'plan_type': result['plan_type'],
-                        'execution_time': result['execution_time'],
-                        'success': result['success'],
-                        'save_results': result.get('save_results', False),
-                        'output_length': len(result.get('output', '')),
-                        'saved_files_count': len(result.get('saved_files', [])),
-                        'output_directory': result.get('output_directory', None)
-                    })
-                    
-                    if 'error_details' in result:
-                        st.markdown("#### 처리 과정 상세")
-                        st.text(result['error_details'])
-                
-            else:
-                st.error("❌ 워크플로우 실행 중 오류 발생")
-                st.error(f"**오류**: {result['message']}")
-                
-                with st.expander("🔍 오류 상세"):
-                    st.code(result.get('error', 'Unknown error'))
-                    
-        else:
-            st.markdown("""
-            #### 🤖 워크플로우 실행 정보
-            
-            **실행되는 프로세스:**
-            1. **MCP App 초기화** - MCP 프레임워크 연결
-            2. **에이전트 생성** - 전문화된 AI 에이전트들 생성
-            3. **워크플로우 계획** - 동적 실행 계획 수립
-            4. **다중 에이전트 협업** - 병렬 및 순차 작업 실행
-            5. **결과 통합** - 최종 결과 생성 및 검증
-            
-            **사용되는 에이전트:**
-            - 🔍 **Finder**: 데이터 검색 및 수집
-            - ✍️ **Writer**: 콘텐츠 생성 및 파일 작성
-            - 📝 **Proofreader**: 문법 및 맞춤법 검토
-            - 🔍 **Fact Checker**: 사실 확인 및 일관성 검증
-            - 🎨 **Style Enforcer**: 스타일 가이드 준수 검토
-            
-            **특징:**
-            - **동적 계획**: 작업에 따라 자동으로 최적 계획 수립
-            - **병렬 처리**: 독립적 작업 동시 실행
-            - **오류 복구**: 자동 재시도 및 대안 경로
-            - **실시간 모니터링**: 진행 상황 추적
-            """)
+    st.markdown("---")
+    
+    # 워크플로우 예제 섹션
+    with st.expander("📚 워크플로우 예제"):
+        render_workflow_examples()
+
+def render_workflow_examples():
+    """워크플로우 예제 표시"""
+    
+    st.markdown("### 🎯 워크플로우 예제")
+    
+    tab1, tab2, tab3 = st.tabs(["📄 문서 검토", "📊 콘텐츠 분석", "🛠️ 커스텀"])
+    
+    with tab1:
+        st.markdown("""
+        #### 문서 검토 및 피드백 생성 워크플로우
+        
+        **실행 과정:**
+        1. **문서 분석**: 입력된 문서 내용 파싱
+        2. **다중 에이전트 검토**:
+           - 교정자(Proofreader): 문법, 맞춤법, 구두점 검사
+           - 팩트체커(Fact Checker): 사실 일관성 및 논리적 일관성 검증
+           - 스타일 검사관(Style Enforcer): 스타일 가이드 준수 평가
+        3. **결과 통합**: 모든 피드백을 종합한 리포트 생성
+        4. **파일 저장**: 최종 검토 결과를 마크다운 파일로 저장
+        
+        **예상 결과:**
+        - 상세한 교정 제안사항
+        - 논리적 일관성 분석 결과
+        - 스타일 개선 권장사항
+        - 종합 평가 및 등급
+        """)
+    
+    with tab2:
+        st.markdown("""
+        #### 콘텐츠 분석 및 요약 워크플로우
+        
+        **실행 과정:**
+        1. **콘텐츠 파싱**: 입력 콘텐츠 구조 분석
+        2. **키워드 추출**: 주요 키워드 및 개념 식별
+        3. **감정 분석**: 콘텐츠의 톤과 감정 분석
+        4. **요약 생성**: 핵심 내용 요약
+        5. **인사이트 제공**: 실행 가능한 권장사항 생성
+        
+        **예상 결과:**
+        - 주요 키워드 목록
+        - 감정 분석 결과 (긍정/부정/중립)
+        - 간결한 요약문
+        - 실행 가능한 인사이트
+        """)
+    
+    with tab3:
+        st.markdown("""
+        #### 커스텀 워크플로우
+        
+        **유연한 설정:**
+        - 사용자 정의 작업 설명
+        - 맞춤형 에이전트 구성
+        - 동적 플래닝 적용
+        - 다양한 출력 형식 지원
+        
+        **활용 예시:**
+        - 복잡한 데이터 처리 파이프라인
+        - 다국어 콘텐츠 번역 및 검수
+        - 소셜 미디어 콘텐츠 최적화
+        - 비즈니스 프로세스 자동화
+        """)
 
 def execute_workflow(workflow_type, input_text, model_type, plan_type, save_results):
     """워크플로우 실행"""
     
-    try:
-        with st.spinner("🔄 워크플로우를 실행하는 중..."):
-            import time
-            
-            # 비동기 함수 실행을 위한 래퍼
+    with st.spinner("🔄 워크플로우를 실행하고 있습니다... 잠시만 기다려주세요."):
+        try:
+            # 비동기 함수 실행을 위한 새 이벤트 루프 생성
             def run_async_workflow():
-                return asyncio.run(execute_async_workflow(workflow_type, input_text, model_type, plan_type, save_results))
+                try:
+                    # 새 이벤트 루프 생성
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # 비동기 워크플로우 실행
+                    result = loop.run_until_complete(
+                        execute_async_workflow(workflow_type, input_text, model_type, plan_type, save_results)
+                    )
+                    
+                    loop.close()
+                    return result
+                    
+                except Exception as e:
+                    return f"워크플로우 실행 중 오류가 발생했습니다: {str(e)}"
             
-            start_time = time.time()
-            workflow_result = run_async_workflow()
-            execution_time = time.time() - start_time
+            # 워크플로우 실행
+            result = run_async_workflow()
             
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            
-            # workflow_result에서 데이터 추출
-            if isinstance(workflow_result, dict):
-                output_text = workflow_result.get('result', '')
-                saved_files = workflow_result.get('saved_files', [])
-                output_directory = workflow_result.get('output_directory', None)
+            # 결과 표시
+            if result:
+                st.success("✅ 워크플로우가 성공적으로 완료되었습니다!")
+                
+                # 결과 표시
+                st.markdown("### 📊 실행 결과")
+                
+                # 결과 텍스트 표시
+                with st.expander("📄 상세 결과 보기", expanded=True):
+                    st.text_area(
+                        "워크플로우 실행 결과",
+                        value=str(result),
+                        height=300,
+                        disabled=True
+                    )
+                
+                # 파일 저장 상태 표시
+                if save_results:
+                    st.info("💾 결과가 파일로 저장되었습니다.")
+                    
             else:
-                # 이전 버전 호환성을 위해
-                output_text = str(workflow_result)
-                saved_files = []
-                output_directory = None
-            
-            st.session_state['workflow_execution_result'] = {
-                'success': True,
-                'workflow_type': workflow_type,
-                'model_type': model_type,
-                'plan_type': plan_type,
-                'execution_time': execution_time,
-                'output': output_text,
-                'agent_count': 5,  # finder, writer, proofreader, fact_checker, style_enforcer
-                'step_count': '다단계',
-                'save_results': save_results,
-                'saved_files': saved_files,
-                'output_directory': output_directory,
-                'timestamp': timestamp
-            }
-            st.rerun()
-            
-    except Exception as e:
-        st.session_state['workflow_execution_result'] = {
-            'success': False,
-            'message': f'워크플로우 실행 중 오류 발생: {str(e)}',
-            'error': str(e),
-            'workflow_type': workflow_type
-        }
-        st.rerun()
+                st.error("❌ 워크플로우 실행에 실패했습니다.")
+                
+        except Exception as e:
+            st.error(f"❌ 오류가 발생했습니다: {str(e)}")
+            st.info("OpenAI API 키가 설정되어 있는지 확인해주세요.")
 
 async def execute_async_workflow(workflow_type, input_text, model_type, plan_type, save_results):
     """비동기 워크플로우 실행"""
     
-    app = MCPApp(name="streamlit_workflow_orchestrator")
-    
-    async with app.run() as orchestrator_app:
-        context = orchestrator_app.context
+    try:
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
+            temp_file.write(input_text)
+            temp_file_path = temp_file.name
         
-        # 임시 디렉토리 생성
-        temp_dir = tempfile.mkdtemp()
-        context.config.mcp.servers["filesystem"].args.extend([temp_dir])
+        # MCP 앱 생성 및 실행
+        workflow_app = MCPApp(name="streamlit_workflow_orchestrator")
         
-        # 결과 저장을 위한 영구 디렉토리 설정
-        permanent_output_dir = None
-        if save_results:
-            # workflow_results 디렉토리 생성
-            permanent_output_dir = Path("workflow_results")
-            permanent_output_dir.mkdir(exist_ok=True)
+        async with workflow_app.run() as orchestrator_app:
+            context = orchestrator_app.context
             
-            # 타임스탬프별 하위 디렉토리 생성
-            import time
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            permanent_output_dir = permanent_output_dir / f"workflow_{timestamp}"
-            permanent_output_dir.mkdir(exist_ok=True)
-        
-        # 에이전트 생성
-        finder_agent = Agent(
-            name="finder",
-            instruction="""You are an agent with access to the filesystem, 
-            as well as the ability to fetch URLs. Your job is to identify 
-            the closest match to a user's request, make the appropriate tool calls, 
-            and return the URI and CONTENTS of the closest match.""",
-            server_names=["fetch", "filesystem"],
-        )
-
-        writer_agent = Agent(
-            name="writer",
-            instruction="""You are an agent that can write to the filesystem.
-            You are tasked with taking the user's input, addressing it, and 
-            writing the result to disk in the appropriate location.""",
-            server_names=["filesystem"],
-        )
-
-        proofreader = Agent(
-            name="proofreader",
-            instruction="""Review the text for grammar, spelling, and punctuation errors.
-            Identify any awkward phrasing or structural issues that could improve clarity. 
-            Provide detailed feedback on corrections.""",
-            server_names=["fetch"],
-        )
-
-        fact_checker = Agent(
-            name="fact_checker",
-            instruction="""Verify the factual consistency within the text. Identify any contradictions,
-            logical inconsistencies, or inaccuracies. Highlight potential issues with reasoning or coherence.""",
-            server_names=["fetch"],
-        )
-
-        style_enforcer = Agent(
-            name="style_enforcer",
-            instruction="""Analyze the text for adherence to style guidelines.
-            Evaluate the narrative flow, clarity of expression, and tone. Suggest improvements to 
-            enhance readability and engagement.""",
-            server_names=["fetch"],
-        )
-        
-        # 워크플로우 타입에 따른 작업 설정
-        output_filename = ""
-        if workflow_type == "문서 검토 및 피드백 생성":
-            # 임시 파일에 입력 텍스트 저장
-            input_file = os.path.join(temp_dir, "input_document.md")
-            with open(input_file, 'w', encoding='utf-8') as f:
-                f.write(input_text)
+            # 현재 디렉토리를 파일시스템 서버에 추가
+            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
             
-            output_filename = "feedback_report.md"
-            task = f"""Load the document from input_document.md in {temp_dir}, 
-            and generate a comprehensive feedback report covering proofreading, 
-            factual consistency, and style adherence. 
-            Write the feedback report to {output_filename} in the same directory."""
-            
-        elif workflow_type == "콘텐츠 분석 및 요약":
-            # 임시 파일에 입력 텍스트 저장
-            input_file = os.path.join(temp_dir, "content_to_analyze.md")
-            with open(input_file, 'w', encoding='utf-8') as f:
-                f.write(input_text)
-            
-            output_filename = "analysis_report.md"
-            task = f"""Load the content from content_to_analyze.md in {temp_dir}, 
-            analyze it for key themes, sentiment, and important insights, 
-            then create a comprehensive summary report. 
-            Write the analysis report to {output_filename} in the same directory."""
-            
-        else:  # 커스텀 워크플로우
-            # 임시 파일에 입력 텍스트 저장
-            input_file = os.path.join(temp_dir, "custom_input.md")
-            with open(input_file, 'w', encoding='utf-8') as f:
-                f.write(input_text)
-            
-            output_filename = "custom_output.md"
-            task = f"""Load the data from custom_input.md in {temp_dir}, 
-            process it according to the requirements, and generate appropriate output. 
-            Write the results to {output_filename} in the same directory."""
+            # 에이전트 생성
+            finder_agent = Agent(
+                name="finder",
+                instruction="""You are an agent with access to the filesystem, 
+                as well as the ability to fetch URLs. Your job is to identify 
+                the closest match to a user's request, make the appropriate tool calls, 
+                and return the URI and CONTENTS of the closest match.""",
+                server_names=["fetch", "filesystem"],
+            )
 
-        # 오케스트레이터 생성 및 실행
-        orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
-            available_agents=[
-                finder_agent,
-                writer_agent,
-                proofreader,
-                fact_checker,
-                style_enforcer,
-            ],
-            plan_type=plan_type,
-        )
+            writer_agent = Agent(
+                name="writer",
+                instruction="""You are an agent that can write to the filesystem.
+                You are tasked with taking the user's input, addressing it, and 
+                writing the result to disk in the appropriate location.""",
+                server_names=["filesystem"],
+            )
 
-        # 작업 실행
-        result = await orchestrator.generate_str(
-            message=task, 
-            request_params=RequestParams(model=model_type)
-        )
-        
-        # 결과 파일이 생성되었는지 확인하고 읽기
-        output_files = []
-        saved_files_info = []
-        
-        for file_name in ["feedback_report.md", "analysis_report.md", "custom_output.md"]:
-            output_path = os.path.join(temp_dir, file_name)
-            if os.path.exists(output_path):
-                with open(output_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                    output_files.append(f"## {file_name}\n\n{file_content}")
+            proofreader = Agent(
+                name="proofreader",
+                instruction="""Review the text for grammar, spelling, and punctuation errors.
+                Identify any awkward phrasing or structural issues that could improve clarity. 
+                Provide detailed feedback on corrections.""",
+                server_names=["fetch"],
+            )
+
+            fact_checker = Agent(
+                name="fact_checker",
+                instruction="""Verify the factual consistency within the text. Identify any contradictions,
+                logical inconsistencies, or inaccuracies in the content. 
+                Highlight potential issues with reasoning or coherence.""",
+                server_names=["fetch"],
+            )
+
+            style_enforcer = Agent(
+                name="style_enforcer",
+                instruction="""Analyze the text for adherence to style guidelines.
+                Evaluate the narrative flow, clarity of expression, and tone. Suggest improvements to 
+                enhance readability and engagement.""",
+                server_names=["fetch"],
+            )
+            
+            # 워크플로우 타입에 따른 작업 정의
+            if workflow_type == "문서 검토 및 피드백 생성":
+                task = f"""Analyze the following text and generate comprehensive feedback:
+                "{input_text}"
                 
-                # save_results가 True인 경우 영구 디렉토리에 파일 저장
-                if save_results and permanent_output_dir:
-                    # 입력 파일도 함께 저장
-                    if file_name == output_filename:
-                        # 입력 파일 저장
-                        input_filename = "input_document.md" if workflow_type == "문서 검토 및 피드백 생성" else \
-                                        "content_to_analyze.md" if workflow_type == "콘텐츠 분석 및 요약" else \
-                                        "custom_input.md"
-                        input_path = os.path.join(temp_dir, input_filename)
-                        if os.path.exists(input_path):
-                            permanent_input_path = permanent_output_dir / input_filename
-                            import shutil
-                            shutil.copy2(input_path, permanent_input_path)
-                            saved_files_info.append(str(permanent_input_path))
-                    
-                    # 출력 파일 저장
-                    permanent_file_path = permanent_output_dir / file_name
-                    import shutil
-                    shutil.copy2(output_path, permanent_file_path)
-                    saved_files_info.append(str(permanent_file_path))
-                    
-                    # 실행 로그도 저장
-                    log_file_path = permanent_output_dir / "execution_log.md"
-                    with open(log_file_path, 'w', encoding='utf-8') as log_file:
-                        log_content = f"""# Workflow Execution Log
+                Provide detailed feedback on:
+                1. Grammar, spelling, and punctuation
+                2. Factual consistency and logical coherence
+                3. Style and readability improvements
+                
+                Generate a comprehensive report with all feedback."""
+                
+            elif workflow_type == "콘텐츠 분석 및 요약":
+                task = f"""Analyze and summarize the following content:
+                "{input_text}"
+                
+                Provide:
+                1. Key themes and main points
+                2. Summary of the content
+                3. Important insights and takeaways
+                
+                Generate a comprehensive analysis report."""
+                
+            else:  # 커스텀 워크플로우
+                task = f"""Execute the following custom workflow:
+                Task: {input_text}
+                
+                Analyze the content and provide comprehensive insights according to the task description."""
 
-## 실행 정보
-- **워크플로우 타입**: {workflow_type}
-- **모델**: {model_type}
-- **플랜 타입**: {plan_type}
-- **실행 시간**: {time.strftime("%Y-%m-%d %H:%M:%S")}
+            # 오케스트레이터 생성
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=[
+                    finder_agent,
+                    writer_agent,
+                    proofreader,
+                    fact_checker,
+                    style_enforcer,
+                ],
+                plan_type=plan_type,
+            )
 
-## 오케스트레이터 결과
-{result}
+            # 워크플로우 실행
+            result = await orchestrator.generate_str(
+                message=task,
+                request_params=RequestParams(model=model_type)
+            )
+            
+            # 임시 파일 정리
+            os.unlink(temp_file_path)
+            
+            return result
+            
+    except Exception as e:
+        return f"워크플로우 실행 중 오류 발생: {str(e)}"
 
-## 생성된 파일들
-{chr(10).join([f"- {file}" for file in saved_files_info])}
-"""
-                        log_file.write(log_content)
-                    saved_files_info.append(str(log_file_path))
+# 사이드바 정보
+def render_sidebar():
+    """사이드바 렌더링"""
+    
+    with st.sidebar:
+        st.markdown("### 🔄 Workflow Orchestrator")
+        st.markdown("---")
         
-        # 최종 결과 조합
-        final_result = result
-        if output_files:
-            final_result += "\n\n---\n\n## 생성된 파일들\n\n" + "\n\n".join(output_files)
+        st.markdown("#### 📋 현재 상태")
+        if WORKFLOW_AGENT_AVAILABLE:
+            st.success("✅ Agent 연결됨")
+        else:
+            st.error("❌ Agent 연결 실패")
         
-        # 파일 저장 정보 추가
-        if save_results and saved_files_info:
-            final_result += f"""
-
----
-
-## 💾 저장된 파일들
-
-다음 파일들이 `{permanent_output_dir}` 디렉토리에 저장되었습니다:
-
-{chr(10).join([f"- `{file}`" for file in saved_files_info])}
-
-**저장된 파일 구성:**
-- 입력 파일: 원본 입력 데이터
-- 출력 파일: 워크플로우 실행 결과  
-- 실행 로그: 전체 실행 과정 및 결과 요약
-"""
+        st.markdown("#### 🛠️ 지원 기능")
+        st.markdown("""
+        - 📄 문서 검토 및 피드백
+        - 📊 콘텐츠 분석 및 요약
+        - 🛠️ 커스텀 워크플로우
+        - 🤖 다중 에이전트 협업
+        - 💾 결과 파일 저장
+        """)
         
-        # 임시 파일 정리
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        
-        # 반환 데이터에 저장 정보 포함
-        return_data = {
-            'result': final_result,
-            'saved_files': saved_files_info if save_results else [],
-            'output_directory': str(permanent_output_dir) if save_results else None
-        }
-        
-        return return_data
+        st.markdown("#### ⚙️ 설정 정보")
+        st.markdown(f"""
+        - **Agent 파일**: `workflow_orchestration.py`
+        - **위치**: `srcs/basic_agents/`
+        - **상태**: {'🟢 연결됨' if WORKFLOW_AGENT_AVAILABLE else '🔴 연결 안됨'}
+        """)
 
 if __name__ == "__main__":
+    render_sidebar()
     main() 
