@@ -57,3 +57,12 @@ colorama>=0.4.6
 tqdm>=4.65.0
 psutil>=5.9.0
 schedule
+
+# Playwright-Lighthouse for SEO analysis
+playwright>=1.40.0
+playwright-lighthouse>=1.0.0
+asyncio
+
+# Google Generative AI (Gemini) for AI Data Generation
+google-generativeai>=0.3.0
+google-cloud-aiplatform>=1.38.0

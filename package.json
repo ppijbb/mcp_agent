@@ -1,0 +1,12 @@
+{
+  "name": "mcp-agent-lighthouse",
+  "version": "1.0.0",
+  "description": "Lighthouse integration for SEO Doctor",
+  "dependencies": {
+    "lighthouse": "^10.4.0",
+    "chrome-launcher": "^0.15.2"
+  },
+  "scripts": {
+    "install": "npm install lighthouse chrome-launcher"
+  }
+} 
