@@ -189,14 +189,14 @@ def display_agent_categories():
     with col2:
         st.markdown("""
         <div class="agent-card">
-            <h3>🔄 Workflow Orchestrator</h3>
-            <p><strong>기능:</strong> 복잡한 워크플로우 자동화</p>
-            <p><strong>특징:</strong> 다중 에이전트 협업</p>
+            <h3>🤖 Decision Agent</h3>
+            <p><strong>기능:</strong> 모바일 인터액션 자동 결정</p>
+            <p><strong>특징:</strong> 실시간 개입, 맞춤형 추천</p>
         </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🔄 워크플로우", key="workflow", use_container_width=True):
-            st.switch_page("pages/workflow.py")
+        if st.button("🤖 Decision Agent", key="decision", use_container_width=True):
+            st.switch_page("pages/decision_agent.py")
     
     # 기본 에이전트들
     st.markdown("""
