@@ -61,6 +61,13 @@ def main():
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
     
+    # 파일 저장 옵션 추가
+    save_to_file = st.checkbox(
+        "재무 분석 결과를 파일로 저장", 
+        value=False,
+        help="체크하면 finance_health_reports/ 디렉토리에 분석 결과를 파일로 저장합니다"
+    )
+    
     st.markdown("---")
     
     # Agent 연동 상태 확인

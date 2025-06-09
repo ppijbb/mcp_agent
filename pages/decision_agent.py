@@ -35,6 +35,23 @@ def main():
     st.title("🤖 Decision Agent")
     st.markdown("### 모바일 인터액션 AI 결정 시스템")
     
+    # 홈으로 돌아가기 버튼
+    if st.button("🏠 홈으로 돌아가기", key="home"):
+        st.switch_page("main.py")
+    
+    # 파일 저장 옵션 추가
+    st.markdown("### ⚙️ 출력 옵션")
+    save_to_file = st.checkbox(
+        "결정 결과를 파일로 저장", 
+        value=False,
+        help="체크하면 decision_agent_reports/ 디렉토리에 결정 결과를 파일로 저장합니다"
+    )
+    
+    if save_to_file:
+        st.info("📁 결정 결과가 decision_agent_reports/ 디렉토리에 저장됩니다.")
+    
+    st.markdown("---")
+    
     # 사이드바 설정
     with st.sidebar:
         st.header("⚙️ 설정")
@@ -90,18 +107,18 @@ def main():
     ])
     
     with tab1:
-        display_realtime_monitoring()
+        display_realtime_monitoring(save_to_file)
     
     with tab2:
-        display_decision_history()
+        display_decision_history(save_to_file)
     
     with tab3:
-        display_scenario_testing()
+        display_scenario_testing(save_to_file)
     
     with tab4:
         display_system_analysis()
 
-def display_realtime_monitoring():
+def display_realtime_monitoring(save_to_file=False):
     """실시간 모니터링 탭"""
     
     st.markdown("### 📱 실시간 모바일 인터액션 모니터링")
@@ -163,10 +180,31 @@ def display_realtime_monitoring():
                             
                             if decision.alternatives:
                                 st.write(f"🔄 **대안:** {', '.join(decision.alternatives)}")
+                            
+                            # 텍스트 출력 생성
+                            decision_text = generate_decision_text_output(interaction, decision)
+                            
+                            # 텍스트 결과 표시
+                            st.markdown("#### 📄 결정 결과 텍스트")
+                            st.text_area(
+                                "결정 내용",
+                                value=decision_text,
+                                height=150,
+                                disabled=True,
+                                key=f"decision_text_{interaction.timestamp}"
+                            )
+                            
+                            # 파일 저장 처리
+                            if save_to_file:
+                                file_saved, output_path = save_decision_to_file(interaction, decision, decision_text)
+                                if file_saved:
+                                    st.success(f"💾 결정이 파일로 저장되었습니다: {output_path}")
+                                else:
+                                    st.error("파일 저장 중 오류가 발생했습니다.")
     else:
         st.info("모니터링을 시작하여 실시간 인터액션을 확인하세요.")
 
-def display_decision_history():
+def display_decision_history(save_to_file=False):
     """결정 이력 탭"""
     
     st.markdown("### 📊 AI 결정 이력 분석")
@@ -260,7 +298,7 @@ def display_decision_history():
     else:
         st.info("아직 결정 이력이 없습니다. 모니터링을 시작해보세요!")
 
-def display_scenario_testing():
+def display_scenario_testing(save_to_file=False):
     """시나리오 테스트 탭"""
     
     st.markdown("### 🎯 Decision Agent 시나리오 테스트")
@@ -476,6 +514,78 @@ def generate_sample_decision_history():
         decisions.append(decision)
     
     return decisions
+
+def generate_decision_text_output(interaction, decision):
+    """Decision Agent 텍스트 결과 생성"""
+    
+    text_output = f"""
+🤖 AI 결정 결과
+
+📱 인터액션 정보:
+- 앱: {interaction.app_name}
+- 유형: {interaction.interaction_type.value}
+- 시간: {interaction.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+- 긴급도: {interaction.urgency_score:.2f}/1.0
+
+🎯 AI 추천 결정:
+- 추천 액션: {decision.recommendation}
+- 신뢰도: {decision.confidence_score:.0%}
+- 자동 실행: {'예' if decision.auto_execute else '아니오'}
+
+📝 결정 근거:
+{decision.reasoning}
+
+🔄 대안 옵션:"""
+    
+    if decision.alternatives:
+        for i, alt in enumerate(decision.alternatives, 1):
+            text_output += f"\n{i}. {alt}"
+    else:
+        text_output += "\n- 추가 대안 없음"
+    
+    # 컨텍스트 정보 추가
+    text_output += f"""
+
+📊 디바이스 상태:
+- 배터리: {interaction.device_state.get('battery', 'N/A')}%
+- 네트워크: {interaction.device_state.get('network', 'N/A')}
+- 위치: {interaction.device_state.get('location', 'N/A')}
+
+⚡ 실행 결과:
+- 결정 생성 시간: {decision.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+- 결정 ID: {decision.decision_id}
+"""
+    
+    return text_output.strip()
+
+def save_decision_to_file(interaction, decision, decision_text):
+    """Decision Agent 결정을 파일로 저장"""
+    
+    try:
+        import os
+        from datetime import datetime
+        
+        output_dir = "decision_agent_reports"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"decision_result_{timestamp}.txt"
+        filepath = os.path.join(output_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("=" * 60 + "\n")
+            f.write("Decision Agent 결정 보고서\n")
+            f.write(f"생성 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(decision_text)
+            f.write("\n\n" + "=" * 60 + "\n")
+            f.write("*본 보고서는 Decision Agent에 의해 자동 생성되었습니다.*\n")
+        
+        return True, filepath
+        
+    except Exception as e:
+        print(f"파일 저장 중 오류: {e}")
+        return False, None
 
 if __name__ == "__main__":
     main() 

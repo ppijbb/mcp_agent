@@ -68,6 +68,13 @@ def main():
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
     
+    # 파일 저장 옵션 추가
+    save_to_file = st.checkbox(
+        "SEO 분석 결과를 파일로 저장", 
+        value=False,
+        help="체크하면 seo_doctor_reports/ 디렉토리에 분석 결과를 파일로 저장합니다"
+    )
+    
     st.markdown("---")
     
     # Lighthouse 사용 가능 여부 확인

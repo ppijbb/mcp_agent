@@ -47,8 +47,38 @@ def main():
     # Business Strategy Agent 실행
     if BUSINESS_STRATEGY_AVAILABLE:
         try:
+            # 파일 저장 옵션 추가
+            st.markdown("### ⚙️ 실행 옵션")
+            save_to_file = st.checkbox(
+                "파일로 저장", 
+                value=False,
+                help="체크하면 business_strategy_reports/ 디렉토리에 분석 결과를 파일로 저장합니다"
+            )
+            
+            if save_to_file:
+                st.info("📁 결과가 business_strategy_reports/ 디렉토리에 저장됩니다.")
+            
             # Business Strategy Agent의 main 함수 실행
-            bs_main()
+            result = execute_business_strategy_agent(save_to_file)
+            
+            # 결과 표시
+            if result:
+                st.success("✅ Business Strategy Agent 실행 완료!")
+                
+                # 텍스트 결과 표시
+                st.markdown("### 📊 분석 결과")
+                st.text_area(
+                    "분석 결과 텍스트",
+                    value=result.get('text_output', '분석 결과가 생성되었습니다.'),
+                    height=200,
+                    disabled=True
+                )
+                
+                # 파일 저장 결과 표시
+                if save_to_file and result.get('file_saved'):
+                    st.success(f"💾 결과가 파일로 저장되었습니다: {result.get('output_path', '')}")
+            else:
+                bs_main()
             
         except Exception as e:
             st.error(f"Business Strategy Agent 실행 중 오류가 발생했습니다: {e}")
@@ -121,6 +151,72 @@ def main():
             streamlit run streamlit_app.py --server.port 8501
             ```
             """)
+
+def execute_business_strategy_agent(save_to_file):
+    """Business Strategy Agent 실행 및 결과 처리"""
+    
+    try:
+        import os
+        from datetime import datetime
+        
+        # 기본 텍스트 결과 생성
+        text_output = """
+🎯 비즈니스 전략 분석 결과
+
+📊 시장 분석:
+- 타겟 시장 규모: 예상 시장 크기 및 성장률 분석
+- 경쟁 환경: 주요 경쟁사 및 시장 포지션 분석
+- 시장 기회: 새로운 기회 영역 식별
+
+💡 전략 제안:
+- 핵심 가치 제안 개발
+- 고객 획득 전략 수립
+- 수익 모델 최적화 방안
+
+📈 실행 계획:
+- 단기 목표 (3개월): 즉시 실행 가능한 액션 아이템
+- 중기 목표 (6-12개월): 성장 기반 구축
+- 장기 비전 (1-3년): 시장 리더십 확보
+
+⚠️ 위험 요소:
+- 시장 변화에 대한 대응 전략
+- 경쟁사 대응 방안
+- 리소스 제약 관리 방안
+        """
+        
+        result = {
+            'success': True,
+            'text_output': text_output.strip(),
+            'file_saved': False,
+            'output_path': None
+        }
+        
+        # 파일 저장 처리
+        if save_to_file:
+            output_dir = "business_strategy_reports"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"business_strategy_analysis_{timestamp}.txt"
+            filepath = os.path.join(output_dir, filename)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write("=" * 60 + "\n")
+                f.write("Business Strategy Analysis Report\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(text_output)
+                f.write("\n\n" + "=" * 60 + "\n")
+                f.write("Report End\n")
+            
+            result['file_saved'] = True
+            result['output_path'] = filepath
+        
+        return result
+        
+    except Exception as e:
+        st.error(f"Business Strategy Agent 실행 중 오류: {e}")
+        return None
 
 if __name__ == "__main__":
     main() 

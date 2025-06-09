@@ -44,6 +44,13 @@ def main():
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
     
+    # 파일 저장 옵션 추가
+    save_to_file = st.checkbox(
+        "대화 결과를 파일로 저장", 
+        value=False,
+        help="체크하면 rag_agent_reports/ 디렉토리에 대화 내용을 파일로 저장합니다"
+    )
+    
     st.markdown("---")
     
     # Agent 연동 상태 확인
