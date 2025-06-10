@@ -22,14 +22,14 @@ __all__ = [
     "EvaluatorOptimizerLLM", "QualityRating", "get_settings",
     
     # Configuration and constants
-    "DEFAULT_COMPANY_NAME", "get_output_dir", "get_timestamp",
+    "DEFAULT_COMPANY_NAME", "DEFAULT_SERVERS", "get_output_dir", "get_timestamp",
     
     # Utilities
     "setup_agent_app", "create_executive_summary", "create_kpi_template",
     "save_deliverables",
     
     # Templates
-    "AgentTemplate", "EnterpriseAgentTemplate",
+    "AgentTemplate", "EnterpriseAgentTemplate", "BasicAgentTemplate",
     
     # Styles and page utilities
     "get_common_styles", "get_mobile_styles", "get_page_header",

@@ -8,6 +8,7 @@ Contains simple, lightweight agents for basic tasks:
 - Streamlit interface agent
 - Data generation agents
 - RAG (Retrieval-Augmented Generation) agent
+- Travel Scout agent (incognito mode travel search)
 """
 
 # Import basic agents for easy access

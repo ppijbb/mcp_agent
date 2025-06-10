@@ -24,7 +24,8 @@ def list_agents():
         "streamlit": "Streamlit web interface agent",
         "data_generator": "Data generation and synthesis agent",
         "enhanced_data_generator": "Advanced data generation with ML",
-        "rag": "Retrieval-Augmented Generation agent"
+        "rag": "Retrieval-Augmented Generation agent",
+        "travel_scout": "Incognito mode travel search agent for best deals"
     }
     
     for agent, description in basic_agents.items():
@@ -76,7 +77,8 @@ def run_basic_agent(agent_name):
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
         "enhanced_data_generator": "basic_agents.enhanced_data_generator",
-        "rag": "basic_agents.rag_agent"
+        "rag": "basic_agents.rag_agent",
+        "travel_scout": "travel_scout.travel_scout_agent"
     }
     
     if agent_name not in agent_map:

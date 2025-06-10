@@ -164,6 +164,42 @@ def display_agent_categories():
         if st.button("👥 HR 관리", key="hr", use_container_width=True):
             st.switch_page("pages/hr_recruitment.py")
     
+    # 라이프스타일 에이전트들
+    st.markdown("""
+    <div class="category-header">
+        <h2>🌟 라이프스타일 에이전트</h2>
+        <p>일상 생활을 더 스마트하게 만드는 AI 어시스턴트</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <div class="agent-card">
+            <h3>🧳 Travel Scout Agent</h3>
+            <p><strong>기능:</strong> 시크릿 모드 여행 검색으로 진짜 최저가 발견</p>
+            <p><strong>특징:</strong> 캐시 방지, 가격 조작 차단, 고품질 숙소/항공편</p>
+            <p><strong>혁신:</strong> 🔒 인코그니토 브라우징으로 공정한 가격 비교</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Travel Scout 가성비 검색", key="travel_scout", use_container_width=True):
+            st.switch_page("pages/travel_scout.py")
+    
+    with col2:
+        st.markdown("""
+        <div class="agent-card">
+            <h3>🔍 Research Agent</h3>
+            <p><strong>기능:</strong> 정보 검색 및 종합 분석</p>
+            <p><strong>특징:</strong> 다중 소스 검증, 트렌드 분석</p>
+            <p><strong>사용처:</strong> 시장 조사, 경쟁사 분석, 학술 연구</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔍 Research Agent", key="research", use_container_width=True):
+            st.switch_page("pages/research.py")
+
     # 고급 에이전트들
     st.markdown("""
     <div class="category-header">
@@ -227,7 +263,7 @@ def display_agent_categories():
         </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🔍 리서치", key="research", use_container_width=True):
+        if st.button("🔍 리서치", key="research_basic", use_container_width=True):
             st.switch_page("pages/research.py")
     
     with col3:
