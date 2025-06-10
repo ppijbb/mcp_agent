@@ -1,0 +1,517 @@
+openapi: 3.1.0
+info:
+  title: Urban Hive Public Data API
+  description: |
+    An API for accessing Korean public data including administrative districts, 
+    urban statistics, community information, and resource sharing data.
+    
+    **Features:**
+    - Real-time Seoul district codes from official APIs
+    - Urban analytics (illegal dumping, traffic, safety)
+    - Community member and group information
+    - Resource sharing marketplace data
+    
+    **Data Sources:**
+    - Korean Statistical Geographic Information Service (SGIS)
+    - Seoul Open Data Portal
+    - Administrative District APIs
+  version: 2.0.0
+  contact:
+    name: Urban Hive Team
+    email: info@urbanhive.ai
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.data.go.kr/openapi
+    description: Korean Public Data Portal
+  - url: https://openapi.seoul.go.kr
+    description: Seoul Open Data Portal
+  - url: https://sgis.kostat.go.kr/openapi
+    description: Korean Statistical Geographic Information Service
+
+paths:
+  /districts/seoul:
+    get:
+      summary: Get Seoul district codes
+      description: |
+        Fetch official Seoul administrative district codes from multiple API sources.
+        Uses caching for performance optimization.
+      operationId: getSeoulDistricts
+      parameters:
+        - name: useCache
+          in: query
+          description: Whether to use cached data
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successfully retrieved district codes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  districts:
+                    type: array
+                    items:
+                      type: string
+                    example: ["강남구", "서초구", "송파구", "강동구"]
+                  source:
+                    type: string
+                    description: API source used
+                    enum: ["sgis", "seoul", "admin", "fallback"]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  cached:
+                    type: boolean
+        '500':
+          description: Error fetching district data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /urban-data/illegal-dumping:
+    get:
+      summary: Get illegal dumping incident data
+      description: Fetch illegal dumping reports and statistics by district
+      operationId: getIllegalDumpingData
+      parameters:
+        - name: district
+          in: query
+          description: Specific district to filter by
+          required: false
+          schema:
+            type: string
+            example: "강남구"
+      responses:
+        '200':
+          description: Illegal dumping incident data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IllegalDumpingIncident'
+
+  /urban-data/traffic:
+    get:
+      summary: Get traffic congestion data
+      description: Fetch traffic flow and congestion statistics
+      operationId: getTrafficData
+      parameters:
+        - name: district
+          in: query
+          description: Specific district to filter by
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Traffic congestion data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrafficData'
+
+  /urban-data/safety:
+    get:
+      summary: Get public safety statistics
+      description: Fetch crime statistics and safety information by area
+      operationId: getSafetyData
+      parameters:
+        - name: district
+          in: query
+          description: Specific district to filter by
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public safety statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SafetyData'
+
+  /community/members:
+    get:
+      summary: Get community member data
+      description: Fetch active community members and their profiles
+      operationId: getCommunityMembers
+      responses:
+        '200':
+          description: Community member data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommunityMember'
+
+  /community/groups:
+    get:
+      summary: Get community group data
+      description: Fetch available community groups and activities
+      operationId: getCommunityGroups
+      responses:
+        '200':
+          description: Community group data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommunityGroup'
+
+  /resources/available:
+    get:
+      summary: Get available resources
+      description: Fetch items, services, and resources available for sharing
+      operationId: getAvailableResources
+      responses:
+        '200':
+          description: Available resource data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableResource'
+
+  /resources/requests:
+    get:
+      summary: Get resource requests
+      description: Fetch community requests for items, services, or help
+      operationId: getResourceRequests
+      responses:
+        '200':
+          description: Resource request data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceRequest'
+
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+        message:
+          type: string
+          description: Human-readable error message
+        timestamp:
+          type: string
+          format: date-time
+
+    IllegalDumpingIncident:
+      type: object
+      required:
+        - location
+        - incidents
+        - trend
+        - last_month
+        - timestamp
+      properties:
+        location:
+          type: string
+          description: Incident location (district + neighborhood)
+          example: "강남구 역삼동"
+        incidents:
+          type: integer
+          description: Number of incidents this month
+          minimum: 0
+        trend:
+          type: string
+          enum: ["증가", "감소", "안정"]
+          description: Trend compared to last month
+        last_month:
+          type: integer
+          description: Number of incidents last month
+          minimum: 0
+        timestamp:
+          type: string
+          format: date-time
+        severity:
+          type: string
+          enum: ["낮음", "보통", "높음"]
+          description: Severity level
+        category:
+          type: string
+          enum: ["생활폐기물", "건설폐기물", "대형폐기물"]
+          description: Type of waste
+
+    TrafficData:
+      type: object
+      required:
+        - intersection
+        - congestion_level
+        - last_updated
+      properties:
+        intersection:
+          type: string
+          description: Intersection or road location
+          example: "강남구 역삼사거리"
+        congestion_level:
+          type: integer
+          description: Congestion level (0-100)
+          minimum: 0
+          maximum: 100
+        accident_prone:
+          type: boolean
+          description: Whether area is accident-prone
+        peak_hours:
+          type: string
+          description: Peak traffic hours
+          example: "07:00-09:00, 18:00-20:00"
+        average_speed:
+          type: number
+          description: Average vehicle speed (km/h)
+          minimum: 0
+        last_updated:
+          type: string
+          format: date-time
+
+    SafetyData:
+      type: object
+      required:
+        - area
+        - crime_rate
+        - risk_level
+        - last_updated
+      properties:
+        area:
+          type: string
+          description: District or area name
+          example: "강남구"
+        crime_rate:
+          type: number
+          description: Crime rate per 1000 residents
+          minimum: 0
+        risk_level:
+          type: string
+          enum: ["매우낮음", "낮음", "보통", "높음", "매우높음"]
+          description: Overall safety risk level
+        patrol_frequency:
+          type: string
+          enum: ["낮음", "보통", "높음"]
+          description: Police patrol frequency
+        emergency_response_time:
+          type: integer
+          description: Average emergency response time (minutes)
+          minimum: 0
+        cctv_count:
+          type: integer
+          description: Number of CCTV cameras in area
+          minimum: 0
+        last_updated:
+          type: string
+          format: date-time
+
+    CommunityMember:
+      type: object
+      required:
+        - id
+        - name
+        - age
+        - interests
+        - location
+        - activity_level
+      properties:
+        id:
+          type: integer
+          description: Unique member ID
+        name:
+          type: string
+          description: Member name
+        age:
+          type: integer
+          minimum: 18
+          maximum: 100
+        interests:
+          type: array
+          items:
+            type: string
+          description: Member interests and hobbies
+        location:
+          type: string
+          description: Member's district
+        activity_level:
+          type: string
+          enum: ["low", "medium", "high"]
+          description: Community activity level
+        last_active:
+          type: string
+          format: date-time
+        verified:
+          type: boolean
+          description: Whether member is verified
+        join_date:
+          type: string
+          format: date-time
+
+    CommunityGroup:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - members
+        - location
+        - schedule
+      properties:
+        id:
+          type: integer
+          description: Unique group ID
+        name:
+          type: string
+          description: Group name
+        type:
+          type: string
+          description: Group category
+          example: "fitness"
+        members:
+          type: integer
+          description: Number of group members
+          minimum: 1
+        location:
+          type: string
+          description: Meeting location
+        schedule:
+          type: string
+          description: Meeting schedule
+          example: "매일 06:00"
+        organizer:
+          type: string
+          description: Group organizer
+        description:
+          type: string
+          description: Group description
+        created_date:
+          type: string
+          format: date-time
+
+    AvailableResource:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - owner
+        - location
+        - available_until
+      properties:
+        id:
+          type: integer
+          description: Unique resource ID
+        type:
+          type: string
+          enum: ["item", "food", "skill", "service"]
+          description: Resource type
+        name:
+          type: string
+          description: Resource name
+        category:
+          type: string
+          description: Resource category
+        owner:
+          type: string
+          description: Resource owner
+        location:
+          type: string
+          description: Resource location (district)
+        available_until:
+          type: string
+          format: date-time
+          description: Availability end time
+        condition:
+          type: string
+          enum: ["새것", "양호", "보통", "나쁨"]
+          description: Item condition (for physical items)
+        description:
+          type: string
+          description: Resource description
+        posted_date:
+          type: string
+          format: date-time
+
+    ResourceRequest:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - requester
+        - location
+        - needed_by
+      properties:
+        id:
+          type: integer
+          description: Unique request ID
+        type:
+          type: string
+          enum: ["item", "food", "skill", "service"]
+          description: Resource type needed
+        name:
+          type: string
+          description: Requested resource name
+        category:
+          type: string
+          description: Resource category
+        requester:
+          type: string
+          description: Person making the request
+        location:
+          type: string
+          description: Required location (district)
+        needed_by:
+          type: string
+          format: date-time
+          description: When resource is needed by
+        urgency:
+          type: string
+          enum: ["낮음", "보통", "높음", "긴급"]
+          description: Request urgency level
+        description:
+          type: string
+          description: Request description
+        posted_date:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: query
+      name: serviceKey
+      description: Korean Public Data Portal API key
+    
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Districts
+    description: Administrative district information
+  - name: Urban Data
+    description: Urban analytics and statistics
+  - name: Community
+    description: Community members and groups
+  - name: Resources
+    description: Resource sharing marketplace 

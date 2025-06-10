@@ -63,6 +63,14 @@ playwright>=1.40.0
 playwright-lighthouse>=1.0.0
 asyncio
 
+# FastAPI and Uvicorn for data providers
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# MCP (Model Context Protocol) server dependencies
+mcp>=1.0.0
+httpx>=0.25.0
+
 # Google Generative AI (Gemini) for AI Data Generation
 google-generativeai>=0.3.0
 google-cloud-aiplatform>=1.38.0

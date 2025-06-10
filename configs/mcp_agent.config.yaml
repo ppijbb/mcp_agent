@@ -21,6 +21,11 @@ mcp:
     filesystem:
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem"]
+    urban-hive: # Urban Hive data provider MCP server
+      command: "python"
+      args: ["-m", "uvicorn", "srcs.urban_hive.providers.urban_hive_mcp_server:app", "--port", "8002"]
+      env:
+        URBAN_HIVE_API_BASE: "http://127.0.0.1:8001"
     pubmed:
       command: "uvx"
       args: ["-y", "pubmedmcp@0.1.3"]
