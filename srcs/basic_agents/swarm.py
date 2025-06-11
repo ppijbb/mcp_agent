@@ -8,7 +8,8 @@ from mcp_agent.workflows.swarm.swarm_anthropic import AnthropicSwarm
 from mcp_agent.human_input.handler import console_input_callback
 
 app = MCPApp(
-    name="airline_customer_service", human_input_callback=console_input_callback
+    name="airline_customer_service", 
+    human_input_callback=console_input_callback
 )
 
 
