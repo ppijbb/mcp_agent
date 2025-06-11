@@ -165,6 +165,11 @@ if __name__ == "__main__":
     travel_agent = TravelScoutAgent()
     
     async def run_search():
+        print("🔌 Initializing MCP connection...")
+        if not await travel_agent.initialize_mcp():
+            print("❌ MCP connection failed. Please check your setup and try again.")
+            return
+
         start_time = datetime.now()
         result = await travel_agent.search(DESTINATION, CHECK_IN, CHECK_OUT)
         end_time = datetime.now()

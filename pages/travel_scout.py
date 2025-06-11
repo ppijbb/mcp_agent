@@ -55,7 +55,7 @@ async def main():
         )
     
     # MCP Status details
-    with st.expander("MCP Browser 연결 상태 정보", expanded=True):
+    with st.expander("MCP Browser 연결 상태 정보", expanded=not mcp_status.get('browser_connected')):
         st.info(mcp_status.get('description', '상태 정보 없음'))
         
         if not mcp_status.get('browser_connected'):
@@ -69,69 +69,91 @@ async def main():
                     st.rerun()
         else:
             st.success("MCP 브라우저가 성공적으로 연결되었습니다.")
-    
-    # Sidebar configuration
-    with st.sidebar:
-        st.header("🔧 검색 설정")
-        
-        # Search parameters
-        st.subheader("📍 여행 정보")
-        destination = st.text_input("목적지", value="Tokyo", help="검색할 도시명을 입력하세요")
-        origin = st.text_input("출발지", value="Seoul", help="출발 도시명을 입력하세요")
-        
-        st.subheader("📅 날짜 설정")
-        col1, col2 = st.columns(2)
-        with col1:
-            departure_date = st.date_input(
-                "출발일",
-                value=datetime.now().date() + timedelta(days=7),
-                min_value=datetime.now().date()
-            )
-            check_in = st.date_input(
-                "체크인",
-                value=datetime.now().date() + timedelta(days=7),
-                min_value=datetime.now().date()
-            )
-        
-        with col2:
-            return_date = st.date_input(
-                "귀국일",
-                value=datetime.now().date() + timedelta(days=14),
-                min_value=departure_date + timedelta(days=1)
-            )
-            check_out = st.date_input(
-                "체크아웃",
-                value=datetime.now().date() + timedelta(days=10),
-                min_value=check_in + timedelta(days=1)
-            )
-        
-        # Quality criteria
-        st.subheader("⚙️ 검색 기준")
-        with st.expander("품질 기준 설정"):
-            min_hotel_rating = st.slider("최소 호텔 평점", 3.0, 5.0, 4.0, 0.1)
-            max_hotel_price = st.slider("최대 호텔 가격 (USD/박)", 50, 1000, 500, 50)
-            max_flight_price = st.slider("최대 항공료 (USD)", 200, 5000, 2000, 100)
+
+    st.markdown("---")
+
+    # --- Search Control Form ---
+    search_container = st.container(border=True)
+    with search_container:
+        with st.form("travel_search_form"):
+            st.header("🔎 여행 계획 입력")
             
-            st.session_state.agent.update_quality_criteria({
-                'min_hotel_rating': min_hotel_rating,
-                'max_hotel_price': max_hotel_price,
-                'max_flight_price': max_flight_price
-            })
+            c1, c2 = st.columns(2)
+            with c1:
+                destination = st.text_input("목적지", value="Tokyo", help="검색할 도시명을 입력하세요")
+                origin = st.text_input("출발지", value="Seoul", help="출발 도시명을 입력하세요")
+
+            with c2:
+                departure_date = st.date_input(
+                    "출발일",
+                    value=datetime.now().date() + timedelta(days=30),
+                    min_value=datetime.now().date()
+                )
+                return_date = st.date_input(
+                    "귀국일",
+                    value=datetime.now().date() + timedelta(days=37),
+                    min_value=departure_date + timedelta(days=1)
+                )
+
+            c3, c4 = st.columns(2)
+            with c3:
+                check_in = st.date_input(
+                    "체크인",
+                    value=datetime.now().date() + timedelta(days=30),
+                    min_value=datetime.now().date()
+                )
+                check_out = st.date_input(
+                    "체크아웃",
+                    value=datetime.now().date() + timedelta(days=34),
+                    min_value=check_in + timedelta(days=1)
+                )
+
+            with c4:
+                min_hotel_rating = st.slider("최소 호텔 평점", 3.0, 5.0, 4.0, 0.1)
+                max_hotel_price = st.slider("최대 호텔 가격 ($/박)", 50, 1000, 500, 50)
+                max_flight_price = st.slider("최대 항공료 ($)", 200, 5000, 2000, 100)
+            
+            search_button = st.form_submit_button(
+                "🚀 실시간 검색 시작", 
+                type="primary",
+                use_container_width=True,
+                help="MCP Browser를 통해 실시간으로 여행 정보를 검색합니다.",
+                disabled=not st.session_state.agent.get_mcp_status().get('browser_connected')
+            )
+
+    # Sidebar for Search History & Stats
+    with st.sidebar:
+        st.header("📊 검색 통계 및 이력")
+        stats = st.session_state.agent.get_search_stats()
+        if stats:
+            st.metric("총 검색 횟수", stats.get('total_searches', 0))
+            st.metric("성공률", f"{stats.get('success_rate', 0):.1f}%")
+            st.metric("MCP 사용률", f"{stats.get('real_time_data_percentage', 0):.1f}%")
+            st.metric("평균 검색 시간", f"{stats.get('average_search_duration', 0):.1f}초")
         
-        # Search button
-        search_button = st.button(
-            "🔍 실시간 검색 시작", 
-            type="primary",
-            use_container_width=True,
-            help="MCP Browser를 통해 실시간으로 여행 정보를 검색합니다.",
-            disabled=not st.session_state.agent.get_mcp_status().get('browser_connected')
-        )
-    
+        if st.session_state.search_history:
+            st.markdown("---")
+            st.subheader("📜 최근 검색")
+            for i, search in enumerate(reversed(st.session_state.search_history[-3:])):
+                with st.expander(f"검색 {len(st.session_state.search_history) - i}"):
+                    mcp_status = search.get('mcp_info', {}).get('status', 'unknown')
+                    mcp_icon = "🟢" if mcp_status == 'connected' else "🔴"
+                    st.write(f"{mcp_icon} {search.get('search_params', {}).get('destination', 'Unknown')}")
+                    st.write(f"호텔: {search.get('performance', {}).get('hotels_found', 0)}개")
+                    st.write(f"항공편: {search.get('performance', {}).get('flights_found', 0)}개")
+                    st.write(f"시간: {search.get('performance', {}).get('total_duration', 0):.1f}초")
+
     # Main content area
     if search_button:
         if not destination or not origin:
             st.error("목적지와 출발지를 모두 입력해주세요.")
             return
+
+        st.session_state.agent.update_quality_criteria({
+            'min_hotel_rating': min_hotel_rating,
+            'max_hotel_price': max_hotel_price,
+            'max_flight_price': max_flight_price
+        })
         
         # Prepare search parameters
         search_params = {
@@ -147,39 +169,46 @@ async def main():
         progress_container = st.container()
         with progress_container:
             st.info("🔍 MCP Browser Use로 검색 중...")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            progress_bar = st.progress(0, text="에이전트가 검색을 시작합니다...")
+
+            async def progress_updater():
+                for i in range(10):
+                    if i < 3:
+                        progress_bar.progress((i + 1) * 10, text="브라우저에서 호텔 정보를 검색 중입니다...")
+                    elif i < 7:
+                        progress_bar.progress((i + 1) * 10, text="항공편 정보를 수집하고 있습니다...")
+                    else:
+                        progress_bar.progress((i + 1) * 10, text="결과를 분석하고 보고서를 생성 중입니다...")
+                    await asyncio.sleep(0.3)
             
-            # Simulate progress updates
-            for i in range(5):
-                progress_bar.progress((i + 1) * 20)
-                status_text.text(f"검색 진행 중... {(i + 1) * 20}%")
-                await asyncio.sleep(0.5)
-        
-        # Perform search
-        try:
-            with st.spinner("MCP Browser로 여행 정보를 검색하고 있습니다..."):
+            progress_task = asyncio.create_task(progress_updater())
+            
+            # Perform search
+            try:
                 search_results = await st.session_state.agent.search_travel_options(search_params)
                 st.session_state.search_results = search_results
                 st.session_state.search_history.append(search_results)
+                
+                progress_task.cancel()
+                progress_container.empty()
+                
+                if search_results.get('status') == 'completed':
+                    st.success(f"✅ 검색 완료! {len(search_results.get('hotels', []))}개 호텔, {len(search_results.get('flights', []))}개 항공편 발견")
+                else:
+                    st.error(f"❌ 검색 실패: {search_results.get('error', 'Unknown error')}")
             
-            progress_container.empty()
-            
-            if search_results.get('status') == 'completed':
-                st.success(f"✅ 검색 완료! {len(search_results.get('hotels', []))}개 호텔, {len(search_results.get('flights', []))}개 항공편 발견")
-            else:
-                st.error(f"❌ 검색 실패: {search_results.get('error', 'Unknown error')}")
-        
-        except Exception as e:
-            progress_container.empty()
-            st.error(f"검색 중 오류 발생: {str(e)}")
-    
+            except Exception as e:
+                progress_task.cancel()
+                progress_container.empty()
+                st.error(f"검색 중 오류 발생: {str(e)}")
+
     # Display results
     if st.session_state.search_results:
+        st.markdown("---")
+        st.header("📋 검색 결과")
         results = st.session_state.search_results
         
         # Search metadata
-        st.markdown("---")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -206,25 +235,6 @@ async def main():
                 "데이터 소스",
                 "MCP 실시간" if mcp_connected else "연결 끊김"
             )
-        
-        # Data source breakdown
-        if 'analysis' in results and 'data_sources' in results['analysis']:
-            st.markdown("### 📊 데이터 소스 분석")
-            data_sources = results['analysis']['data_sources']
-            
-            source_col1, source_col2 = st.columns(2)
-            with source_col1:
-                st.metric(
-                    "실시간 데이터 비율", 
-                    f"{data_sources.get('real_time_percentage', 0):.1f}%"
-                )
-            
-            with source_col2:
-                total_mcp = data_sources.get('mcp_hotels', 0) + data_sources.get('mcp_flights', 0)
-                st.metric(
-                    "MCP 검색 결과 수",
-                    f"{total_mcp} 건"
-                )
         
         # Display results in tabs
         tab1, tab2, tab3, tab4 = st.tabs(["🏨 호텔", "✈️ 항공편", "💡 추천", "📈 분석"])
@@ -373,31 +383,14 @@ async def main():
                         st.info(f"모든 데이터 ({total_items}건)는 MCP Browser를 통해 실시간으로 수집되었습니다.")
             else:
                 st.info("분석 정보가 없습니다.")
-    
-    # Search history in sidebar
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("📊 검색 통계")
-        
-        stats = st.session_state.agent.get_search_stats()
-        if stats:
-            st.metric("총 검색 횟수", stats.get('total_searches', 0))
-            st.metric("성공률", f"{stats.get('success_rate', 0):.1f}%")
-            st.metric("MCP 사용률", f"{stats.get('real_time_data_percentage', 0):.1f}%")
-            st.metric("평균 검색 시간", f"{stats.get('average_search_duration', 0):.1f}초")
-        
-        if st.session_state.search_history:
-            st.markdown("### 📜 최근 검색")
-            for i, search in enumerate(reversed(st.session_state.search_history[-3:])):
-                with st.expander(f"검색 {len(st.session_state.search_history) - i}"):
-                    mcp_status = search.get('mcp_info', {}).get('status', 'unknown')
-                    mcp_icon = "🟢" if mcp_status == 'connected' else "🔴"
-                    st.write(f"{mcp_icon} {search.get('search_params', {}).get('destination', 'Unknown')}")
-                    st.write(f"호텔: {search.get('performance', {}).get('hotels_found', 0)}개")
-                    st.write(f"항공편: {search.get('performance', {}).get('flights_found', 0)}개")
-                    st.write(f"시간: {search.get('performance', {}).get('total_duration', 0):.1f}초")
-
 
 # Run the Streamlit app
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    # To run streamlit apps with asyncio, we need to handle the event loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    loop.run_until_complete(main()) 

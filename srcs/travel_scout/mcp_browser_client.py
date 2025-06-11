@@ -37,9 +37,8 @@ class MCPBrowserClient:
         # MCP Browser Use environment variables for incognito browsing
         browser_env = {
             # LLM Configuration (required)
-            'MCP_LLM_PROVIDER': 'openai',
-            'MCP_LLM_MODEL_NAME': 'gpt-4o',
-            'MCP_LLM_API_KEY': os.getenv('OPENAI_API_KEY', 'demo-key'),
+            'MCP_LLM_PROVIDER': 'vertexai',
+            'MCP_LLM_MODEL_NAME': 'gemini-2.0-flash-lite',
             
             # Browser Configuration for Incognito Mode
             'MCP_BROWSER_HEADLESS': 'true',  # Headless for production
@@ -76,7 +75,7 @@ class MCPBrowserClient:
             # MCP Browser Use server parameters
             server_params = StdioServerParameters(
                 command="npx",
-                args=["-y", "@modelcontextprotocol/server-browser-use"],
+                args=["-y", "@modelcontextprotocol/server-puppeteer"],
                 env=dict(os.environ)  # Pass current environment with MCP config
             )
             
@@ -345,10 +344,9 @@ class MCPBrowserClient:
 
 
 class TravelMCPManager:
-    """Manager for travel search using MCP browser"""
-    
+    """Manages MCP client and travel search orchestration"""
     def __init__(self):
-        self.browser_client = MCPBrowserClient()
+        self.mcp_client = MCPBrowserClient()
         self.search_history = []
     
     async def search_travel_options(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -359,14 +357,14 @@ class TravelMCPManager:
             logger.info(f"🔍 Starting MCP travel search for {search_params.get('destination')}")
             
             # Ensure MCP connection
-            if not self.browser_client.session:
-                await self.browser_client.connect_to_mcp_server()
+            if not self.mcp_client.session:
+                await self.mcp_client.connect_to_mcp_server()
             
             # Parallel searches
             search_tasks = []
             
             # Hotel search
-            hotel_task = self.browser_client.search_hotels_incognito(
+            hotel_task = self.mcp_client.search_hotels_incognito(
                 search_params['destination'],
                 search_params['check_in'],
                 search_params['check_out']
@@ -375,7 +373,7 @@ class TravelMCPManager:
             
             # Flight search (if origin provided)
             if search_params.get('origin'):
-                flight_task = self.browser_client.search_flights_incognito(
+                flight_task = self.mcp_client.search_flights_incognito(
                     search_params['origin'],
                     search_params['destination'],
                     search_params['departure_date'],
@@ -412,7 +410,7 @@ class TravelMCPManager:
                     "hotels_found": len(hotels),
                     "flights_found": len(flights),
                     "method": "MCP Browser Use (Incognito Mode)",
-                    "mcp_connected": self.browser_client.session is not None
+                    "mcp_connected": self.mcp_client.session is not None
                 },
                 "search_params": search_params,
                 "quality_criteria": search_params.get('quality_criteria', {}),
@@ -549,4 +547,4 @@ class TravelMCPManager:
     
     async def cleanup(self):
         """Cleanup resources"""
-        await self.browser_client.cleanup() 
+        await self.mcp_client.cleanup() 
