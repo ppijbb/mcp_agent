@@ -1,365 +1,186 @@
 #!/usr/bin/env python3
 """
-Travel Scout Agent
+Travel Scout Agent - MCP-Agent Implementation
 
-A specialized agent that uses incognito/private browsing mode to search for 
-the best value accommodations and flights to target destinations.
-
-Key Features:
-- Uses incognito mode to prevent cache interference with pricing
-- Searches for high-quality accommodations with excellent reviews
-- Finds cost-effective flights while maintaining quality standards
-- Always prioritizes the lowest prices meeting quality criteria
+A travel search agent using the mcp_agent framework for consistent
+integration with the MCP ecosystem.
 """
 
 import asyncio
+import os
+import sys
 import json
 import time
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 
-from ..common import *
+from mcp_agent.app import MCPApp
+from mcp_agent.config import get_settings
+from .mcp_browser_client import TravelMCPManager
 
 
-class TravelScoutAgent(BasicAgentTemplate):
-    """Travel search agent using incognito mode for unbiased price discovery"""
+class TravelScoutAgent:
+    """Travel Scout Agent using the real MCP Browser backend"""
     
-    def __init__(self, destination: str = None, check_in: str = None, check_out: str = None, 
-                 departure_date: str = None, return_date: str = None, origin: str = None):
-        super().__init__(
-            agent_name="travel_scout",
-            task_description="Search for best value travel deals using incognito browsing"
-        )
+    def __init__(self, output_dir: str = "travel_results", config_path: str = "configs/mcp_agent.config.yaml"):
+        """Initialize Travel Scout Agent
         
-        # Travel search parameters
-        self.destination = destination or "Seoul, South Korea"
-        self.check_in = check_in or self._get_default_checkin()
-        self.check_out = check_out or self._get_default_checkout()
-        self.departure_date = departure_date or self._get_default_departure()
-        self.return_date = return_date or self._get_default_return()
-        self.origin = origin or "Seoul, South Korea"
-        
-        # Quality thresholds
-        self.min_hotel_rating = 4.0
-        self.min_review_count = 100
-        self.min_flight_rating = 4.0
-        
-        # Search results storage
-        self.search_results = {
-            "hotels": [],
-            "flights": [],
-            "timestamp": datetime.now().isoformat(),
-            "search_params": {
-                "destination": self.destination,
-                "check_in": self.check_in,
-                "check_out": self.check_out,
-                "departure_date": self.departure_date,
-                "return_date": self.return_date,
-                "origin": self.origin
-            }
-        }
-        
-    def _get_default_checkin(self) -> str:
-        """Get default check-in date (30 days from now)"""
-        return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    
-    def _get_default_checkout(self) -> str:
-        """Get default check-out date (33 days from now)"""
-        return (datetime.now() + timedelta(days=33)).strftime("%Y-%m-%d")
-    
-    def _get_default_departure(self) -> str:
-        """Get default departure date (30 days from now)"""
-        return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    
-    def _get_default_return(self) -> str:
-        """Get default return date (37 days from now)"""
-        return (datetime.now() + timedelta(days=37)).strftime("%Y-%m-%d")
-
-    def create_agents(self):
-        """Create specialized travel search agents"""
-        return [
-            # Hotel Search Agent
-            Agent(
-                name="hotel_scout",
-                instruction=f"""You are a hotel search specialist using incognito browsing to find the best accommodation deals.
-
-                Search Parameters:
-                - Destination: {self.destination}
-                - Check-in: {self.check_in}
-                - Check-out: {self.check_out}
-                - Minimum Rating: {self.min_hotel_rating}/5.0
-                - Minimum Reviews: {self.min_review_count}
-
-                Your mission:
-                1. ALWAYS use incognito/private browsing mode to prevent price manipulation
-                2. Search multiple hotel booking sites (Booking.com, Hotels.com, Expedia, Agoda)
-                3. Focus on hotels with ratings ≥ {self.min_hotel_rating} and reviews ≥ {self.min_review_count}
-                4. Prioritize value for money - best quality at lowest price
-                5. Extract detailed information: name, price, rating, review count, amenities, location
-                6. Compare prices across platforms for the same hotel
-                7. Document search methodology and cache-prevention measures
-
-                Quality Standards:
-                - Only consider hotels with excellent reviews (4.0+ rating)
-                - Minimum {self.min_review_count} reviews for reliability
-                - Look for recent positive reviews
-                - Consider location convenience and safety
-                - Check for hidden fees or additional charges
-
-                Output Format:
-                - Hotel name and exact location
-                - Nightly rate and total cost
-                - Rating and number of reviews
-                - Key amenities and features
-                - Booking platform and direct comparison
-                - Value assessment and recommendation reasoning
-                """,
-                server_names=["mcp_playwright-mcp-server"]
-            ),
-            
-            # Flight Search Agent
-            Agent(
-                name="flight_scout",
-                instruction=f"""You are a flight search specialist using incognito browsing to find the best flight deals.
-
-                Search Parameters:
-                - Origin: {self.origin}
-                - Destination: {self.destination}
-                - Departure: {self.departure_date}
-                - Return: {self.return_date}
-                - Minimum Rating: {self.min_flight_rating}/5.0
-
-                Your mission:
-                1. ALWAYS use incognito/private browsing mode to avoid dynamic pricing
-                2. Search multiple flight booking sites (Kayak, Expedia, Skyscanner, Google Flights)
-                3. Focus on airlines with good ratings and reliable service
-                4. Find the best balance of price, convenience, and quality
-                5. Check for nearby airports and flexible dates for better deals
-                6. Extract comprehensive flight information and compare options
-                7. Document incognito browsing usage and price consistency
-
-                Quality Standards:
-                - Prefer airlines with ratings ≥ {self.min_flight_rating}
-                - Consider flight duration and layover times
-                - Check baggage policies and additional fees
-                - Verify airline reliability and punctuality
-                - Consider flight times and convenience
-
-                Output Format:
-                - Airline and flight numbers
-                - Departure/arrival times and airports
-                - Total flight time and layovers
-                - Price breakdown (base fare + taxes + fees)
-                - Airline rating and service quality
-                - Booking platform comparison
-                - Value assessment and recommendation
-                """,
-                server_names=["mcp_playwright-mcp-server"]
-            ),
-            
-            # Price Comparison Agent
-            Agent(
-                name="price_analyzer",
-                instruction=f"""You are a price analysis specialist ensuring we get the absolute best deals.
-
-                Your responsibilities:
-                1. Analyze all hotel and flight options found by other agents
-                2. Cross-reference prices across different platforms
-                3. Calculate total trip cost including all fees
-                4. Identify the best value combinations (hotel + flight packages)
-                5. Flag any suspicious pricing or potential scams
-                6. Recommend final booking strategy
-
-                Analysis Criteria:
-                - Total cost optimization
-                - Quality-to-price ratio assessment
-                - Hidden fee detection
-                - Seasonal pricing patterns
-                - Platform reliability and booking protection
-                - Cancellation policy comparison
-
-                Output Format:
-                - Ranked list of best value combinations
-                - Total trip cost breakdown
-                - Savings opportunities identified
-                - Risk assessment for each option
-                - Final recommendation with reasoning
-                - Booking timeline and strategy
-                """,
-                server_names=DEFAULT_SERVERS
-            )
-        ]
-
-    def create_evaluator(self):
-        """Create travel search quality evaluator"""
-        return Agent(
-            name="travel_scout_evaluator",
-            instruction=f"""You are a travel booking expert evaluating the quality of travel search results.
-
-            Evaluation Criteria:
-
-            1. INCOGNITO BROWSING COMPLIANCE (25%)
-            - Verified use of private/incognito mode
-            - Evidence of cache prevention measures
-            - Consistency in pricing across sessions
-            - Documentation of browsing methodology
-
-            2. ACCOMMODATION QUALITY (25%)
-            - Hotels meet minimum rating threshold ({self.min_hotel_rating}+)
-            - Sufficient review count ({self.min_review_count}+)
-            - Recent positive reviews analysis
-            - Location safety and convenience
-            - Amenity value assessment
-
-            3. FLIGHT QUALITY (25%)
-            - Airlines meet quality standards
-            - Reasonable flight times and connections
-            - Transparent pricing with all fees included
-            - Baggage policy consideration
-            - Schedule convenience
-
-            4. PRICE OPTIMIZATION (25%)
-            - Comprehensive platform comparison
-            - Best value identification
-            - Hidden fee detection
-            - Total cost accuracy
-            - Savings maximization
-
-            Rate as EXCELLENT, GOOD, FAIR, or POOR with specific feedback.
-            Highlight any missing elements or quality concerns.
-            Provide actionable recommendations for improvement.
-            """,
-        )
-
-    def define_task(self):
-        """Define the travel search task"""
-        return f"""Execute comprehensive travel search for the following trip:
-
-        TRIP DETAILS:
-        - Destination: {self.destination}
-        - Hotel Stay: {self.check_in} to {self.check_out}
-        - Flight Route: {self.origin} ↔ {self.destination}
-        - Travel Dates: {self.departure_date} to {self.return_date}
-
-        REQUIREMENTS:
-        1. Use INCOGNITO/PRIVATE browsing mode exclusively
-        2. Search high-quality accommodations (4.0+ rating, 100+ reviews)
-        3. Find reliable flights with good airline ratings
-        4. Prioritize best value (quality + lowest price)
-        5. Compare multiple booking platforms
-        6. Provide detailed analysis and recommendations
-
-        DELIVERABLES:
-        - Comprehensive hotel options analysis
-        - Flight alternatives with pricing breakdown
-        - Total trip cost calculations
-        - Best value recommendations
-        - Booking strategy and timeline
-        - Incognito browsing verification report
-
-        Begin the search process immediately and ensure all browsing is done in incognito mode to prevent price manipulation.
+        Args:
+            output_dir: Directory to save travel search results
+            config_path: Path to mcp_agent configuration file
         """
-
-    async def run_travel_search(self):
-        """Main method to run the travel search"""
-        return await self.run()
-
-    def save_results(self):
-        """Save search results to file"""
-        results_file = self.output_dir / f"travel_search_results_{self.timestamp}.json"
-        with open(results_file, 'w', encoding='utf-8') as f:
-            json.dump(self.search_results, f, indent=2, ensure_ascii=False)
-        
-        print(f"🎯 Search results saved to: {results_file}")
-
-    def create_summary(self):
-        """Create travel search executive summary"""
-        summary_data = {
-            "destination": self.destination,
-            "travel_dates": f"{self.departure_date} to {self.return_date}",
-            "accommodation_dates": f"{self.check_in} to {self.check_out}",
-            "search_methodology": "Incognito browsing mode for unbiased pricing",
-            "quality_standards": f"Hotels: {self.min_hotel_rating}+ rating, {self.min_review_count}+ reviews",
-            "platforms_searched": "Multiple booking platforms for comprehensive comparison"
+        self.output_dir = output_dir
+        self.search_history = []
+        self.quality_criteria = {
+            'min_hotel_rating': 4.0,
+            'max_hotel_price': 500,
+            'max_flight_price': 2000
         }
+        self.mcp_manager = TravelMCPManager()
+        self.mcp_connected = False
         
-        create_executive_summary(
-            output_dir=self.output_dir,
-            agent_name=self.agent_name,
-            company_name="Travel Scout",
-            timestamp=self.timestamp,
-            summary_data=summary_data
+        # Initialize app for potential future use with mcp_agent framework
+        self.app = MCPApp(
+            name="travel_scout_agent", 
+            settings=get_settings(config_path)
         )
+    
+    def get_mcp_status(self) -> Dict[str, Any]:
+        """Get MCP Browser connection status"""
+        status = 'connected' if self.mcp_connected else 'disconnected'
+        return {
+            'status': status,
+            'browser_connected': self.mcp_connected,
+            'real_time_capability': self.mcp_connected,
+            'description': f'MCP Browser is {status}.'
+        }
 
-    def create_kpis(self):
-        """Create travel search KPIs"""
-        kpi_structure = {
-            "Search Quality": {
-                "Incognito Compliance": "100%",
-                "Platform Coverage": "4+ booking sites",
-                "Quality Threshold": f"{self.min_hotel_rating}+ rating hotels",
-                "Review Reliability": f"{self.min_review_count}+ reviews"
-            },
-            "Cost Optimization": {
-                "Price Comparison": "Multi-platform analysis",
-                "Hidden Fee Detection": "Comprehensive fee audit",
-                "Value Optimization": "Quality-to-price ratio maximization",
-                "Savings Identification": "Best deal discovery"
-            },
-            "Service Quality": {
-                "Hotel Standards": f"{self.min_hotel_rating}+ rating requirement",
-                "Flight Standards": f"{self.min_flight_rating}+ airline rating",
-                "Location Quality": "Safety and convenience assessed",
-                "Review Recency": "Recent feedback prioritized"
+    async def initialize_mcp(self) -> bool:
+        """Initialize and connect to the MCP Browser server."""
+        try:
+            self.mcp_connected = await self.mcp_manager.mcp_client.connect_to_mcp_server()
+            return self.mcp_connected
+        except Exception as e:
+            print(f"Error during MCP initialization: {e}")
+            self.mcp_connected = False
+            return False
+
+    def update_quality_criteria(self, criteria: Dict[str, Any]) -> None:
+        """Update quality criteria for search"""
+        self.quality_criteria.update(criteria)
+
+    async def search_travel_options(self, search_params: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """
+        Search for travel options using the real TravelMCPManager.
+        This method replaces the previous mock/orchestrator logic.
+        """
+        search_start_time = time.time()
+        
+        if not self.mcp_connected:
+            raise ConnectionError("MCP Browser is not connected. Please connect before searching.")
+
+        try:
+            search_params['quality_criteria'] = self.quality_criteria
+            
+            # Use the real MCP Manager to perform the search
+            search_result = await self.mcp_manager.search_travel_options(search_params)
+            
+            # Add metadata for the UI
+            total_duration = time.time() - search_start_time
+            search_result.setdefault('performance', {})['total_duration'] = total_duration
+            search_result['mcp_info'] = self.get_mcp_status()
+            search_result['status'] = 'completed'
+
+            self.search_history.append(search_result)
+            return search_result
+            
+        except Exception as e:
+            error_result = {
+                "status": "failed",
+                "error": str(e),
+                "search_params": search_params,
+                "execution_time": time.time() - search_start_time
             }
-        }
+            self.search_history.append(error_result)
+            return error_result
+
+    def get_search_history(self) -> List[Dict]:
+        """Get search history"""
+        return self.mcp_manager.get_search_history()
+
+    def get_search_stats(self) -> Dict:
+        """Get search statistics"""
+        history = self.get_search_history()
+        if not history:
+            return {
+                "total_searches": 0, "success_rate": 0.0,
+                "real_time_data_percentage": 0.0, "average_search_duration": 0.0,
+                "message": "No searches performed yet"
+            }
         
-        create_kpi_template(
-            output_dir=self.output_dir,
-            agent_name=self.agent_name,
-            kpi_structure=kpi_structure,
-            timestamp=self.timestamp
-        )
+        completed_searches = [s for s in history if s.get("status") == "completed"]
+        
+        success_rate = (len(completed_searches) / len(history)) * 100 if history else 0
+        
+        real_time_searches = [s for s in completed_searches if s.get('mcp_info', {}).get('browser_connected')]
+        real_time_percentage = (len(real_time_searches) / len(completed_searches)) * 100 if completed_searches else 0
+        
+        durations = [s.get("performance", {}).get("total_duration", 0) for s in history]
+        average_duration = sum(durations) / len(durations) if durations else 0
+        
+        return {
+            "total_searches": len(history), "completed_searches": len(completed_searches),
+            "success_rate": success_rate, "real_time_data_percentage": real_time_percentage,
+            "average_search_duration": average_duration, "history_count": len(history)
+        }
+
+    async def search(self, destination: str, check_in: str, check_out: str, use_orchestrator: bool = True) -> Dict[str, Any]:
+        """Convenience method for searching travel options (for CLI)"""
+        search_params = {
+            'destination': destination, 'origin': 'Seoul', 'check_in': check_in,
+            'check_out': check_out, 'departure_date': check_in, 'return_date': check_out
+        }
+        return await self.search_travel_options(search_params)
 
 
-def main():
-    """Main execution function"""
-    print("🧳 Travel Scout Agent - Incognito Mode Travel Search")
-    print("=" * 50)
-    
-    # Get user input for travel parameters
-    destination = input("Enter destination (default: Seoul, South Korea): ").strip()
-    origin = input("Enter origin city (default: Seoul, South Korea): ").strip()
-    
-    # Date inputs with validation
-    try:
-        departure = input("Enter departure date (YYYY-MM-DD, default: 30 days from now): ").strip()
-        return_date = input("Enter return date (YYYY-MM-DD, default: 37 days from now): ").strip()
-        check_in = input("Enter hotel check-in date (YYYY-MM-DD, default: 30 days from now): ").strip()
-        check_out = input("Enter hotel check-out date (YYYY-MM-DD, default: 33 days from now): ").strip()
-    except:
-        departure = return_date = check_in = check_out = None
-    
-    # Create and run the agent
-    agent = TravelScoutAgent(
-        destination=destination or None,
-        origin=origin or None,
-        departure_date=departure or None,
-        return_date=return_date or None,
-        check_in=check_in or None,
-        check_out=check_out or None
-    )
-    
-    print(f"\n🎯 Searching for travel deals to: {agent.destination}")
-    print(f"📅 Travel dates: {agent.departure_date} to {agent.return_date}")
-    print(f"🏨 Hotel stay: {agent.check_in} to {agent.check_out}")
-    print(f"🔒 Using INCOGNITO mode to prevent price manipulation")
-    print("\nStarting search...")
-    
-    # Run the travel search
-    asyncio.run(agent.run_travel_search())
+# Convenience function for direct usage
+async def search_travel(destination: str, check_in: str, check_out: str) -> Dict[str, Any]:
+    """Search for travel options using TravelScoutAgent"""
+    agent = TravelScoutAgent()
+    return await agent.search(destination, check_in, check_out)
 
 
 if __name__ == "__main__":
-    main() 
+    # Command line usage
+    DESTINATION = "Tokyo" if len(sys.argv) <= 1 else sys.argv[1]
+    CHECK_IN = "2025-08-01" if len(sys.argv) <= 2 else sys.argv[2]
+    CHECK_OUT = "2025-08-05" if len(sys.argv) <= 3 else sys.argv[3]
+    
+    print(f"🧳 Travel Scout Agent - MCP Browser Mode")
+    print(f"📍 Destination: {DESTINATION}")
+    print(f"📅 Check-in: {CHECK_IN}")
+    print(f"📅 Check-out: {CHECK_OUT}")
+    print("-" * 50)
+    
+    travel_agent = TravelScoutAgent()
+    
+    async def run_search():
+        start_time = datetime.now()
+        result = await travel_agent.search(DESTINATION, CHECK_IN, CHECK_OUT)
+        end_time = datetime.now()
+        
+        duration = (end_time - start_time).total_seconds()
+        print(f"\n⏱️  Total execution time: {duration:.2f} seconds")
+        
+        stats = travel_agent.get_search_stats()
+        print(f"📊 Search Statistics: {stats}")
+        
+        if result.get("status") == "completed":
+            print("✅ Travel search completed successfully!")
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print("❌ Travel search failed!")
+            if "error" in result:
+                print(f"Error: {result['error']}")
+    
+    asyncio.run(run_search())
