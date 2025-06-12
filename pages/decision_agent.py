@@ -12,14 +12,19 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 중앙 설정 시스템 import
+from configs.settings import get_reports_path
+
 try:
-    from srcs.advanced_agents.decision_agent_demo import (
-        MockDecisionAgent, 
-        create_sample_interactions, 
-        InteractionType
+    from srcs.advanced_agents.decision_agent import (
+        DecisionAgent, 
+        InteractionType,
+        MobileInteraction
     )
+    DECISION_AGENT_AVAILABLE = True
 except ImportError as e:
-    st.error(f"Import error: {e}")
+    st.error(f"Decision Agent를 사용하려면 필요한 의존성을 설치해야 합니다: {e}")
+    st.error("시스템 관리자에게 문의하여 Decision Agent 모듈을 설정하세요.")
     st.stop()
 
 # 페이지 설정
@@ -29,6 +34,51 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def load_risk_tolerance_options():
+    """위험 허용도 옵션 동적 로딩"""
+    # TODO: 실제 사용자 프로필 시스템에서 로드
+    return ["보수적", "중간", "적극적"]
+
+def load_priority_options():
+    """우선순위 옵션 동적 로딩"""
+    # TODO: 실제 시스템 설정에서 로드
+    return ["절약", "편의성", "품질", "시간"]
+
+def load_notification_types():
+    """알림 유형 동적 로딩"""
+    # TODO: 실제 시스템에서 지원하는 알림 유형 로드
+    return ["구매", "결제", "예약", "통화", "메시지"]
+
+def load_user_profile_defaults():
+    """사용자 프로필 기본값 동적 로딩"""
+    # TODO: 실제 사용자 데이터베이스에서 로드
+    return {
+        "age_min": 18,
+        "age_max": 80,
+        "budget_min": 0,
+        "budget_step": 100000
+    }
+
+def load_decision_scenarios():
+    """결정 시나리오 동적 로딩"""
+    # TODO: 실제 시나리오 데이터베이스에서 로드
+    return {}
+
+def get_real_decision_history():
+    """실제 결정 이력 조회"""
+    # TODO: 실제 데이터베이스에서 결정 이력 조회
+    raise NotImplementedError("실제 결정 이력 조회 기능이 구현되지 않았습니다.")
+
+def get_real_system_metrics():
+    """실제 시스템 메트릭 조회"""
+    # TODO: 실제 시스템 모니터링에서 메트릭 조회
+    raise NotImplementedError("실제 시스템 메트릭 조회 기능이 구현되지 않았습니다.")
+
+def get_real_mobile_interactions():
+    """실제 모바일 인터액션 조회"""
+    # TODO: 실제 모바일 모니터링 시스템에서 인터액션 조회
+    raise NotImplementedError("실제 모바일 인터액션 조회 기능이 구현되지 않았습니다.")
 
 def main():
     """메인 함수"""
@@ -44,11 +94,11 @@ def main():
     save_to_file = st.checkbox(
         "결정 결과를 파일로 저장", 
         value=False,
-        help="체크하면 decision_agent_reports/ 디렉토리에 결정 결과를 파일로 저장합니다"
+        help=f"체크하면 {get_reports_path('decision_agent')} 디렉토리에 결정 결과를 파일로 저장합니다"
     )
     
     if save_to_file:
-        st.info("📁 결정 결과가 decision_agent_reports/ 디렉토리에 저장됩니다.")
+        st.info(f"📁 결정 결과가 {get_reports_path('decision_agent')} 디렉토리에 저장됩니다.")
     
     st.markdown("---")
     
@@ -59,43 +109,65 @@ def main():
         # 사용자 프로필 설정
         st.subheader("👤 사용자 프로필")
         
+        profile_defaults = load_user_profile_defaults()
+        
         col1, col2 = st.columns(2)
         with col1:
-            age = st.slider("나이", 18, 80, 30)
-            budget = st.number_input("월 예산 (원)", min_value=0, value=2000000, step=100000)
+            age = st.slider(
+                "나이", 
+                profile_defaults["age_min"], 
+                profile_defaults["age_max"], 
+                value=None,
+                help="사용자의 나이를 입력하세요"
+            )
+            budget = st.number_input(
+                "월 예산 (원)", 
+                min_value=profile_defaults["budget_min"], 
+                value=None, 
+                step=profile_defaults["budget_step"],
+                help="월 예산을 입력하세요"
+            )
         
         with col2:
+            risk_tolerance_options = load_risk_tolerance_options()
             risk_tolerance = st.select_slider(
                 "위험 허용도", 
-                options=["보수적", "중간", "적극적"],
-                value="중간"
+                options=risk_tolerance_options,
+                value=None,
+                help="투자 위험 허용도를 선택하세요"
             )
+            
+            priority_options = load_priority_options()
             priority = st.selectbox(
                 "우선순위",
-                ["절약", "편의성", "품질", "시간"]
+                priority_options,
+                index=None,
+                placeholder="우선순위를 선택하세요"
             )
         
         # 결정 임계값 설정
         st.subheader("🎯 결정 임계값")
         intervention_threshold = st.slider(
             "개입 임계값", 
-            0.0, 1.0, 0.7, 0.1,
+            0.0, 1.0, value=None, step=0.1,
             help="이 값 이상의 긴급도에서만 AI가 개입합니다"
         )
         
         auto_execute_threshold = st.slider(
             "자동 실행 임계값", 
-            0.0, 1.0, 0.9, 0.1,
+            0.0, 1.0, value=None, step=0.1,
             help="이 값 이상의 신뢰도에서 자동으로 실행합니다"
         )
         
         # 알림 설정
         st.subheader("🔔 알림 설정")
-        enable_notifications = st.checkbox("알림 활성화", value=True)
+        enable_notifications = st.checkbox("알림 활성화", value=False)
+        
+        notification_types_options = load_notification_types()
         notification_types = st.multiselect(
             "알림 유형",
-            ["구매", "결제", "예약", "통화", "메시지"],
-            default=["구매", "결제", "예약"]
+            notification_types_options,
+            help="받고 싶은 알림 유형을 선택하세요"
         )
     
     # 메인 탭
@@ -144,63 +216,74 @@ def display_realtime_monitoring(save_to_file=False):
     
     # 모니터링 상태에 따른 표시
     if st.session_state.get('monitoring', False):
-        # 모의 실시간 업데이트
         st.info("🔍 모바일 인터액션 감지 중...")
         
-        # 가상의 인터액션 표시
-        interactions = create_sample_interactions()[:2]
-        
-        for interaction in interactions:
-            with st.expander(f"📱 {interaction.app_name} - {interaction.interaction_type.value}", expanded=True):
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    st.json(interaction.context, expanded=False)
-                
-                with col2:
-                    st.markdown(f"""
-                    **⏰ 시간:** {interaction.timestamp.strftime('%H:%M:%S')}  
-                    **🔋 배터리:** {interaction.device_state['battery']}%  
-                    **📶 네트워크:** {interaction.device_state['network']}  
-                    **🚨 긴급도:** {interaction.urgency_score:.1f}/1.0
-                    """)
+        try:
+            # 실제 인터액션 조회
+            interactions = get_real_mobile_interactions()
+            
+            if not interactions:
+                st.info("현재 감지된 모바일 인터액션이 없습니다.")
+                return
+            
+            for interaction in interactions[:2]:  # 최근 2개만 표시
+                with st.expander(f"📱 {interaction.app_name} - {interaction.interaction_type.value}", expanded=True):
+                    col1, col2 = st.columns([2, 1])
                     
-                    if st.button(f"🤖 AI 결정 요청", key=f"decide_{interaction.timestamp}"):
-                        with st.spinner("AI가 결정을 생성 중..."):
-                            # Mock 결정 생성
-                            agent = MockDecisionAgent()
-                            user_profile = asyncio.run(agent._get_user_profile("demo_user"))
-                            context = asyncio.run(agent._build_decision_context(interaction, user_profile))
-                            decision = asyncio.run(agent._generate_decision(context))
-                            
-                            # 결정 표시
-                            st.success(f"💡 **추천:** {decision.recommendation}")
-                            st.info(f"🎯 **신뢰도:** {decision.confidence_score:.0%}")
-                            st.write(f"📝 **근거:** {decision.reasoning}")
-                            
-                            if decision.alternatives:
-                                st.write(f"🔄 **대안:** {', '.join(decision.alternatives)}")
-                            
-                            # 텍스트 출력 생성
-                            decision_text = generate_decision_text_output(interaction, decision)
-                            
-                            # 텍스트 결과 표시
-                            st.markdown("#### 📄 결정 결과 텍스트")
-                            st.text_area(
-                                "결정 내용",
-                                value=decision_text,
-                                height=150,
-                                disabled=True,
-                                key=f"decision_text_{interaction.timestamp}"
-                            )
-                            
-                            # 파일 저장 처리
-                            if save_to_file:
-                                file_saved, output_path = save_decision_to_file(interaction, decision, decision_text)
-                                if file_saved:
-                                    st.success(f"💾 결정이 파일로 저장되었습니다: {output_path}")
-                                else:
-                                    st.error("파일 저장 중 오류가 발생했습니다.")
+                    with col1:
+                        st.json(interaction.context, expanded=False)
+                    
+                    with col2:
+                        st.markdown(f"""
+                        **⏰ 시간:** {interaction.timestamp.strftime('%H:%M:%S')}  
+                        **🔋 배터리:** {interaction.device_state.get('battery', 'N/A')}%  
+                        **📶 네트워크:** {interaction.device_state.get('network', 'N/A')}  
+                        **🚨 긴급도:** {interaction.urgency_score:.1f}/1.0
+                        """)
+                        
+                        if st.button(f"🤖 AI 결정 요청", key=f"decide_{interaction.timestamp}"):
+                            with st.spinner("AI가 결정을 생성 중..."):
+                                # 실제 결정 에이전트 호출
+                                agent = DecisionAgent()
+                                decision = agent.make_decision(interaction)
+                                
+                                if not decision:
+                                    st.error("AI 결정 생성에 실패했습니다.")
+                                    return
+                                
+                                # 결정 표시
+                                st.success(f"💡 **추천:** {decision.recommendation}")
+                                st.info(f"🎯 **신뢰도:** {decision.confidence_score:.0%}")
+                                st.write(f"📝 **근거:** {decision.reasoning}")
+                                
+                                if decision.alternatives:
+                                    st.write(f"🔄 **대안:** {', '.join(decision.alternatives)}")
+                                
+                                # 텍스트 출력 생성
+                                decision_text = format_decision_result(interaction, decision)
+                                
+                                # 텍스트 결과 표시
+                                st.markdown("#### 📄 결정 결과 텍스트")
+                                st.text_area(
+                                    "결정 내용",
+                                    value=decision_text,
+                                    height=150,
+                                    disabled=True,
+                                    key=f"decision_text_{interaction.timestamp}"
+                                )
+                                
+                                # 파일 저장 처리
+                                if save_to_file:
+                                    file_saved, output_path = save_decision_to_file(interaction, decision, decision_text)
+                                    if file_saved:
+                                        st.success(f"💾 결정이 파일로 저장되었습니다: {output_path}")
+                                    else:
+                                        st.error("파일 저장 중 오류가 발생했습니다.")
+        
+        except NotImplementedError as e:
+            st.error(f"실시간 모니터링 기능이 구현되지 않았습니다: {e}")
+        except Exception as e:
+            st.error(f"모니터링 중 오류가 발생했습니다: {e}")
     else:
         st.info("모니터링을 시작하여 실시간 인터액션을 확인하세요.")
 
@@ -209,13 +292,14 @@ def display_decision_history(save_to_file=False):
     
     st.markdown("### 📊 AI 결정 이력 분석")
     
-    # 샘플 결정 데이터 생성
-    if 'decision_history' not in st.session_state:
-        st.session_state.decision_history = generate_sample_decision_history()
-    
-    history = st.session_state.decision_history
-    
-    if history:
+    try:
+        # 실제 결정 이력 조회
+        history = get_real_decision_history()
+        
+        if not history:
+            st.info("아직 결정 이력이 없습니다. 모니터링을 시작해보세요!")
+            return
+        
         # 통계 요약
         col1, col2, col3, col4 = st.columns(4)
         
@@ -223,38 +307,120 @@ def display_decision_history(save_to_file=False):
             st.metric("📋 총 결정", len(history))
         
         with col2:
-            auto_count = sum(1 for d in history if d['auto_execute'])
+            auto_count = sum(1 for d in history if d.get('auto_execute', False))
             st.metric("⚡ 자동 실행", f"{auto_count}/{len(history)}")
         
         with col3:
-            avg_confidence = sum(d['confidence'] for d in history) / len(history)
+            confidences = [d.get('confidence', 0) for d in history if d.get('confidence')]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
             st.metric("🎯 평균 신뢰도", f"{avg_confidence:.0%}")
         
         with col4:
-            purchase_count = sum(1 for d in history if d['type'] == 'purchase')
+            purchase_count = sum(1 for d in history if d.get('type') == 'purchase')
             st.metric("🛒 구매 관련", purchase_count)
         
-        # 결정 유형별 분포
-        st.markdown("#### 📈 결정 유형별 분포")
+        # 결정 유형별 분포 차트
+        display_decision_analytics(history)
         
-        col1, col2 = st.columns(2)
+        # 상세 결정 이력
+        display_detailed_history(history)
+    
+    except NotImplementedError as e:
+        st.error(f"결정 이력 조회 기능이 구현되지 않았습니다: {e}")
+    except Exception as e:
+        st.error(f"결정 이력 조회 중 오류가 발생했습니다: {e}")
+
+def display_scenario_testing(save_to_file=False):
+    """시나리오 테스트 탭"""
+    
+    st.markdown("### 🎯 Decision Agent 시나리오 테스트")
+    
+    try:
+        # 실제 시나리오 로딩
+        scenarios = load_decision_scenarios()
         
-        with col1:
-            # 결정 유형 파이 차트
-            type_counts = {}
-            for decision in history:
-                type_counts[decision['type']] = type_counts.get(decision['type'], 0) + 1
-            
+        if not scenarios:
+            st.warning("현재 사용 가능한 테스트 시나리오가 없습니다.")
+            st.info("시스템 관리자에게 문의하여 시나리오를 설정하세요.")
+            return
+        
+        selected_scenario = st.selectbox(
+            "🎭 테스트 시나리오 선택",
+            list(scenarios.keys()),
+            index=None,
+            placeholder="시나리오를 선택하세요",
+            format_func=lambda x: f"{x} - {scenarios[x].get('description', '')}"
+        )
+        
+        if not selected_scenario:
+            st.info("테스트할 시나리오를 선택하세요.")
+            return
+        
+        scenario = scenarios[selected_scenario]
+        
+        # 시나리오 실행
+        execute_scenario_test(scenario, selected_scenario, save_to_file)
+    
+    except NotImplementedError as e:
+        st.error(f"시나리오 테스트 기능이 구현되지 않았습니다: {e}")
+    except Exception as e:
+        st.error(f"시나리오 테스트 중 오류가 발생했습니다: {e}")
+
+def display_system_analysis():
+    """시스템 분석 탭"""
+    
+    st.markdown("### ⚙️ Decision Agent 시스템 분석")
+    
+    try:
+        # 실제 시스템 메트릭 조회
+        metrics = get_real_system_metrics()
+        
+        if not metrics:
+            st.error("시스템 메트릭을 조회할 수 없습니다.")
+            return
+        
+        # 시스템 상태 표시
+        display_system_status(metrics)
+        
+        # 성능 지표 표시
+        display_performance_metrics(metrics)
+        
+        # 시스템 설정 표시
+        display_system_configuration(metrics)
+    
+    except NotImplementedError as e:
+        st.error(f"시스템 분석 기능이 구현되지 않았습니다: {e}")
+    except Exception as e:
+        st.error(f"시스템 분석 중 오류가 발생했습니다: {e}")
+
+def display_decision_analytics(history):
+    """결정 분석 차트 표시"""
+    if not history:
+        return
+    
+    st.markdown("#### 📈 결정 유형별 분포")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # 결정 유형 파이 차트
+        type_counts = {}
+        for decision in history:
+            decision_type = decision.get('type', 'unknown')
+            type_counts[decision_type] = type_counts.get(decision_type, 0) + 1
+        
+        if type_counts:
             fig_pie = px.pie(
                 values=list(type_counts.values()),
                 names=list(type_counts.keys()),
                 title="결정 유형별 분포"
             )
             st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col2:
-            # 신뢰도 분포 히스토그램
-            confidences = [d['confidence'] for d in history]
+    
+    with col2:
+        # 신뢰도 분포 히스토그램
+        confidences = [d.get('confidence', 0) for d in history if d.get('confidence') is not None]
+        if confidences:
             fig_hist = px.histogram(
                 x=confidences,
                 nbins=10,
@@ -262,261 +428,139 @@ def display_decision_history(save_to_file=False):
                 labels={'x': '신뢰도', 'y': '빈도'}
             )
             st.plotly_chart(fig_hist, use_container_width=True)
-        
-        # 시간대별 결정 패턴
-        st.markdown("#### ⏰ 시간대별 결정 패턴")
-        
-        df = pd.DataFrame(history)
-        df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
-        hourly_counts = df.groupby('hour').size().reset_index(name='count')
-        
-        fig_line = px.line(
-            hourly_counts,
-            x='hour',
-            y='count',
-            title="시간대별 결정 빈도",
-            labels={'hour': '시간', 'count': '결정 수'}
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
-        
-        # 상세 결정 이력
-        st.markdown("#### 📋 상세 결정 이력")
-        
-        for i, decision in enumerate(reversed(history[-10:]), 1):
-            with st.expander(f"{i}. {decision['type']} - {decision['timestamp']}", expanded=False):
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.write(f"**💡 추천:** {decision['recommendation']}")
-                    st.write(f"**📝 근거:** {decision.get('reasoning', '근거 없음')}")
-                    if decision.get('alternatives'):
-                        st.write(f"**🔄 대안:** {', '.join(decision['alternatives'])}")
-                
-                with col2:
-                    st.metric("신뢰도", f"{decision['confidence']:.0%}")
-                    st.write(f"**⚡ 자동실행:** {'예' if decision['auto_execute'] else '아니오'}")
-    else:
-        st.info("아직 결정 이력이 없습니다. 모니터링을 시작해보세요!")
 
-def display_scenario_testing(save_to_file=False):
-    """시나리오 테스트 탭"""
+def display_detailed_history(history):
+    """상세 결정 이력 표시"""
+    st.markdown("#### 📋 상세 결정 이력")
     
-    st.markdown("### 🎯 Decision Agent 시나리오 테스트")
-    
-    # 시나리오 선택
-    scenarios = {
-        "온라인 쇼핑": {
-            "description": "고가의 전자제품 구매 상황",
-            "interaction_type": InteractionType.PURCHASE,
-            "context": {
-                "product": "맥북 프로 16인치",
-                "price": 3500000,
-                "discount": 0.05,
-                "seller_rating": 4.9,
-                "reviews_count": 1547
-            }
-        },
-        "음식 배달": {
-            "description": "늦은 밤 음식 주문 상황",
-            "interaction_type": InteractionType.FOOD_ORDER,
-            "context": {
-                "restaurant": "24시 치킨집",
-                "menu": "후라이드 치킨 + 맥주",
-                "price": 35000,
-                "delivery_time": 40,
-                "rating": 3.8
-            }
-        },
-        "호텔 예약": {
-            "description": "해외 출장 호텔 예약",
-            "context": {
-                "hotel": "서울 비즈니스 호텔",
-                "check_in": "2024-03-20",
-                "check_out": "2024-03-22",
-                "price": 450000,
-                "rating": 4.6
-            }
-        },
-        "중요한 전화": {
-            "description": "상사로부터의 긴급 전화",
-            "interaction_type": InteractionType.CALL,
-            "context": {
-                "contact": "이사장님",
-                "call_type": "업무",
-                "last_contact": "1개월 전",
-                "importance": "critical"
-            }
-        }
-    }
-    
-    selected_scenario = st.selectbox(
-        "🎭 테스트 시나리오 선택",
-        list(scenarios.keys()),
-        format_func=lambda x: f"{x} - {scenarios[x]['description']}"
-    )
-    
-    scenario = scenarios[selected_scenario]
-    
-    # 시나리오 상세 정보
-    st.markdown(f"#### 📋 시나리오: {selected_scenario}")
+    for i, decision in enumerate(reversed(history[-10:]), 1):
+        timestamp = decision.get('timestamp', 'N/A')
+        decision_type = decision.get('type', 'unknown')
+        
+        with st.expander(f"{i}. {decision_type} - {timestamp}", expanded=False):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.write(f"**💡 추천:** {decision.get('recommendation', 'N/A')}")
+                st.write(f"**📝 근거:** {decision.get('reasoning', '근거 없음')}")
+                alternatives = decision.get('alternatives', [])
+                if alternatives:
+                    st.write(f"**🔄 대안:** {', '.join(alternatives)}")
+            
+            with col2:
+                confidence = decision.get('confidence', 0)
+                st.metric("신뢰도", f"{confidence:.0%}")
+                auto_execute = decision.get('auto_execute', False)
+                st.write(f"**⚡ 자동실행:** {'예' if auto_execute else '아니오'}")
+
+def execute_scenario_test(scenario, scenario_name, save_to_file):
+    """시나리오 테스트 실행"""
+    st.markdown(f"#### 📋 시나리오: {scenario_name}")
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.markdown("**📝 시나리오 상세:**")
-        st.json(scenario['context'])
+        st.json(scenario.get('context', {}))
     
     with col2:
         st.markdown("**🎯 시나리오 정보:**")
         st.write(f"**📱 유형:** {scenario.get('interaction_type', 'N/A')}")
-        st.write(f"**📄 설명:** {scenario['description']}")
+        st.write(f"**📄 설명:** {scenario.get('description', 'N/A')}")
         
         if st.button("🚀 시나리오 실행", type="primary"):
             with st.spinner("AI 결정 생성 중..."):
-                # 시나리오 실행
-                agent = MockDecisionAgent()
+                # 실제 시나리오 실행
+                agent = DecisionAgent()
+                result = agent.test_scenario(scenario)
                 
-                # 가상 인터액션 생성
-                from srcs.advanced_agents.decision_agent_demo import MobileInteraction
-                
-                interaction = MobileInteraction(
-                    timestamp=datetime.now(),
-                    app_name=selected_scenario,
-                    interaction_type=scenario.get('interaction_type', InteractionType.PURCHASE),
-                    context=scenario['context'],
-                    device_state={'battery': 85, 'network': 'WiFi'},
-                    location={'lat': 37.5665, 'lon': 126.9780},
-                    urgency_score=0.8
-                )
-                
-                # 결정 생성
-                user_profile = asyncio.run(agent._get_user_profile("demo_user"))
-                context = asyncio.run(agent._build_decision_context(interaction, user_profile))
-                decision = asyncio.run(agent._generate_decision(context))
+                if not result:
+                    st.error("시나리오 테스트에 실패했습니다.")
+                    return
                 
                 # 결과 표시
-                st.success(f"✅ 시나리오 실행 완료!")
-                
-                col3, col4 = st.columns(2)
-                
-                with col3:
-                    st.markdown("**🤖 AI 결정:**")
-                    st.info(f"💡 **추천:** {decision.recommendation}")
-                    st.write(f"📝 **근거:** {decision.reasoning}")
-                    if decision.alternatives:
-                        st.write(f"🔄 **대안:** {', '.join(decision.alternatives)}")
-                
-                with col4:
-                    st.markdown("**📊 결정 메트릭:**")
-                    st.metric("신뢰도", f"{decision.confidence_score:.0%}")
-                    st.metric("자동 실행", "예" if decision.auto_execute else "아니오")
-                    st.metric("긴급도", f"{interaction.urgency_score:.1f}/1.0")
+                display_scenario_results(result)
 
-def display_system_analysis():
-    """시스템 분석 탭"""
+def display_scenario_results(result):
+    """시나리오 테스트 결과 표시"""
+    st.success("✅ 시나리오 실행 완료!")
     
-    st.markdown("### ⚙️ Decision Agent 시스템 분석")
+    col3, col4 = st.columns(2)
     
-    # 시스템 상태
+    with col3:
+        st.markdown("**🤖 AI 결정:**")
+        st.info(f"💡 **추천:** {result.get('recommendation', 'N/A')}")
+        st.write(f"📝 **근거:** {result.get('reasoning', 'N/A')}")
+        alternatives = result.get('alternatives', [])
+        if alternatives:
+            st.write(f"🔄 **대안:** {', '.join(alternatives)}")
+    
+    with col4:
+        st.markdown("**📊 결정 메트릭:**")
+        confidence = result.get('confidence_score', 0)
+        st.metric("신뢰도", f"{confidence:.0%}")
+        auto_execute = result.get('auto_execute', False)
+        st.metric("자동 실행", "예" if auto_execute else "아니오")
+        urgency = result.get('urgency_score', 0)
+        st.metric("긴급도", f"{urgency:.1f}/1.0")
+
+def display_system_status(metrics):
+    """시스템 상태 표시"""
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🟢 시스템 상태", "정상")
+        status = metrics.get('system_status', 'unknown')
+        st.metric("🟢 시스템 상태", status)
     
     with col2:
-        st.metric("📊 처리 속도", "1.2초")
+        processing_speed = metrics.get('processing_speed', 'N/A')
+        st.metric("📊 처리 속도", processing_speed)
     
     with col3:
-        st.metric("🧠 AI 모델", "Claude-3.5")
+        ai_model = metrics.get('ai_model', 'N/A')
+        st.metric("🧠 AI 모델", ai_model)
     
     with col4:
-        st.metric("📈 정확도", "87.3%")
-    
-    # 성능 지표
+        accuracy = metrics.get('accuracy', 'N/A')
+        st.metric("📈 정확도", accuracy)
+
+def display_performance_metrics(metrics):
+    """성능 지표 표시"""
     st.markdown("#### 📈 시스템 성능 지표")
     
-    # 가상 성능 데이터
-    dates = pd.date_range(start='2024-01-01', end='2024-01-31', freq='D')
-    performance_data = {
-        'date': dates,
-        'accuracy': [0.85 + (i % 7) * 0.02 for i in range(len(dates))],
-        'response_time': [1.0 + (i % 5) * 0.1 for i in range(len(dates))],
-        'decisions_count': [20 + (i % 10) * 5 for i in range(len(dates))]
-    }
+    performance_data = metrics.get('performance_data', {})
+    if not performance_data:
+        st.warning("성능 데이터를 사용할 수 없습니다.")
+        return
     
-    df = pd.DataFrame(performance_data)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 정확도 추이
-        fig_accuracy = px.line(
-            df, x='date', y='accuracy',
-            title='AI 결정 정확도 추이',
-            labels={'accuracy': '정확도', 'date': '날짜'}
-        )
-        st.plotly_chart(fig_accuracy, use_container_width=True)
-    
-    with col2:
-        # 응답 시간 추이
-        fig_response = px.line(
-            df, x='date', y='response_time',
-            title='평균 응답 시간 추이',
-            labels={'response_time': '응답시간(초)', 'date': '날짜'}
-        )
-        st.plotly_chart(fig_response, use_container_width=True)
-    
-    # 일별 결정 수
-    fig_decisions = px.bar(
-        df, x='date', y='decisions_count',
-        title='일별 AI 결정 수',
-        labels={'decisions_count': '결정 수', 'date': '날짜'}
-    )
-    st.plotly_chart(fig_decisions, use_container_width=True)
-    
-    # 시스템 설정
+    # 성능 차트 표시 로직
+    # TODO: 실제 성능 데이터를 기반으로 차트 생성
+
+def display_system_configuration(metrics):
+    """시스템 설정 표시"""
     st.markdown("#### ⚙️ 시스템 설정")
+    
+    config = metrics.get('configuration', {})
+    if not config:
+        st.warning("시스템 설정 정보를 사용할 수 없습니다.")
+        return
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("**🤖 AI 모델 설정:**")
-        st.write("- 모델: Claude-3.5-Sonnet")
-        st.write("- 최대 토큰: 4096")
-        st.write("- 온도: 0.3")
-        st.write("- 최대 재시도: 3")
+        ai_config = config.get('ai_model', {})
+        for key, value in ai_config.items():
+            st.write(f"- {key}: {value}")
     
     with col2:
         st.markdown("**📊 데이터 설정:**")
-        st.write("- 저장 기간: 30일")
-        st.write("- 백업 주기: 매일")
-        st.write("- 데이터 암호화: AES-256")
-        st.write("- 익명화: 활성화")
+        data_config = config.get('data', {})
+        for key, value in data_config.items():
+            st.write(f"- {key}: {value}")
 
-def generate_sample_decision_history():
-    """샘플 결정 이력 생성"""
-    
-    import random
-    
-    decisions = []
-    decision_types = ['purchase', 'food_order', 'booking', 'call', 'message']
-    
-    for i in range(50):
-        decision = {
-            'timestamp': (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%Y-%m-%d %H:%M:%S'),
-            'type': random.choice(decision_types),
-            'recommendation': f"샘플 추천 {i+1}",
-            'reasoning': f"샘플 근거 {i+1}",
-            'confidence': random.uniform(0.6, 0.95),
-            'auto_execute': random.choice([True, False]),
-            'alternatives': [f"대안 {j+1}" for j in range(random.randint(0, 3))]
-        }
-        decisions.append(decision)
-    
-    return decisions
-
-def generate_decision_text_output(interaction, decision):
-    """Decision Agent 텍스트 결과 생성"""
+def format_decision_result(interaction, decision):
+    """Decision Agent 결과 포맷팅"""
     
     text_output = f"""
 🤖 AI 결정 결과
@@ -565,7 +609,7 @@ def save_decision_to_file(interaction, decision, decision_text):
         import os
         from datetime import datetime
         
-        output_dir = "decision_agent_reports"
+        output_dir = get_reports_path('decision_agent')
         os.makedirs(output_dir, exist_ok=True)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

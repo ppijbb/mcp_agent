@@ -7,23 +7,34 @@
 import streamlit as st
 import sys
 from pathlib import Path
+import os
+from datetime import datetime
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# 설정 파일에서 경로 가져오기
+try:
+    from configs.settings import get_reports_path
+    REPORTS_PATH = get_reports_path('business_strategy')
+except ImportError:
+    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
+    st.stop()
+
 # 공통 스타일 및 유틸리티 임포트
 from srcs.common.styles import get_common_styles, get_page_header
 from srcs.common.page_utils import setup_page, render_home_button
 
-# Business Strategy Agent 모듈 임포트
+# Business Strategy Agent 모듈 임포트 - 필수 의존성
 try:
     from srcs.business_strategy_agents.streamlit_app import main as bs_main
     from srcs.business_strategy_agents.streamlit_app import *
-    BUSINESS_STRATEGY_AVAILABLE = True
 except ImportError as e:
-    BUSINESS_STRATEGY_AVAILABLE = False
-    import_error = str(e)
+    st.error(f"❌ Business Strategy Agent를 불러올 수 없습니다: {e}")
+    st.error("**시스템 요구사항**: Business Strategy Agent가 필수입니다.")
+    st.info("에이전트 모듈을 설치하고 다시 시도해주세요.")
+    st.stop()
 
 # 페이지 설정
 setup_page("🎯 Business Strategy Agent", "🎯")
@@ -44,179 +55,177 @@ def main():
     
     st.markdown("---")
     
+    st.success("🤖 Business Strategy Agent가 성공적으로 연결되었습니다!")
+    
     # Business Strategy Agent 실행
-    if BUSINESS_STRATEGY_AVAILABLE:
-        try:
-            # 파일 저장 옵션 추가
-            st.markdown("### ⚙️ 실행 옵션")
-            save_to_file = st.checkbox(
-                "파일로 저장", 
-                value=False,
-                help="체크하면 business_strategy_reports/ 디렉토리에 분석 결과를 파일로 저장합니다"
+    try:
+        # 파일 저장 옵션 추가
+        st.markdown("### ⚙️ 실행 옵션")
+        save_to_file = st.checkbox(
+            "파일로 저장", 
+            value=False,
+            help=f"체크하면 {REPORTS_PATH} 디렉토리에 분석 결과를 파일로 저장합니다"
+        )
+        
+        if save_to_file:
+            st.info(f"📁 결과가 {REPORTS_PATH} 디렉토리에 저장됩니다.")
+        
+        # 실제 Business Strategy Agent 실행
+        result = execute_business_strategy_agent(save_to_file)
+        
+        # 실제 에이전트 결과 표시
+        if result:
+            st.success("✅ Business Strategy Agent 실행 완료!")
+            
+            # 실제 에이전트 출력만 표시
+            st.markdown("### 📊 분석 결과")
+            st.text_area(
+                "분석 결과",
+                value=result.get('agent_output', ''),
+                height=200,
+                disabled=True
             )
             
-            if save_to_file:
-                st.info("📁 결과가 business_strategy_reports/ 디렉토리에 저장됩니다.")
-            
-            # Business Strategy Agent의 main 함수 실행
-            result = execute_business_strategy_agent(save_to_file)
-            
-            # 결과 표시
-            if result:
-                st.success("✅ Business Strategy Agent 실행 완료!")
-                
-                # 텍스트 결과 표시
-                st.markdown("### 📊 분석 결과")
-                st.text_area(
-                    "분석 결과 텍스트",
-                    value=result.get('text_output', '분석 결과가 생성되었습니다.'),
-                    height=200,
-                    disabled=True
-                )
-                
-                # 파일 저장 결과 표시
-                if save_to_file and result.get('file_saved'):
-                    st.success(f"💾 결과가 파일로 저장되었습니다: {result.get('output_path', '')}")
-            else:
-                bs_main()
-            
-        except Exception as e:
-            st.error(f"Business Strategy Agent 실행 중 오류가 발생했습니다: {e}")
-            st.info("에이전트에 연결하려면 필요한 모듈을 확인해주세요.")
-            
-            # 수동 접속 가이드만 제공
-            st.markdown("### 🔧 수동 접속")
-            st.info("Business Strategy Agent를 별도로 실행해주세요.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.code("cd srcs/business_strategy_agents")
-            with col2:
-                st.code("streamlit run streamlit_app.py")
-                
-    else:
-        st.error("Business Strategy Agent를 불러올 수 없습니다.")
-        st.error(f"오류 내용: {import_error}")
+            # 파일 저장 결과 표시
+            if save_to_file and result.get('file_saved'):
+                st.success(f"💾 결과가 파일로 저장되었습니다: {result.get('output_path', '')}")
+        else:
+            # 실제 에이전트 메인 함수 호출
+            bs_main()
         
-        # 에이전트 소개만 제공 (가짜 데이터 제거)
-        st.markdown("### 🎯 Business Strategy Agent 소개")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            #### 📊 주요 기능
-            - **시장 분석**: 타겟 시장 규모 및 동향 분석
-            - **경쟁사 분석**: 경쟁 구도 및 포지셔닝 전략
-            - **비즈니스 모델 설계**: 수익 구조 및 가치 제안
-            - **SWOT 분석**: 강점, 약점, 기회, 위협 요소
-            - **재무 모델링**: 매출 예측 및 투자 계획
-            """)
-        
-        with col2:
-            st.markdown("""
-            #### ✨ 스페셜 기능
-            - **스파클 모드**: 재미있는 비즈니스 인사이트
-            - **대화형 분석**: 자연어로 질문하고 답변 받기
-            - **시각화**: 차트와 그래프로 결과 표시
-            - **보고서 생성**: 전문적인 분석 리포트
-            - **실시간 업데이트**: 최신 시장 데이터 반영
-            """)
-        
-        st.markdown("---")
-        
-        # 설치 가이드
-        with st.expander("🔧 설치 및 실행 가이드"):
-            st.markdown("""
-            ### Business Strategy Agent 설정
-            
-            1. **필요한 패키지 설치**:
-            ```bash
-            pip install streamlit plotly pandas openai
-            ```
-            
-            2. **환경 변수 설정**:
-            ```bash
-            export OPENAI_API_KEY="your-api-key"
-            ```
-            
-            3. **에이전트 실행**:
-            ```bash
-            cd srcs/business_strategy_agents
-            streamlit run streamlit_app.py
-            ```
-            
-            4. **포트 설정** (옵션):
-            ```bash
-            streamlit run streamlit_app.py --server.port 8501
-            ```
-            """)
+    except Exception as e:
+        st.error(f"❌ Business Strategy Agent 실행 실패: {e}")
+        st.error("Business Strategy Agent 구현을 확인해주세요.")
+        st.stop()
 
 def execute_business_strategy_agent(save_to_file):
-    """Business Strategy Agent 실행 및 결과 처리"""
+    """실제 Business Strategy Agent 실행 및 결과 처리 - 폴백 없음"""
     
     try:
-        import os
-        from datetime import datetime
+        # 실제 에이전트 호출 - 하드코딩된 데이터 없음
+        # 여기서는 실제 비즈니스 전략 에이전트를 호출해야 함
+        # 현재는 bs_main()을 통해 실제 에이전트와 연동
         
-        # 기본 텍스트 결과 생성
-        text_output = """
-🎯 비즈니스 전략 분석 결과
-
-📊 시장 분석:
-- 타겟 시장 규모: 예상 시장 크기 및 성장률 분석
-- 경쟁 환경: 주요 경쟁사 및 시장 포지션 분석
-- 시장 기회: 새로운 기회 영역 식별
-
-💡 전략 제안:
-- 핵심 가치 제안 개발
-- 고객 획득 전략 수립
-- 수익 모델 최적화 방안
-
-📈 실행 계획:
-- 단기 목표 (3개월): 즉시 실행 가능한 액션 아이템
-- 중기 목표 (6-12개월): 성장 기반 구축
-- 장기 비전 (1-3년): 시장 리더십 확보
-
-⚠️ 위험 요소:
-- 시장 변화에 대한 대응 전략
-- 경쟁사 대응 방안
-- 리소스 제약 관리 방안
+        # 실제 에이전트가 구현되지 않은 경우 에러 발생
+        raise NotImplementedError("실제 Business Strategy Agent 구현이 필요합니다.")
+        
+        # 아래 코드는 실제 에이전트 구현 시 사용할 템플릿
         """
+        # 실제 에이전트 호출 예시:
+        from srcs.business_strategy_agents.agent import BusinessStrategyAgent
+        
+        agent = BusinessStrategyAgent()
+        analysis_result = agent.analyze_business_strategy(
+            company_info=company_info,
+            market_data=market_data,
+            objectives=objectives
+        )
+        
+        if not analysis_result:
+            raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
+        
+        # 실제 에이전트 출력 포맷팅
+        agent_output = format_business_analysis(analysis_result)
         
         result = {
             'success': True,
-            'text_output': text_output.strip(),
+            'agent_output': agent_output,
+            'analysis_data': analysis_result,
             'file_saved': False,
             'output_path': None
         }
         
         # 파일 저장 처리
         if save_to_file:
-            output_dir = "business_strategy_reports"
-            os.makedirs(output_dir, exist_ok=True)
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"business_strategy_analysis_{timestamp}.txt"
-            filepath = os.path.join(output_dir, filename)
-            
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write("=" * 60 + "\n")
-                f.write("Business Strategy Analysis Report\n")
-                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("=" * 60 + "\n\n")
-                f.write(text_output)
-                f.write("\n\n" + "=" * 60 + "\n")
-                f.write("Report End\n")
-            
-            result['file_saved'] = True
-            result['output_path'] = filepath
+            file_saved, output_path = save_business_results_to_file(analysis_result)
+            result['file_saved'] = file_saved
+            result['output_path'] = output_path
         
         return result
+        """
         
+    except NotImplementedError:
+        # 실제 에이전트가 구현되지 않은 경우 None 반환하여 bs_main() 호출
+        return None
     except Exception as e:
         st.error(f"Business Strategy Agent 실행 중 오류: {e}")
         return None
+
+def format_business_analysis(analysis_result):
+    """실제 에이전트 분석 결과 포맷팅"""
+    
+    if not analysis_result:
+        raise Exception("분석 결과가 없습니다.")
+    
+    # 실제 에이전트 데이터만 사용하여 출력 생성
+    output_lines = [
+        "🎯 비즈니스 전략 분석 결과",
+        ""
+    ]
+    
+    # 실제 분석 결과만 사용
+    if 'market_analysis' in analysis_result:
+        market = analysis_result['market_analysis']
+        output_lines.extend([
+            "📊 시장 분석:",
+            f"- 시장 규모: {market.get('market_size', 'N/A')}",
+            f"- 성장률: {market.get('growth_rate', 'N/A')}",
+            f"- 주요 트렌드: {market.get('trends', 'N/A')}",
+            ""
+        ])
+    
+    if 'strategy_recommendations' in analysis_result:
+        strategies = analysis_result['strategy_recommendations']
+        output_lines.append("💡 전략 제안:")
+        for strategy in strategies:
+            output_lines.append(f"- {strategy}")
+        output_lines.append("")
+    
+    if 'action_plan' in analysis_result:
+        plan = analysis_result['action_plan']
+        output_lines.extend([
+            "📈 실행 계획:",
+            f"- 단기 목표: {plan.get('short_term', 'N/A')}",
+            f"- 중기 목표: {plan.get('medium_term', 'N/A')}",
+            f"- 장기 비전: {plan.get('long_term', 'N/A')}",
+            ""
+        ])
+    
+    if 'risk_factors' in analysis_result:
+        risks = analysis_result['risk_factors']
+        output_lines.append("⚠️ 위험 요소:")
+        for risk in risks:
+            output_lines.append(f"- {risk}")
+    
+    return "\n".join(output_lines)
+
+def save_business_results_to_file(analysis_result):
+    """비즈니스 전략 분석 결과를 파일로 저장"""
+    
+    try:
+        os.makedirs(REPORTS_PATH, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"business_strategy_analysis_{timestamp}.md"
+        filepath = os.path.join(REPORTS_PATH, filename)
+        
+        # 실제 에이전트 출력 생성
+        agent_output = format_business_analysis(analysis_result)
+        
+        # 마크다운 파일로 저장
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("# 비즈니스 전략 분석 보고서\n\n")
+            f.write(f"**생성 시간**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write("---\n\n")
+            f.write(agent_output)
+            f.write("\n\n---\n")
+            f.write("*본 보고서는 Business Strategy Agent에 의해 자동 생성되었습니다.*\n")
+        
+        return True, filepath
+        
+    except Exception as e:
+        st.error(f"파일 저장 중 오류: {e}")
+        return False, None
 
 if __name__ == "__main__":
     main() 

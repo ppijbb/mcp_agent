@@ -12,16 +12,45 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# 중앙 설정 임포트
+from configs.settings import get_reports_path
+
 # 공통 유틸리티 임포트
 from srcs.common.page_utils import create_agent_page
 
 # Research Agent 임포트 시도
 try:
     from srcs.basic_agents.researcher_v2 import ResearcherAgent
-    RESEARCH_AGENT_AVAILABLE = True
 except ImportError as e:
-    RESEARCH_AGENT_AVAILABLE = False
-    import_error = str(e)
+    st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {e}")
+    st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+    st.stop()
+
+def load_research_focus_options():
+    """연구 초점 옵션 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("연구 초점 옵션 로딩 기능이 구현되지 않았습니다")
+
+def load_research_templates():
+    """연구 템플릿 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("연구 템플릿 로딩 기능이 구현되지 않았습니다")
+
+def get_research_agent_status():
+    """Research Agent 상태 확인"""
+    # 실제 구현 필요
+    raise NotImplementedError("Research Agent 상태 확인 기능이 구현되지 않았습니다")
+
+def validate_research_result(result):
+    """연구 결과 검증"""
+    if not result:
+        raise Exception("Research Agent에서 유효한 결과를 반환하지 않았습니다")
+    return result
+
+def save_research_report(content, filename):
+    """연구 보고서를 파일로 저장"""
+    # 실제 구현 필요
+    raise NotImplementedError("연구 보고서 저장 기능이 구현되지 않았습니다")
 
 def main():
     """Research Agent 메인 페이지"""
@@ -49,40 +78,10 @@ def main():
     
     st.markdown("---")
     
-    # Agent 연동 상태 확인
-    if not RESEARCH_AGENT_AVAILABLE:
-        st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {import_error}")
-        st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
-        
-        with st.expander("🔧 설치 가이드"):
-            st.markdown("""
-            ### Research Agent v2 설정
-            
-            1. **필요한 패키지 설치**:
-            ```bash
-            pip install openai asyncio
-            ```
-            
-            2. **환경 변수 설정**:
-            ```bash
-            export OPENAI_API_KEY="your-api-key"
-            ```
-            
-            3. **MCP Agent 설정**:
-            ```bash
-            # MCP Agent 설정 파일 확인
-            ls configs/mcp_agent.config.yaml
-            ```
-            """)
-        
-        # 에이전트 소개
-        render_agent_info()
-        return
-    else:
-        st.success("🤖 Research Agent v2가 성공적으로 연결되었습니다!")
-        
-        # 에이전트 인터페이스
-        render_research_agent_interface()
+    st.success("🤖 Research Agent v2가 성공적으로 연결되었습니다!")
+    
+    # 에이전트 인터페이스
+    render_research_agent_interface()
 
 def render_research_agent_interface():
     """Research Agent 실행 인터페이스"""
@@ -99,24 +98,43 @@ def render_research_agent_interface():
             
             research_topic = st.text_input(
                 "연구 주제",
-                value="AI and machine learning trends",
+                value=None,
+                placeholder="조사하고 싶은 주제를 입력하세요",
                 help="조사하고 싶은 주제를 입력하세요"
             )
             
-            research_focus = st.selectbox(
-                "연구 초점",
-                ["종합 분석", "트렌드 분석", "경쟁 분석", "미래 전망", "시장 조사"]
-            )
+            # 동적 연구 초점 옵션 로드
+            try:
+                focus_options = load_research_focus_options()
+                research_focus = st.selectbox(
+                    "연구 초점",
+                    focus_options,
+                    index=None,
+                    placeholder="연구 초점을 선택하세요"
+                )
+            except Exception as e:
+                st.warning(f"연구 초점 옵션 로드 실패: {e}")
+                research_focus = st.text_input(
+                    "연구 초점",
+                    value=None,
+                    placeholder="연구 초점을 직접 입력하세요"
+                )
             
             # 파일 저장 옵션
             save_to_file = st.checkbox(
                 "파일로 저장", 
                 value=False,
-                help="체크하면 research_reports/ 디렉토리에 파일로 저장합니다"
+                help=f"체크하면 {get_reports_path('research')}/ 디렉토리에 파일로 저장합니다"
             )
             
-            if st.button("🚀 Research Agent 실행", type="primary", use_container_width=True):
-                execute_research_agent(research_topic, research_focus, save_to_file)
+            # 필수 입력 검증
+            if not research_topic:
+                st.warning("연구 주제를 입력해주세요.")
+            elif not research_focus:
+                st.warning("연구 초점을 선택하거나 입력해주세요.")
+            else:
+                if st.button("🚀 Research Agent 실행", type="primary", use_container_width=True):
+                    execute_research_agent(research_topic, research_focus, save_to_file)
         
         with col2:
             if 'research_execution_result' in st.session_state:
@@ -176,29 +194,32 @@ def render_research_agent_interface():
                         st.code(result.get('error', 'Unknown error'))
         
             else:
-                st.markdown("""
-                #### 🤖 Research Agent 정보
-                
-                **실행되는 프로세스:**
-                1. **다중 에이전트 생성** - 전문 연구 AI 에이전트들
-                2. **MCP App 초기화** - MCP 프레임워크 연결
-                3. **오케스트레이터 실행** - 통합 워크플로우 관리
-                4. **연구 수행** - 포괄적 정보 수집 및 분석
-                
-                **생성되는 연구 결과:**
-                - 📈 **트렌드 분석**: 현재 동향 및 발전 패턴
-                - 🏢 **경쟁 분석**: 주요 업체 및 시장 현황
-                - 🔮 **미래 전망**: 전략적 시사점 및 기회
-                - 📋 **종합 보고서**: 실행 요약 및 권고사항
-                
-                **출력 옵션:**
-                - 🖥️ **화면 표시**: 즉시 결과 확인 (기본값)
-                - 💾 **파일 저장**: research_reports/ 디렉토리에 저장
-                """)
+                display_research_info()
                 
     except Exception as e:
         st.error(f"Agent 초기화 중 오류: {e}")
-        st.info("에이전트 클래스를 확인해주세요.")
+
+def display_research_info():
+    """연구 에이전트 정보 표시"""
+    st.markdown("""
+    #### 🤖 Research Agent 정보
+    
+    **실행되는 프로세스:**
+    1. **다중 에이전트 생성** - 전문 연구 AI 에이전트들
+    2. **MCP App 초기화** - MCP 프레임워크 연결
+    3. **오케스트레이터 실행** - 통합 워크플로우 관리
+    4. **연구 수행** - 포괄적 정보 수집 및 분석
+    
+    **생성되는 연구 결과:**
+    - 📈 **트렌드 분석**: 현재 동향 및 발전 패턴
+    - 🏢 **경쟁 분석**: 주요 업체 및 시장 현황
+    - 🔮 **미래 전망**: 전략적 시사점 및 기회
+    - 📋 **종합 보고서**: 실행 요약 및 권고사항
+    
+    **출력 옵션:**
+    - 🖥️ **화면 표시**: 즉시 결과 확인 (기본값)
+    - 💾 **파일 저장**: research_reports/ 디렉토리에 저장
+    """)
 
 def execute_research_agent(topic, focus, save_to_file):
     """Research Agent 실행"""
@@ -218,6 +239,14 @@ def execute_research_agent(topic, focus, save_to_file):
                 save_to_file=save_to_file
             )
             
+            # 결과 검증
+            validate_research_result(result)
+            
+            # 파일 저장이 요청된 경우
+            if save_to_file and result.get('content'):
+                filename = f"research_{topic.replace(' ', '_').lower()}_{focus.replace(' ', '_')}.md"
+                save_research_report(result['content'], filename)
+            
             st.session_state['research_execution_result'] = result
             st.rerun()
             
@@ -231,45 +260,6 @@ def execute_research_agent(topic, focus, save_to_file):
             'save_to_file': save_to_file
         }
         st.rerun()
-
-def render_agent_info():
-    """에이전트 기능 소개"""
-    
-    st.markdown("### 🔍 Research Agent 소개")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        #### 📊 주요 기능
-        - **종합 정보 수집**: 다양한 소스에서 정보 수집
-        - **트렌드 분석**: 최신 동향 및 패턴 분석
-        - **경쟁 분석**: 시장 참여자 및 경쟁 현황
-        - **미래 전망**: 전략적 시사점 및 예측
-        - **보고서 생성**: 구조화된 연구 보고서 작성
-        """)
-    
-    with col2:
-        st.markdown("""
-        #### ✨ 고급 기능
-        - **다중 에이전트**: 전문화된 연구 에이전트들
-        - **품질 평가**: EvaluatorOptimizer 적용
-        - **실시간 분석**: 최신 정보 기반 분석
-        - **구조화 출력**: 마크다운 형식 보고서
-        - **KPI 추적**: 연구 품질 지표 모니터링
-        """)
-    
-    st.markdown("#### 🎯 사용 사례")
-    use_cases = [
-        "기술 트렌드 조사 및 분석",
-        "시장 동향 및 경쟁 분석",
-        "신규 사업 기회 탐색",
-        "학술 연구 지원",
-        "전략 기획 정보 수집"
-    ]
-    
-    for use_case in use_cases:
-        st.markdown(f"- {use_case}")
 
 if __name__ == "__main__":
     main() 

@@ -18,21 +18,51 @@ import pandas as pd
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# 중앙 설정 임포트
+from configs.settings import get_reports_path
+
 # SEO Doctor 모듈 임포트
 try:
     from srcs.seo_doctor.seo_doctor_app import main as seo_main
     from srcs.seo_doctor.seo_doctor_app import *
-    SEO_DOCTOR_AVAILABLE = True
 except ImportError as e:
-    SEO_DOCTOR_AVAILABLE = False
-    import_error = str(e)
+    st.error(f"⚠️ SEO Doctor를 불러올 수 없습니다: {e}")
+    st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+    st.stop()
 
 # 실제 Lighthouse 분석기 임포트
 try:
     from srcs.seo_doctor.lighthouse_analyzer import analyze_website_with_lighthouse
-    LIGHTHOUSE_AVAILABLE = True
-except ImportError:
-    LIGHTHOUSE_AVAILABLE = False
+except ImportError as e:
+    st.error(f"⚠️ Lighthouse 분석기를 불러올 수 없습니다: {e}")
+    st.info("Lighthouse 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+    st.stop()
+
+def load_analysis_strategies():
+    """분석 전략 옵션 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("분석 전략 로딩 기능을 구현해주세요")
+
+def load_seo_templates():
+    """SEO 템플릿 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("SEO 템플릿 로딩 기능을 구현해주세요")
+
+def get_lighthouse_status():
+    """Lighthouse 상태 확인"""
+    # 실제 구현 필요
+    raise NotImplementedError("Lighthouse 상태 확인 기능을 구현해주세요")
+
+def validate_seo_result(result):
+    """SEO 분석 결과 검증"""
+    if not result:
+        raise Exception("SEO 분석에서 유효한 결과를 반환하지 않았습니다")
+    return result
+
+def save_seo_report(content, filename):
+    """SEO 분석 보고서를 파일로 저장"""
+    # 실제 구현 필요
+    raise NotImplementedError("SEO 보고서 저장 기능을 구현해주세요")
 
 # 페이지 설정
 try:
@@ -72,48 +102,12 @@ def main():
     save_to_file = st.checkbox(
         "SEO 분석 결과를 파일로 저장", 
         value=False,
-        help="체크하면 seo_doctor_reports/ 디렉토리에 분석 결과를 파일로 저장합니다"
+        help=f"체크하면 {get_reports_path('seo_doctor')}/ 디렉토리에 분석 결과를 파일로 저장합니다"
     )
     
     st.markdown("---")
     
-    # Lighthouse 사용 가능 여부 확인
-    if not LIGHTHOUSE_AVAILABLE:
-        st.error("⚠️ Lighthouse 분석기를 불러올 수 없습니다.")
-        st.info("Node.js, Lighthouse, Chrome을 설치해주세요.")
-        
-        with st.expander("🔧 설치 가이드"):
-            st.markdown("""
-            ### Lighthouse 환경 설정
-            
-            1. **Node.js 설치**:
-            ```bash
-            # Ubuntu/Debian
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            
-            # macOS
-            brew install node
-            ```
-            
-            2. **Lighthouse 설치**:
-            ```bash
-            npm install -g lighthouse chrome-launcher
-            ```
-            
-            3. **Chrome 설치** (헤드리스 모드용):
-            ```bash
-            # Ubuntu/Debian
-            wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-            sudo apt-get install google-chrome-stable
-            ```
-            """)
-        
-        # 폴백으로 기본 인터페이스 제공
-        render_fallback_interface()
-        return
-    else:
-        st.success("🤖 Lighthouse 실시간 분석기가 준비되었습니다!")
+    st.success("🤖 Lighthouse 실시간 분석기가 준비되었습니다!")
 
     # 실제 분석 인터페이스
     render_real_seo_analysis()
@@ -129,16 +123,27 @@ def render_real_seo_analysis():
         # URL 입력
         url = st.text_input(
             "🌐 분석할 웹사이트 URL", 
+            value=None,
             placeholder="https://example.com",
             help="실시간으로 웹사이트를 분석합니다"
         )
         
-        # 분석 옵션
-        strategy = st.selectbox(
-            "📱 분석 환경",
-            ["mobile", "desktop"],
-            help="모바일 또는 데스크탑 환경에서 분석"
-        )
+        # 분석 옵션 - 동적 로드
+        try:
+            strategies = load_analysis_strategies()
+            strategy = st.selectbox(
+                "📱 분석 환경",
+                strategies,
+                index=None,
+                placeholder="분석 환경을 선택하세요"
+            )
+        except Exception as e:
+            st.warning(f"분석 전략 로드 실패: {e}")
+            strategy = st.text_input(
+                "📱 분석 환경",
+                value=None,
+                placeholder="mobile 또는 desktop 입력"
+            )
     
     with col2:
         st.markdown("#### 🎯 실시간 분석 특징")
@@ -150,17 +155,19 @@ def render_real_seo_analysis():
         - 🛡️ **Best Practices** 검사
         """)
 
-    # 분석 시작 버튼
-    if st.button("🚨 실시간 SEO 진단 시작", type="primary", use_container_width=True):
-        if not url:
-            st.error("URL을 입력해주세요!")
-            return
-        
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-        
-        # 실제 분석 수행
-        run_real_lighthouse_analysis(url, strategy)
+    # 필수 입력 검증
+    if not url:
+        st.warning("분석할 웹사이트 URL을 입력해주세요.")
+    elif not strategy:
+        st.warning("분석 환경을 선택하거나 입력해주세요.")
+    else:
+        # 분석 시작 버튼
+        if st.button("🚨 실시간 SEO 진단 시작", type="primary", use_container_width=True):
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            # 실제 분석 수행
+            run_real_lighthouse_analysis(url, strategy)
 
 def run_real_lighthouse_analysis(url: str, strategy: str):
     """실제 Lighthouse 분석 수행"""
@@ -202,6 +209,9 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
             )
             loop.close()
             
+            # 결과 검증
+            validate_seo_result(analysis_result)
+            
             # 마지막 단계
             progress_bar.progress(1.0)
             status_text.text(progress_steps[-1])
@@ -217,12 +227,11 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
     # 분석 결과 표시
     if "error" in analysis_result:
         st.error(f"❌ 분석 실패: {analysis_result['error']}")
-        st.info("URL을 확인하거나 잠시 후 다시 시도해주세요.")
         return
     
-    display_real_analysis_results(analysis_result, strategy)
+    display_real_analysis_results(analysis_result, strategy, url)
 
-def display_real_analysis_results(result: dict, strategy: str):
+def display_real_analysis_results(result: dict, strategy: str, url: str):
     """실제 분석 결과 표시"""
     
     # 기본 정보 추출
@@ -318,9 +327,24 @@ def display_real_analysis_results(result: dict, strategy: str):
     # 차트 시각화
     render_score_visualization(scores)
     
+    # 파일 저장 처리
+    if st.session_state.get('save_to_file', False):
+        try:
+            report_content = generate_seo_report_content(result, strategy)
+            filename = f"seo_analysis_{url.replace('https://', '').replace('http://', '').replace('/', '_')}_{strategy}.md"
+            save_seo_report(report_content, filename)
+            st.success(f"📁 보고서가 저장되었습니다: {filename}")
+        except Exception as e:
+            st.warning(f"보고서 저장 실패: {e}")
+    
     # 상세 분석 보고서
     with st.expander("📋 상세 Lighthouse 보고서"):
         st.json(result.get('raw_lighthouse_result', {}))
+
+def generate_seo_report_content(result: dict, strategy: str):
+    """SEO 보고서 내용 생성"""
+    # 실제 구현 필요
+    raise NotImplementedError("SEO 보고서 내용 생성 기능을 구현해주세요")
 
 def render_score_visualization(scores: dict):
     """점수 시각화 차트"""
@@ -374,53 +398,6 @@ def render_score_visualization(scores: dict):
         )
         
         st.plotly_chart(fig, use_container_width=True)
-
-def render_fallback_interface():
-    """Lighthouse 사용 불가능시 폴백 인터페이스"""
-    
-    st.markdown("### 🔧 시스템 점검 모드")
-    st.info("현재 Lighthouse 엔진이 설정되지 않아 시스템 점검 모드로 실행됩니다.")
-    
-    # 기본 입력 폼은 유지
-    url = st.text_input("🌐 웹사이트 URL", placeholder="https://example.com")
-    
-    if st.button("🔍 기본 점검 시작", use_container_width=True):
-        if url:
-            st.warning("⚠️ 현재 기본 점검 모드입니다. 정확한 분석을 위해 Lighthouse를 설치해주세요.")
-        else:
-            st.error("URL을 입력해주세요!")
-
-# 수동 설치 가이드
-with st.expander("🔧 SEO Doctor 수동 실행 가이드"):
-    st.markdown("""
-    ### SEO Doctor 설정 및 실행
-    
-    1. **디렉토리 이동**:
-    ```bash
-    cd srcs/seo_doctor
-    ```
-    
-    2. **필요한 패키지 설치**:
-    ```bash
-    pip install streamlit plotly pandas asyncio
-    ```
-    
-    3. **SEO Doctor 실행**:
-    ```bash
-    streamlit run seo_doctor_app.py --server.port 8502
-    ```
-    
-    4. **런처 사용** (추천):
-    ```bash
-    python ../../seo_doctor_launcher.py
-    ```
-    
-    ### 🎯 주요 특징
-    - **모바일 최적화**: 터치 친화적 UI
-    - **3분 진단**: 빠른 결과 제공
-    - **바이럴 요소**: 점수 공유, 경쟁 심리
-    - **실시간 분석**: 즉시 처방전 생성
-    """)
 
 if __name__ == "__main__":
     main() 

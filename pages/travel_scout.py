@@ -18,7 +18,41 @@ import os
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from srcs.travel_scout.travel_scout_agent import TravelScoutAgent
+# 중앙 설정 임포트
+from configs.settings import get_reports_path
+
+try:
+    from srcs.travel_scout.travel_scout_agent import TravelScoutAgent
+except ImportError as e:
+    st.error(f"⚠️ Travel Scout Agent를 불러올 수 없습니다: {e}")
+    st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+    st.stop()
+
+def load_destination_options():
+    """목적지 옵션 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("목적지 옵션 로딩 기능을 구현해주세요")
+
+def load_origin_options():
+    """출발지 옵션 로드"""
+    # 실제 구현 필요
+    raise NotImplementedError("출발지 옵션 로딩 기능을 구현해주세요")
+
+def get_user_location():
+    """사용자 위치 기반 기본값 설정"""
+    # 실제 구현 필요
+    raise NotImplementedError("사용자 위치 기반 기본값 설정 기능을 구현해주세요")
+
+def validate_travel_result(result):
+    """여행 검색 결과 검증"""
+    if not result:
+        raise Exception("Travel Scout Agent에서 유효한 결과를 반환하지 않았습니다")
+    return result
+
+def save_travel_report(content, filename):
+    """여행 검색 보고서를 파일로 저장"""
+    # 실제 구현 필요
+    raise NotImplementedError("여행 보고서 저장 기능을 구현해주세요")
 
 # Configure page
 st.set_page_config(
@@ -80,8 +114,43 @@ async def main():
             
             c1, c2 = st.columns(2)
             with c1:
-                destination = st.text_input("목적지", value="Tokyo", help="검색할 도시명을 입력하세요")
-                origin = st.text_input("출발지", value="Seoul", help="출발 도시명을 입력하세요")
+                # 동적 목적지 옵션 로드
+                try:
+                    destination_options = load_destination_options()
+                    destination = st.selectbox(
+                        "목적지", 
+                        destination_options,
+                        index=None,
+                        placeholder="목적지를 선택하세요",
+                        help="검색할 도시명을 선택하세요"
+                    )
+                except Exception as e:
+                    st.warning(f"목적지 옵션 로드 실패: {e}")
+                    destination = st.text_input(
+                        "목적지", 
+                        value=None,
+                        placeholder="목적지를 직접 입력하세요",
+                        help="검색할 도시명을 입력하세요"
+                    )
+                
+                # 동적 출발지 옵션 로드
+                try:
+                    origin_options = load_origin_options()
+                    origin = st.selectbox(
+                        "출발지", 
+                        origin_options,
+                        index=None,
+                        placeholder="출발지를 선택하세요",
+                        help="출발 도시명을 선택하세요"
+                    )
+                except Exception as e:
+                    st.warning(f"출발지 옵션 로드 실패: {e}")
+                    origin = st.text_input(
+                        "출발지", 
+                        value=None,
+                        placeholder="출발지를 직접 입력하세요",
+                        help="출발 도시명을 입력하세요"
+                    )
 
             with c2:
                 departure_date = st.date_input(
@@ -113,13 +182,26 @@ async def main():
                 max_hotel_price = st.slider("최대 호텔 가격 ($/박)", 50, 1000, 500, 50)
                 max_flight_price = st.slider("최대 항공료 ($)", 200, 5000, 2000, 100)
             
-            search_button = st.form_submit_button(
-                "🚀 실시간 검색 시작", 
-                type="primary",
-                use_container_width=True,
-                help="MCP Browser를 통해 실시간으로 여행 정보를 검색합니다.",
-                disabled=not st.session_state.agent.get_mcp_status().get('browser_connected')
+            # 파일 저장 옵션
+            save_to_file = st.checkbox(
+                "검색 결과를 파일로 저장", 
+                value=False,
+                help=f"체크하면 {get_reports_path('travel_scout')}/ 디렉토리에 검색 결과를 파일로 저장합니다"
             )
+            
+            # 필수 입력 검증
+            if not destination:
+                st.warning("목적지를 선택하거나 입력해주세요.")
+            elif not origin:
+                st.warning("출발지를 선택하거나 입력해주세요.")
+            else:
+                search_button = st.form_submit_button(
+                    "🚀 실시간 검색 시작", 
+                    type="primary",
+                    use_container_width=True,
+                    help="MCP Browser를 통해 실시간으로 여행 정보를 검색합니다.",
+                    disabled=not st.session_state.agent.get_mcp_status().get('browser_connected')
+                )
 
     # Sidebar for Search History & Stats
     with st.sidebar:
@@ -144,11 +226,7 @@ async def main():
                     st.write(f"시간: {search.get('performance', {}).get('total_duration', 0):.1f}초")
 
     # Main content area
-    if search_button:
-        if not destination or not origin:
-            st.error("목적지와 출발지를 모두 입력해주세요.")
-            return
-
+    if 'search_button' in locals() and search_button:
         st.session_state.agent.update_quality_criteria({
             'min_hotel_rating': min_hotel_rating,
             'max_hotel_price': max_hotel_price,
@@ -186,8 +264,22 @@ async def main():
             # Perform search
             try:
                 search_results = await st.session_state.agent.search_travel_options(search_params)
+                
+                # 결과 검증
+                validate_travel_result(search_results)
+                
                 st.session_state.search_results = search_results
                 st.session_state.search_history.append(search_results)
+                
+                # 파일 저장 처리
+                if save_to_file and search_results.get('status') == 'completed':
+                    try:
+                        report_content = generate_travel_report_content(search_results, search_params)
+                        filename = f"travel_search_{destination}_{origin}_{departure_date.strftime('%Y%m%d')}.md"
+                        save_travel_report(report_content, filename)
+                        st.success(f"📁 보고서가 저장되었습니다: {filename}")
+                    except Exception as e:
+                        st.warning(f"보고서 저장 실패: {e}")
                 
                 progress_task.cancel()
                 progress_container.empty()
@@ -383,6 +475,11 @@ async def main():
                         st.info(f"모든 데이터 ({total_items}건)는 MCP Browser를 통해 실시간으로 수집되었습니다.")
             else:
                 st.info("분석 정보가 없습니다.")
+
+def generate_travel_report_content(results: dict, search_params: dict):
+    """여행 검색 보고서 내용 생성"""
+    # 실제 구현 필요
+    raise NotImplementedError("여행 보고서 내용 생성 기능을 구현해주세요")
 
 # Run the Streamlit app
 if __name__ == "__main__":

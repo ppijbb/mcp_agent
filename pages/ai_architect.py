@@ -7,18 +7,31 @@
 import streamlit as st
 import sys
 from pathlib import Path
+import os
+from datetime import datetime
+import json
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# AI Architect Agent 임포트 시도
+# 설정 파일에서 경로 가져오기
+try:
+    from configs.settings import get_reports_path
+    REPORTS_PATH = get_reports_path('ai_architect')
+except ImportError:
+    # 설정 파일이 없으면 에러 발생
+    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
+    st.stop()
+
+# AI Architect Agent 임포트 - 필수 의존성
 try:
     from srcs.advanced_agents.evolutionary_ai_architect_agent import EvolutionaryAIArchitectAgent
-    ARCHITECT_AGENT_AVAILABLE = True
 except ImportError as e:
-    ARCHITECT_AGENT_AVAILABLE = False
-    import_error = str(e)
+    st.error(f"❌ AI Architect Agent를 불러올 수 없습니다: {e}")
+    st.error("**시스템 요구사항**: EvolutionaryAIArchitectAgent가 필수입니다.")
+    st.info("에이전트 모듈을 설치하고 다시 시도해주세요.")
+    st.stop()
 
 def main():
     """AI Architect Agent 메인 페이지"""
@@ -46,77 +59,10 @@ def main():
     
     st.markdown("---")
     
-    # Agent 연동 상태 확인
-    if not ARCHITECT_AGENT_AVAILABLE:
-        st.error(f"⚠️ AI Architect Agent를 불러올 수 없습니다: {import_error}")
-        st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
-        
-        with st.expander("🔧 설치 가이드"):
-            st.markdown("""
-            ### AI Architect Agent 설정
-            
-            1. **필요한 패키지 설치**:
-            ```bash
-            pip install numpy pandas matplotlib seaborn
-            ```
-            
-            2. **에이전트 모듈 확인**:
-            ```bash
-            ls srcs/advanced_agents/evolutionary_ai_architect_agent.py
-            ls srcs/advanced_agents/architect.py
-            ls srcs/advanced_agents/genome.py
-            ls srcs/advanced_agents/improvement_engine.py
-            ```
-            
-            3. **필요 시 종속성 설치**:
-            ```bash
-            pip install -r requirements.txt
-            ```
-            """)
-        
-        # 에이전트 소개만 제공
-        render_agent_info()
-        return
-    else:
-        st.success("🤖 AI Architect Agent가 성공적으로 연결되었습니다!")
-        
-        # 에이전트 실행 인터페이스 제공
-        render_architect_agent_interface()
-
-def render_agent_info():
-    """에이전트 기능 소개"""
+    st.success("🤖 AI Architect Agent가 성공적으로 연결되었습니다!")
     
-    st.markdown("### 🏗️ AI Architect Agent 소개")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        #### 📋 주요 기능
-        - **진화형 아키텍처**: 자동 최적화 및 스케일링
-        - **성능 모니터링**: 실시간 시스템 건강도 체크
-        - **비용 최적화**: 클라우드 리소스 효율적 관리
-        - **보안 강화**: AI 기반 위협 탐지 및 대응
-        - **배포 자동화**: CI/CD 파이프라인 최적화
-        """)
-    
-    with col2:
-        st.markdown("""
-        #### ✨ 스페셜 기능
-        - **적응형 학습**: 사용 패턴 기반 자동 조정
-        - **예측 분석**: 장애 예방 및 용량 계획
-        - **멀티클라우드 지원**: 하이브리드 환경 최적화
-        - **A/B 테스트 자동화**: 성능 비교 분석
-        - **비용 예측**: ROI 기반 아키텍처 추천
-        """)
-    
-    st.markdown("""
-    #### 🎯 사용 사례
-    - 대규모 AI 서비스 아키텍처 설계
-    - 레거시 시스템 현대화 전략
-    - 마이크로서비스 전환 계획
-    - 클라우드 네이티브 최적화
-    """)
+    # 에이전트 실행 인터페이스 제공
+    render_architect_agent_interface()
 
 def render_architect_agent_interface():
     """AI Architect Agent 실행 인터페이스"""
@@ -138,7 +84,7 @@ def render_architect_agent_interface():
             
             problem_description = st.text_area(
                 "문제 설명", 
-                value="Design an AI system for real-time image processing and analysis",
+                placeholder="해결하고자 하는 AI 아키텍처 문제를 상세히 설명하세요",
                 height=100,
                 help="해결하고자 하는 AI 아키텍처 문제를 상세히 설명하세요"
             )
@@ -174,7 +120,7 @@ def render_architect_agent_interface():
             save_to_file = st.checkbox(
                 "파일로 저장", 
                 value=False,
-                help="체크하면 ai_architect_reports/ 디렉토리에 설계 결과를 파일로 저장합니다"
+                help=f"체크하면 {REPORTS_PATH} 디렉토리에 설계 결과를 파일로 저장합니다"
             )
             
             if st.button("🚀 AI Architect 실행", type="primary", use_container_width=True):
@@ -190,11 +136,11 @@ def render_architect_agent_interface():
                 if result['success']:
                     st.success("✅ AI Architect Agent 실행 완료!")
                     
-                    # 텍스트 결과 표시
+                    # 실제 에이전트 결과만 표시
                     st.markdown("#### 📊 아키텍처 설계 결과")
                     st.text_area(
-                        "설계 결과 텍스트",
-                        value=result.get('text_output', '아키텍처 설계가 완료되었습니다.'),
+                        "설계 결과",
+                        value=result.get('agent_output', ''),
                         height=300,
                         disabled=True
                     )
@@ -203,62 +149,21 @@ def render_architect_agent_interface():
                     if result.get('save_to_file') and result.get('file_saved'):
                         st.success(f"💾 결과가 파일로 저장되었습니다: {result.get('output_path', '')}")
                     
-                    # 결과 정보 표시
-                    st.markdown("#### 🏗️ 추천 아키텍처 정보")
-                    
-                    solution = result['solution']
-                    
-                    # 추천 아키텍처 정보
-                    if 'recommended_architecture' in solution:
-                        arch = solution['recommended_architecture']
-                        
-                        col_arch1, col_arch2 = st.columns(2)
-                        
-                        with col_arch1:
-                            st.metric("아키텍처 타입", arch.get('type', 'Unknown'))
-                            st.metric("레이어 수", len(arch.get('layers', [])))
-                        
-                        with col_arch2:  
-                            st.metric("적합도 점수", f"{arch.get('fitness_score', 0):.4f}")
-                            st.metric("복잡도", arch.get('complexity_rating', 'N/A'))
-                    
-                    # 구현 단계
-                    if 'implementation_steps' in solution:
-                        st.markdown("#### 📋 구현 단계")
-                        for step in solution['implementation_steps']:
-                            st.markdown(f"- {step}")
-                    
-                    # 예상 성능
-                    if 'expected_performance' in solution:
-                        perf = solution['expected_performance']
-                        st.markdown("#### 📈 예상 성능")
-                        
-                        col_perf1, col_perf2, col_perf3 = st.columns(3)
-                        with col_perf1:
-                            st.metric("정확도 추정", perf.get('accuracy_estimate', 'N/A'))
-                        with col_perf2:
-                            st.metric("복잡도 등급", perf.get('complexity_rating', 'N/A'))
-                        with col_perf3:
-                            st.metric("훈련 시간 추정", perf.get('training_time_estimate', 'N/A'))
-                    
-                    # 적응형 기능
-                    if 'adaptive_features' in solution:
-                        st.markdown("#### ✨ 적응형 기능")
-                        for feature in solution['adaptive_features']:
-                            st.markdown(f"- {feature}")
+                    # 실제 에이전트 결과 정보 표시
+                    display_agent_results(result)
                     
                     # 상세 정보 표시
                     if result.get('show_details'):
                         render_detailed_results(result)
                     
                     # 해결책 다운로드
-                    solution_text = format_solution_for_download(result)
-                    st.download_button(
-                        label="📥 아키텍처 설계서 다운로드",
-                        data=solution_text,
-                        file_name=f"ai_architecture_design_{result['timestamp']}.md",
-                        mime="text/markdown"
-                    )
+                    if result.get('agent_output'):
+                        st.download_button(
+                            label="📥 아키텍처 설계서 다운로드",
+                            data=result['agent_output'],
+                            file_name=f"ai_architecture_design_{result['timestamp']}.md",
+                            mime="text/markdown"
+                        )
                     
                 else:
                     st.error("❌ 실행 중 오류 발생")
@@ -287,8 +192,9 @@ def render_architect_agent_interface():
                 """)
                 
     except Exception as e:
-        st.error(f"Agent 초기화 중 오류: {e}")
-        st.info("에이전트 클래스를 확인해주세요.")
+        st.error(f"❌ Agent 초기화 실패: {e}")
+        st.error("EvolutionaryAIArchitectAgent 구현을 확인해주세요.")
+        st.stop()
 
 def execute_architect_agent(agent, problem_description, architecture_type, generations, show_details, save_to_file):
     """AI Architect Agent 실행"""
@@ -306,8 +212,11 @@ def execute_architect_agent(agent, problem_description, architecture_type, gener
                 'generations': generations
             }
             
-            # 에이전트 실행
+            # 실제 에이전트 실행 - 폴백 없음
             solution_result = agent.solve_problem(problem_description, constraints)
+            
+            if not solution_result:
+                raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
             
             # 상세 정보가 필요한 경우 에이전트 상태 가져오기
             agent_status = agent.get_status() if show_details else None
@@ -315,8 +224,8 @@ def execute_architect_agent(agent, problem_description, architecture_type, gener
             # 현재 시간 타임스탬프
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             
-            # 기본 텍스트 결과 생성
-            text_output = generate_architect_text_output(solution_result, problem_description)
+            # 실제 에이전트 출력만 사용
+            agent_output = format_agent_output(solution_result, problem_description)
             
             # 파일 저장 처리
             file_saved = False
@@ -326,17 +235,17 @@ def execute_architect_agent(agent, problem_description, architecture_type, gener
             
             st.session_state['architect_execution_result'] = {
                 'success': True,
-                'solution': solution_result['solution'],
-                'problem_analysis': solution_result['problem_analysis'],
-                'performance_metrics': solution_result['performance_metrics'],
-                'improvement_opportunities': solution_result['improvement_opportunities'],
-                'improvement_strategy': solution_result['improvement_strategy'],
-                'processing_time': solution_result['processing_time'],
-                'generation': solution_result['generation'],
+                'solution': solution_result.get('solution', {}),
+                'problem_analysis': solution_result.get('problem_analysis', {}),
+                'performance_metrics': solution_result.get('performance_metrics', {}),
+                'improvement_opportunities': solution_result.get('improvement_opportunities', []),
+                'improvement_strategy': solution_result.get('improvement_strategy', {}),
+                'processing_time': solution_result.get('processing_time', 0),
+                'generation': solution_result.get('generation', 0),
                 'agent_status': agent_status,
                 'show_details': show_details,
                 'timestamp': timestamp,
-                'text_output': text_output,
+                'agent_output': agent_output,
                 'save_to_file': save_to_file,
                 'file_saved': file_saved,
                 'output_path': output_path
@@ -346,10 +255,59 @@ def execute_architect_agent(agent, problem_description, architecture_type, gener
     except Exception as e:
         st.session_state['architect_execution_result'] = {
             'success': False,
-            'message': f'AI Architect Agent 실행 중 오류 발생: {str(e)}',
+            'message': f'AI Architect Agent 실행 실패: {str(e)}',
             'error': str(e)
         }
         st.rerun()
+
+def display_agent_results(result):
+    """실제 에이전트 결과 표시"""
+    
+    solution = result.get('solution', {})
+    
+    if not solution:
+        st.warning("에이전트 결과가 비어있습니다.")
+        return
+    
+    # 추천 아키텍처 정보
+    if 'recommended_architecture' in solution:
+        st.markdown("#### 🏗️ 추천 아키텍처 정보")
+        arch = solution['recommended_architecture']
+        
+        col_arch1, col_arch2 = st.columns(2)
+        
+        with col_arch1:
+            st.metric("아키텍처 타입", arch.get('type', 'Unknown'))
+            st.metric("레이어 수", len(arch.get('layers', [])))
+        
+        with col_arch2:  
+            st.metric("적합도 점수", f"{arch.get('fitness_score', 0):.4f}")
+            st.metric("복잡도", arch.get('complexity_rating', 'N/A'))
+    
+    # 구현 단계
+    if 'implementation_steps' in solution:
+        st.markdown("#### 📋 구현 단계")
+        for step in solution['implementation_steps']:
+            st.markdown(f"- {step}")
+    
+    # 예상 성능
+    if 'expected_performance' in solution:
+        perf = solution['expected_performance']
+        st.markdown("#### 📈 예상 성능")
+        
+        col_perf1, col_perf2, col_perf3 = st.columns(3)
+        with col_perf1:
+            st.metric("정확도 추정", perf.get('accuracy_estimate', 'N/A'))
+        with col_perf2:
+            st.metric("복잡도 등급", perf.get('complexity_rating', 'N/A'))
+        with col_perf3:
+            st.metric("훈련 시간 추정", perf.get('training_time_estimate', 'N/A'))
+    
+    # 적응형 기능
+    if 'adaptive_features' in solution:
+        st.markdown("#### ✨ 적응형 기능")
+        for feature in solution['adaptive_features']:
+            st.markdown(f"- {feature}")
 
 def render_detailed_results(result):
     """상세 결과 렌더링"""
@@ -357,7 +315,7 @@ def render_detailed_results(result):
     with st.expander("🔍 상세 실행 정보", expanded=False):
         
         # 문제 분석
-        if 'problem_analysis' in result:
+        if 'problem_analysis' in result and result['problem_analysis']:
             st.markdown("#### 📊 문제 분석")
             analysis = result['problem_analysis']
             
@@ -369,20 +327,20 @@ def render_detailed_results(result):
                 st.info(f"**권장 아키텍처**: {analysis.get('suggested_architecture_type', 'N/A')}")
         
         # 성능 메트릭
-        if 'performance_metrics' in result:
+        if 'performance_metrics' in result and result['performance_metrics']:
             st.markdown("#### 📈 성능 메트릭")
             metrics = result['performance_metrics']
             st.json(metrics)
         
         # 개선 기회
-        if 'improvement_opportunities' in result:
+        if 'improvement_opportunities' in result and result['improvement_opportunities']:
             st.markdown("#### 🚀 개선 기회")
             opportunities = result['improvement_opportunities']
             for opp in opportunities:
                 st.markdown(f"- {opp}")
         
         # 개선 전략
-        if 'improvement_strategy' in result:
+        if 'improvement_strategy' in result and result['improvement_strategy']:
             st.markdown("#### 🎯 개선 전략")
             strategy = result['improvement_strategy']
             st.json(strategy)
@@ -400,159 +358,103 @@ def render_detailed_results(result):
             
             # 인구 통계
             pop_stats = status.get('population_stats', {})
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.metric("다양성 점수", f"{pop_stats.get('diversity_score', 0):.3f}")
-            with col_s2:
-                st.metric("평균 적합도", f"{pop_stats.get('average_fitness', 0):.3f}")
+            if pop_stats:
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    st.metric("다양성 점수", f"{pop_stats.get('diversity_score', 0):.3f}")
+                with col_s2:
+                    st.metric("평균 적합도", f"{pop_stats.get('average_fitness', 0):.3f}")
 
-def format_solution_for_download(result):
-    """다운로드용 해결책 포맷팅"""
+def format_agent_output(solution_result, problem_description):
+    """실제 에이전트 출력 포맷팅"""
     
-    solution = result['solution']
-    timestamp = result['timestamp']
-    
-    content = f"""# AI 아키텍처 설계서
-생성 시간: {timestamp}
-
-## 📊 추천 아키텍처
-
-"""
-    
-    if 'recommended_architecture' in solution:
-        arch = solution['recommended_architecture']
-        content += f"""
-- **아키텍처 ID**: {arch.get('id', 'N/A')}
-- **타입**: {arch.get('type', 'N/A')}
-- **적합도 점수**: {arch.get('fitness_score', 0):.4f}
-- **레이어 수**: {len(arch.get('layers', []))}
-
-### 하이퍼파라미터
-```json
-{arch.get('hyperparameters', {})}
-```
-"""
-    
-    if 'implementation_steps' in solution:
-        content += "\n## 📋 구현 단계\n\n"
-        for i, step in enumerate(solution['implementation_steps'], 1):
-            content += f"{i}. {step}\n"
-    
-    if 'expected_performance' in solution:
-        perf = solution['expected_performance']
-        content += f"""
-## 📈 예상 성능
-
-- **정확도 추정**: {perf.get('accuracy_estimate', 'N/A')}
-- **복잡도 등급**: {perf.get('complexity_rating', 'N/A')}
-- **훈련 시간 추정**: {perf.get('training_time_estimate', 'N/A')}
-"""
-    
-    if 'adaptive_features' in solution:
-        content += "\n## ✨ 적응형 기능\n\n"
-        for feature in solution['adaptive_features']:
-            content += f"- {feature}\n"
-    
-    content += f"""
-## 🔍 실행 정보
-
-- **처리 시간**: {result.get('processing_time', 0):.2f}초
-- **진화 세대**: {result.get('generation', 0)}
-- **성공**: {result.get('success', False)}
-"""
-    
-    return content
-
-def generate_architect_text_output(solution_result, problem_description):
-    """AI Architect 텍스트 결과 생성"""
+    if not solution_result:
+        raise Exception("에이전트 결과가 없습니다.")
     
     solution = solution_result.get('solution', {})
     
-    text_output = f"""
-🏗️ AI 아키텍처 설계 결과
-
-📝 문제 설명:
-{problem_description}
-
-🎯 추천 아키텍처:
-- 아키텍처 ID: {solution.get('recommended_architecture', {}).get('id', 'auto-generated')}
-- 타입: {solution.get('recommended_architecture', {}).get('type', 'hybrid')}
-- 적합도 점수: {solution.get('recommended_architecture', {}).get('fitness_score', 0.85):.4f}
-- 레이어 수: {len(solution.get('recommended_architecture', {}).get('layers', []))}
-
-📊 예상 성능:
-- 정확도 추정: {solution.get('expected_performance', {}).get('accuracy_estimate', '85-90%')}
-- 복잡도 등급: {solution.get('expected_performance', {}).get('complexity_rating', 'Medium')}
-- 훈련 시간 추정: {solution.get('expected_performance', {}).get('training_time_estimate', '2-4시간')}
-
-📋 구현 단계:"""
+    if not solution:
+        raise Exception("에이전트 솔루션이 비어있습니다.")
     
-    # 구현 단계 추가
+    # 실제 에이전트 데이터만 사용하여 출력 생성
+    output_lines = [
+        "🏗️ AI 아키텍처 설계 결과",
+        "",
+        f"📝 문제 설명:",
+        problem_description,
+        ""
+    ]
+    
+    # 실제 에이전트 결과만 사용
+    if 'recommended_architecture' in solution:
+        arch = solution['recommended_architecture']
+        output_lines.extend([
+            "🎯 추천 아키텍처:",
+            f"- 아키텍처 ID: {arch.get('id', 'N/A')}",
+            f"- 타입: {arch.get('type', 'N/A')}",
+            f"- 적합도 점수: {arch.get('fitness_score', 0):.4f}",
+            f"- 레이어 수: {len(arch.get('layers', []))}",
+            ""
+        ])
+    
+    if 'expected_performance' in solution:
+        perf = solution['expected_performance']
+        output_lines.extend([
+            "📊 예상 성능:",
+            f"- 정확도 추정: {perf.get('accuracy_estimate', 'N/A')}",
+            f"- 복잡도 등급: {perf.get('complexity_rating', 'N/A')}",
+            f"- 훈련 시간 추정: {perf.get('training_time_estimate', 'N/A')}",
+            ""
+        ])
+    
     if 'implementation_steps' in solution:
+        output_lines.append("📋 구현 단계:")
         for i, step in enumerate(solution['implementation_steps'], 1):
-            text_output += f"\n{i}. {step}"
-    else:
-        text_output += """
-1. 데이터 전처리 및 준비
-2. 모델 아키텍처 구현
-3. 하이퍼파라미터 튜닝
-4. 모델 훈련 및 검증
-5. 성능 최적화 및 배포"""
+            output_lines.append(f"{i}. {step}")
+        output_lines.append("")
     
-    # 적응형 기능 추가
-    text_output += "\n\n✨ 적응형 기능:"
     if 'adaptive_features' in solution:
+        output_lines.append("✨ 적응형 기능:")
         for feature in solution['adaptive_features']:
-            text_output += f"\n- {feature}"
-    else:
-        text_output += """
-- 자동 하이퍼파라미터 최적화
-- 동적 아키텍처 조정
-- 실시간 성능 모니터링
-- 적응형 학습률 스케줄링"""
+            output_lines.append(f"- {feature}")
+        output_lines.append("")
     
     # 실행 정보 추가
-    text_output += f"""
-
-🔍 실행 정보:
-- 처리 시간: {solution_result.get('processing_time', 0):.2f}초
-- 진화 세대: {solution_result.get('generation', 1)}
-- 설계 성공: ✅
-"""
+    output_lines.extend([
+        "🔍 실행 정보:",
+        f"- 처리 시간: {solution_result.get('processing_time', 0):.2f}초",
+        f"- 진화 세대: {solution_result.get('generation', 0)}",
+        "- 설계 성공: ✅"
+    ])
     
-    return text_output.strip()
+    return "\n".join(output_lines)
 
 def save_architect_results_to_file(solution_result, problem_description, timestamp):
     """AI Architect 결과를 파일로 저장"""
     
     try:
-        import os
-        from datetime import datetime
-        
-        output_dir = "ai_architect_reports"
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(REPORTS_PATH, exist_ok=True)
         
         filename = f"ai_architect_design_{timestamp}.md"
-        filepath = os.path.join(output_dir, filename)
+        filepath = os.path.join(REPORTS_PATH, filename)
         
-        # 텍스트 결과 생성
-        text_output = generate_architect_text_output(solution_result, problem_description)
+        # 실제 에이전트 출력 생성
+        agent_output = format_agent_output(solution_result, problem_description)
         
         # 마크다운 파일로 저장
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write("# AI 아키텍처 설계 보고서\n\n")
             f.write(f"**생성 시간**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             f.write("---\n\n")
-            f.write(text_output)
+            f.write(agent_output)
             f.write("\n\n---\n")
             f.write("## 상세 기술 사양\n\n")
             
-            # JSON 형태의 상세 정보 추가
+            # 실제 에이전트 결과의 상세 정보 추가
             solution = solution_result.get('solution', {})
             if 'recommended_architecture' in solution:
                 f.write("### 아키텍처 상세\n\n")
                 f.write("```json\n")
-                import json
                 f.write(json.dumps(solution['recommended_architecture'], indent=2, ensure_ascii=False))
                 f.write("\n```\n\n")
             
@@ -562,7 +464,7 @@ def save_architect_results_to_file(solution_result, problem_description, timesta
         return True, filepath
         
     except Exception as e:
-        print(f"파일 저장 중 오류: {e}")
+        st.error(f"파일 저장 중 오류: {e}")
         return False, None
 
 if __name__ == "__main__":
