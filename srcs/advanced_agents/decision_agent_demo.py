@@ -22,9 +22,29 @@ from advanced_agents.decision_agent import (
 )
 
 class MockDecisionAgent(DecisionAgent):
-    """API 키 없이 테스트할 수 있는 Mock Decision Agent"""
+    """⚠️ DEPRECATED: Use decision_agent_mcp_agent.py for real MCP implementation
+    
+    🚨 CRITICAL ISSUE: This class contains MOCK DATA and should not be used in production.
+    
+    Based on real-world MCP implementation patterns from:
+    https://medium.com/@govindarajpriyanthan/from-theory-to-practice-building-a-multi-agent-research-system-with-mcp-part-2-811b0163e87c
+    
+    USE srcs/advanced_agents/decision_agent_mcp_agent.py INSTEAD for real ReAct decision making.
+    
+    ❌ PROBLEMS WITH THIS CLASS:
+    - Line 47-77: Pre-defined mock decisions (fake data)
+    - Line 113: Mock confidence scores
+    - Line 235: Simulated sleep delays
+    - No real market research
+    - No actual risk assessment
+    - No ReAct reasoning pattern
+    """
     
     def __init__(self):
+        print("⚠️ WARNING: MockDecisionAgent is DEPRECATED!")
+        print("🚨 Use srcs/advanced_agents/decision_agent_mcp_agent.py for real MCP implementation")
+        print("📖 Based on: https://medium.com/@govindarajpriyanthan/from-theory-to-practice-building-a-multi-agent-research-system-with-mcp-part-2-811b0163e87c")
+        
         # API 키 없이 초기화
         self.user_profiles: Dict[str, UserProfile] = {}
         self.interaction_buffer: list = []

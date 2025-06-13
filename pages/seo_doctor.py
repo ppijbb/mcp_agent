@@ -21,22 +21,30 @@ sys.path.insert(0, str(project_root))
 # 중앙 설정 임포트
 from configs.settings import get_reports_path
 
-# SEO Doctor 모듈 임포트
-try:
-    from srcs.seo_doctor.seo_doctor_app import main as seo_main
-    from srcs.seo_doctor.seo_doctor_app import *
-except ImportError as e:
-    st.error(f"⚠️ SEO Doctor를 불러올 수 없습니다: {e}")
-    st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
-    st.stop()
+# 🚨 CRITICAL UPDATE: Use Real MCP Agent instead of Mock
+# Based on: https://medium.com/@matteo28/how-i-solved-a-real-world-customer-problem-with-the-model-context-protocol-mcp-328da5ac76fe
 
-# 실제 Lighthouse 분석기 임포트
+# Real SEO Doctor MCP Agent import
+try:
+    from srcs.seo_doctor.seo_doctor_mcp_agent import (
+        create_seo_doctor_agent,
+        run_emergency_seo_diagnosis,
+        SEOAnalysisResult,
+        SEOEmergencyLevel
+    )
+    SEO_AGENT_AVAILABLE = True
+except ImportError as e:
+    st.error(f"⚠️ Real SEO Doctor MCP Agent를 불러올 수 없습니다: {e}")
+    st.info("새로운 MCP Agent 구현을 확인하고 필요한 의존성을 설치해주세요.")
+    SEO_AGENT_AVAILABLE = False
+
+# Fallback: Legacy Lighthouse analyzer (for reference only)
 try:
     from srcs.seo_doctor.lighthouse_analyzer import analyze_website_with_lighthouse
+    LIGHTHOUSE_FALLBACK_AVAILABLE = True
 except ImportError as e:
-    st.error(f"⚠️ Lighthouse 분석기를 불러올 수 없습니다: {e}")
-    st.info("Lighthouse 모듈을 확인하고 필요한 의존성을 설치해주세요.")
-    st.stop()
+    st.warning(f"⚠️ Lighthouse 분석기 (fallback)를 불러올 수 없습니다: {e}")
+    LIGHTHOUSE_FALLBACK_AVAILABLE = False
 
 def load_analysis_strategies():
     """분석 전략 옵션 로드"""
@@ -170,33 +178,59 @@ def render_real_seo_analysis():
             run_real_lighthouse_analysis(url, strategy)
 
 def run_real_lighthouse_analysis(url: str, strategy: str):
-    """실제 Lighthouse 분석 수행"""
+    """🚨 REAL MCP Agent Analysis - No More Mock Data"""
+    
+    # Check if real MCP Agent is available
+    if not SEO_AGENT_AVAILABLE:
+        st.error("🚨 Real SEO Doctor MCP Agent가 사용 불가능합니다!")
+        st.info("srcs/seo_doctor/seo_doctor_mcp_agent.py를 확인하고 필요한 의존성을 설치해주세요.")
+        return
     
     # 진행 상황 표시
     progress_container = st.container()
     
     with progress_container:
-        st.markdown("### 🔬 Lighthouse 분석 진행 중...")
+        st.markdown("### 🏥 Real MCP Agent Emergency Diagnosis")
+        st.markdown("**Based on real-world MCP implementation patterns**")
         
         progress_steps = [
-            "🚀 Chrome 브라우저 실행 중...",
-            "📊 웹사이트 로딩 및 분석...", 
-            "🔍 Core Web Vitals 측정...",
-            "🎯 SEO 요소 검사...",
-            "♿ 접근성 진단...",
-            "📋 분석 결과 생성...",
-            "✅ 진단 완료!"
+            "🚀 Initializing MCP Agent...",
+            "🔧 Configuring MCP Servers (g-search, fetch, lighthouse)...",
+            "📊 Real website analysis in progress...", 
+            "🔍 Core Web Vitals measurement...",
+            "🎯 SEO factors examination...",
+            "♿ Accessibility diagnosis...",
+            "🕵️ Competitor intelligence gathering...",
+            "📋 Generating prescription...",
+            "✅ Emergency diagnosis complete!"
         ]
         
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # 실제 분석 수행 (비동기)
+        # 실제 MCP Agent 분석 수행
         try:
-            for i, step in enumerate(progress_steps[:-1]):
+            for i, step in enumerate(progress_steps[:-2]):
                 progress_bar.progress((i + 1) / len(progress_steps))
                 status_text.text(step)
-                time.sleep(1)  # UI 표시용 딜레이
+                time.sleep(0.8)  # UI 표시용 딜레이
+                
+            # 🚨 CRITICAL: Use Real MCP Agent instead of mock
+            status_text.text("🏥 Running Real MCP Agent Emergency Diagnosis...")
+            progress_bar.progress(0.8)
+            
+            # Execute real SEO analysis
+            seo_result = asyncio.run(run_emergency_seo_diagnosis(
+                url=url,
+                include_competitors=True,
+                output_dir=get_reports_path('seo_doctor')
+            ))
+            
+            # Final steps
+            for i, step in enumerate(progress_steps[-2:], len(progress_steps)-2):
+                progress_bar.progress((i + 1) / len(progress_steps))
+                status_text.text(step)
+                time.sleep(0.5)
             
             # 실제 Lighthouse 분석 실행
             status_text.text("🔬 Lighthouse 엔진 실행 중... (30-60초 소요)")

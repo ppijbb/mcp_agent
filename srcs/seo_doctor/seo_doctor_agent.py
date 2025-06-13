@@ -1,18 +1,32 @@
 """
-SEO Doctor Agent - 사이트 응급처치 + 경쟁사 스파이 AI
+SEO Doctor Agent - DEPRECATED - Use seo_doctor_mcp_agent.py
 
-MAU 10만+ 목표의 바이럴 SEO 솔루션
+⚠️  WARNING: This file contains MOCK DATA and should not be used in production.
+⚠️  Use srcs/seo_doctor/seo_doctor_mcp_agent.py for real SEO analysis.
+
+This file is kept for reference only and will be removed.
+All random.* mock functions have been identified as CRITICAL ISSUES:
+- Line 133-137: Mock random site indicators  
+- Line 196-200: Mock recovery time estimation
+- Line 206: Mock algorithm risk assessment
+- Line 226: Mock analysis simulation
+- All other random.* calls throughout the file
+
+USE seo_doctor_mcp_agent.py INSTEAD for real MCP implementation.
 """
 
+# DEPRECATED IMPORTS - DO NOT USE
 import asyncio
 import time
-import random
+import random  # ❌ CRITICAL: ALL random.* calls are MOCK DATA
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 import json
 import re
+
+# ⚠️ DEPRECATION WARNING
 
 class SEOEmergencyLevel(Enum):
     """SEO 응급 상황 레벨"""

@@ -5,6 +5,12 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# 🚨 CRITICAL UPDATE: Use real MCP Agents instead of fake implementations
+# Based on: https://medium.com/@govindarajpriyanthan/from-theory-to-practice-building-a-multi-agent-research-system-with-mcp-part-2-811b0163e87c
+from srcs.urban_hive.urban_hive_mcp_agent import (
+    UrbanHiveMCPAgent, UrbanDataCategory, run_urban_analysis
+)
+# Legacy imports (DEPRECATED - contain fallback/mock data)
 from srcs.urban_hive import ResourceMatcherAgent, SocialConnectorAgent, UrbanAnalystAgent
 from srcs.common.page_utils import setup_page, render_home_button
 from configs.settings import UrbanHiveConfig, ConnectionStatus
@@ -106,7 +112,7 @@ with tab2:
         with st.form("social_profile_form"):
             st.markdown("### 📝 프로필 정보")
             
-            name = st.text_input("이름", placeholder="예: 김철수")
+            name = st.text_input("이름", placeholder="예: 사용자")
             interests = st.text_area(
                 "관심사나 취미를 자유롭게 적어주세요",
                 placeholder="예: 요리, 운동, 독서, 여행, 사진 촬영을 좋아합니다. 특히 새벽 조깅을 즐기고 카페에서 책 읽는 것을 좋아해요.",
