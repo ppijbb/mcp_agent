@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 # Removed database imports - external sources only
 
+# New exception for unavailable data
+from .exceptions import ExternalDataUnavailableError
+
 
 @dataclass
 class DataSourceConfig:
@@ -226,8 +229,9 @@ class DataSourceManager:
         
         # Try sources in priority order
         if data_type not in self.sources:
-            print(f"No data sources registered for {data_type}")
-            return None
+            raise ExternalDataUnavailableError(
+                f"No data sources registered for {data_type}"
+            )
         
         for priority, source in self.sources[data_type]:
             try:
@@ -244,8 +248,10 @@ class DataSourceManager:
                 print(f"Error fetching {data_type} from source: {e}")
                 continue
         
-        print(f"All data sources failed for {data_type}")
-        return None
+        # All data sources failed – raise explicit error instead of silent None
+        raise ExternalDataUnavailableError(
+            f"All data sources failed for {data_type}"
+        )
     
     def _is_cache_valid(self, cache_key: str, max_age: int = 3600) -> bool:
         """Check if cached data is still valid."""

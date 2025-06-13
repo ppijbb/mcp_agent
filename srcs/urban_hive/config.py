@@ -30,6 +30,7 @@ class APIConfig:
                 "admin_districts": "https://api.data.go.kr/openapi/tn_pubr_public_admin_district_api",
                 "seoul_districts": "https://openapi.seoul.go.kr:8088/6d4d776b466c656533356a4b4b5872/json/ListNecessaryStoresInformationOfSupermarket/1/25",
                 "geographic_codes": "https://sgis.kostat.go.kr/openapi/service/administrative/code",
+                "crime_stats": "https://api.data.go.kr/openapi/tn_pubr_public_crime_occurrence_api",
             }
 
 

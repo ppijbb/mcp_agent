@@ -11,13 +11,13 @@ Connects to Korean public data APIs to fetch real urban data including:
 
 import asyncio
 import os
-import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 import httpx
 import json
 from ..external_data_client import external_data_manager
 from ..config import config, get_api_config, get_cache_config
+from ..exceptions import ExternalDataUnavailableError
 
 class PublicDataClient:
     """Client for accessing Korean public data APIs."""
@@ -38,34 +38,201 @@ class PublicDataClient:
         self._cache_duration = cache_config.cache_duration_hours * 60 * 60  # Convert hours to seconds
 
     async def fetch_illegal_dumping_data(self, district: Optional[str] = None) -> List[Dict]:
-        """Fetch illegal dumping incident data."""
+        """Fetch illegal dumping incident data from the Korean Public Data Portal.
+
+        Parameters
+        ----------
+        district : Optional[str]
+            Optionally filter results by Seoul district name (e.g., "강남구").
+        """
+        endpoint = self.endpoints.get("illegal_dumping")
+        if not endpoint:
+            raise ExternalDataUnavailableError("Illegal dumping endpoint not configured")
+
+        params = {
+            "serviceKey": self.api_key,
+            "pageNo": 1,
+            "numOfRows": 1000,
+            "type": "json",
+        }
+
+        if district:
+            # Many public APIs use 'signguNm' or similar for district filter
+            params["signguNm"] = district
+
         try:
-            # Only use external APIs - no data generation
-            print(f"No external API configured for illegal dumping data: {district}")
-            return []
-        except Exception as e:
-            print(f"Error fetching illegal dumping data: {e}")
-            return []
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(endpoint, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            # Navigate common response structure
+            items: List[Dict] = []
+            if isinstance(data, dict):
+                # Pattern 1: {"response": {"body": {"items": {"item": [...] }}}}
+                if "response" in data:
+                    body = data["response"].get("body", {})
+                    items_ = body.get("items", {})
+                    if isinstance(items_, dict):
+                        items = items_.get("item", [])
+                    else:
+                        items = items_
+                # Pattern 2: {"items": [...]}
+                elif "items" in data:
+                    items = data["items"]
+
+            # Normalize fields
+            result: List[Dict] = []
+            for item in items:
+                try:
+                    result.append({
+                        "location": item.get("siteAddr", "Unknown"),
+                        "incidents": int(item.get("illegalDumpCo", 0)),
+                        "trend": item.get("stateChgCdNm", "Unknown"),
+                        "last_month": None,  # Field not provided
+                        "timestamp": item.get("crtrYmd", datetime.now().isoformat()),
+                        "severity": item.get("seCdNm", "Unknown"),
+                        "category": item.get("wasteSeNm", "Unknown"),
+                    })
+                except Exception:
+                    continue
+
+            if district:
+                # Ensure filtering by district if not done via API param
+                result = [r for r in result if district in r["location"]]
+
+            if not result:
+                raise ExternalDataUnavailableError("No illegal dumping data returned")
+
+            return result
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            raise ExternalDataUnavailableError(f"Illegal dumping API error: {e}")
 
     async def fetch_traffic_data(self, district: Optional[str] = None) -> List[Dict]:
-        """Fetch traffic congestion and accident data."""
+        """Fetch traffic accident data from Public Data Portal."""
+        endpoint = self.endpoints.get("traffic_accidents")
+        if not endpoint:
+            raise ExternalDataUnavailableError("Traffic accidents endpoint not configured")
+
+        params = {
+            "serviceKey": self.api_key,
+            "pageNo": 1,
+            "numOfRows": 1000,
+            "type": "json",
+        }
+        if district:
+            params["signguNm"] = district
+
         try:
-            # Only use external APIs - no data generation
-            print(f"No external API configured for traffic data: {district}")
-            return []
-        except Exception as e:
-            print(f"Error fetching traffic data: {e}")
-            return []
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(endpoint, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            items: List[Dict] = []
+            if "response" in data:
+                body = data["response"].get("body", {})
+                items_ = body.get("items", {})
+                if isinstance(items_, dict):
+                    items = items_.get("item", [])
+                else:
+                    items = items_
+
+            result: List[Dict] = []
+            for item in items:
+                try:
+                    intersection = item.get("spotNm", "Unknown")
+                    if district and district not in intersection:
+                        continue
+                    result.append({
+                        "intersection": intersection,
+                        "congestion_level": None,  # Not provided by endpoint
+                        "accident_prone": True,
+                        "peak_hours": None,
+                        "average_speed": None,
+                        "last_updated": item.get("accdtDt", datetime.now().isoformat()),
+                    })
+                except Exception:
+                    continue
+
+            if not result:
+                raise ExternalDataUnavailableError("No traffic data returned")
+
+            return result
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            raise ExternalDataUnavailableError(f"Traffic API error: {e}")
 
     async def fetch_safety_data(self, district: Optional[str] = None) -> List[Dict]:
-        """Fetch public safety and crime statistics."""
+        """Fetch basic crime statistics using the public crime occurrence API.
+
+        Note: The actual schema of crime API may differ; the parsing here is
+        best-effort and should be adjusted after confirming the real response
+        format.
+        """
+        endpoint = self.endpoints.get("crime_stats")
+        if not endpoint:
+            raise ExternalDataUnavailableError("Crime stats endpoint not configured")
+
+        params = {
+            "serviceKey": self.api_key,
+            "pageNo": 1,
+            "numOfRows": 1000,
+            "type": "json",
+        }
+        if district:
+            params["signguNm"] = district
+
         try:
-            # Only use external APIs - no data generation
-            print(f"No external API configured for safety data: {district}")
-            return []
-        except Exception as e:
-            print(f"Error fetching safety data: {e}")
-            return []
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(endpoint, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            items: List[Dict] = []
+            if "response" in data:
+                body = data["response"].get("body", {})
+                items_ = body.get("items", {})
+                if isinstance(items_, dict):
+                    items = items_.get("item", [])
+                else:
+                    items = items_
+
+            result: List[Dict] = []
+            for item in items:
+                try:
+                    area = item.get("signguNm", "Unknown")
+                    if district and district not in area:
+                        continue
+                    crime_rate = float(item.get("crimeOccurCnt", 0))
+                    risk_level = self._risk_level_from_rate(crime_rate)
+                    result.append({
+                        "area": area,
+                        "crime_rate": crime_rate,
+                        "risk_level": risk_level,
+                        "last_updated": item.get("crtrYmd", datetime.now().isoformat()),
+                    })
+                except Exception:
+                    continue
+
+            if not result:
+                raise ExternalDataUnavailableError("No crime data returned")
+
+            return result
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            raise ExternalDataUnavailableError(f"Crime stats API error: {e}")
+
+    @staticmethod
+    def _risk_level_from_rate(rate: float) -> str:
+        """Simple heuristic mapping crime rate per 1000 residents to risk level."""
+        if rate >= 6:
+            return "매우높음"
+        if rate >= 5:
+            return "높음"
+        if rate >= 4:
+            return "보통"
+        if rate >= 3:
+            return "낮음"
+        return "매우낮음"
 
     async def fetch_community_data(self) -> Dict:
         """Fetch community member and group data from external sources only."""
@@ -97,12 +264,12 @@ class PublicDataClient:
                 self._cache_timestamp = datetime.now().timestamp()
                 return districts
             else:
-                print("No districts returned from external sources")
-                return []
+                raise ExternalDataUnavailableError("No districts returned from external sources")
             
         except Exception as e:
-            print(f"Error fetching districts from external sources: {e}")
-            return []
+            raise ExternalDataUnavailableError(
+                f"Error fetching districts from external sources: {e}"
+            )
     
     def _is_cache_valid(self) -> bool:
         """Check if cached district data is still valid."""

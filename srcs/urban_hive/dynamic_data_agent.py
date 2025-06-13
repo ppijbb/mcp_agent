@@ -6,9 +6,9 @@ No data generation or simulation - only retrieval of existing data.
 """
 
 import asyncio
-from datetime import datetime
 from typing import Dict, List, Optional, Any
 from .external_data_client import external_data_manager
+from .exceptions import ExternalDataUnavailableError
 
 
 class DynamicDataAgent:
@@ -69,9 +69,15 @@ class DynamicDataAgent:
         return resources
     
     async def get_district_characteristics_dynamic(self, district: str) -> Dict[str, Any]:
-        """Get district characteristics - return empty dict since no external source."""
-        print(f"No external source for district characteristics: {district}")
-        return {}
+        """Get district characteristics.
+
+        Currently no external endpoint implemented. Raise explicit error so that
+        callers can handle the missing data case gracefully instead of relying on
+        silent fallbacks.
+        """
+        raise ExternalDataUnavailableError(
+            f"District characteristics endpoint not implemented for {district}"
+        )
     
     async def health_check(self) -> Dict[str, bool]:
         """Check health of external data sources."""

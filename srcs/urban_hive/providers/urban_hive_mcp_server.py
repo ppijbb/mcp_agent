@@ -17,7 +17,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # MCP imports
 from mcp.server import Server
@@ -31,6 +31,9 @@ from mcp.types import (
     ImageContent,
     EmbeddedResource,
 )
+
+# Exception for data unavailability
+from ..exceptions import ExternalDataUnavailableError
 
 # Server instance
 server = Server("urban-hive")
@@ -78,31 +81,13 @@ async def fetch_real_data(endpoint: str, params: Optional[Dict] = None) -> Dict:
                 if response.status_code == 200:
                     return response.json()
     except Exception as e:
-        print(f"Warning: Could not fetch from public data client: {e}")
+        # Bubble up detailed error – no silent fallback
+        raise ExternalDataUnavailableError(
+            f"Could not fetch data for endpoint '{endpoint}': {e}"
+        )
     
-    # Fallback to simulated data
-    return get_fallback_data(endpoint)
-
-def get_fallback_data(endpoint: str) -> Dict:
-    """Provide minimal fallback data when all data sources are unavailable."""
-    fallback_data = {
-        "resources/available": [
-            {"id": 1, "type": "system", "name": "데이터 서비스 점검 중", "owner": "시스템", "location": "전체", "available_until": (datetime.now() + timedelta(hours=1)).isoformat()},
-        ],
-        "resources/requests": [
-            {"id": 1, "type": "system", "name": "데이터 서비스 점검 중", "requester": "시스템", "location": "전체", "needed_by": (datetime.now() + timedelta(hours=1)).isoformat()},
-        ],
-        "community/members": [
-            {"id": 1, "name": "시스템 알림", "age": 0, "interests": ["서비스 점검"], "location": "전체", "activity_level": "system"},
-        ],
-        "community/groups": [
-            {"id": 1, "name": "서비스 점검 중", "type": "system", "members": 0, "location": "전체", "schedule": "점검 중"},
-        ],
-        "urban-data/illegal-dumping": [
-            {"location": "전체 지역", "incidents": 0, "trend": "점검 중", "last_month": 0, "timestamp": datetime.now().isoformat()},
-        ]
-    }
-    return fallback_data.get(endpoint, [])
+    # Should never reach here – added to satisfy type checker
+    raise ExternalDataUnavailableError(f"Unhandled error fetching data for {endpoint}")
 
 @server.list_resources()
 async def list_resources() -> List[Resource]:
