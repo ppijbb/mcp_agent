@@ -1,179 +1,190 @@
 """
-Most Hooking Business Strategy Agent Package
+Business Strategy Agents - Real MCPAgent Implementation
+======================================================
 
-This package provides a comprehensive business intelligence system that monitors
-global digital trends and generates actionable business insights with hooking opportunities.
+This package contains real MCPAgent implementations for comprehensive 
+business strategy analysis and planning.
 
-🌟 Key Features:
-- 360-degree global monitoring (News, Social Media, Communities, Trends)
-- MCP server integration for diverse data sources
-- AI-powered hooking point detection
-- Cross-regional analysis (East Asia & North America focus)
-- Automated Notion documentation
-- Real-time business opportunity scoring
-
-📁 Package Structure:
-- architecture.py: Core system architecture and interfaces
-- config.py: Configuration management and environment settings
-- mcp_layer.py: MCP server communication layer
-- ai_engine.py: AI processing and analysis engines
-- notion_integration.py: Notion API integration
-- main_agent.py: Main orchestration agent
-- demo.py: Demonstration and testing scripts
+All agents use the standard mcp_agent library for reliable, 
+quality-controlled business intelligence workflows.
 """
 
-from .architecture import (
-    CoreArchitecture,
-    RegionType,
-    ContentType,
-    BusinessOpportunityLevel,
-    DataSource,
-    RawContent,
-    ProcessedInsight,
-    BusinessStrategy,
-    get_architecture
-)
+# Version and metadata
+__version__ = "2.0.0"
+__description__ = "Real MCPAgent Business Strategy Suite"
+__author__ = "MCPAgent Team"
 
-from .config import (
-    Config,
-    APIConfig,
-    NotionConfig,
-    MonitoringConfig,
-    RegionConfig,
-    get_config,
-    validate_config,
-    setup_environment
-)
+# Import real MCPAgents only
+try:
+    from .business_data_scout_agent import (
+        BusinessDataScoutMCPAgent,
+        run_business_data_scout,
+        create_business_data_scout
+    )
+except ImportError as e:
+    print(f"Warning: Could not import BusinessDataScoutMCPAgent: {e}")
+    BusinessDataScoutMCPAgent = None
 
-from .mcp_layer import (
-    MCPServerManager,
-    MCPRequest,
-    MCPResponse,
-    MCPServerStatus,
-    DataCollectorFactory,
-    NewsCollector,
-    SocialMediaCollector,
-    CommunityCollector,
-    get_mcp_manager
-)
+try:
+    from .trend_analyzer_agent import (
+        TrendAnalyzerMCPAgent,
+        run_trend_analysis,
+        create_trend_analyzer
+    )
+except ImportError as e:
+    print(f"Warning: Could not import TrendAnalyzerMCPAgent: {e}")
+    TrendAnalyzerMCPAgent = None
 
-from .ai_engine import (
-    AgentRole,
-    BaseAgent,
-    DataScoutAgent,
-    TrendAnalyzerAgent,
-    HookingDetectorAgent,
-    StrategyPlannerAgent,
-    AgentOrchestrator,
-    get_orchestrator
-)
+try:
+    from .strategy_planner_agent import (
+        StrategyPlannerMCPAgent,
+        run_strategy_planning,
+        create_strategy_planner
+    )
+except ImportError as e:
+    print(f"Warning: Could not import StrategyPlannerMCPAgent: {e}")
+    StrategyPlannerMCPAgent = None
 
-from .notion_integration import (
-    NotionClient,
-    NotionFormatter,
-    NotionIntegration,
-    get_notion_integration
-)
+try:
+    from .unified_business_strategy_agent import (
+        UnifiedBusinessStrategyMCPAgent,
+        run_unified_business_strategy,
+        create_unified_business_strategy
+    )
+except ImportError as e:
+    print(f"Warning: Could not import UnifiedBusinessStrategyMCPAgent: {e}")
+    UnifiedBusinessStrategyMCPAgent = None
 
-from .main_agent import (
-    MostHookingBusinessStrategyAgent,
-    AdditionalMCPServers,
-    EnhancedDataCollector,
-    get_main_agent,
-    run_quick_analysis,
-    get_agent_status
-)
+try:
+    from .run_business_strategy_agents import (
+        BusinessStrategyRunner
+    )
+except ImportError as e:
+    print(f"Warning: Could not import BusinessStrategyRunner: {e}")
+    BusinessStrategyRunner = None
 
-__version__ = "1.0.0"
-__author__ = "AI Assistant"
-__description__ = "Most Hooking Business Strategy Agent - Global Business Intelligence System"
+# Import supporting modules (if compatible with MCPAgent)
+try:
+    from .config import get_config
+except ImportError as e:
+    print(f"Warning: Could not import config: {e}")
+    get_config = None
 
-# 패키지 초기화
-def initialize_package():
-    """패키지 초기화 함수"""
-    print(f"🚀 Initializing {__description__} v{__version__}")
-    
-    # 환경 설정
-    setup_environment()
-    
-    # 설정 검증
-    issues = validate_config()
-    if issues:
-        print("⚠️ Configuration issues found:")
-        for issue in issues:
-            print(f"  - {issue}")
-        print("💡 See ARCHITECTURE.md for setup instructions")
-    else:
-        print("✅ Configuration validation passed")
-    
-    # 추가 MCP 서버 정보
-    additional_servers_count = len(AdditionalMCPServers.ADDITIONAL_SERVERS)
-    print(f"🌐 {additional_servers_count} additional MCP servers available")
-    
-    # 에이전트 역할 정보
-    agent_roles = len([role for role in AgentRole])
-    print(f"🤖 {agent_roles} specialized AI agent roles defined")
-    
-    print("📊 Package initialized successfully!")
-    print("🎯 Ready to discover the most hooking business opportunities!")
+try:
+    from .architecture import (
+        RegionType,
+        BusinessOpportunityLevel,
+        ContentType,
+        DataSource,
+        RawContent,
+        ProcessedInsight,
+        BusinessStrategy
+    )
+except ImportError as e:
+    print(f"Warning: Could not import architecture components: {e}")
 
-# 자동 초기화
-initialize_package()
+try:
+    from .notion_integration import get_notion_integration
+except ImportError as e:
+    print(f"Warning: Could not import notion_integration: {e}")
+    get_notion_integration = None
 
+# Public API - Business Strategy MCPAgents
 __all__ = [
-    # Architecture
-    'CoreArchitecture',
-    'RegionType',
-    'ContentType', 
-    'BusinessOpportunityLevel',
-    'DataSource',
-    'RawContent',
-    'ProcessedInsight', 
-    'BusinessStrategy',
-    'get_architecture',
+    # Business Strategy MCPAgent Classes
+    "BusinessDataScoutMCPAgent",
+    "TrendAnalyzerMCPAgent", 
+    "StrategyPlannerMCPAgent",
+    "UnifiedBusinessStrategyMCPAgent",
     
-    # Config
-    'Config',
-    'APIConfig',
-    'NotionConfig',
-    'MonitoringConfig',
-    'RegionConfig',
-    'get_config',
-    'validate_config',
-    'setup_environment',
+    # Runner and execution functions
+    "BusinessStrategyRunner",
+    "run_business_data_scout",
+    "run_trend_analysis",
+    "run_strategy_planning", 
+    "run_unified_business_strategy",
     
-    # MCP Layer
-    'MCPServerManager',
-    'MCPRequest',
-    'MCPResponse',
-    'MCPServerStatus',
-    'DataCollectorFactory',
-    'NewsCollector',
-    'SocialMediaCollector',
-    'CommunityCollector',
-    'get_mcp_manager',
+    # Factory functions
+    "create_business_data_scout",
+    "create_trend_analyzer",
+    "create_strategy_planner",
+    "create_unified_business_strategy",
     
-    # AI Engine
-    'AgentRole',
-    'BaseAgent',
-    'DataScoutAgent',
-    'TrendAnalyzerAgent',
-    'HookingDetectorAgent',
-    'StrategyPlannerAgent',
-    'AgentOrchestrator',
-    'get_orchestrator',
+    # Supporting components (if available)
+    "get_config",
+    "get_notion_integration",
     
-    # Notion Integration
-    'NotionClient',
-    'NotionFormatter',
-    'NotionIntegration',
-    'get_notion_integration',
+    # Data structures
+    "RegionType",
+    "BusinessOpportunityLevel",
+    "ContentType",
+    "DataSource",
+    "RawContent",
+    "ProcessedInsight",
+    "BusinessStrategy",
+]
+
+# Convenience functions
+def get_available_agents():
+    """Get list of available business strategy MCPAgents"""
+    agents = []
     
-    # Main Agent
-    'MostHookingBusinessStrategyAgent',
-    'AdditionalMCPServers',
-    'EnhancedDataCollector',
-    'get_main_agent',
-    'run_quick_analysis',
-    'get_agent_status'
-] 
+    if BusinessDataScoutMCPAgent:
+        agents.append("BusinessDataScoutMCPAgent")
+    if TrendAnalyzerMCPAgent:
+        agents.append("TrendAnalyzerMCPAgent")
+    if StrategyPlannerMCPAgent:
+        agents.append("StrategyPlannerMCPAgent")
+    if UnifiedBusinessStrategyMCPAgent:
+        agents.append("UnifiedBusinessStrategyMCPAgent")
+    
+    return agents
+
+def get_package_info():
+    """Get package information"""
+    return {
+        "name": "business_strategy_agents",
+        "version": __version__,
+        "description": __description__,
+        "author": __author__,
+        "agent_type": "Business Strategy MCPAgent",
+        "architecture": "mcp_agent.app.MCPApp + mcp_agent.agents.agent.Agent",
+        "available_agents": get_available_agents(),
+        "total_agents": len(get_available_agents())
+    }
+
+# Module initialization
+def _initialize_package():
+    """Initialize the package and check dependencies"""
+    try:
+        import mcp_agent
+        print(f"✅ Business Strategy MCPAgent package initialized successfully")
+        print(f"📊 Available agents: {len(get_available_agents())}")
+        return True
+    except ImportError:
+        print("⚠️  Warning: mcp_agent library not found")
+        print("📦 Install with: pip install mcp_agent")
+        return False
+
+# Auto-initialize when imported
+_package_ready = _initialize_package()
+
+# Simple deprecation warnings for old imports
+def __getattr__(name):
+    """Handle deprecated imports with helpful error messages"""
+    deprecated_agents = [
+        "BaseAgent", "DataScoutAgent", "TrendAnalyzerAgent", 
+        "HookingDetectorAgent", "StrategyPlannerAgent", "AgentOrchestrator"
+    ]
+    
+    if name in deprecated_agents:
+        raise ImportError(
+            f"❌ {name} is deprecated.\n"
+            f"✅ Use current MCPAgent equivalent instead:\n"
+            f"   - BusinessDataScoutMCPAgent\n"
+            f"   - TrendAnalyzerMCPAgent\n" 
+            f"   - StrategyPlannerMCPAgent\n"
+            f"   - UnifiedBusinessStrategyMCPAgent"
+        )
+    
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'") 

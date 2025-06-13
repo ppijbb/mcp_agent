@@ -14,7 +14,7 @@ from rich import print
 
 app = MCPApp(
     name="mcp_root_test",
-    settings=get_settings(config_path)
+    settings=get_settings("configs/mcp_agent.config.yaml"),
 )
 
 
