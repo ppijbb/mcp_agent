@@ -88,10 +88,10 @@ def main():
     st.markdown("---")
     
     st.success("🤖 RAG Agent가 연결되었습니다!")
-    
+        
     # Qdrant 서버 연결 확인
     check_qdrant_connection()
-    
+        
     # RAG Agent 실행
     render_rag_interface()
 
@@ -156,7 +156,7 @@ def render_rag_chatbot():
             for question in sample_questions:
                 if st.button(f"📝 {question}", key=f"sample_{hash(question)}"):
                     st.session_state.selected_question = question
-                    
+                        
     except Exception as e:
         st.warning(f"샘플 질문 로드 실패: {e}")
     

@@ -5,13 +5,17 @@ from pathlib import Path
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.mcp.mcp_connection_manager import MCPConnectionManager
 from mcp_agent.workflows.llm.augmented_llm_anthropic import AnthropicAugmentedLLM  # noqa: F401
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.logging.logger import LoggingConfig
 from rich import print
 
-app = MCPApp(name="mcp_root_test")
+app = MCPApp(
+    name="mcp_root_test",
+    settings=get_settings(config_path)
+)
 
 
 async def example_usage():

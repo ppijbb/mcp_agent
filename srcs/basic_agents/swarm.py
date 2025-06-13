@@ -3,12 +3,14 @@ import os
 
 from rich import print
 from mcp_agent.app import MCPApp
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.swarm.swarm import DoneAgent, SwarmAgent
 from mcp_agent.workflows.swarm.swarm_anthropic import AnthropicSwarm
 from mcp_agent.human_input.handler import console_input_callback
 
 app = MCPApp(
     name="airline_customer_service", 
+    settings=get_settings("configs/mcp_agent.config.yaml"),
     human_input_callback=console_input_callback
 )
 

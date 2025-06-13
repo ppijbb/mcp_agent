@@ -14,61 +14,43 @@ import plotly.graph_objects as go
 from datetime import datetime, timezone
 import time
 from typing import List, Dict, Any
+import sys
+from pathlib import Path
+import os
+
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# 설정 파일에서 경로 가져오기
+try:
+    from configs.settings import get_reports_path
+    REPORTS_PATH = get_reports_path('business_strategy')
+except ImportError:
+    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
+    st.stop()
+
+# 공통 스타일 및 유틸리티 임포트
+try:
+    from srcs.common.styles import get_common_styles, get_page_header
+    from srcs.common.page_utils import setup_page, render_home_button
+except ImportError:
+    st.error("❌ 공통 스타일 모듈을 찾을 수 없습니다.")
+    st.stop()
 
 # 기존 기능들 임포트
-from .main_agent import get_main_agent, run_quick_analysis, get_agent_status
-from .ai_engine import get_orchestrator, AgentRole
-from .architecture import RegionType, BusinessOpportunityLevel
-from .config import get_config, validate_config
+try:
+    from .main_agent import get_main_agent, run_quick_analysis, get_agent_status
+    from .ai_engine import get_orchestrator, AgentRole
+    from .architecture import RegionType, BusinessOpportunityLevel
+    from .config import get_config, validate_config
+except ImportError as e:
+    st.error(f"❌ Business Strategy Agent 모듈을 불러올 수 없습니다: {e}")
+    st.error("**시스템 요구사항**: Business Strategy Agent가 필수입니다.")
+    st.stop()
 
-# 재미있는 확장 기능들 임포트
-from .fun_extensions import get_fun_extensions
-
-# Streamlit 설정
-st.set_page_config(
-    page_title="Most Hooking Business Strategy Agent",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# 전역 CSS 스타일
-st.markdown("""
-<style>
-.main-header {
-    font-size: 2.5rem;
-    color: #1e88e5;
-    text-align: center;
-    margin-bottom: 2rem;
-}
-.agent-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 1rem;
-    border-radius: 10px;
-    margin: 0.5rem 0;
-}
-.metric-card {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #28a745;
-}
-.warning-card {
-    background: #fff3cd;
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #ffc107;
-}
-.error-card {
-    background: #f8d7da;
-    padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #dc3545;
-}
-</style>
-""", unsafe_allow_html=True)
-
+# 페이지 설정
+setup_page("🎯 Business Strategy Agent", "🎯")
 
 def initialize_session_state():
     """세션 상태 초기화"""
@@ -78,27 +60,21 @@ def initialize_session_state():
         st.session_state.agent_status = None
     if 'analysis_history' not in st.session_state:
         st.session_state.analysis_history = []
-    if 'user_achievements' not in st.session_state:
-        st.session_state.user_achievements = []
-    if 'fun_mode' not in st.session_state:
-        st.session_state.fun_mode = True
-    if 'story_mode' not in st.session_state:
-        st.session_state.story_mode = False
-
 
 def render_header():
-    """헤더 렌더링"""
-    st.markdown('<h1 class="main-header">🎯 Most Hooking Business Strategy Agent</h1>', 
-                unsafe_allow_html=True)
+    """헤더 렌더링 - pages 스타일 적용"""
+    # 공통 스타일 적용
+    st.markdown(get_common_styles(), unsafe_allow_html=True)
     
-    st.markdown("""
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <p style="font-size: 1.2rem; color: #666;">
-            AI-Powered Global Business Intelligence & Opportunity Detection System
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    # 헤더 렌더링
+    header_html = get_page_header("business", "🎯 Business Strategy Agent", 
+                                 "AI 기반 비즈니스 전략 수립 및 시장 분석 플랫폼")
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # 홈으로 돌아가기 버튼
+    render_home_button()
+    
+    st.markdown("---")
 
 def render_sidebar():
     """사이드바 렌더링"""
@@ -114,18 +90,14 @@ def render_sidebar():
                 issues = validate_config()
                 
                 if issues:
-                    st.markdown('<div class="warning-card">', unsafe_allow_html=True)
                     st.warning("Configuration Issues Found:")
                     for issue in issues:
                         st.write(f"• {issue}")
-                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.success("✅ System Configuration OK")
                 
             except Exception as e:
-                st.markdown('<div class="error-card">', unsafe_allow_html=True)
                 st.error(f"System Check Failed: {e}")
-                st.markdown('</div>', unsafe_allow_html=True)
         
         # 에이전트 상태
         st.subheader("🤖 Agent Status")
@@ -150,7 +122,6 @@ def render_sidebar():
             st.write(f"• Insights Generated: {metrics['insights_generated']}")
             st.write(f"• Strategies Created: {metrics['strategies_created']}")
 
-
 def render_analysis_input():
     """분석 입력 섹션"""
     st.header("🔍 Run Business Strategy Analysis")
@@ -159,33 +130,16 @@ def render_analysis_input():
     
     with col1:
         st.subheader("📝 Keywords")
-        default_keywords = ["AI", "startup", "fintech", "sustainability", "digital transformation"]
         
-        # 사전 정의된 키워드 세트
-        keyword_preset = st.selectbox(
-            "Keyword Preset",
-            ["Custom", "AI & Tech", "Fintech", "Sustainability", "E-commerce", "Healthcare"]
+        keywords_input = st.text_area(
+            "Enter keywords (one per line)",
+            placeholder="AI\nstartup\nfintech\nsustainability\ndigital transformation",
+            height=150
         )
+        selected_keywords = [kw.strip() for kw in keywords_input.split('\n') if kw.strip()]
         
-        preset_keywords = {
-            "AI & Tech": ["AI", "machine learning", "automation", "chatbot", "robotics"],
-            "Fintech": ["fintech", "digital payment", "cryptocurrency", "blockchain", "neobank"],
-            "Sustainability": ["sustainability", "green tech", "renewable energy", "ESG", "carbon neutral"],
-            "E-commerce": ["e-commerce", "online retail", "marketplace", "logistics", "digital marketplace"],
-            "Healthcare": ["digital health", "telemedicine", "health tech", "medical AI", "biotech"]
-        }
-        
-        if keyword_preset != "Custom":
-            selected_keywords = preset_keywords[keyword_preset]
-        else:
-            keywords_input = st.text_area(
-                "Enter keywords (one per line)",
-                value="\n".join(default_keywords),
-                height=150
-            )
-            selected_keywords = [kw.strip() for kw in keywords_input.split('\n') if kw.strip()]
-        
-        st.write(f"**Selected Keywords:** {', '.join(selected_keywords)}")
+        if selected_keywords:
+            st.write(f"**Selected Keywords:** {', '.join(selected_keywords)}")
     
     with col2:
         st.subheader("🌏 Regions")
@@ -198,13 +152,15 @@ def render_analysis_input():
         selected_regions = [RegionType(region) for region in regions]
         
         st.subheader("⚙️ Analysis Options")
-        analysis_mode = st.radio(
-            "Analysis Mode",
-            ["Quick Analysis", "Deep Analysis", "Mock Test"]
-        )
-        
         include_trends = st.checkbox("Include Trend Analysis", value=True)
         include_strategies = st.checkbox("Generate Strategies", value=True)
+        
+        # 파일 저장 옵션
+        save_to_file = st.checkbox(
+            "파일로 저장", 
+            value=False,
+            help=f"체크하면 {REPORTS_PATH} 디렉토리에 분석 결과를 파일로 저장합니다"
+        )
     
     # 분석 실행
     if st.button("🚀 Run Analysis", type="primary", use_container_width=True):
@@ -216,99 +172,47 @@ def render_analysis_input():
             st.error("Please select at least one region")
             return
         
-        run_analysis(selected_keywords, selected_regions, analysis_mode)
+        run_analysis(selected_keywords, selected_regions, include_trends, include_strategies, save_to_file)
 
-
-@st.cache_data(ttl=300)  # 5분 캐시
-def run_analysis_cached(keywords: List[str], regions: List[str], mode: str):
-    """캐시된 분석 실행"""
-    return run_analysis_internal(keywords, regions, mode)
-
-
-def run_analysis_internal(keywords: List[str], regions: List[str], mode: str):
-    """내부 분석 실행 함수"""
-    try:
-        region_enums = [RegionType(region) for region in regions]
-        
-        if mode == "Mock Test":
-            # Mock 테스트 결과 생성
-            return create_mock_results(keywords, region_enums)
-        else:
-            # 실제 분석 실행
-            return asyncio.run(run_quick_analysis(keywords))
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def run_analysis(keywords: List[str], regions: List[RegionType], mode: str):
+def run_analysis(keywords: List[str], regions: List[RegionType], include_trends: bool, include_strategies: bool, save_to_file: bool):
     """분석 실행 및 결과 표시"""
-    fun_extensions = get_fun_extensions()
-    personality = fun_extensions['personality']
-    achievements = fun_extensions['achievements']
-    music = fun_extensions['music']
-    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    # 🎭 에이전트 개성 표시
-    if st.session_state.fun_mode:
-        agent_chat = st.empty()
-    
     try:
-        # 진행 상황 시뮬레이션 (개성 있는 메시지들)
-        agent_steps = [
-            ("DATA_SCOUT", "working", "Initializing agents..."),
-            ("DATA_SCOUT", "excited", "Collecting data from MCP servers..."),
-            ("TREND_ANALYZER", "working", "Analyzing trends and patterns..."),
-            ("HOOKING_DETECTOR", "excited", "Detecting hooking opportunities..."),
-            ("STRATEGY_PLANNER", "working", "Generating business strategies..."),
-            ("STRATEGY_PLANNER", "excited", "Finalizing results...")
-        ]
+        # 진행 상황 표시
+        status_text.text("Initializing analysis...")
+        progress_bar.progress(0.1)
         
-        for i, (agent_role, emotion, step) in enumerate(agent_steps):
-            if st.session_state.fun_mode:
-                reaction = personality.get_reaction(agent_role, emotion)
-                agent_chat.info(f"**{agent_role}**: {reaction}")
-            
-            status_text.text(step)
-            progress_bar.progress((i + 1) / len(agent_steps))
-            time.sleep(0.8)  # 개성 메시지를 볼 시간
+        status_text.text("Running business strategy analysis...")
+        progress_bar.progress(0.5)
         
         # 실제 분석 실행
-        region_strings = [region.value for region in regions]
-        results = run_analysis_cached(keywords, region_strings, mode)
+        results = asyncio.run(run_quick_analysis(keywords))
         
         progress_bar.progress(1.0)
         status_text.text("Analysis completed!")
-        
-        # 🎵 음악 생성
-        if st.session_state.fun_mode and 'error' not in results:
-            soundtrack = music.generate_soundtrack_description(results)
-            st.info(soundtrack)
-        
-        # 🏆 성취 확인
-        if 'error' not in results:
-            user_id = "streamlit_user"  # 실제로는 사용자 세션 ID 사용
-            new_achievements = achievements.check_achievements(user_id, results)
-            
-            for achievement in new_achievements:
-                st.balloons()
-                st.success(f"🎉 새로운 성취 달성! {achievement['name']}")
-                st.session_state.user_achievements.extend(new_achievements)
         
         # 결과 저장
         st.session_state.analysis_results = results
         st.session_state.analysis_history.append({
             'timestamp': datetime.now(),
             'keywords': keywords,
-            'regions': region_strings,
-            'mode': mode,
+            'regions': [region.value for region in regions],
             'success': 'error' not in results
         })
         
         # 성공 메시지
         if 'error' not in results:
             st.success(f"✅ Analysis completed! Generated {results.get('enhanced_insights_count', 0)} insights")
+            
+            # 파일 저장 처리
+            if save_to_file:
+                file_saved, output_path = save_business_results_to_file(results)
+                if file_saved:
+                    st.success(f"💾 결과가 파일로 저장되었습니다: {output_path}")
+                else:
+                    st.warning("파일 저장에 실패했습니다.")
         else:
             st.error(f"❌ Analysis failed: {results['error']}")
         
@@ -317,80 +221,6 @@ def run_analysis(keywords: List[str], regions: List[RegionType], mode: str):
     finally:
         progress_bar.empty()
         status_text.empty()
-        if st.session_state.fun_mode:
-            agent_chat.empty()
-
-
-def create_mock_results(keywords: List[str], regions: List[RegionType]) -> Dict[str, Any]:
-    """Mock 테스트 결과 생성"""
-    from .architecture import ProcessedInsight, BusinessStrategy
-    
-    # Mock insights 생성
-    mock_insights = []
-    for i, keyword in enumerate(keywords[:5]):
-        insight = ProcessedInsight(
-            content_id=f"mock_{keyword}_{i}",
-            hooking_score=0.8 - (i * 0.1),
-            business_opportunity=BusinessOpportunityLevel.HIGH if i < 2 else BusinessOpportunityLevel.MEDIUM,
-            region=regions[i % len(regions)],
-            category="mock_analysis",
-            key_topics=[keyword, "innovation", "market_growth"],
-            sentiment_score=0.75,
-            trend_direction="rising",
-            market_size_estimate=f"${(100 + i * 50)}B market opportunity",
-            competitive_landscape=[],
-            actionable_insights=[
-                f"{keyword} market showing strong growth indicators",
-                f"New opportunities in {keyword} sector",
-                f"Competitive advantage possible in {keyword}"
-            ],
-            timestamp=datetime.now(timezone.utc)
-        )
-        mock_insights.append(insight)
-    
-    # Mock strategies 생성
-    mock_strategies = []
-    for insight in mock_insights[:3]:
-        strategy = BusinessStrategy(
-            strategy_id=f"strategy_{insight.content_id}",
-            title=f"{insight.key_topics[0].title()} Innovation Strategy",
-            opportunity_level=insight.business_opportunity,
-            region=insight.region,
-            category=insight.category,
-            description=f"Strategic approach to capitalize on {insight.key_topics[0]} market opportunities",
-            key_insights=insight.actionable_insights,
-            action_items=[
-                {"task": "Market research", "timeline": "2 weeks", "resources": "Research team"},
-                {"task": "MVP development", "timeline": "6 weeks", "resources": "Dev team + $100K"}
-            ],
-            timeline="8 weeks",
-            resource_requirements={"budget": "$200K", "team": "5 people"},
-            roi_prediction={"expected_revenue": "$1M", "roi_percentage": "400%"},
-            risk_factors=["Market competition", "Technology adoption"],
-            success_metrics=["User acquisition", "Revenue growth"],
-            related_trends=insight.key_topics,
-            created_at=datetime.now(timezone.utc)
-        )
-        mock_strategies.append(strategy)
-    
-    return {
-        'analysis_id': f"mock_{int(time.time())}",
-        'success': True,
-        'enhanced_insights_count': len(mock_insights),
-        'regional_strategies_count': len(mock_strategies),
-        'enhanced_insights': mock_insights,
-        'strategies': mock_strategies,
-        'duration_seconds': 2.5,
-        'top_hooking_opportunities': [
-            {
-                'score': insight.hooking_score,
-                'topics': insight.key_topics,
-                'region': insight.region.value,
-                'opportunity_level': insight.business_opportunity.value
-            } for insight in mock_insights
-        ]
-    }
-
 
 def render_results():
     """분석 결과 렌더링"""
@@ -435,22 +265,10 @@ def render_results():
             f"{top_score:.2f}"
         )
     
-    # 🌤️ 재미있는 확장 기능들
-    fun_extensions = get_fun_extensions()
-    
-    # 트렌드 날씨 표시
-    if st.session_state.fun_mode and results.get('enhanced_insights'):
-        weather = fun_extensions['analytics'].generate_trend_weather(results['enhanced_insights'])
-        st.info(f"📡 **트렌드 날씨 예보**: {weather}")
-    
-    # 탭으로 결과 구분 (재미있는 탭 추가)
-    if st.session_state.fun_mode:
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", 
-            "📊 Analytics", "🎪 Circus Show", "📖 Story Mode"
-        ])
-    else:
-        tab1, tab2, tab3, tab4 = st.tabs(["🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", "📊 Analytics"])
+    # 탭으로 결과 구분
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🎯 Top Opportunities", "📈 Insights Detail", "🚀 Strategies", "📊 Analytics"
+    ])
     
     with tab1:
         render_top_opportunities(results)
@@ -463,15 +281,6 @@ def render_results():
     
     with tab4:
         render_analytics(results)
-    
-    # 🎪 재미있는 탭들
-    if st.session_state.fun_mode:
-        with tab5:
-            render_circus_show(results, fun_extensions)
-        
-        with tab6:
-            render_story_mode(results, fun_extensions)
-
 
 def render_top_opportunities(results: Dict[str, Any]):
     """상위 기회 렌더링"""
@@ -511,7 +320,6 @@ def render_top_opportunities(results: Dict[str, Any]):
             <p><strong>Region:</strong> {region}</p>
         </div>
         """, unsafe_allow_html=True)
-
 
 def render_insights_detail(results: Dict[str, Any]):
     """인사이트 상세 렌더링"""
@@ -570,7 +378,6 @@ def render_insights_detail(results: Dict[str, Any]):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-
 def render_strategies(results: Dict[str, Any]):
     """전략 렌더링"""
     st.subheader("🚀 Generated Strategies")
@@ -607,7 +414,6 @@ def render_strategies(results: Dict[str, Any]):
                     st.write("**Risk Factors:**")
                     for risk in strategy.risk_factors:
                         st.write(f"⚠️ {risk}")
-
 
 def render_analytics(results: Dict[str, Any]):
     """분석 통계 렌더링"""
@@ -673,7 +479,6 @@ def render_analytics(results: Dict[str, Any]):
                 'Timestamp': analysis['timestamp'].strftime('%Y-%m-%d %H:%M'),
                 'Keywords': ', '.join(analysis['keywords'][:3]) + ('...' if len(analysis['keywords']) > 3 else ''),
                 'Regions': ', '.join(analysis['regions']),
-                'Mode': analysis['mode'],
                 'Success': '✅' if analysis['success'] else '❌'
             }
             for analysis in st.session_state.analysis_history[-10:]  # 최근 10개
@@ -681,195 +486,80 @@ def render_analytics(results: Dict[str, Any]):
         
         st.dataframe(history_df, use_container_width=True)
 
-
-def render_circus_show(results: Dict[str, Any], fun_extensions: Dict[str, Any]):
-    """🎪 서커스 쇼 모드 - 인사이트를 서커스 퍼포먼스로 표현"""
-    st.subheader("🎪 Welcome to the Business Insight Circus!")
-    
-    insights = results.get('enhanced_insights', [])
-    if not insights:
-        st.info("🎭 No performances available - need insights to start the show!")
-        return
-    
-    st.write("### 🎊 Tonight's Main Performances:")
-    
-    # 각 인사이트를 서커스 퍼포먼스로 변환
-    for i, insight in enumerate(insights[:5], 1):
-        performance = fun_extensions['analytics'].create_circus_performance(insight)
+def save_business_results_to_file(analysis_result):
+    """비즈니스 전략 분석 결과를 파일로 저장"""
+    try:
+        os.makedirs(REPORTS_PATH, exist_ok=True)
         
-        with st.container():
-            # 퍼포먼스 카드
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #f9ca24);
-                background-size: 400% 400%;
-                animation: gradient 3s ease infinite;
-                border-radius: 15px;
-                padding: 1.5rem;
-                margin: 1rem 0;
-                color: white;
-                text-align: center;
-                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            ">
-                <h3>🎪 Performance #{i}: {performance['performance']}</h3>
-                <p style="font-size: 1.1em;">{performance['description']}</p>
-                <p style="font-size: 1.5em;">{performance['effect']}</p>
-                <p><strong>Hooking Score:</strong> {insight.hooking_score:.2f}</p>
-                <p><strong>Topics:</strong> {', '.join(insight.key_topics[:3])}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # 박수 버튼
-            if st.button(f"👏 Applause for Performance #{i}!", key=f"applause_{i}"):
-                st.balloons()
-                st.success(f"🎉 The crowd goes wild! Performance #{i} was spectacular!")
-    
-    # 서커스 통계
-    st.write("### 🎭 Tonight's Show Statistics:")
-    
-    perf_stats = {
-        "🔥 Fire Shows": len([i for i in insights if i.hooking_score >= 0.9]),
-        "🎪 Acrobatics": len([i for i in insights if 0.7 <= i.hooking_score < 0.9]),
-        "🤹 Juggling": len([i for i in insights if 0.5 <= i.hooking_score < 0.7]),
-        "🎭 Mime Acts": len([i for i in insights if i.hooking_score < 0.5])
-    }
-    
-    cols = st.columns(4)
-    for col, (show_type, count) in zip(cols, perf_stats.items()):
-        with col:
-            st.metric(show_type, count)
-
-
-def render_story_mode(results: Dict[str, Any], fun_extensions: Dict[str, Any]):
-    """📖 스토리 모드 - 분석 결과를 이야기로 변환"""
-    st.subheader("📖 Business Adventure Story")
-    
-    insights = results.get('enhanced_insights', [])
-    if not insights:
-        st.info("📚 No story to tell yet - run an analysis to begin the adventure!")
-        return
-    
-    # 스토리 스타일 선택
-    story_type = st.selectbox(
-        "Choose Your Adventure Style:",
-        ["hero_journey", "detective"],
-        format_func=lambda x: {
-            "hero_journey": "🏰 Epic Hero's Journey",
-            "detective": "🔍 Mystery Detective Story"
-        }[x]
-    )
-    
-    # 스토리 생성
-    story_lines = fun_extensions['story'].create_analysis_story(results, story_type)
-    
-    st.write("### 📜 Your Business Adventure:")
-    
-    # 스토리를 한 줄씩 애니메이션처럼 표시
-    story_container = st.container()
-    
-    with story_container:
-        for i, line in enumerate(story_lines):
-            time.sleep(0.1)  # 약간의 딜레이로 스토리텔링 효과
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 1rem;
-                margin: 0.5rem 0;
-                border-radius: 10px;
-                border-left: 4px solid #ffd700;
-                font-size: 1.1em;
-                line-height: 1.6;
-            ">
-                <p>{line}</p>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # 인터랙티브 요소
-    st.write("### 🎯 Your Role in the Story:")
-    
-    # 플레이어 액션 선택
-    if story_type == "hero_journey":
-        action = st.selectbox(
-            "What will you do next in your business quest?",
-            [
-                "⚔️ Attack the market with aggressive expansion",
-                "🛡️ Defend your position with solid strategies", 
-                "🏃 Scout for new opportunities",
-                "🤝 Form strategic alliances"
-            ]
-        )
-    else:
-        action = st.selectbox(
-            "How will you solve this business mystery?",
-            [
-                "🔍 Investigate deeper market trends",
-                "📊 Analyze the evidence more carefully",
-                "🤔 Interview key stakeholders",
-                "💡 Follow your business intuition"
-            ]
-        )
-    
-    if st.button("🚀 Take Action!", type="primary"):
-        st.success(f"📖 Excellent choice! {action}")
-        st.balloons()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"business_strategy_analysis_{timestamp}.md"
+        filepath = os.path.join(REPORTS_PATH, filename)
         
-        # 액션 결과 생성
-        action_results = [
-            "💎 You discovered a hidden market opportunity!",
-            "🎯 Your strategy perfectly hit the target market!",
-            "🏆 Success! You've unlocked a new business level!",
-            "✨ Plot twist! Your action revealed unexpected insights!"
-        ]
+        # 분석 결과 포맷팅
+        agent_output = format_business_analysis(analysis_result)
         
-        import random
-        result = random.choice(action_results)
-        st.info(f"📜 **Story continues...** {result}")
+        # 마크다운 파일로 저장
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("# 비즈니스 전략 분석 보고서\n\n")
+            f.write(f"**생성 시간**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write("---\n\n")
+            f.write(agent_output)
+            f.write("\n\n---\n")
+            f.write("*본 보고서는 Business Strategy Agent에 의해 자동 생성되었습니다.*\n")
+        
+        return True, filepath
+        
+    except Exception as e:
+        st.error(f"파일 저장 중 오류: {e}")
+        return False, None
 
-
-def render_sidebar_extensions():
-    """사이드바에 재미있는 기능들 추가"""
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🎮 Fun Features")
+def format_business_analysis(analysis_result):
+    """실제 에이전트 분석 결과 포맷팅"""
+    if not analysis_result:
+        raise Exception("분석 결과가 없습니다.")
     
-    # 재미 모드 토글
-    st.session_state.fun_mode = st.sidebar.toggle(
-        "🎪 Fun Mode", 
-        value=st.session_state.fun_mode,
-        help="Enable personality, circus show, and story mode"
-    )
+    output_lines = [
+        "🎯 비즈니스 전략 분석 결과",
+        ""
+    ]
     
-    # 성취 표시
-    if st.session_state.user_achievements:
-        st.sidebar.subheader("🏆 Your Achievements")
-        for achievement in st.session_state.user_achievements[-3:]:  # 최근 3개만
-            st.sidebar.success(f"{achievement['name']}")
+    # 인사이트 정보
+    if 'enhanced_insights' in analysis_result:
+        insights = analysis_result['enhanced_insights']
+        output_lines.extend([
+            f"📊 총 인사이트 수: {len(insights)}",
+            f"🔍 평균 후킹 점수: {sum(i.hooking_score for i in insights) / len(insights):.2f}",
+            ""
+        ])
+        
+        output_lines.append("💡 주요 인사이트:")
+        for insight in insights[:5]:
+            output_lines.append(f"- {', '.join(insight.key_topics[:3])} (점수: {insight.hooking_score:.2f})")
+        output_lines.append("")
     
-    # 트렌드 배틀 섹션
-    st.sidebar.subheader("⚔️ Trend Battle")
-    if st.sidebar.button("🎯 Create Prediction Challenge"):
-        fun_extensions = get_fun_extensions()
-        challenge = fun_extensions['battle'].create_prediction_challenge()
-        st.sidebar.success(f"Challenge created: {challenge['topic']}")
-        st.sidebar.write(f"Reward: {challenge['reward_points']} points")
+    # 전략 정보
+    if 'strategies' in analysis_result:
+        strategies = analysis_result['strategies']
+        output_lines.append("🚀 생성된 전략:")
+        for strategy in strategies:
+            output_lines.extend([
+                f"### {strategy.title}",
+                f"- 지역: {strategy.region.value}",
+                f"- 기회 수준: {strategy.opportunity_level.value}",
+                f"- 타임라인: {strategy.timeline}",
+                f"- 설명: {strategy.description}",
+                ""
+            ])
     
-    # 음악 컨트롤
-    if st.session_state.analysis_results and st.session_state.fun_mode:
-        st.sidebar.subheader("🎵 Trend Music")
-        if st.sidebar.button("🎼 Generate Soundtrack"):
-            fun_extensions = get_fun_extensions()
-            soundtrack = fun_extensions['music'].generate_soundtrack_description(
-                st.session_state.analysis_results
-            )
-            st.sidebar.info(soundtrack)
-
+    return "\n".join(output_lines)
 
 def main():
     """메인 함수"""
     initialize_session_state()
     render_header()
     render_sidebar()
-    render_sidebar_extensions()  # 🎮 재미있는 사이드바 기능 추가
+    
+    st.success("🤖 Business Strategy Agent가 성공적으로 연결되었습니다!")
     
     # 메인 컨텐츠
     render_analysis_input()
@@ -882,11 +572,10 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #666; font-size: 0.9rem;">
-        🎯 Most Hooking Business Strategy Agent v1.0 | 
+        🎯 Most Hooking Business Strategy Agent | 
         Built with ❤️ using Streamlit & AI Agents
     </div>
     """, unsafe_allow_html=True)
-
 
 if __name__ == "__main__":
     main()

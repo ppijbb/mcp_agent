@@ -2,6 +2,7 @@ import asyncio
 from qdrant_client import QdrantClient
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from dataclasses import dataclass
@@ -15,7 +16,10 @@ from mcp_agent.workflows.llm.augmented_llm_openai import (
 T = TypeVar("T", bound=AugmentedLLM)
 
 # Global app instance
-app = MCPApp(name="mcp_rag_agent")
+app = MCPApp(
+    name="mcp_rag_agent",
+    settings=get_settings("configs/mcp_agent.config.yaml")
+)
 
 @dataclass
 class AgentState:

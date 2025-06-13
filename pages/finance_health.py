@@ -345,7 +345,7 @@ def display_portfolio_analysis(portfolio_data):
         if 'assets' in portfolio_data:
             df = pd.DataFrame(portfolio_data['assets'])
             st.dataframe(df, use_container_width=True)
-            
+        
             # 포트폴리오 구성 차트
             if 'amount' in df.columns and 'name' in df.columns:
                 fig = px.pie(df, values='amount', names='name', title='포트폴리오 구성')
@@ -521,7 +521,7 @@ def save_analysis_to_file(financial_data, analysis_result):
             f.write("*본 보고서는 Finance Health Agent에 의해 자동 생성되었습니다.*\n")
         
         st.success(f"💾 분석 결과가 파일로 저장되었습니다: {filepath}")
-        
+            
     except Exception as e:
         st.error(f"파일 저장 중 오류: {e}")
 

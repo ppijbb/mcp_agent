@@ -3,13 +3,17 @@ import streamlit as st
 import asyncio
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
+from mcp_agent.config import get_settings
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from dataclasses import dataclass
 from typing import Optional, Type, TypeVar
 
 T = TypeVar("T", bound=OpenAIAugmentedLLM)
-
+app = MCPApp(
+    name="mcp_basic_agent",
+    settings=get_settings("configs/mcp_agent.config.yaml"),
+)
 
 @dataclass
 class AgentState:
@@ -121,6 +125,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    app = MCPApp(name="mcp_basic_agent")
-
     asyncio.run(main())

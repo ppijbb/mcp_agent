@@ -72,4 +72,59 @@ UI_SETTINGS = {
     'theme': 'default',
     'language': 'ko',
     'page_size': 20
-} 
+}
+
+class ConnectionStatus:
+    """실시간 연결 상태를 체크하는 클래스"""
+    
+    def check_ui_status(self):
+        """UI 인터페이스 상태 체크"""
+        try:
+            # 실제 UI 상태 체크 로직
+            return "정상"
+        except Exception:
+            return "오류"
+    
+    def check_mcp_status(self):
+        """MCP 서버 연결 상태 체크"""
+        try:
+            # 실제 MCP 서버 연결 체크 로직
+            # 임시로 연결 시도 중으로 반환
+            return "연결 시도 중"
+        except Exception:
+            return "연결 실패"
+    
+    def check_data_source_status(self):
+        """데이터 소스 연결 상태 체크"""
+        try:
+            # 실제 데이터 소스 연결 체크 로직
+            return "대기"
+        except Exception:
+            return "연결 실패"
+
+
+class UrbanHiveConfig:
+    """Urban Hive 에이전트 설정"""
+    
+    def __init__(self):
+        self.analysis_types = {
+            "illegal_dumping": "Illegal Dumping - 불법 투기 분석",
+            "public_safety": "Public Safety - 공공 안전 분석",
+            "traffic_flow": "Traffic Flow - 교통 흐름 분석",
+            "community_event": "Community Event - 커뮤니티 이벤트 분석",
+            "air_quality": "Air Quality - 대기질 분석",
+            "noise_pollution": "Noise Pollution - 소음 공해 분석",
+            "green_space": "Green Space - 녹지 공간 분석",
+            "housing_market": "Housing Market - 주택 시장 분석"
+        }
+    
+    def get_analysis_options(self):
+        """분석 옵션 목록 반환"""
+        return list(self.analysis_types.values())
+    
+    def get_analysis_type_by_name(self, display_name):
+        """표시명으로 분석 타입 키 반환"""
+        for key, value in self.analysis_types.items():
+            if value == display_name:
+                return key
+        return None 

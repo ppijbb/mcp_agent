@@ -82,7 +82,7 @@ def main():
     st.markdown("---")
     
     st.success("🤖 HR Recruitment Agent가 성공적으로 연결되었습니다!")
-    
+        
     # 에이전트 실행 인터페이스 제공
     render_hr_agent_interface(save_to_file)
 
@@ -155,7 +155,7 @@ def render_hr_agent_interface(save_to_file=False):
                     
                     # 결과 정보 표시
                     display_hr_results(result, position_name if 'position_name' in locals() else 'unknown')
-                    
+                        
                 else:
                     st.error("❌ 실행 중 오류 발생")
                     st.error(f"**오류**: {result.get('message', 'Unknown error')}")

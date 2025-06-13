@@ -225,7 +225,7 @@ def display_realtime_monitoring(save_to_file=False):
             if not interactions:
                 st.info("현재 감지된 모바일 인터액션이 없습니다.")
                 return
-            
+        
             for interaction in interactions[:2]:  # 최근 2개만 표시
                 with st.expander(f"📱 {interaction.app_name} - {interaction.interaction_type.value}", expanded=True):
                     col1, col2 = st.columns([2, 1])
@@ -250,7 +250,7 @@ def display_realtime_monitoring(save_to_file=False):
                                 if not decision:
                                     st.error("AI 결정 생성에 실패했습니다.")
                                     return
-                                
+                            
                                 # 결정 표시
                                 st.success(f"💡 **추천:** {decision.recommendation}")
                                 st.info(f"🎯 **신뢰도:** {decision.confidence_score:.0%}")
@@ -408,7 +408,7 @@ def display_decision_analytics(history):
         for decision in history:
             decision_type = decision.get('type', 'unknown')
             type_counts[decision_type] = type_counts.get(decision_type, 0) + 1
-        
+            
         if type_counts:
             fig_pie = px.pie(
                 values=list(type_counts.values()),
@@ -436,17 +436,17 @@ def display_detailed_history(history):
     for i, decision in enumerate(reversed(history[-10:]), 1):
         timestamp = decision.get('timestamp', 'N/A')
         decision_type = decision.get('type', 'unknown')
-        
+    
         with st.expander(f"{i}. {decision_type} - {timestamp}", expanded=False):
             col1, col2 = st.columns([3, 1])
-            
+                
             with col1:
                 st.write(f"**💡 추천:** {decision.get('recommendation', 'N/A')}")
                 st.write(f"**📝 근거:** {decision.get('reasoning', '근거 없음')}")
                 alternatives = decision.get('alternatives', [])
                 if alternatives:
                     st.write(f"**🔄 대안:** {', '.join(alternatives)}")
-            
+                    
             with col2:
                 confidence = decision.get('confidence', 0)
                 st.metric("신뢰도", f"{confidence:.0%}")
@@ -484,7 +484,7 @@ def execute_scenario_test(scenario, scenario_name, save_to_file):
 def display_scenario_results(result):
     """시나리오 테스트 결과 표시"""
     st.success("✅ 시나리오 실행 완료!")
-    
+                    
     col3, col4 = st.columns(2)
     
     with col3:
@@ -494,7 +494,7 @@ def display_scenario_results(result):
         alternatives = result.get('alternatives', [])
         if alternatives:
             st.write(f"🔄 **대안:** {', '.join(alternatives)}")
-    
+                    
     with col4:
         st.markdown("**📊 결정 메트릭:**")
         confidence = result.get('confidence_score', 0)
@@ -523,7 +523,7 @@ def display_system_status(metrics):
     with col4:
         accuracy = metrics.get('accuracy', 'N/A')
         st.metric("📈 정확도", accuracy)
-
+    
 def display_performance_metrics(metrics):
     """성능 지표 표시"""
     st.markdown("#### 📈 시스템 성능 지표")

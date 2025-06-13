@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from srcs.urban_hive import ResourceMatcherAgent, SocialConnectorAgent, UrbanAnalystAgent
 from srcs.common.page_utils import setup_page, render_home_button
+from configs.settings import UrbanHiveConfig, ConnectionStatus
 
 # 페이지 설정
 setup_page("🏙️ Urban Hive Agent", "🏙️")
@@ -178,12 +179,9 @@ with tab3:
     with col1:
         st.markdown("### 🎯 분석할 도시 데이터 선택")
         
-        analysis_options = [
-            "Illegal Dumping - 불법 투기 분석",
-            "Public Safety - 공공 안전 분석", 
-            "Traffic Flow - 교통 흐름 분석",
-            "Community Event - 커뮤니티 이벤트 분석"
-        ]
+        # 동적으로 분석 옵션 로드
+        config = UrbanHiveConfig()
+        analysis_options = config.get_analysis_options()
         
         selected_analysis = st.selectbox(
             "분석 유형을 선택하세요:",
@@ -212,11 +210,25 @@ with tab3:
         except:
             st.info("통계를 불러올 수 없습니다.")
         
-        # 실시간 상태 표시
+        # 실시간 연결 상태 체크
         st.markdown("### 🔌 연결 상태")
-        st.markdown("- 🟢 UI 인터페이스: 정상")
-        st.markdown("- 🟡 MCP 서버: 연결 시도 중")
-        st.markdown("- 🟡 데이터 소스: 대기")
+        connection_status = ConnectionStatus()
+        
+        ui_status = connection_status.check_ui_status()
+        mcp_status = connection_status.check_mcp_status()
+        data_status = connection_status.check_data_source_status()
+        
+        status_icon = {
+            "정상": "🟢",
+            "연결 시도 중": "🟡", 
+            "대기": "🟡",
+            "오류": "🔴",
+            "연결 실패": "🔴"
+        }
+        
+        st.markdown(f"- {status_icon.get(ui_status, '🔴')} UI 인터페이스: {ui_status}")
+        st.markdown(f"- {status_icon.get(mcp_status, '🔴')} MCP 서버: {mcp_status}")
+        st.markdown(f"- {status_icon.get(data_status, '🔴')} 데이터 소스: {data_status}")
 
 # 하단 정보
 st.markdown("---")

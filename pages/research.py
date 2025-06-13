@@ -108,17 +108,17 @@ def render_research_agent_interface():
                 focus_options = load_research_focus_options()
                 research_focus = st.selectbox(
                     "연구 초점",
-                    focus_options,
-                    index=None,
-                    placeholder="연구 초점을 선택하세요"
-                )
+                        focus_options,
+                        index=None,
+                        placeholder="연구 초점을 선택하세요"
+                    )
             except Exception as e:
                 st.warning(f"연구 초점 옵션 로드 실패: {e}")
                 research_focus = st.text_input(
                     "연구 초점",
                     value=None,
                     placeholder="연구 초점을 직접 입력하세요"
-                )
+            )
             
             # 파일 저장 옵션
             save_to_file = st.checkbox(
