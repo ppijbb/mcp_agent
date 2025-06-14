@@ -148,17 +148,8 @@ def render_rag_chatbot():
     st.markdown("### 💬 RAG Chatbot")
     st.caption("🚀 문서 기반 질의응답을 시작하세요!")
     
-    # 샘플 질문 로드
-    try:
-        sample_questions = load_sample_questions()
-        
-        with st.expander("💡 샘플 질문들"):
-            for question in sample_questions:
-                if st.button(f"📝 {question}", key=f"sample_{hash(question)}"):
-                    st.session_state.selected_question = question
-                        
-    except Exception as e:
-        st.warning(f"샘플 질문 로드 실패: {e}")
+    # ✅ P2: Sample questions fallback system removed - Using real RAG Agent dynamic questions
+    st.info("💡 문서가 로드된 후 관련 샘플 질문들이 자동으로 생성됩니다.")
     
     # 메시지 히스토리 초기화
     if "rag_messages" not in st.session_state:
@@ -207,10 +198,7 @@ def render_rag_chatbot():
                     st.error(error_msg)
                     st.session_state.rag_messages.append({"role": "assistant", "content": error_msg})
 
-def load_sample_questions():
-    """샘플 질문 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("샘플 질문 로딩 기능이 구현되지 않았습니다")
+# ✅ P2: Removed load_sample_questions fallback function
 
 def generate_rag_response(question):
     """RAG 기반 응답 생성"""

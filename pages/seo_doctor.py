@@ -38,13 +38,7 @@ except ImportError as e:
     st.info("새로운 MCP Agent 구현을 확인하고 필요한 의존성을 설치해주세요.")
     SEO_AGENT_AVAILABLE = False
 
-# Fallback: Legacy Lighthouse analyzer (for reference only)
-try:
-    from srcs.seo_doctor.lighthouse_analyzer import analyze_website_with_lighthouse
-    LIGHTHOUSE_FALLBACK_AVAILABLE = True
-except ImportError as e:
-    st.warning(f"⚠️ Lighthouse 분석기 (fallback)를 불러올 수 없습니다: {e}")
-    LIGHTHOUSE_FALLBACK_AVAILABLE = False
+# ✅ P2: Lighthouse fallback system removed - Using real MCP Agent only
 
 def load_analysis_strategies():
     """분석 전략 옵션 로드"""

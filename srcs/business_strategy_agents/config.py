@@ -384,3 +384,71 @@ def validate_config() -> List[str]:
         issues.append("No regions enabled for monitoring")
     
     return issues 
+
+def classify_keywords_by_category(keywords: List[str]) -> Dict[str, List[str]]:
+    """카테고리별 키워드 분류 로직 구현"""
+    
+    # 카테고리별 키워드 패턴 정의
+    category_patterns = {
+        "기술": [
+            "ai", "artificial intelligence", "machine learning", "ml", "deep learning", "neural network",
+            "python", "javascript", "react", "node.js", "docker", "kubernetes", "aws", "cloud",
+            "blockchain", "cryptocurrency", "iot", "5g", "quantum", "automation", "robotics",
+            "api", "microservices", "devops", "cicd", "git", "database", "sql", "nosql",
+            "cybersecurity", "encryption", "data science", "big data", "analytics", "visualization"
+        ],
+        "비즈니스": [
+            "strategy", "전략", "business model", "revenue", "profit", "growth", "expansion",
+            "market share", "competition", "competitive advantage", "roi", "kpi", "metrics",
+            "sales", "marketing", "branding", "customer", "client", "partnership", "merger",
+            "acquisition", "investment", "funding", "venture capital", "ipo", "valuation",
+            "operations", "efficiency", "productivity", "cost reduction", "optimization"
+        ],
+        "마케팅": [
+            "seo", "sem", "social media", "content marketing", "email marketing", "influencer",
+            "advertising", "campaign", "brand awareness", "lead generation", "conversion",
+            "funnel", "customer acquisition", "retention", "engagement", "viral", "trending",
+            "analytics", "tracking", "attribution", "personalization", "segmentation",
+            "a/b testing", "landing page", "ctr", "cpc", "cpm", "roas", "ltv"
+        ],
+        "산업": [
+            "healthcare", "fintech", "edtech", "e-commerce", "retail", "manufacturing",
+            "automotive", "energy", "renewable", "sustainability", "green tech", "cleantech",
+            "real estate", "construction", "logistics", "supply chain", "transportation",
+            "hospitality", "tourism", "entertainment", "gaming", "media", "publishing",
+            "agriculture", "food tech", "biotech", "pharmaceutical", "medical device"
+        ],
+        "트렌드": [
+            "remote work", "hybrid", "digital transformation", "sustainability", "esg",
+            "diversity", "inclusion", "mental health", "wellness", "work-life balance",
+            "gig economy", "freelance", "subscription", "saas", "platform economy",
+            "circular economy", "sharing economy", "experience economy", "creator economy",
+            "metaverse", "nft", "web3", "decentralized", "dao", "defi"
+        ]
+    }
+    
+    # 결과 딕셔너리 초기화
+    categorized = {category: [] for category in category_patterns.keys()}
+    categorized["기타"] = []
+    
+    # 각 키워드를 카테고리별로 분류
+    for keyword in keywords:
+        keyword_lower = keyword.lower().strip()
+        classified = False
+        
+        # 각 카테고리의 패턴과 매칭
+        for category, patterns in category_patterns.items():
+            for pattern in patterns:
+                if pattern.lower() in keyword_lower or keyword_lower in pattern.lower():
+                    categorized[category].append(keyword)
+                    classified = True
+                    break
+            if classified:
+                break
+        
+        # 어떤 카테고리에도 속하지 않는 경우 "기타"로 분류
+        if not classified:
+            categorized["기타"].append(keyword)
+    
+    # 빈 카테고리 제거
+    return {k: v for k, v in categorized.items() if v} 

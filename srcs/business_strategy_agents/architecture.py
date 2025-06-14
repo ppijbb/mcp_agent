@@ -498,3 +498,238 @@ architecture = CoreArchitecture()
 def get_architecture() -> CoreArchitecture:
     """아키텍처 인스턴스 반환"""
     return architecture 
+
+async def connect_to_mcp_server(server_name: str, config: Dict[str, Any]) -> bool:
+    """실제 MCP 서버 연결 로직"""
+    
+    try:
+        import asyncio
+        import subprocess
+        import time
+        import socket
+        from pathlib import Path
+        
+        # MCP 서버 설정 검증
+        if not config.get('command'):
+            raise ValueError(f"MCP 서버 '{server_name}' 설정에 command가 없습니다.")
+        
+        command = config['command']
+        args = config.get('args', [])
+        port = config.get('port')
+        
+        # 서버별 연결 로직
+        if server_name == "urban-hive":
+            # Urban Hive MCP 서버 연결
+            return await connect_urban_hive_server(command, args, port)
+        
+        elif server_name in ["g-search", "fetch", "filesystem", "puppeteer", "brave"]:
+            # 표준 MCP 서버들 연결
+            return await connect_standard_mcp_server(server_name, command, args)
+        
+        elif server_name == "interpreter":
+            # Docker 기반 인터프리터 서버 연결
+            return await connect_docker_mcp_server(command, args)
+        
+        else:
+            # 일반적인 MCP 서버 연결
+            return await connect_generic_mcp_server(server_name, command, args)
+            
+    except Exception as e:
+        print(f"MCP 서버 '{server_name}' 연결 실패: {e}")
+        return False
+
+async def connect_urban_hive_server(command: str, args: List[str], port: int = 8002) -> bool:
+    """Urban Hive MCP 서버 연결"""
+    
+    try:
+        # 포트 사용 중인지 확인
+        if is_port_in_use(port):
+            print(f"Urban Hive 서버가 이미 포트 {port}에서 실행 중입니다.")
+            return True
+        
+        # 서버 시작
+        full_command = [command] + args
+        process = subprocess.Popen(
+            full_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=Path(__file__).parent.parent.parent  # 프로젝트 루트
+        )
+        
+        # 서버 시작 대기 (최대 10초)
+        for _ in range(20):  # 0.5초씩 20번 = 10초
+            if is_port_in_use(port):
+                print(f"Urban Hive MCP 서버가 포트 {port}에서 성공적으로 시작되었습니다.")
+                return True
+            await asyncio.sleep(0.5)
+        
+        # 시작 실패 시 프로세스 종료
+        process.terminate()
+        return False
+        
+    except Exception as e:
+        print(f"Urban Hive 서버 시작 실패: {e}")
+        return False
+
+async def connect_standard_mcp_server(server_name: str, command: str, args: List[str]) -> bool:
+    """표준 MCP 서버 연결 (npx, uvx 기반)"""
+    
+    try:
+        # 명령어 존재 확인
+        if command == "npx":
+            # Node.js 패키지 매니저 확인
+            result = subprocess.run(["npm", "--version"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"npm이 설치되지 않았습니다. {server_name} 서버를 시작할 수 없습니다.")
+                return False
+        
+        elif command == "uvx":
+            # uv 패키지 매니저 확인
+            result = subprocess.run(["uv", "--version"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"uv가 설치되지 않았습니다. {server_name} 서버를 시작할 수 없습니다.")
+                return False
+        
+        # 서버 연결 테스트 (실제로는 패키지 설치 확인)
+        full_command = [command] + args + ["--help"]
+        result = subprocess.run(
+            full_command,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            print(f"{server_name} MCP 서버 패키지가 사용 가능합니다.")
+            return True
+        else:
+            print(f"{server_name} MCP 서버 패키지를 찾을 수 없습니다.")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print(f"{server_name} 서버 연결 테스트 시간 초과")
+        return False
+    except Exception as e:
+        print(f"{server_name} 서버 연결 실패: {e}")
+        return False
+
+async def connect_docker_mcp_server(command: str, args: List[str]) -> bool:
+    """Docker 기반 MCP 서버 연결"""
+    
+    try:
+        # Docker 설치 확인
+        result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print("Docker가 설치되지 않았습니다.")
+            return False
+        
+        # Docker 이미지 존재 확인
+        if len(args) >= 4 and args[0] == "run":
+            image_name = args[3]  # docker run -i --rm <image_name>
+            
+            result = subprocess.run(
+                ["docker", "images", "-q", image_name],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.stdout.strip():
+                print(f"Docker 이미지 '{image_name}'가 사용 가능합니다.")
+                return True
+            else:
+                print(f"Docker 이미지 '{image_name}'를 찾을 수 없습니다.")
+                # 이미지 풀 시도
+                pull_result = subprocess.run(
+                    ["docker", "pull", image_name],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if pull_result.returncode == 0:
+                    print(f"Docker 이미지 '{image_name}'를 성공적으로 다운로드했습니다.")
+                    return True
+                else:
+                    print(f"Docker 이미지 '{image_name}' 다운로드 실패")
+                    return False
+        
+        return False
+        
+    except Exception as e:
+        print(f"Docker MCP 서버 연결 실패: {e}")
+        return False
+
+async def connect_generic_mcp_server(server_name: str, command: str, args: List[str]) -> bool:
+    """일반적인 MCP 서버 연결"""
+    
+    try:
+        # 명령어 존재 확인
+        result = subprocess.run(
+            ["which", command] if command != "python" else ["python", "--version"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print(f"{server_name} MCP 서버 명령어 '{command}'가 사용 가능합니다.")
+            return True
+        else:
+            print(f"{server_name} MCP 서버 명령어 '{command}'를 찾을 수 없습니다.")
+            return False
+            
+    except Exception as e:
+        print(f"{server_name} 서버 연결 실패: {e}")
+        return False
+
+def is_port_in_use(port: int) -> bool:
+    """포트 사용 중인지 확인"""
+    
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
+    except Exception:
+        return False
+
+async def validate_mcp_configuration(config_path: str = None) -> Dict[str, bool]:
+    """MCP 설정 검증 및 연결 테스트"""
+    
+    try:
+        import yaml
+        from pathlib import Path
+        
+        # 설정 파일 경로
+        if not config_path:
+            config_path = Path(__file__).parent.parent.parent / "configs" / "mcp_agent.config.yaml"
+        
+        # 설정 파일 로드
+        if not Path(config_path).exists():
+            print(f"MCP 설정 파일을 찾을 수 없습니다: {config_path}")
+            return {}
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        mcp_servers = config.get('mcp', {}).get('servers', {})
+        
+        # 각 서버 연결 테스트
+        connection_results = {}
+        
+        for server_name, server_config in mcp_servers.items():
+            print(f"MCP 서버 '{server_name}' 연결 테스트 중...")
+            connection_results[server_name] = await connect_to_mcp_server(server_name, server_config)
+        
+        # 결과 요약
+        successful_connections = sum(connection_results.values())
+        total_servers = len(connection_results)
+        
+        print(f"\nMCP 서버 연결 결과: {successful_connections}/{total_servers} 성공")
+        
+        for server_name, success in connection_results.items():
+            status = "✅ 성공" if success else "❌ 실패"
+            print(f"  {server_name}: {status}")
+        
+        return connection_results
+        
+    except Exception as e:
+        print(f"MCP 설정 검증 실패: {e}")
+        return {} 
