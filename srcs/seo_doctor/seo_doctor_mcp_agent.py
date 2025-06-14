@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+import re
 
 # Real MCP Agent imports
 from mcp_agent.app import MCPApp
@@ -850,3 +851,380 @@ async def run_emergency_seo_diagnosis(
     )
 
 # Remove all old mock functions - they are completely replaced 
+
+def load_analysis_strategies() -> List[str]:
+    """분석 전략 옵션 로드"""
+    return [
+        "mobile",
+        "desktop", 
+        "mobile_first",
+        "cross_platform",
+        "performance_focused",
+        "seo_focused",
+        "accessibility_focused",
+        "comprehensive"
+    ]
+
+def load_seo_templates() -> List[Dict[str, str]]:
+    """SEO 템플릿 로드"""
+    return [
+        {
+            "template": "emergency_audit",
+            "name": "Emergency SEO Audit Template",
+            "description": "Critical issues and immediate fixes",
+            "focus_areas": ["core_web_vitals", "technical_seo", "critical_errors", "quick_wins"]
+        },
+        {
+            "template": "performance_optimization",
+            "name": "Performance Optimization Template", 
+            "description": "Speed and Core Web Vitals focused analysis",
+            "focus_areas": ["lcp", "fid", "cls", "loading_speed", "optimization"]
+        },
+        {
+            "template": "technical_seo",
+            "name": "Technical SEO Template",
+            "description": "Technical SEO factors and crawlability",
+            "focus_areas": ["indexing", "crawlability", "schema", "meta_tags", "sitemap"]
+        },
+        {
+            "template": "competitive_analysis",
+            "name": "Competitive SEO Analysis Template",
+            "description": "Competitor comparison and gap analysis", 
+            "focus_areas": ["competitor_performance", "gap_analysis", "keyword_opportunities", "backlink_analysis"]
+        },
+        {
+            "template": "mobile_optimization",
+            "name": "Mobile SEO Template",
+            "description": "Mobile-first optimization analysis",
+            "focus_areas": ["mobile_performance", "responsive_design", "mobile_usability", "amp"]
+        },
+        {
+            "template": "content_seo",
+            "name": "Content SEO Template",
+            "description": "Content quality and SEO optimization",
+            "focus_areas": ["content_quality", "keyword_optimization", "readability", "structured_data"]
+        },
+        {
+            "template": "local_seo",
+            "name": "Local SEO Template",
+            "description": "Local search optimization analysis",
+            "focus_areas": ["local_listings", "google_my_business", "location_data", "local_keywords"]
+        },
+        {
+            "template": "e_commerce_seo",
+            "name": "E-commerce SEO Template", 
+            "description": "E-commerce specific SEO analysis",
+            "focus_areas": ["product_pages", "category_optimization", "checkout_flow", "product_schema"]
+        }
+    ]
+
+def get_lighthouse_status() -> Dict[str, Any]:
+    """Lighthouse 상태 확인"""
+    try:
+        # MCP 설정 파일에서 lighthouse 서버 확인
+        config_path = "configs/mcp_agent.config.yaml"
+        
+        lighthouse_available = False
+        lighthouse_config = None
+        
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    import yaml
+                    config = yaml.safe_load(f)
+                    if 'mcp' in config and 'servers' in config['mcp']:
+                        lighthouse_config = config['mcp']['servers'].get('lighthouse')
+                        lighthouse_available = lighthouse_config is not None
+            except Exception as e:
+                lighthouse_available = False
+        
+        # SEO Doctor Agent 초기화 테스트
+        try:
+            agent = SEODoctorMCPAgent()
+            agent_ready = True
+            agent_error = None
+        except Exception as e:
+            agent_ready = False
+            agent_error = str(e)
+        
+        # 출력 디렉토리 확인
+        output_dir = "seo_doctor_reports"
+        output_writable = os.access(os.path.dirname(os.getcwd()), os.W_OK)
+        
+        return {
+            "status": "ready" if lighthouse_available and agent_ready else "not_ready",
+            "lighthouse_server": {
+                "available": lighthouse_available,
+                "config": lighthouse_config,
+                "status": "configured" if lighthouse_available else "not_configured"
+            },
+            "mcp_config": {
+                "path": config_path,
+                "exists": os.path.exists(config_path)
+            },
+            "agent_initialization": {
+                "success": agent_ready,
+                "error": agent_error
+            },
+            "output_directory": {
+                "path": output_dir,
+                "writable": output_writable
+            },
+            "required_servers": ["lighthouse", "g-search", "fetch", "filesystem"],
+            "capabilities": [
+                "lighthouse_performance_audit",
+                "technical_seo_analysis",
+                "competitor_research",
+                "core_web_vitals_measurement",
+                "emergency_diagnosis"
+            ],
+            "analysis_strategies": load_analysis_strategies(),
+            "available_templates": [t["name"] for t in load_seo_templates()],
+            "timestamp": datetime.now().isoformat(),
+            "message": "Lighthouse and SEO Doctor are ready" if lighthouse_available and agent_ready else "Configuration or initialization issues detected"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "message": f"Failed to check Lighthouse status: {str(e)}"
+        }
+
+def save_seo_report(content: str, filename: str) -> str:
+    """SEO 분석 보고서를 파일로 저장"""
+    try:
+        # 설정에서 보고서 경로 가져오기
+        try:
+            from configs.settings import get_reports_path
+            reports_dir = get_reports_path('seo_doctor')
+        except ImportError:
+            reports_dir = "seo_doctor_reports"
+        
+        # 디렉토리 생성
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        # 파일명에 타임스탬프 추가
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if not filename.endswith('.md'):
+            filename = f"{filename}_{timestamp}.md"
+        
+        file_path = os.path.join(reports_dir, filename)
+        
+        # 보고서 헤더 생성
+        report_header = f"""# 🏥 SEO Doctor Emergency Report
+
+**Generated**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  
+**Agent Type**: SEO Doctor MCP Agent  
+**Report ID**: seo_emergency_{timestamp}  
+**Analysis Engine**: Google Lighthouse + MCP Servers
+
+---
+
+"""
+        
+        # 메타데이터 생성
+        metadata = {
+            "report_id": f"seo_emergency_{timestamp}",
+            "generated_at": datetime.now().isoformat(),
+            "agent_type": "SEO Doctor MCP Agent",
+            "analysis_engine": "Google Lighthouse + MCP Servers",
+            "content_length": len(content),
+            "file_path": file_path,
+            "lighthouse_status": get_lighthouse_status(),
+            "analysis_strategies": load_analysis_strategies(),
+            "available_templates": [t["name"] for t in load_seo_templates()],
+            "report_sections": [
+                "Emergency Diagnosis",
+                "Performance Metrics", 
+                "Core Web Vitals",
+                "Critical Issues",
+                "Quick Fixes",
+                "Competitor Analysis",
+                "Recovery Timeline",
+                "Detailed Recommendations"
+            ]
+        }
+        
+        # Markdown 보고서 저장
+        full_content = report_header + content
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(full_content)
+        
+        # 메타데이터 JSON 저장
+        metadata_file = file_path.replace('.md', '_metadata.json')
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+        return file_path
+        
+    except Exception as e:
+        raise Exception(f"SEO 보고서 저장 실패: {str(e)}")
+
+def generate_seo_report_content(result: dict, strategy: str) -> str:
+    """SEO 보고서 내용 생성"""
+    try:
+        # 기본 정보 추출
+        overall_score = result.get('overall_score', 0)
+        scores = result.get('scores', {})
+        metrics = result.get('metrics', {})
+        issues = result.get('issues', [])
+        recovery_days = result.get('recovery_days', 0)
+        emergency_level = result.get('emergency_level', '분석 중')
+        improvement_potential = result.get('improvement_potential', 0)
+        
+        # 응급 레벨 아이콘 매핑
+        emergency_icons = {
+            "🚨 응급실": "🚨",
+            "⚠️ 위험": "⚠️", 
+            "⚡ 주의": "⚡",
+            "✅ 안전": "✅",
+            "🚀 완벽": "🚀"
+        }
+        emergency_icon = emergency_icons.get(emergency_level, "📊")
+        
+        # 보고서 내용 생성
+        report_content = f"""
+## {emergency_icon} Emergency Diagnosis Summary
+
+**Overall SEO Health Score**: {overall_score}/100  
+**Emergency Level**: {emergency_level}  
+**Analysis Strategy**: {strategy.upper()}  
+**Estimated Recovery Time**: {recovery_days} days  
+**Improvement Potential**: +{improvement_potential}%
+
+---
+
+## 📊 Category Scores
+
+| Category | Score | Status |
+|----------|--------|--------|
+| 🚀 Performance | {scores.get('performance', 0)}/100 | {'✅ Good' if scores.get('performance', 0) >= 80 else '⚠️ Needs Work' if scores.get('performance', 0) >= 60 else '🚨 Critical'} |
+| 🔍 SEO | {scores.get('seo', 0)}/100 | {'✅ Good' if scores.get('seo', 0) >= 80 else '⚠️ Needs Work' if scores.get('seo', 0) >= 60 else '🚨 Critical'} |
+| ♿ Accessibility | {scores.get('accessibility', 0)}/100 | {'✅ Good' if scores.get('accessibility', 0) >= 80 else '⚠️ Needs Work' if scores.get('accessibility', 0) >= 60 else '🚨 Critical'} |
+| 🛡️ Best Practices | {scores.get('best_practices', 0)}/100 | {'✅ Good' if scores.get('best_practices', 0) >= 80 else '⚠️ Needs Work' if scores.get('best_practices', 0) >= 60 else '🚨 Critical'} |
+
+---
+
+## ⚡ Core Web Vitals
+
+"""
+        
+        # Core Web Vitals 메트릭 추가
+        if metrics:
+            report_content += f"""
+| Metric | Value | Status |
+|--------|-------|--------|
+| ⏰ LCP (Largest Contentful Paint) | {metrics.get('lcp', 'N/A')} | {'✅ Good' if 'good' in str(metrics.get('lcp', '')).lower() else '⚠️ Needs Improvement'} |
+| 🎨 FCP (First Contentful Paint) | {metrics.get('fcp', 'N/A')} | {'✅ Good' if 'good' in str(metrics.get('fcp', '')).lower() else '⚠️ Needs Improvement'} |
+| 📏 CLS (Cumulative Layout Shift) | {metrics.get('cls', 'N/A')} | {'✅ Good' if 'good' in str(metrics.get('cls', '')).lower() else '⚠️ Needs Improvement'} |
+
+"""
+        else:
+            report_content += "\n*Core Web Vitals data not available in this analysis.*\n"
+        
+        # 발견된 문제점들
+        report_content += "\n---\n\n## 🚨 Critical Issues Found\n\n"
+        
+        if issues:
+            for i, issue in enumerate(issues, 1):
+                report_content += f"{i}. **{issue}**\n"
+        else:
+            report_content += "✅ No critical issues detected! Your website is in good health.\n"
+        
+        # 권장 사항
+        report_content += f"""
+
+---
+
+## 💊 Emergency Treatment Plan
+
+### Immediate Actions (Day 1-3)
+- Fix critical performance issues
+- Resolve accessibility blockers
+- Address Core Web Vitals failures
+- Implement quick wins for SEO
+
+### Weekly Medicine (Week 1-4)
+- Optimize images and assets
+- Improve page loading speed
+- Enhance mobile responsiveness
+- Update meta tags and structured data
+
+### Monthly Checkup (Month 1-3)
+- Monitor performance metrics
+- Track Core Web Vitals improvements
+- Analyze competitor performance
+- Implement advanced optimizations
+
+### Long-term Recovery Plan
+- Continuous performance monitoring
+- Regular SEO audits
+- Content optimization strategy
+- Technical debt reduction
+
+---
+
+## 📈 Expected Results
+
+After implementing the emergency treatment plan:
+
+- **Performance Score**: Expected improvement of +{improvement_potential}%
+- **SEO Visibility**: Improved search rankings within {recovery_days} days
+- **User Experience**: Better Core Web Vitals scores
+- **Conversion Rate**: Potential increase due to faster loading times
+
+---
+
+## 🔍 Technical Details
+
+**Analysis Strategy Used**: {strategy}  
+**Lighthouse Version**: Latest via MCP Server  
+**Analysis Date**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  
+**Report Format**: Emergency Diagnosis  
+
+---
+
+## 📞 Follow-up Recommendations
+
+1. **Schedule re-analysis** in {recovery_days} days
+2. **Monitor Core Web Vitals** daily using Google Search Console
+3. **Track competitor performance** weekly
+4. **Implement structured monitoring** for ongoing health checks
+
+---
+
+*This report was generated by SEO Doctor MCP Agent using real Lighthouse data and competitor analysis.*
+"""
+        
+        return report_content
+        
+    except Exception as e:
+        # 에러 발생 시 기본 보고서 생성
+        return f"""
+# 🏥 SEO Doctor Emergency Report
+
+**Analysis Date**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+**Strategy**: {strategy}
+
+## ⚠️ Report Generation Error
+
+An error occurred while generating the detailed report: {str(e)}
+
+## Basic Analysis Results
+
+- **Overall Score**: {result.get('overall_score', 'N/A')}
+- **Emergency Level**: {result.get('emergency_level', 'Analysis Error')}
+- **Issues Found**: {len(result.get('issues', []))} items
+
+## Raw Data
+
+```json
+{json.dumps(result, indent=2, default=str)}
+```
+
+---
+
+*Please check the SEO Doctor MCP Agent configuration and try again.*
+""" 

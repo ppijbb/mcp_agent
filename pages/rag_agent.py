@@ -17,42 +17,27 @@ from configs.settings import get_reports_path
 
 # RAG Agent 임포트 시도
 try:
-    from srcs.basic_agents.rag_agent import main as rag_main, initialize_collection, MCPApp
+    from srcs.basic_agents.rag_agent import (
+        main as rag_main, 
+        initialize_collection, 
+        MCPApp,
+        load_collection_types,
+        load_document_formats,
+        get_qdrant_status,
+        get_available_collections,
+        save_rag_conversation,
+        generate_rag_response
+    )
 except ImportError as e:
     st.error(f"⚠️ RAG Agent를 불러올 수 없습니다: {e}")
     st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
     st.stop()
-
-def load_collection_types():
-    """사용 가능한 컬렉션 타입 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("컬렉션 타입 로딩 기능이 구현되지 않았습니다")
-
-def load_document_formats():
-    """지원하는 문서 형식 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("문서 형식 로딩 기능이 구현되지 않았습니다")
-
-def get_qdrant_status():
-    """Qdrant 서버 상태 확인"""
-    # 실제 구현 필요
-    raise NotImplementedError("Qdrant 상태 확인 기능이 구현되지 않았습니다")
-
-def get_available_collections():
-    """사용 가능한 컬렉션 목록 조회"""
-    # 실제 구현 필요
-    raise NotImplementedError("컬렉션 목록 조회 기능이 구현되지 않았습니다")
 
 def validate_rag_result(result):
     """RAG 결과 검증"""
     if not result:
         raise Exception("RAG 시스템에서 유효한 결과를 반환하지 않았습니다")
     return result
-
-def save_rag_conversation(messages, filename):
-    """RAG 대화 내용을 파일로 저장"""
-    # 실제 구현 필요
-    raise NotImplementedError("대화 저장 기능이 구현되지 않았습니다")
 
 def main():
     """RAG Agent 메인 페이지"""
@@ -199,11 +184,7 @@ def render_rag_chatbot():
                     st.session_state.rag_messages.append({"role": "assistant", "content": error_msg})
 
 # ✅ P2: Removed load_sample_questions fallback function
-
-def generate_rag_response(question):
-    """RAG 기반 응답 생성"""
-    # 실제 구현 필요
-    raise NotImplementedError("RAG 응답 생성 기능이 구현되지 않았습니다")
+# ✅ P1-2: generate_rag_response 함수는 srcs.basic_agents.rag_agent에서 import
 
 if __name__ == "__main__":
     main() 

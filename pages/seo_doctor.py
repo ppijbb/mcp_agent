@@ -30,7 +30,12 @@ try:
         create_seo_doctor_agent,
         run_emergency_seo_diagnosis,
         SEOAnalysisResult,
-        SEOEmergencyLevel
+        SEOEmergencyLevel,
+        load_analysis_strategies,
+        load_seo_templates,
+        get_lighthouse_status,
+        save_seo_report,
+        generate_seo_report_content
     )
     SEO_AGENT_AVAILABLE = True
 except ImportError as e:
@@ -39,32 +44,13 @@ except ImportError as e:
     SEO_AGENT_AVAILABLE = False
 
 # ✅ P2: Lighthouse fallback system removed - Using real MCP Agent only
-
-def load_analysis_strategies():
-    """분석 전략 옵션 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("분석 전략 로딩 기능을 구현해주세요")
-
-def load_seo_templates():
-    """SEO 템플릿 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("SEO 템플릿 로딩 기능을 구현해주세요")
-
-def get_lighthouse_status():
-    """Lighthouse 상태 확인"""
-    # 실제 구현 필요
-    raise NotImplementedError("Lighthouse 상태 확인 기능을 구현해주세요")
+# ✅ P1-4: 모든 함수는 srcs.seo_doctor.seo_doctor_mcp_agent에서 import
 
 def validate_seo_result(result):
     """SEO 분석 결과 검증"""
     if not result:
         raise Exception("SEO 분석에서 유효한 결과를 반환하지 않았습니다")
     return result
-
-def save_seo_report(content, filename):
-    """SEO 분석 보고서를 파일로 저장"""
-    # 실제 구현 필요
-    raise NotImplementedError("SEO 보고서 저장 기능을 구현해주세요")
 
 # 페이지 설정
 try:
@@ -369,10 +355,7 @@ def display_real_analysis_results(result: dict, strategy: str, url: str):
     with st.expander("📋 상세 Lighthouse 보고서"):
         st.json(result.get('raw_lighthouse_result', {}))
 
-def generate_seo_report_content(result: dict, strategy: str):
-    """SEO 보고서 내용 생성"""
-    # 실제 구현 필요
-    raise NotImplementedError("SEO 보고서 내용 생성 기능을 구현해주세요")
+# ✅ P1-4: generate_seo_report_content 함수는 srcs.seo_doctor.seo_doctor_mcp_agent에서 import
 
 def render_score_visualization(scores: dict):
     """점수 시각화 차트"""

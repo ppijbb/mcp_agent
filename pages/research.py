@@ -20,37 +20,23 @@ from srcs.common.page_utils import create_agent_page
 
 # Research Agent 임포트 시도
 try:
-    from srcs.basic_agents.researcher_v2 import ResearcherAgent
+    from srcs.basic_agents.researcher_v2 import (
+        ResearcherAgent,
+        load_research_focus_options,
+        load_research_templates,
+        get_research_agent_status,
+        save_research_report
+    )
 except ImportError as e:
     st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {e}")
     st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
     st.stop()
-
-def load_research_focus_options():
-    """연구 초점 옵션 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("연구 초점 옵션 로딩 기능이 구현되지 않았습니다")
-
-def load_research_templates():
-    """연구 템플릿 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("연구 템플릿 로딩 기능이 구현되지 않았습니다")
-
-def get_research_agent_status():
-    """Research Agent 상태 확인"""
-    # 실제 구현 필요
-    raise NotImplementedError("Research Agent 상태 확인 기능이 구현되지 않았습니다")
 
 def validate_research_result(result):
     """연구 결과 검증"""
     if not result:
         raise Exception("Research Agent에서 유효한 결과를 반환하지 않았습니다")
     return result
-
-def save_research_report(content, filename):
-    """연구 보고서를 파일로 저장"""
-    # 실제 구현 필요
-    raise NotImplementedError("연구 보고서 저장 기능이 구현되지 않았습니다")
 
 def main():
     """Research Agent 메인 페이지"""

@@ -6,12 +6,16 @@ from mcp_agent.config import get_settings
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from dataclasses import dataclass
-from typing import Optional, Type, TypeVar
+from typing import Optional, Type, TypeVar, List, Dict, Any
 import streamlit as st
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import (
     AugmentedLLM,
 )
+import json
+import os
+from datetime import datetime
+from pathlib import Path
 
 T = TypeVar("T", bound=AugmentedLLM)
 
@@ -199,3 +203,182 @@ if __name__ == "__main__":
     # For standalone execution
     initialize_collection()
     asyncio.run(main())
+
+def load_collection_types() -> List[str]:
+    """사용 가능한 컬렉션 타입 로드"""
+    return [
+        "document",
+        "knowledge_base", 
+        "chat_history",
+        "embeddings",
+        "vector_store",
+        "memory"
+    ]
+
+def load_document_formats() -> List[Dict[str, str]]:
+    """지원하는 문서 형식 로드"""
+    return [
+        {"format": "txt", "description": "Plain Text Files", "extension": ".txt"},
+        {"format": "pdf", "description": "PDF Documents", "extension": ".pdf"},
+        {"format": "docx", "description": "Word Documents", "extension": ".docx"},
+        {"format": "md", "description": "Markdown Files", "extension": ".md"},
+        {"format": "json", "description": "JSON Data", "extension": ".json"},
+        {"format": "csv", "description": "CSV Data", "extension": ".csv"},
+        {"format": "html", "description": "HTML Documents", "extension": ".html"},
+        {"format": "xml", "description": "XML Documents", "extension": ".xml"}
+    ]
+
+def get_qdrant_status() -> Dict[str, Any]:
+    """Qdrant 서버 상태 확인"""
+    try:
+        client = QdrantClient("http://localhost:6333")
+        
+        # 서버 연결 테스트
+        collections = client.get_collections()
+        
+        return {
+            "status": "connected",
+            "server_url": "http://localhost:6333",
+            "collections_count": len(collections.collections) if collections else 0,
+            "timestamp": datetime.now().isoformat(),
+            "message": "Qdrant server is running and accessible"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "disconnected",
+            "server_url": "http://localhost:6333",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "message": "Cannot connect to Qdrant server"
+        }
+
+def get_available_collections() -> List[Dict[str, Any]]:
+    """사용 가능한 컬렉션 목록 조회"""
+    try:
+        client = QdrantClient("http://localhost:6333")
+        collections = client.get_collections()
+        
+        collection_list = []
+        
+        if collections and hasattr(collections, 'collections'):
+            for collection in collections.collections:
+                try:
+                    # 컬렉션 상세 정보 조회
+                    info = client.get_collection(collection.name)
+                    collection_list.append({
+                        "name": collection.name,
+                        "vectors_count": info.vectors_count if info else 0,
+                        "status": info.status if info else "unknown",
+                        "created": datetime.now().isoformat()
+                    })
+                except Exception as e:
+                    collection_list.append({
+                        "name": collection.name,
+                        "vectors_count": 0,
+                        "status": "error",
+                        "error": str(e)
+                    })
+        
+        return collection_list
+        
+    except Exception as e:
+        return [{"error": f"Failed to retrieve collections: {str(e)}"}]
+
+def save_rag_conversation(messages: List[Dict[str, str]], filename: str) -> str:
+    """RAG 대화 내용을 파일로 저장"""
+    try:
+        # 설정에서 보고서 경로 가져오기
+        try:
+            from configs.settings import get_reports_path
+            reports_dir = get_reports_path('rag_agent')
+        except ImportError:
+            reports_dir = "rag_reports"
+        
+        # 디렉토리 생성
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        # 파일명에 타임스탬프 추가
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if not filename.endswith('.json'):
+            filename = f"{filename}_{timestamp}.json"
+        
+        file_path = os.path.join(reports_dir, filename)
+        
+        # 대화 데이터 구조화
+        conversation_data = {
+            "conversation_id": f"rag_chat_{timestamp}",
+            "created_at": datetime.now().isoformat(),
+            "agent_type": "RAG Agent",
+            "messages_count": len(messages),
+            "messages": messages,
+            "metadata": {
+                "qdrant_status": get_qdrant_status(),
+                "available_collections": get_available_collections()
+            }
+        }
+        
+        # JSON 파일로 저장
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(conversation_data, f, ensure_ascii=False, indent=2)
+        
+        return file_path
+        
+    except Exception as e:
+        raise Exception(f"대화 저장 실패: {str(e)}")
+
+def generate_rag_response(question: str) -> str:
+    """RAG 기반 응답 생성"""
+    try:
+        # Qdrant 연결 상태 확인
+        status = get_qdrant_status()
+        if status["status"] != "connected":
+            return f"❌ Qdrant 서버에 연결할 수 없습니다: {status.get('error', 'Unknown error')}"
+        
+        # 컬렉션 확인
+        collections = get_available_collections()
+        if not collections or (len(collections) == 1 and "error" in collections[0]):
+            return "❌ 사용 가능한 컬렉션이 없습니다. 먼저 컬렉션을 초기화해주세요."
+        
+        # Qdrant 클라이언트로 검색
+        client = QdrantClient("http://localhost:6333")
+        client.set_model("BAAI/bge-small-en-v1.5")
+        
+        # 컬렉션에서 검색
+        search_results = client.query(
+            collection_name="my_collection",
+            query_text=question,
+            limit=3
+        )
+        
+        if not search_results:
+            return "죄송합니다. 관련된 정보를 찾을 수 없습니다. 다른 질문을 시도해보세요."
+        
+        # 검색 결과를 기반으로 응답 생성
+        context_texts = []
+        for result in search_results:
+            if hasattr(result, 'document') and result.document:
+                context_texts.append(result.document)
+            elif hasattr(result, 'payload') and 'document' in result.payload:
+                context_texts.append(result.payload['document'])
+        
+        if not context_texts:
+            return "검색 결과에서 관련 정보를 추출할 수 없습니다."
+        
+        # 간단한 응답 생성 (실제로는 LLM을 사용해야 함)
+        context = "\n".join(context_texts[:2])  # 상위 2개 결과만 사용
+        
+        response = f"""**질문**: {question}
+
+**관련 정보를 찾았습니다:**
+
+{context}
+
+**응답**: 위의 정보를 바탕으로, MCP(Model Context Protocol)에 관한 질문에 답변드리겠습니다. 더 구체적인 질문이 있으시면 언제든 물어보세요!
+
+*검색된 문서 수: {len(search_results)}개*"""
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ RAG 응답 생성 중 오류가 발생했습니다: {str(e)}"

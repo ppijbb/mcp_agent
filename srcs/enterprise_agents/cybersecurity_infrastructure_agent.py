@@ -15,6 +15,71 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     QualityRating,
 )
 
+# ✅ P2-1: Cybersecurity Agent 메서드 구현 (2개 함수)
+
+def load_assessment_types():
+    """평가 유형을 동적으로 로드"""
+    return [
+        "전체 보안 평가 (Comprehensive Security Assessment)",
+        "취약점 스캔 (Vulnerability Scanning)",
+        "침투 테스트 (Penetration Testing)",
+        "컴플라이언스 감사 (Compliance Audit)",
+        "사고 대응 계획 (Incident Response Planning)",
+        "위협 인텔리전스 (Threat Intelligence)",
+        "인프라 보안 설계 (Infrastructure Security Design)",
+        "클라우드 보안 평가 (Cloud Security Assessment)",
+        "데이터 보호 감사 (Data Protection Audit)",
+        "네트워크 보안 분석 (Network Security Analysis)",
+        "웹 애플리케이션 보안 테스트 (Web Application Security Testing)",
+        "모바일 보안 평가 (Mobile Security Assessment)",
+        "API 보안 검증 (API Security Validation)",
+        "소셜 엔지니어링 테스트 (Social Engineering Testing)",
+        "물리적 보안 평가 (Physical Security Assessment)"
+    ]
+
+def load_compliance_frameworks():
+    """컴플라이언스 프레임워크를 동적으로 로드"""
+    return [
+        # 국제 표준
+        "ISO 27001 (Information Security Management)",
+        "ISO 27002 (Code of Practice for Information Security)",
+        "ISO 27017 (Cloud Security)",
+        "ISO 27018 (Privacy in Cloud Computing)",
+        
+        # 미국 표준 및 규정
+        "NIST Cybersecurity Framework",
+        "NIST SP 800-53 (Security Controls)",
+        "SOX (Sarbanes-Oxley Act)",
+        "FISMA (Federal Information Security Management Act)",
+        "FedRAMP (Federal Risk and Authorization Management Program)",
+        
+        # 개인정보보호 규정
+        "GDPR (General Data Protection Regulation)",
+        "CCPA (California Consumer Privacy Act)",
+        "PIPEDA (Personal Information Protection and Electronic Documents Act)",
+        
+        # 산업별 규정
+        "HIPAA (Health Insurance Portability and Accountability Act)",
+        "PCI DSS (Payment Card Industry Data Security Standard)",
+        "GLBA (Gramm-Leach-Bliley Act)",
+        "FERPA (Family Educational Rights and Privacy Act)",
+        
+        # 클라우드 및 기술 프레임워크
+        "CSA CCM (Cloud Security Alliance Cloud Controls Matrix)",
+        "COBIT (Control Objectives for Information and Related Technologies)",
+        "ITIL (Information Technology Infrastructure Library)",
+        
+        # 지역별 규정
+        "K-ISMS (한국 정보보호관리체계)",
+        "PIPL (Personal Information Protection Law - China)",
+        "LGPD (Lei Geral de Proteção de Dados - Brazil)",
+        
+        # 업계 특화 프레임워크
+        "SWIFT CSP (Customer Security Programme)",
+        "NERC CIP (North American Electric Reliability Corporation Critical Infrastructure Protection)",
+        "IEC 62443 (Industrial Communication Networks Security)"
+    ]
+
 # Configuration
 OUTPUT_DIR = "cybersecurity_infrastructure_reports"
 COMPANY_NAME = "TechCorp Inc."

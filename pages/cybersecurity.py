@@ -20,9 +20,13 @@ except ImportError:
     st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
     st.stop()
 
-# Cybersecurity Infrastructure Agent 임포트 - 필수 의존성
+# ✅ P2-1: Import real implementations from Cybersecurity Agent
 try:
-    from srcs.enterprise_agents.cybersecurity_infrastructure_agent import CybersecurityAgent
+    from srcs.enterprise_agents.cybersecurity_infrastructure_agent import (
+        CybersecurityAgent,
+        load_assessment_types,
+        load_compliance_frameworks
+    )
 except ImportError as e:
     st.error(f"❌ Cybersecurity Infrastructure Agent를 불러올 수 없습니다: {e}")
     st.error("**시스템 요구사항**: CybersecurityAgent가 필수입니다.")
@@ -201,23 +205,7 @@ def render_cybersecurity_agent_interface():
         st.error("CybersecurityAgent 구현을 확인해주세요.")
         st.stop()
 
-def load_assessment_types():
-    """평가 유형을 동적으로 로드 """
-    try:
-        # 실제 구현에서는 외부 API나 설정 파일에서 로드해야 함
-        # 현재는 기본값만 제공
-        return ["전체 보안 평가", "취약점 스캔만", "컴플라이언스 감사만", "사고 대응 계획만"]
-    except Exception:
-        return None
-
-def load_compliance_frameworks():
-    """컴플라이언스 프레임워크를 동적으로 로드"""
-    try:
-        # 실제 구현에서는 외부 API나 설정 파일에서 로드해야 함
-        # 현재는 기본값만 제공
-        return ["SOX", "ISO 27001", "NIST", "GDPR", "HIPAA"]
-    except Exception:
-        return None
+# ✅ P2-1: load_assessment_types and load_compliance_frameworks are now imported from srcs.enterprise_agents.cybersecurity_infrastructure_agent
 
 def display_cybersecurity_results(result):
     """실제 사이버보안 에이전트 결과 표시"""

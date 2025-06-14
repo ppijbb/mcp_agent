@@ -28,31 +28,20 @@ except ImportError as e:
     st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
     st.stop()
 
-def load_destination_options():
-    """목적지 옵션 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("목적지 옵션 로딩 기능을 구현해주세요")
-
-def load_origin_options():
-    """출발지 옵션 로드"""
-    # 실제 구현 필요
-    raise NotImplementedError("출발지 옵션 로딩 기능을 구현해주세요")
-
-def get_user_location():
-    """사용자 위치 기반 기본값 설정"""
-    # 실제 구현 필요
-    raise NotImplementedError("사용자 위치 기반 기본값 설정 기능을 구현해주세요")
+# ✅ P1-5: Import real implementations from Travel Scout Agent
+from srcs.travel_scout.travel_scout_agent import (
+    load_destination_options,
+    load_origin_options, 
+    get_user_location,
+    save_travel_report,
+    generate_travel_report_content
+)
 
 def validate_travel_result(result):
     """여행 검색 결과 검증"""
     if not result:
         raise Exception("Travel Scout Agent에서 유효한 결과를 반환하지 않았습니다")
     return result
-
-def save_travel_report(content, filename):
-    """여행 검색 보고서를 파일로 저장"""
-    # 실제 구현 필요
-    raise NotImplementedError("여행 보고서 저장 기능을 구현해주세요")
 
 # Configure page
 st.set_page_config(
@@ -476,10 +465,7 @@ async def main():
             else:
                 st.info("분석 정보가 없습니다.")
 
-def generate_travel_report_content(results: dict, search_params: dict):
-    """여행 검색 보고서 내용 생성"""
-    # 실제 구현 필요
-    raise NotImplementedError("여행 보고서 내용 생성 기능을 구현해주세요")
+# ✅ P1-5: generate_travel_report_content is now imported from srcs.travel_scout.travel_scout_agent
 
 # Run the Streamlit app
 if __name__ == "__main__":
