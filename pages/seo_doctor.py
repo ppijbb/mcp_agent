@@ -190,17 +190,13 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
         
         # 실제 MCP Agent 분석 수행
         try:
-            for i, step in enumerate(progress_steps[:-2]):
-                progress_bar.progress((i + 1) / len(progress_steps))
-                status_text.text(step)
-                time.sleep(0.8)  # UI 표시용 딜레이
-                
             # 🚨 CRITICAL: Use Real MCP Agent instead of mock
             status_text.text("🏥 Running Real MCP Agent Emergency Diagnosis...")
             progress_bar.progress(0.8)
             
             # Execute real SEO analysis
-            seo_result = asyncio.run(run_emergency_seo_diagnosis(
+            # The result from this function should be used.
+            analysis_result = asyncio.run(run_emergency_seo_diagnosis(
                 url=url,
                 include_competitors=True,
                 output_dir=get_reports_path('seo_doctor')
@@ -211,18 +207,7 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
                 progress_bar.progress((i + 1) / len(progress_steps))
                 status_text.text(step)
                 time.sleep(0.5)
-            
-            # 실제 Lighthouse 분석 실행
-            status_text.text("🔬 Lighthouse 엔진 실행 중... (30-60초 소요)")
-            
-            # asyncio를 사용하여 분석 실행
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            analysis_result = loop.run_until_complete(
-                analyze_website_with_lighthouse(url, strategy)
-            )
-            loop.close()
-            
+
             # 결과 검증
             validate_seo_result(analysis_result)
             
@@ -238,12 +223,31 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
     # 진행 바 제거
     progress_container.empty()
     
-    # 분석 결과 표시
-    if "error" in analysis_result:
+    # SEOAnalysisResult 객체를 dict로 변환하여 결과 표시에 사용
+    if isinstance(analysis_result, SEOAnalysisResult):
+        display_data = {
+            "url": analysis_result.url,
+            "emergency_level": analysis_result.emergency_level.value,
+            "overall_score": analysis_result.overall_score,
+            "performance_score": analysis_result.performance_score,
+            "seo_score": analysis_result.seo_score,
+            "accessibility_score": analysis_result.accessibility_score,
+            "best_practices_score": analysis_result.best_practices_score,
+            "core_web_vitals": analysis_result.core_web_vitals,
+            "critical_issues": analysis_result.critical_issues,
+            "quick_fixes": analysis_result.quick_fixes,
+            "estimated_recovery_days": analysis_result.estimated_recovery_days,
+            "competitor_analysis": analysis_result.competitor_analysis,
+            "recommendations": analysis_result.recommendations,
+            "analysis_timestamp": analysis_result.analysis_timestamp.isoformat(),
+            "lighthouse_raw_data": analysis_result.lighthouse_raw_data
+        }
+        display_real_analysis_results(display_data, strategy, url)
+    elif "error" in analysis_result:
         st.error(f"❌ 분석 실패: {analysis_result['error']}")
         return
-    
-    display_real_analysis_results(analysis_result, strategy, url)
+    else:
+        st.error("❌ 알 수 없는 분석 결과 형식입니다.")
 
 def display_real_analysis_results(result: dict, strategy: str, url: str):
     """실제 분석 결과 표시"""

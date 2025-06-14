@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
 
-from .run_business_strategy_agents import BusinessStrategyRunner
+from srcs.business_strategy_agents.run_business_strategy_agents import BusinessStrategyRunner
 
 
 def main():

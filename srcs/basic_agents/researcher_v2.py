@@ -13,11 +13,6 @@ from pathlib import Path
 from typing import List, Dict, Any
 import json
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # Define fallback constants first
 DEFAULT_SERVERS = ["filesystem", "fetch"]
 DEFAULT_COMPANY_NAME = "TechCorp Inc."

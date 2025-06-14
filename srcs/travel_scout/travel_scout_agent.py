@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Any
 
 from mcp_agent.app import MCPApp
 from mcp_agent.config import get_settings
-from .mcp_browser_client import TravelMCPManager
+from srcs.travel_scout.mcp_browser_client import TravelMCPManager
 
 # ✅ P1-5: Travel Scout 메서드 구현 (5개 함수)
 
