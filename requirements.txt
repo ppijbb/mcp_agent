@@ -7,6 +7,7 @@ anthropic
 openai
 langchain>=0.1.0
 langchain-community>=0.0.20
+langchain-openai
 
 # Most Hooking Business Strategy Agent dependencies
 aiofiles>=24.1.0
