@@ -49,27 +49,25 @@ class AgentFactory:
         self.config = config
         self._agents: Dict[str, Agent] = {}
     
-    def create_all_agents(self) -> List[Agent]:
-        """모든 Agent 생성 - Enhanced Multi-Agent System"""
+    def create_all_agents_dict(self) -> Dict[str, Agent]:
+        """모든 전문 Agent를 생성하여 딕셔너리로 반환합니다."""
         print("🤖 Multi-Agent System 초기화 시작...")
         
-        # === 기존 Agent들 ===
         # 1. Figma Analyzer Agent
         figma_analyzer = FigmaAnalyzerAgent.create_agent(self.config.figma_url)
-        self._agents["figma_analyzer"] = figma_analyzer
+        self._agents["figma_analyzer_agent"] = figma_analyzer
         print(f"✅ {FigmaAnalyzerAgent.get_description()}")
         
         # 2. PRD Writer Agent  
         prd_writer = PRDWriterAgent.create_agent(self.config.output_path)
-        self._agents["prd_writer"] = prd_writer
+        self._agents["prd_writer_agent"] = prd_writer
         print(f"✅ {PRDWriterAgent.get_description()}")
         
         # 3. Figma Creator Agent
         figma_creator = FigmaCreatorAgent.create_agent()
-        self._agents["figma_creator"] = figma_creator
+        self._agents["figma_creator_agent"] = figma_creator
         print(f"✅ {FigmaCreatorAgent.get_description()}")
         
-        # === 새로운 Multi-Agent들 ===
         # 4. Conversation Agent
         conversation_agent = ConversationAgent.create_agent()
         self._agents["conversation_agent"] = conversation_agent
@@ -77,17 +75,17 @@ class AgentFactory:
         
         # 5. Project Manager Agent
         project_manager = ProjectManagerAgent.create_agent()
-        self._agents["project_manager"] = project_manager
+        self._agents["project_manager_agent"] = project_manager
         print(f"✅ {ProjectManagerAgent.get_description()}")
         
         # 6. KPI Analyst Agent
         kpi_analyst = KPIAnalystAgent.create_agent()
-        self._agents["kpi_analyst"] = kpi_analyst
+        self._agents["kpi_analyst_agent"] = kpi_analyst
         print(f"✅ {KPIAnalystAgent.get_description()}")
         
         # 7. Marketing Strategist Agent
         marketing_strategist = MarketingStrategistAgent.create_agent()
-        self._agents["marketing_strategist"] = marketing_strategist
+        self._agents["marketing_strategist_agent"] = marketing_strategist
         print(f"✅ {MarketingStrategistAgent.get_description()}")
         
         # 8. Operations Agent
@@ -97,17 +95,14 @@ class AgentFactory:
         
         # 9. Notion Document Agent
         notion_document = NotionDocumentAgent.create_agent()
-        self._agents["notion_document"] = notion_document
+        self._agents["notion_document_agent"] = notion_document
         print(f"✅ {NotionDocumentAgent.get_description()}")
         
-        # 10. Coordinator Agent (중앙 조율)
-        coordinator = CoordinatorAgent.create_agent()
-        self._agents["coordinator"] = coordinator
-        print(f"✅ {CoordinatorAgent.get_description()}")
+        # CoordinatorAgent는 별도로 생성되므로 여기서는 제외합니다.
         
         print("🎯 Multi-Agent System 초기화 완료!")
-        print(f"📊 총 {len(self._agents)}개 Agent가 활성화되었습니다.")
-        return list(self._agents.values())
+        print(f"📊 총 {len(self._agents)}개 전문 Agent가 활성화되었습니다.")
+        return self._agents
     
     def get_agent(self, name: str) -> Agent:
         """특정 Agent 반환"""
@@ -145,78 +140,16 @@ class WorkflowOrchestrator:
             plan_type="full"
         )
     
-    def create_workflow_task(self, config: AgentConfig) -> str:
-        """Multi-Agent 워크플로우 작업 정의 생성"""
-        return f"""Execute a comprehensive multi-agent product planning workflow that creates a complete business plan with technical specifications, marketing strategy, and operational framework.
-
-        **MULTI-AGENT WORKFLOW EXECUTION**:
-        
-        **PHASE 1: DISCOVERY & REQUIREMENTS (2-3 days)**
-        🎯 **coordinator** - Orchestrate the entire workflow and manage agent communication
-        💬 **conversation_agent** - Conduct structured user interviews to gather detailed requirements
-        🔍 **figma_analyzer** - Analyze existing Figma design (if provided): {config.figma_url}
-        
-        **PHASE 2: STRATEGIC PLANNING (3-5 days)**
-        📋 **prd_writer** - Create comprehensive PRD based on requirements and design analysis
-        📊 **kpi_analyst** - Define success metrics, KPIs, and measurement frameworks
-        📈 **marketing_strategist** - Develop go-to-market strategy and marketing plans
-        
-        **PHASE 3: OPERATIONAL PLANNING (2-3 days)**  
-        📅 **project_manager** - Create development timeline, sprints, and resource allocation
-        ⚙️ **operations_agent** - Design service operations, infrastructure, and support systems
-        
-        **PHASE 4: DESIGN & DOCUMENTATION (3-4 days)**
-        🎨 **figma_creator** - Create visual designs, mockups, and interactive prototypes
-        📚 **notion_document** - Compile all deliverables into comprehensive documentation
-        
-        **INTER-AGENT COMMUNICATION**:
-        - Each agent receives outputs from previous phase agents
-        - coordinator ensures consistency and quality across all deliverables
-        - Feedback loops enable refinement and optimization
-        - Parallel execution where possible to optimize timeline
-        
-        **COMPREHENSIVE DELIVERABLES**:
-        
-        **📋 Strategic Documents**:
-        - ✅ Detailed PRD with technical specifications
-        - ✅ KPI framework and measurement strategy
-        - ✅ Marketing strategy and go-to-market plan
-        - ✅ Business operations and service strategy
-        
-        **📅 Project Management**:
-        - ✅ Development timeline with sprints and milestones
-        - ✅ Resource allocation and team requirements
-        - ✅ Risk assessment and mitigation strategies
-        - ✅ Budget planning and cost estimates
-        
-        **🎨 Design Assets**:
-        - ✅ Visual mockups and interactive prototypes
-        - ✅ Design system and component library
-        - ✅ User journey maps and workflow diagrams
-        - ✅ Responsive design variants
-        
-        **📚 Comprehensive Documentation**:
-        - ✅ Notion workspace with all project documentation
-        - ✅ Knowledge base and team collaboration setup
-        - ✅ Process documentation and SOPs
-        - ✅ Training materials and onboarding guides
-        
-        **QUALITY CRITERIA**:
-        - All deliverables must be professionally formatted and actionable
-        - Cross-agent consistency and integration verification
-        - Business viability and technical feasibility validation
-        - Ready-to-implement package for development teams
-        - Scalable frameworks for future growth
-        
-        **SUCCESS METRICS**:
-        - Complete coverage of all business and technical aspects
-        - Seamless integration across all deliverables
-        - Executable roadmap with clear next steps
-        - Comprehensive documentation for team handoff
-        
-        Output Path: {config.output_path}
-        
-        Focus on creating a world-class product planning package that covers every aspect of product development, from user requirements to operational deployment."""
+    def create_initial_prompt(self, config: AgentConfig) -> str:
+        """ReAct 루프를 시작하기 위한 초기 프롬프트 생성"""
+        # 이 프롬프트는 이제 CoordinatorAgent의 첫 번째 THOUGHT를 위해 사용됩니다.
+        # 전체 워크플로우를 지시하는 대신, 초기 목표만 설정합니다.
+        return f"""Start a new product planning project.
+        - **User's Goal**: Analyze the provided Figma URL and generate a complete business plan.
+        - **Figma URL**: {config.figma_url}
+        - **Output Path**: {config.output_path}
+        Your first step is to run the 'Discovery & Requirements' phase.
+        """
     
     def print_workflow_info(self, config: AgentConfig):
         """Multi-Agent 워크플로우 정보 출력"""

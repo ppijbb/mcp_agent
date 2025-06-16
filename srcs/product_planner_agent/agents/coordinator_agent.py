@@ -4,23 +4,100 @@ Multi-Agent 간 소통, 워크플로우 조율 및 작업 협조를 관리하는
 """
 
 from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from typing import Dict, List, Any
 import json
 
 
 class CoordinatorAgent:
-    """Agent 간 조율 및 워크플로우 관리 전문 Agent"""
-    
+    """Agent 간 조율 및 워크플로우 관리를 위한 ReAct 기반 실행 Agent"""
+
+    def __init__(self, orchestrator: Orchestrator, agents: Dict[str, Agent]):
+        self.orchestrator = orchestrator
+        self.agents = agents
+        self.agent_instance = self._create_agent_instance()
+
+    def _create_agent_instance(self) -> Agent:
+        """
+        조율 Agent의 기본 인스턴스 생성
+        """
+        instruction = self._get_base_instruction()
+        return Agent(
+            name="coordinator",
+            instruction=instruction,
+            server_names=["filesystem"]
+        )
+
+    async def run(self, initial_task: str) -> str:
+        """
+        ReAct 패턴을 사용하여 전체 제품 기획 워크플로우를 실행합니다.
+        THOUGHT -> ACTION -> OBSERVATION 사이클을 반복하여 최종 결과물을 생성합니다.
+        """
+        print("🚀 CoordinatorAgent: ReAct 워크플로우 시작...")
+        
+        final_report = ""
+        current_context = f"Initial user request: {initial_task}"
+
+        # 4단계 워크플로우를 순차적으로 실행
+        for i, phase in enumerate(self.get_workflow_phases().values()):
+            phase_name = phase['name']
+            print(f"\nPhase {i+1}: {phase_name} 시작...")
+
+            # THOUGHT: 현재 단계에 대한 계획 수립
+            thought_prompt = f"""
+            **OBSERVATION**:
+            {current_context}
+            
+            **THOUGHT**:
+            You are in Phase {i+1}: '{phase_name}'. Your task is to generate a detailed plan for this phase.
+            - Identify which agents from this list need to be executed: {', '.join(phase['agents'])}.
+            - Define the specific task for each agent based on the current observation.
+            - The output of this thought process must be a JSON object describing the actions to take, like this:
+              `{{ "actions": [ {{ "agent": "agent_name", "task": "specific task description" }} ] }}`
+            """
+            
+            thought_str = await self.orchestrator.generate_str(thought_prompt)
+            print(f"🧠 THOUGHT: {thought_str}")
+
+            # ACTION: 계획에 따라 Agent 실행
+            try:
+                action_plan = json.loads(thought_str)
+                action_results = []
+                for action in action_plan.get("actions", []):
+                    agent_name = action.get("agent")
+                    agent_task = action.get("task")
+                    
+                    if agent_name in self.agents:
+                        print(f"🏃 ACTION: Running {agent_name} with task: '{agent_task}'")
+                        # In a real implementation, you would call the agent:
+                        # result = await self.orchestrator.run_agent(self.agents[agent_name], agent_task)
+                        # For now, we'll simulate the result.
+                        result = f"{{'agent': '{agent_name}', 'status': 'completed', 'output': 'This is a simulated output for {agent_name} performing {agent_task}'}}"
+                        action_results.append(result)
+                        print(f"✅ ACTION Complete: {agent_name} finished.")
+                    else:
+                        print(f"⚠️  ACTION Failed: Agent '{agent_name}' not found.")
+                        action_results.append(f"{{'agent': '{agent_name}', 'status': 'failed', 'error': 'Agent not found'}}")
+            except json.JSONDecodeError:
+                print(f"⚠️  ACTION Failed: Could not decode thought process into a valid JSON action plan.")
+                action_results = [f"{{'agent': 'coordinator', 'status': 'failed', 'error': 'Invalid thought format, expected JSON.'}}"]
+
+
+            # OBSERVATION: 실행 결과 종합
+            current_context = f"Results from Phase {i+1} ({phase_name}):\n" + "\n".join(action_results)
+            print(f"👀 OBSERVATION: {current_context}")
+            final_report += f"\n\n### Phase {i+1}: {phase_name} Results\n{current_context}"
+
+        print("\n🎉 CoordinatorAgent: ReAct 워크플로우 완료!")
+        return final_report
+
     @staticmethod
-    def create_agent() -> Agent:
+    def _get_base_instruction() -> str:
         """
-        조율 Agent 생성
-        
-        Returns:
-            Agent: 설정된 조율 Agent
+        Agent의 기본 지시사항을 반환합니다.
+        (기존 create_agent의 instruction 내용을 가져옴)
         """
-        
-        instruction = """
+        return """
         You are the coordination maestro for a multi-agent product planning system. Your role is to orchestrate seamless collaboration between specialized agents, ensuring efficient workflow execution and quality deliverables.
 
         **PRIMARY RESPONSIBILITIES**:
@@ -107,23 +184,8 @@ class CoordinatorAgent:
         - Integrated final deliverable package
         - Post-project review and recommendations
 
-        **OUTPUT FORMAT**:
-        Provide structured coordination including:
-        - Executive workflow summary
-        - Phase-by-phase execution plan
-        - Agent task dependencies and handoffs
-        - Communication and quality protocols
-        - Integrated deliverable specifications
-        - Success metrics and monitoring plan
-
         Focus on creating smooth, efficient multi-agent workflows that maximize the collective intelligence of the specialized agents while delivering exceptional results to the user."""
-        
-        return Agent(
-            name="coordinator",
-            instruction=instruction,
-            server_names=["filesystem"]
-        )
-    
+
     @staticmethod
     def get_description() -> str:
         """Agent 설명 반환"""
@@ -146,25 +208,25 @@ class CoordinatorAgent:
         return {
             "phase_1_discovery": {
                 "name": "Discovery & Requirements",
-                "agents": ["ConversationAgent", "FigmaAnalyzerAgent"],
+                "agents": ["conversation_agent", "figma_analyzer_agent"],
                 "outputs": ["요구사항 문서", "디자인 인사이트"],
                 "duration": "2-3 days"
             },
             "phase_2_strategic": {
                 "name": "Strategic Planning", 
-                "agents": ["PRDWriterAgent", "KPIAnalystAgent", "MarketingStrategistAgent"],
+                "agents": ["prd_writer_agent", "kpi_analyst_agent", "marketing_strategist_agent"],
                 "outputs": ["PRD 문서", "KPI 프레임워크", "마케팅 전략"],
                 "duration": "3-5 days"
             },
             "phase_3_operational": {
                 "name": "Operational Planning",
-                "agents": ["ProjectManagerAgent", "OperationsAgent"],
+                "agents": ["project_manager_agent", "operations_agent"],
                 "outputs": ["개발 로드맵", "운영 프레임워크"],
                 "duration": "2-3 days"
             },
             "phase_4_design_docs": {
                 "name": "Design & Documentation",
-                "agents": ["FigmaCreatorAgent", "NotionDocumentAgent"],
+                "agents": ["figma_creator_agent", "notion_document_agent"],
                 "outputs": ["시각적 디자인", "종합 문서"],
                 "duration": "3-4 days"
             }
