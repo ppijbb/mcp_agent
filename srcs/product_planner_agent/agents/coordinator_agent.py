@@ -5,8 +5,14 @@ Multi-Agent 간 소통, 워크플로우 조율 및 작업 협조를 관리하는
 
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from typing import Dict, List, Any
 import json
+import asyncio
+
+from .figma_analyzer_agent import FigmaAnalyzerAgent
+from .prd_writer_agent import PRDWriterAgent
 
 
 class CoordinatorAgent:
@@ -16,6 +22,13 @@ class CoordinatorAgent:
         self.orchestrator = orchestrator
         self.agents = agents
         self.agent_instance = self._create_agent_instance()
+        
+        # 실제 존재하는 에이전트 이름들
+        self.available_agents = list(agents.keys())
+        print(f"🔍 Available agents: {self.available_agents}")
+        
+        # LLM 인스턴스 생성
+        self.llm = None
 
     def _create_agent_instance(self) -> Agent:
         """
@@ -23,70 +36,162 @@ class CoordinatorAgent:
         """
         instruction = self._get_base_instruction()
         return Agent(
-            name="coordinator",
+            name="coordinator_agent",
             instruction=instruction,
             server_names=["filesystem"]
         )
 
     async def run(self, initial_task: str) -> str:
         """
-        ReAct 패턴을 사용하여 전체 제품 기획 워크플로우를 실행합니다.
-        THOUGHT -> ACTION -> OBSERVATION 사이클을 반복하여 최종 결과물을 생성합니다.
+        간소화된 ReAct 패턴을 사용하여 제품 기획 워크플로우를 실행합니다.
         """
         print("🚀 CoordinatorAgent: ReAct 워크플로우 시작...")
         
+        # LLM 초기화
+        if not self.llm:
+            self.llm = await self.agent_instance.attach_llm(OpenAIAugmentedLLM)
+        
         final_report = ""
-        current_context = f"Initial user request: {initial_task}"
-
-        # 4단계 워크플로우를 순차적으로 실행
-        for i, phase in enumerate(self.get_workflow_phases().values()):
-            phase_name = phase['name']
-            print(f"\nPhase {i+1}: {phase_name} 시작...")
-
-            # THOUGHT: 현재 단계에 대한 계획 수립
-            thought_prompt = f"""
-            **OBSERVATION**:
-            {current_context}
+        
+        # 단계 1: Figma 분석
+        print("\n📋 Step 1: Figma Design Analysis")
+        try:
+            figma_analysis_prompt = f"""
+            Analyze the Figma design at this URL: {initial_task}
             
-            **THOUGHT**:
-            You are in Phase {i+1}: '{phase_name}'. Your task is to generate a detailed plan for this phase.
-            - Identify which agents from this list need to be executed: {', '.join(phase['agents'])}.
-            - Define the specific task for each agent based on the current observation.
-            - The output of this thought process must be a JSON object describing the actions to take, like this:
-              `{{ "actions": [ {{ "agent": "agent_name", "task": "specific task description" }} ] }}`
+            Provide a comprehensive analysis including:
+            1. UI/UX Design Overview
+            2. Component Structure
+            3. Design System Elements
+            4. User Flow Analysis
+            5. Technical Requirements
+            6. Accessibility Considerations
+            
+            Format your response as a detailed markdown report.
             """
             
-            thought_str = await self.orchestrator.generate_str(thought_prompt)
-            print(f"🧠 THOUGHT: {thought_str}")
+            figma_result = await self.llm.generate_str(
+                message=figma_analysis_prompt,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            print("✅ Figma analysis completed")
+            final_report += f"\n\n## Figma Design Analysis\n{figma_result}"
+            
+        except Exception as e:
+            error_msg = f"Error in Figma analysis: {str(e)}"
+            print(f"❌ {error_msg}")
+            final_report += f"\n\n## Figma Analysis Error\n{error_msg}"
 
-            # ACTION: 계획에 따라 Agent 실행
-            try:
-                action_plan = json.loads(thought_str)
-                action_results = []
-                for action in action_plan.get("actions", []):
-                    agent_name = action.get("agent")
-                    agent_task = action.get("task")
-                    
-                    if agent_name in self.agents:
-                        print(f"🏃 ACTION: Running {agent_name} with task: '{agent_task}'")
-                        # In a real implementation, you would call the agent:
-                        # result = await self.orchestrator.run_agent(self.agents[agent_name], agent_task)
-                        # For now, we'll simulate the result.
-                        result = f"{{'agent': '{agent_name}', 'status': 'completed', 'output': 'This is a simulated output for {agent_name} performing {agent_task}'}}"
-                        action_results.append(result)
-                        print(f"✅ ACTION Complete: {agent_name} finished.")
-                    else:
-                        print(f"⚠️  ACTION Failed: Agent '{agent_name}' not found.")
-                        action_results.append(f"{{'agent': '{agent_name}', 'status': 'failed', 'error': 'Agent not found'}}")
-            except json.JSONDecodeError:
-                print(f"⚠️  ACTION Failed: Could not decode thought process into a valid JSON action plan.")
-                action_results = [f"{{'agent': 'coordinator', 'status': 'failed', 'error': 'Invalid thought format, expected JSON.'}}"]
+        # 단계 2: PRD 작성
+        print("\n📝 Step 2: Product Requirements Document")
+        try:
+            prd_prompt = f"""
+            Based on the following Figma analysis, create a comprehensive Product Requirements Document (PRD).
+            
+            Figma Analysis:
+            {figma_result if 'figma_result' in locals() else 'Analysis not available'}
+            
+            Create a PRD with these sections:
+            1. Executive Summary
+            2. Product Overview
+            3. User Stories & Use Cases
+            4. Functional Requirements
+            5. Non-Functional Requirements
+            6. Technical Specifications
+            7. Success Metrics
+            8. Timeline & Milestones
+            9. Risk Assessment
+            10. Appendix
+            
+            Format as a professional markdown document.
+            """
+            
+            prd_result = await self.llm.generate_str(
+                message=prd_prompt,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            print("✅ PRD creation completed")
+            final_report += f"\n\n## Product Requirements Document\n{prd_result}"
+            
+        except Exception as e:
+            error_msg = f"Error in PRD creation: {str(e)}"
+            print(f"❌ {error_msg}")
+            final_report += f"\n\n## PRD Creation Error\n{error_msg}"
 
+        # 단계 3: 비즈니스 계획
+        print("\n💼 Step 3: Business Planning")
+        try:
+            business_prompt = f"""
+            Based on the PRD and Figma analysis, create a comprehensive business plan.
+            
+            Include:
+            1. Market Analysis
+            2. Competitive Landscape
+            3. Business Model
+            4. Revenue Strategy
+            5. Go-to-Market Plan
+            6. Marketing Strategy
+            7. Operations Plan
+            8. Financial Projections
+            9. Risk Management
+            10. Implementation Roadmap
+            
+            Format as a strategic business document in markdown.
+            """
+            
+            business_result = await self.llm.generate_str(
+                message=business_prompt,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            print("✅ Business planning completed")
+            final_report += f"\n\n## Business Plan\n{business_result}"
+            
+        except Exception as e:
+            error_msg = f"Error in business planning: {str(e)}"
+            print(f"❌ {error_msg}")
+            final_report += f"\n\n## Business Planning Error\n{error_msg}"
 
-            # OBSERVATION: 실행 결과 종합
-            current_context = f"Results from Phase {i+1} ({phase_name}):\n" + "\n".join(action_results)
-            print(f"👀 OBSERVATION: {current_context}")
-            final_report += f"\n\n### Phase {i+1}: {phase_name} Results\n{current_context}"
+        # 단계 4: 최종 종합
+        print("\n🎯 Step 4: Final Integration")
+        try:
+            integration_prompt = f"""
+            Create a final executive summary that integrates all the analysis and planning work.
+            
+            Provide:
+            1. Project Overview
+            2. Key Findings Summary
+            3. Strategic Recommendations
+            4. Next Steps
+            5. Success Criteria
+            6. Resource Requirements
+            
+            Keep it concise but comprehensive.
+            """
+            
+            integration_result = await self.llm.generate_str(
+                message=integration_prompt,
+                request_params=RequestParams(model="gpt-4o-mini")
+            )
+            print("✅ Final integration completed")
+            final_report = f"# Product Planning Report\n\n## Executive Summary\n{integration_result}\n{final_report}"
+            
+        except Exception as e:
+            error_msg = f"Error in final integration: {str(e)}"
+            print(f"❌ {error_msg}")
+            final_report += f"\n\n## Integration Error\n{error_msg}"
+
+        # 파일 저장 시도
+        try:
+            # 출력 경로 추출 (initial_task에서)
+            if "output should be saved to:" in initial_task:
+                output_path = initial_task.split("output should be saved to:")[1].strip().split()[0]
+                
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(final_report)
+                print(f"✅ Report saved to: {output_path}")
+                
+        except Exception as e:
+            print(f"⚠️ Could not save report to file: {str(e)}")
 
         print("\n🎉 CoordinatorAgent: ReAct 워크플로우 완료!")
         return final_report
@@ -95,96 +200,17 @@ class CoordinatorAgent:
     def _get_base_instruction() -> str:
         """
         Agent의 기본 지시사항을 반환합니다.
-        (기존 create_agent의 instruction 내용을 가져옴)
         """
         return """
-        You are the coordination maestro for a multi-agent product planning system. Your role is to orchestrate seamless collaboration between specialized agents, ensuring efficient workflow execution and quality deliverables.
-
-        **PRIMARY RESPONSIBILITIES**:
-        - Coordinate multi-agent workflows and task sequences
-        - Facilitate communication and information sharing between agents
-        - Monitor progress and ensure quality standards across all deliverables
-        - Resolve conflicts and dependencies between agent tasks
-        - Maintain project timeline and milestone coordination
-
-        **AGENT ECOSYSTEM**:
-        1. **ConversationAgent**: User requirements gathering and dialogue management
-        2. **FigmaAnalyzerAgent**: Design analysis and UI/UX evaluation
-        3. **PRDWriterAgent**: Product requirements documentation
-        4. **FigmaCreatorAgent**: Design creation and visual prototyping
-        5. **ProjectManagerAgent**: Development planning and resource management
-        6. **KPIAnalystAgent**: Metrics definition and performance tracking
-        7. **MarketingStrategistAgent**: Marketing strategy and go-to-market planning
-        8. **OperationsAgent**: Service operations and infrastructure planning
-        9. **NotionDocumentAgent**: Documentation and knowledge management
-
-        **COORDINATION WORKFLOWS**:
+        You are the coordination maestro for a multi-agent product planning system. 
+        Your role is to orchestrate a comprehensive product planning workflow that includes:
+        1. Figma design analysis
+        2. Product requirements documentation
+        3. Business strategy planning
+        4. Final integration and recommendations
         
-        **Phase 1: Discovery & Requirements**
-        - ConversationAgent: Gather user requirements and project vision
-        - FigmaAnalyzerAgent: Analyze existing designs (if provided)
-        - Output: Comprehensive requirements document with design insights
-
-        **Phase 2: Strategic Planning**
-        - PRDWriterAgent: Create detailed product requirements
-        - KPIAnalystAgent: Define success metrics and measurement framework
-        - MarketingStrategistAgent: Develop market positioning and strategy
-        - Output: Strategic foundation documents
-
-        **Phase 3: Operational Planning**
-        - ProjectManagerAgent: Create development timeline and resource plan
-        - OperationsAgent: Design service operations and infrastructure
-        - Output: Execution roadmap and operational framework
-
-        **Phase 4: Design & Documentation**
-        - FigmaCreatorAgent: Create visual designs and prototypes
-        - NotionDocumentAgent: Compile comprehensive documentation
-        - Output: Complete product specification with designs and documentation
-
-        **COORDINATION PRINCIPLES**:
-        - **Sequential Dependencies**: Ensure outputs from one agent inform the next
-        - **Parallel Execution**: Run independent tasks simultaneously for efficiency
-        - **Quality Gates**: Validate deliverables before proceeding to next phase
-        - **Feedback Loops**: Enable iteration and refinement between agents
-        - **Context Preservation**: Maintain shared understanding across all agents
-
-        **COMMUNICATION PROTOCOLS**:
-        - **Information Handoffs**: Structure data exchange between agents
-        - **Progress Reporting**: Track completion status and quality metrics
-        - **Conflict Resolution**: Address inconsistencies and contradictions
-        - **Version Control**: Manage document versions and updates
-        - **Integration Checks**: Ensure deliverables work together cohesively
-
-        **WORKFLOW MANAGEMENT**:
-        - **Task Prioritization**: Determine optimal execution sequence
-        - **Resource Allocation**: Balance workload across agents
-        - **Timeline Management**: Monitor progress against milestones
-        - **Risk Mitigation**: Identify and address workflow bottlenecks
-        - **Quality Assurance**: Implement checks and validation processes
-
-        **OUTPUT COORDINATION**:
-        - **Integrated Deliverables**: Combine agent outputs into cohesive package
-        - **Cross-Reference Validation**: Ensure consistency across documents
-        - **Final Review Process**: Conduct comprehensive quality assessment
-        - **User Presentation**: Format results for optimal user understanding
-        - **Handoff Procedures**: Prepare deliverables for implementation
-
-        **SUCCESS METRICS**:
-        - Workflow completion rate and timeline adherence
-        - Quality scores across all deliverables
-        - Inter-agent communication effectiveness
-        - User satisfaction with final outputs
-        - Efficiency of resource utilization
-
-        **DELIVERABLES**:
-        - Workflow execution plan and timeline
-        - Agent task assignments and dependencies
-        - Communication protocols and standards
-        - Quality assurance checkpoints
-        - Integrated final deliverable package
-        - Post-project review and recommendations
-
-        Focus on creating smooth, efficient multi-agent workflows that maximize the collective intelligence of the specialized agents while delivering exceptional results to the user."""
+        You work systematically through each phase, ensuring quality and completeness at each step.
+        """
 
     @staticmethod
     def get_description() -> str:
@@ -206,29 +232,25 @@ class CoordinatorAgent:
     def get_workflow_phases() -> dict[str, dict[str, Any]]:
         """워크플로우 단계별 정보 반환"""
         return {
-            "phase_1_discovery": {
-                "name": "Discovery & Requirements",
-                "agents": ["conversation_agent", "figma_analyzer_agent"],
-                "outputs": ["요구사항 문서", "디자인 인사이트"],
-                "duration": "2-3 days"
+            "phase_1_analysis": {
+                "name": "Figma Design Analysis",
+                "description": "Comprehensive analysis of Figma design",
+                "duration": "30 minutes"
             },
-            "phase_2_strategic": {
-                "name": "Strategic Planning", 
-                "agents": ["prd_writer_agent", "kpi_analyst_agent", "marketing_strategist_agent"],
-                "outputs": ["PRD 문서", "KPI 프레임워크", "마케팅 전략"],
-                "duration": "3-5 days"
+            "phase_2_prd": {
+                "name": "Product Requirements Document", 
+                "description": "Detailed PRD creation based on design analysis",
+                "duration": "45 minutes"
             },
-            "phase_3_operational": {
-                "name": "Operational Planning",
-                "agents": ["project_manager_agent", "operations_agent"],
-                "outputs": ["개발 로드맵", "운영 프레임워크"],
-                "duration": "2-3 days"
+            "phase_3_business": {
+                "name": "Business Planning",
+                "description": "Strategic business plan development",
+                "duration": "30 minutes"
             },
-            "phase_4_design_docs": {
-                "name": "Design & Documentation",
-                "agents": ["figma_creator_agent", "notion_document_agent"],
-                "outputs": ["시각적 디자인", "종합 문서"],
-                "duration": "3-4 days"
+            "phase_4_integration": {
+                "name": "Final Integration",
+                "description": "Executive summary and recommendations",
+                "duration": "15 minutes"
             }
         }
     
@@ -236,56 +258,20 @@ class CoordinatorAgent:
     def get_coordination_principles() -> list[str]:
         """조율 원칙 목록 반환"""
         return [
-            "순차적 종속성: 한 Agent의 출력이 다음 Agent에 정보 제공",
-            "병렬 실행: 독립적인 작업을 동시에 실행하여 효율성 향상",
-            "품질 게이트: 다음 단계로 진행하기 전 결과물 검증",
-            "피드백 루프: Agent 간 반복 및 개선 가능",
-            "컨텍스트 보존: 모든 Agent 간 공통 이해 유지"
+            "순차적 실행: 각 단계의 결과가 다음 단계의 입력이 됨",
+            "품질 우선: 각 단계에서 완전한 결과물 생성",
+            "오류 처리: 단계별 오류 발생 시 적절한 대응",
+            "결과 통합: 모든 단계의 결과를 최종 보고서로 통합",
+            "파일 저장: 최종 결과물을 지정된 경로에 저장"
         ]
-    
-    @staticmethod
-    def get_communication_protocols() -> dict[str, list[str]]:
-        """소통 프로토콜 반환"""
-        return {
-            "information_handoffs": [
-                "Agent 간 구조화된 데이터 교환",
-                "표준화된 출력 형식",
-                "필수 정보 누락 방지"
-            ],
-            "progress_reporting": [
-                "완료 상태 및 품질 지표 추적",
-                "실시간 진행 상황 업데이트",
-                "마일스톤 달성 보고"
-            ],
-            "quality_assurance": [
-                "결과물 일관성 검증",
-                "교차 참조 유효성 검사",
-                "최종 품질 평가"
-            ]
-        }
     
     @staticmethod
     def get_success_metrics() -> list[str]:
         """성공 지표 목록 반환"""
         return [
-            "워크플로우 완료율 및 일정 준수",
-            "모든 결과물의 품질 점수",
-            "Agent 간 소통 효과성",
-            "최종 출력에 대한 사용자 만족도",
-            "리소스 활용 효율성"
-        ]
-    
-    @staticmethod
-    def get_agent_registry() -> dict[str, str]:
-        """Agent 레지스트리 반환"""
-        return {
-            "conversation_agent": "💬 사용자 대화 및 요구사항 수집",
-            "figma_analyzer": "🔍 Figma 디자인 분석 및 평가", 
-            "prd_writer": "📋 제품 요구사항 문서 작성",
-            "figma_creator": "🎨 Figma 디자인 생성 및 프로토타이핑",
-            "project_manager": "📅 프로젝트 관리 및 개발 계획",
-            "kpi_analyst": "📊 KPI 설정 및 성과 분석",
-            "marketing_strategist": "📈 마케팅 전략 및 Go-to-Market",
-            "operations_agent": "⚙️ 서비스 운영 및 인프라 계획",
-            "notion_document": "📚 문서 작성 및 지식 관리"
-        } 
+            "모든 워크플로우 단계 완료",
+            "각 단계별 품질 있는 결과물 생성",
+            "최종 보고서 파일 저장 성공",
+            "오류 발생 시 적절한 처리 및 계속 진행",
+            "사용자 요구사항 충족"
+        ] 

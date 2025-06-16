@@ -45,21 +45,23 @@ class AgentConfig:
 class AgentFactory:
     """Agent 생성 팩토리 클래스"""
     
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, orchestrator: Orchestrator = None):
         self.config = config
+        self.orchestrator = orchestrator
         self._agents: Dict[str, Agent] = {}
+        self._react_agents: Dict[str, Any] = {}
     
     def create_all_agents_dict(self) -> Dict[str, Agent]:
         """모든 전문 Agent를 생성하여 딕셔너리로 반환합니다."""
         print("🤖 Multi-Agent System 초기화 시작...")
         
         # 1. Figma Analyzer Agent
-        figma_analyzer = FigmaAnalyzerAgent.create_agent(self.config.figma_url)
+        figma_analyzer = FigmaAnalyzerAgent(self.config.figma_url)
         self._agents["figma_analyzer_agent"] = figma_analyzer
         print(f"✅ {FigmaAnalyzerAgent.get_description()}")
         
         # 2. PRD Writer Agent  
-        prd_writer = PRDWriterAgent.create_agent(self.config.output_path)
+        prd_writer = PRDWriterAgent(self.config.output_path)
         self._agents["prd_writer_agent"] = prd_writer
         print(f"✅ {PRDWriterAgent.get_description()}")
         
@@ -98,11 +100,31 @@ class AgentFactory:
         self._agents["notion_document_agent"] = notion_document
         print(f"✅ {NotionDocumentAgent.get_description()}")
         
-        # CoordinatorAgent는 별도로 생성되므로 여기서는 제외합니다.
-        
         print("🎯 Multi-Agent System 초기화 완료!")
         print(f"📊 총 {len(self._agents)}개 전문 Agent가 활성화되었습니다.")
         return self._agents
+
+    def create_react_agents_dict(self) -> Dict[str, Any]:
+        """ReAct 패턴을 지원하는 Agent들을 생성하여 딕셔너리로 반환합니다."""
+        if not self.orchestrator:
+            raise ValueError("ReAct Agent 생성을 위해서는 Orchestrator가 필요합니다.")
+        
+        print("🔄 ReAct 패턴 Multi-Agent System 초기화 시작...")
+        
+        # 모든 Agent를 담을 통합 딕셔너리
+        all_agents: Dict[str, Any] = self.create_all_agents_dict()
+
+        # Coordinator Agent 생성 및 추가
+        # 모든 Agent를 Coordinator에게 전달
+        coordinator = CoordinatorAgent(self.orchestrator, all_agents)
+        all_agents["coordinator_agent"] = coordinator
+        print(f"✅ {CoordinatorAgent.get_description()}")
+
+        self._react_agents = all_agents
+        
+        print("🎯 Coordinator-led ReAct System 초기화 완료!")
+        print(f"📊 총 {len(self._react_agents)}개 Agent가 활성화되었습니다.")
+        return self._react_agents
     
     def get_agent(self, name: str) -> Agent:
         """특정 Agent 반환"""
@@ -164,7 +186,7 @@ class WorkflowOrchestrator:
         print("\n🎯 MULTI-AGENT ECOSYSTEM:")
         print("   💬 ConversationAgent - 사용자 대화 및 요구사항 수집")
         print("   🔍 FigmaAnalyzer - 디자인 분석 및 UI/UX 평가") 
-        print("   📋 PRDWriter - 제품 요구사항 문서 작성")
+        print("   �� PRDWriter - 제품 요구사항 문서 작성")
         print("   🎨 FigmaCreator - 디자인 생성 및 프로토타이핑")
         print("   📅 ProjectManager - 개발 계획 및 리소스 관리")
         print("   📊 KPIAnalyst - 지표 정의 및 성과 추적")

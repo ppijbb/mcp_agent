@@ -4,15 +4,24 @@ Figma 디자인을 분석하여 구조화된 요구사항을 추출하는 전문
 """
 
 from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 
 
 class FigmaAnalyzerAgent:
     """Figma 디자인 분석 전문 Agent"""
-    
+
+    def __init__(self, figma_url: str):
+        self.figma_url = figma_url
+        self.agent_instance = self._create_agent_instance()
+
+    def _create_agent_instance(self) -> Agent:
+        """Figma 분석 Agent의 기본 인스턴스 생성"""
+        return self.create_agent(self.figma_url)
+
     @staticmethod
     def create_agent(figma_url: str) -> Agent:
         """
-        Figma 분석 Agent 생성
+        Figma 분석 Agent 생성 (기존 호환성 유지)
         
         Args:
             figma_url: 분석할 Figma URL
@@ -54,26 +63,28 @@ class FigmaAnalyzerAgent:
         **Output Format**: Provide structured analysis in markdown format.
         **Validation**: If URL is not accessible, clearly state the limitation and provide analysis based on URL structure and common Figma patterns.
         
-        Be specific, actionable, and focus on extracting product requirements from the design."""
+        Example for inaccessible URL:
+        "The Figma URL [URL] is not accessible. Based on the URL structure, this appears to be a [file/prototype]. A typical Figma file includes pages, frames, and components. Analysis is limited without access."
+        """
         
         return Agent(
             name="figma_analyzer",
             instruction=instruction,
-            server_names=["fetch", "filesystem"]
+            server_names=["figma-dev-mode", "fetch", "filesystem"]
         )
-    
+
     @staticmethod
     def get_description() -> str:
         """Agent 설명 반환"""
-        return "🎨 Figma 디자인을 분석하여 구조화된 요구사항을 추출하는 전문 Agent"
+        return "🎨 Figma 디자인을 분석하여 구조화된 요구사항을 추출하는 전문 Agent (ReAct 패턴 적용)"
     
     @staticmethod 
     def get_capabilities() -> list[str]:
         """Agent 주요 기능 목록 반환"""
         return [
-            "디자인 구조 및 계층 분석",
-            "UI/UX 패턴 및 상호작용 분석", 
-            "기술적 요구사항 도출",
-            "콘텐츠 및 데이터 구조 분석",
-            "접근성 및 반응형 디자인 고려사항"
+            "Figma URL 유효성 검증 및 접근성 확인",
+            "디자인 구조 및 컴포넌트 계층 분석",
+            "UI/UX 패턴 및 사용자 인터랙션 흐름 추출",
+            "기술적 요구사항 및 구현 스펙 도출",
+            "콘텐츠 구조 및 데이터 요구사항 문서화"
         ] 
