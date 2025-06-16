@@ -1,7 +1,7 @@
 from warnings import warn
 
 # Primary, fully-supported agent
-from .urban_hive_mcp_agent import UrbanHiveMCPAgent
+from .urban_hive_agent import UrbanHiveMCPAgent
 
 # ---------------------------------------------------------------------------
 # Legacy agents (deprecated)

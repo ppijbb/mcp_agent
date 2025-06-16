@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # 🚨 CRITICAL UPDATE: Use real MCP Agents instead of fake implementations
 # Based on: https://medium.com/@govindarajpriyanthan/from-theory-to-practice-building-a-multi-agent-research-system-with-mcp-part-2-811b0163e87c
-from srcs.urban_hive.urban_hive_mcp_agent import (
+from srcs.urban_hive.urban_hive_agent import (
     UrbanHiveMCPAgent, UrbanDataCategory, run_urban_analysis
 )
 # ✅ P2: Legacy imports removed - Using real MCP Agent only
