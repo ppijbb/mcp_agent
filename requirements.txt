@@ -14,12 +14,12 @@ aiofiles>=24.1.0
 aiohttp>=3.8.0
 asyncio-throttle>=1.0.0
 schedule>=1.2.0
-python-dotenv>=1.0.0
+python-dotenv>=1.0.1
 
 # Data processing and analysis
 pandas>=1.3.0
 numpy>=1.21.0
-matplotlib>=3.5.0
+matplotlib>=3.9.0
 seaborn>=0.11.0
 plotly>=5.0.0
 
@@ -62,14 +62,14 @@ schedule
 
 # Playwright-Lighthouse for SEO analysis
 playwright>=1.40.0
-playwright-lighthouse>=1.0.0
+playwright-lighthouse
 asyncio
 fpdf>=1.7.2
 openpyxl>=3.0.0
 
 # FastAPI and Uvicorn for data providers
 fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+uvicorn[standard]>=0.34.3
 
 # MCP (Model Context Protocol) server dependencies
 mcp>=1.0.0
@@ -79,3 +79,17 @@ qdrant-client>=1.9.0
 # Google Generative AI (Gemini) for AI Data Generation
 google-generativeai>=0.3.0
 google-cloud-aiplatform>=1.38.0
+
+# Graph Database
+neo4j>=5.28.0
+
+# Additional dependencies
+networkx>=3.3
+
+# SEO Doctor dependencies
+google-api-python-client>=2.0.0
+playwright-lighthouse
+beautifulsoup4>=4.13.4
+
+graphviz
+# Travel Scout dependencies

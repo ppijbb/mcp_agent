@@ -210,11 +210,11 @@ def render_workflow_interface():
     with col2:
         st.markdown("#### 🎛️ 실행 옵션")
         
-        model_type = st.selectbox(
-            "AI 모델",
-            ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+        model_name = st.selectbox(
+            "실행할 모델을 선택하세요:",
+            ["gpt-4o-mini"],
             index=0,
-            help="사용할 AI 모델을 선택하세요"
+            help="워크플로우의 모든 단계에서 사용할 LLM 모델을 선택합니다."
         )
         
         plan_type = st.selectbox(
@@ -235,7 +235,7 @@ def render_workflow_interface():
         # 실행 버튼
         if st.button("🚀 워크플로우 실행", type="primary", use_container_width=True):
             if workflow_type and input_text:
-                execute_workflow(workflow_type, input_text, model_type, plan_type, save_results)
+                execute_workflow(workflow_type, input_text, model_name, plan_type, save_results)
             else:
                 st.error("⚠️ 모든 필수 필드를 입력해주세요!")
     
@@ -307,7 +307,7 @@ def render_workflow_examples():
         - 비즈니스 프로세스 자동화
         """)
 
-def execute_workflow(workflow_type, input_text, model_type, plan_type, save_results):
+def execute_workflow(workflow_type, input_text, model_name, plan_type, save_results):
     """워크플로우 실행"""
     
     with st.spinner("🔄 워크플로우를 실행하고 있습니다... 잠시만 기다려주세요."):
@@ -321,7 +321,7 @@ def execute_workflow(workflow_type, input_text, model_type, plan_type, save_resu
                     
                     # 비동기 워크플로우 실행
                     result = loop.run_until_complete(
-                        execute_async_workflow(workflow_type, input_text, model_type, plan_type, save_results)
+                        execute_async_workflow(workflow_type, input_text, model_name, plan_type, save_results)
                     )
                     
                     loop.close()
@@ -360,7 +360,7 @@ def execute_workflow(workflow_type, input_text, model_type, plan_type, save_resu
             st.error(f"❌ 오류가 발생했습니다: {str(e)}")
             st.info("OpenAI API 키가 설정되어 있는지 확인해주세요.")
 
-async def execute_async_workflow(workflow_type, input_text, model_type, plan_type, save_results):
+async def execute_async_workflow(workflow_type, input_text, model_name, plan_type, save_results):
     """비동기 워크플로우 실행"""
     
     try:
@@ -465,7 +465,7 @@ async def execute_async_workflow(workflow_type, input_text, model_type, plan_typ
             # 워크플로우 실행
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model=model_type)
+                request_params=RequestParams(model=model_name)
             )
             
             # 임시 파일 정리
