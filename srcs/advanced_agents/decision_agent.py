@@ -31,10 +31,58 @@ from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 
-# Import existing data structures (they're well designed)
-from srcs.advanced_agents.decision_agent import (
-    InteractionType, MobileInteraction, Decision, UserProfile
-)
+# Data structures defined within this file
+from enum import Enum
+from dataclasses import dataclass
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+
+class InteractionType(Enum):
+    """Types of mobile interactions for decision analysis"""
+    PURCHASE = "구매"
+    PAYMENT = "결제"
+    BOOKING = "예약"
+    CALL = "통화"
+    MESSAGE = "메시지"
+    NAVIGATION = "내비게이션"
+    FOOD_ORDER = "음식주문"
+    SHOPPING = "쇼핑"
+    APP_OPEN = "앱실행"
+
+@dataclass
+class MobileInteraction:
+    """Mobile interaction data structure"""
+    interaction_type: InteractionType
+    app_name: str
+    timestamp: datetime
+    context: Dict[str, Any]
+    duration: float = 0.0
+    location: Optional[str] = None
+
+@dataclass
+class UserProfile:
+    """User profile for decision making"""
+    user_id: str
+    age: int
+    gender: str
+    occupation: str
+    income_level: str
+    risk_tolerance: str
+    preferences: Dict[str, Any]
+    financial_goals: List[str]
+    spending_patterns: Dict[str, Any]
+
+@dataclass 
+class Decision:
+    """Decision result structure"""
+    decision_id: str
+    recommendation: str
+    confidence_score: float
+    reasoning: str
+    risk_level: str
+    alternatives: List[str]
+    timestamp: datetime
+    evidence: Dict[str, Any]
 
 class DecisionConfidenceLevel(Enum):
     """Decision Confidence Classification"""

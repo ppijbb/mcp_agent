@@ -26,7 +26,7 @@ from configs.settings import get_reports_path
 
 # Finance Health Agent 모듈 임포트
 try:
-    from srcs.enterprise_agents.personal_finance_health_agent import PersonalFinanceHealthAgent
+    from srcs.enterprise_agents.personal_finance_health_agent import main as finance_health_main
 except ImportError as e:
     st.error(f"Finance Health Agent를 사용하려면 필요한 의존성을 설치해야 합니다: {e}")
     st.error("시스템 관리자에게 문의하여 Finance Health Agent 모듈을 설정하세요.")

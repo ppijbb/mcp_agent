@@ -26,10 +26,10 @@ except ImportError:
 
 # AI Architect Agent 임포트 - 필수 의존성
 try:
-    from srcs.advanced_agents.evolutionary_ai_architect_agent import EvolutionaryAIArchitectAgent
+    from srcs.advanced_agents.evolutionary_ai_architect_agent import EvolutionaryAIArchitectMCP
 except ImportError as e:
     st.error(f"❌ AI Architect Agent를 불러올 수 없습니다: {e}")
-    st.error("**시스템 요구사항**: EvolutionaryAIArchitectAgent가 필수입니다.")
+    st.error("**시스템 요구사항**: EvolutionaryAIArchitectMCP가 필수입니다.")
     st.info("에이전트 모듈을 설치하고 다시 시도해주세요.")
     st.stop()
 
@@ -72,7 +72,7 @@ def render_architect_agent_interface():
     # 에이전트 초기화
     try:
         if 'architect_agent' not in st.session_state:
-            st.session_state.architect_agent = EvolutionaryAIArchitectAgent("EvoAI-Streamlit", population_size=8)
+            st.session_state.architect_agent = EvolutionaryAIArchitectMCP("EvoAI-Streamlit", population_size=8)
         
         agent = st.session_state.architect_agent
         

@@ -668,24 +668,24 @@ class UrbanHiveMCPAgent:
     def _extract_percentage(self, text: str, pattern: str) -> float:
         """Extract percentage values from text"""
         import re
-        match = re.search(f"{pattern}[:\s]*(\d+(?:\.\d+)?)%?", text, re.IGNORECASE)
+        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)%?", text, re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
     
     def _extract_number(self, text: str, pattern: str, unit: str = "") -> float:
         """Extract numerical values from text"""
         import re
-        match = re.search(f"{pattern}[:\s]*(\d+(?:\.\d+)?)\s*{unit}", text, re.IGNORECASE)
+        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)\s*{unit}", text, re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
     
     def _extract_rating(self, text: str, pattern: str) -> float:
         """Extract rating values (e.g., 7.8/10)"""
         import re
-        match = re.search(f"{pattern}[:\s]*(\d+(?:\.\d+)?)/10", text, re.IGNORECASE)
+        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)/10", text, re.IGNORECASE)
         if match:
             return float(match.group(1)) * 10  # Convert to 0-100 scale
         
         # Try simple number extraction
-        match = re.search(f"{pattern}[:\s]*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
     
     async def _parse_geographic_data(self, raw_analysis: str, location: str) -> Dict[str, Any]:
