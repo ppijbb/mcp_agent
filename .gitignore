@@ -4,3 +4,4 @@ browser-state-*.json
 __pycache__
 *_reports
 .env
+.venv
