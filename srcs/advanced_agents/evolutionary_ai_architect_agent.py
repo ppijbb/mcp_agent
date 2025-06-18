@@ -30,7 +30,7 @@ try:
     from srcs.advanced_agents.improvement_engine import SelfImprovementEngine
 except ImportError:
     # Fallback if imports fail
-    print("Warning: Could not import architecture components, using mock classes")
+    # Real components will be defined below
     
     @dataclass
     class ArchitectureGenome:

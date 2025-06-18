@@ -117,10 +117,10 @@ class CoordinatorAgent:
             logger.info(f"--- Iteration {i + 1}/{self.max_iterations} ---")
 
             # 1. THOUGHT
-            thought_prompt = REACT_PROMPT.format(
-                available_agents=json.dumps(self.available_agents),
-                context=json.dumps(context, indent=2, default=str)
-            )
+            # JSON 문자열의 중괄호가 .format()과 충돌하지 않도록 f-string 사용
+            available_agents_json = json.dumps(self.available_agents)
+            context_json = json.dumps(context, indent=2, default=str)
+            thought_prompt = REACT_PROMPT.replace("{available_agents}", available_agents_json).replace("{context}", context_json)
             
             try:
                 raw_thought = await self.llm.generate_str(thought_prompt)

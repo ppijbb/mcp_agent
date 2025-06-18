@@ -78,7 +78,8 @@ class BusinessPlannerAgent:
             
         except Exception as e:
             logger.error(f"💥 Error in business plan creation: {e}", exc_info=True)
-            return await self._generate_fallback_business_plan(prd_content, str(e))
+            # No fallback - raise the actual error for proper handling
+            raise RuntimeError(f"Business plan creation failed: {e}") from e
 
     async def _extract_business_context(self, prd_content: Dict[str, Any]) -> Dict[str, Any]:
         """PRD에서 비즈니스 관련 컨텍스트 추출"""
@@ -359,59 +360,7 @@ class BusinessPlannerAgent:
                 }
             }
 
-    async def _generate_fallback_business_plan(self, prd_content: Dict[str, Any], error_msg: str) -> Dict[str, Any]:
-        """비즈니스 계획 생성 실패 시 기본 계획 생성"""
-        return {
-            "status": "fallback_plan",
-            "error": error_msg,
-            "basic_business_plan": {
-                "executive_summary": {
-                    "product_overview": "Digital product with modern user interface",
-                    "market_opportunity": "Growing market for user-friendly solutions",
-                    "business_model": "Subscription-based with freemium options",
-                    "funding_needs": "Seed funding for initial development and marketing"
-                },
-                "market_strategy": {
-                    "target_market": "Tech-savvy early adopters",
-                    "competitive_advantage": "Superior user experience and design",
-                    "go_to_market": "Product-led growth strategy",
-                    "pricing": "Competitive pricing with value tiers"
-                },
-                "financial_overview": {
-                    "revenue_model": "Recurring subscription revenue",
-                    "cost_structure": "Development, marketing, and operational costs",
-                    "break_even": "18-24 months post-launch",
-                    "funding_requirement": "12-18 months runway"
-                },
-                "execution_plan": {
-                    "phase_1": "Product development and testing (0-6 months)",
-                    "phase_2": "Market launch and initial traction (6-12 months)",
-                    "phase_3": "Growth and optimization (12-18 months)",
-                    "phase_4": "Scale and expansion (18+ months)"
-                },
-                "key_risks": [
-                    "Market competition and adoption challenges",
-                    "Technical development and scalability risks",
-                    "Funding and cash flow management",
-                    "Team building and execution capabilities"
-                ],
-                "success_metrics": [
-                    "Monthly Recurring Revenue (MRR)",
-                    "Customer Acquisition Cost (CAC)",
-                    "Customer Lifetime Value (LTV)",
-                    "Product-market fit indicators"
-                ]
-            },
-            "recommendations": [
-                "Conduct detailed market research and customer validation",
-                "Develop minimum viable product (MVP) for testing",
-                "Build strategic partnerships for market entry",
-                "Establish clear metrics and tracking systems",
-                "Plan for iterative development and improvement"
-            ],
-            "plan_timestamp": datetime.now().isoformat(),
-            "note": "This is a fallback business plan. Please refine with specific market research and business requirements."
-        }
+
 
     @staticmethod
     def create_agent() -> Agent:

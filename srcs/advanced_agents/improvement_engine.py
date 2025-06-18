@@ -23,38 +23,41 @@ from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 
-# Import existing components
-try:
-    from srcs.advanced_agents.genome import PerformanceMetrics
-    from srcs.advanced_agents.improvement_engine import SelfImprovementEngine
-except ImportError:
-    print("Warning: Could not import improvement components, using mock classes")
+# Real PerformanceMetrics - No Mock Classes
+@dataclass
+class PerformanceMetrics:
+    accuracy: float = 0.0
+    problem_solving_time: float = 0.0
+    success_rate: float = 0.0
+    efficiency: float = 0.0
+    adaptability: float = 0.0
+    creativity_score: float = 0.0
+    resource_usage: float = 0.0
+    learning_speed: float = 0.0
     
-    @dataclass
-    class PerformanceMetrics:
-        accuracy: float = 0.0
-        problem_solving_time: float = 0.0
-        success_rate: float = 0.0
-        efficiency: float = 0.0
-        adaptability: float = 0.0
-        creativity_score: float = 0.0
-        resource_usage: float = 0.0
-        learning_speed: float = 0.0
-        
-        def overall_score(self):
-            return (self.accuracy + self.efficiency + self.adaptability + self.creativity_score) / 4
+    def overall_score(self):
+        return (self.accuracy + self.efficiency + self.adaptability + self.creativity_score) / 4
+
+class SelfImprovementEngine:
+    """Real Self Improvement Engine - No Mock Implementation"""
+    def __init__(self):
+        self.performance_history = []
     
-    class SelfImprovementEngine:
-        def __init__(self):
-            self.performance_history = []
+    def assess_performance(self, task_results):
+        """Real performance assessment based on actual task results"""
+        if not task_results:
+            raise ValueError("Task results are required for performance assessment")
         
-        def assess_performance(self, task_results):
-            return PerformanceMetrics(
-                accuracy=task_results.get('accuracy', 0.8),
-                efficiency=random.uniform(0.6, 0.9),
-                adaptability=random.uniform(0.5, 0.8),
-                creativity_score=random.uniform(0.4, 0.7)
-            )
+        return PerformanceMetrics(
+            accuracy=task_results.get('accuracy', 0.0),
+            efficiency=task_results.get('efficiency', 0.0),
+            adaptability=task_results.get('adaptability', 0.0),
+            creativity_score=task_results.get('creativity_score', 0.0),
+            problem_solving_time=task_results.get('problem_solving_time', 0.0),
+            success_rate=task_results.get('success_rate', 0.0),
+            resource_usage=task_results.get('resource_usage', 0.0),
+            learning_speed=task_results.get('learning_speed', 0.0)
+        )
 
 class ImprovementType(Enum):
     PERFORMANCE_ANALYSIS = "performance_analysis"

@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "Lighthouse integration for SEO Doctor",
   "dependencies": {
+    "chrome-launcher": "^0.15.2",
     "lighthouse": "^10.4.0",
-    "chrome-launcher": "^0.15.2"
+    "playwright": "^1.53.0"
   },
   "scripts": {
     "install": "npm install lighthouse chrome-launcher"
   }
-} 
+}

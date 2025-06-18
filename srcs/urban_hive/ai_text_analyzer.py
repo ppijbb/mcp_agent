@@ -60,7 +60,7 @@ class AITextAnalyzer:
             - analysis_result: detailed analysis including extracted items and context
         """
         if not self.client:
-            return self._fallback_resource_intent(query)
+            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
         
         try:
             prompt = f"""
@@ -104,7 +104,8 @@ class AITextAnalyzer:
             
         except Exception as e:
             print(f"Error in AI resource intent analysis: {e}")
-            return self._fallback_resource_intent(query)
+            # No fallback - raise the actual error for proper handling
+            raise RuntimeError(f"Resource intent analysis failed: {e}") from e
     
     async def analyze_interests(self, interests_text: str) -> List[str]:
         """
@@ -114,7 +115,7 @@ class AITextAnalyzer:
             List[str]: List of interest categories
         """
         if not self.client:
-            return self._fallback_interests_analysis(interests_text)
+            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
         
         try:
             prompt = f"""
@@ -162,7 +163,8 @@ class AITextAnalyzer:
             
         except Exception as e:
             print(f"Error in AI interests analysis: {e}")
-            return self._fallback_interests_analysis(interests_text)
+            # No fallback - raise the actual error for proper handling
+            raise RuntimeError(f"Interests analysis failed: {e}") from e
     
     async def assess_isolation_risk(self, user_profile: Dict) -> Tuple[str, str]:
         """
@@ -172,7 +174,7 @@ class AITextAnalyzer:
             Tuple[str, str]: (risk_level, reasoning)
         """
         if not self.client:
-            return self._fallback_isolation_assessment(user_profile)
+            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
         
         try:
             interests = user_profile.get('interests', '')
@@ -214,7 +216,8 @@ class AITextAnalyzer:
             
         except Exception as e:
             print(f"Error in AI isolation risk assessment: {e}")
-            return self._fallback_isolation_assessment(user_profile)
+            # No fallback - raise the actual error for proper handling
+            raise RuntimeError(f"Isolation risk assessment failed: {e}") from e
     
     async def _call_anthropic(self, prompt: str) -> str:
         """Call Anthropic Claude API."""
@@ -248,60 +251,7 @@ class AITextAnalyzer:
         except Exception as e:
             raise Exception(f"OpenAI API error: {e}")
     
-    # Fallback methods when AI is not available
-    def _fallback_resource_intent(self, query: str) -> Tuple[str, Dict]:
-        """Fallback method using simple keyword matching."""
-        query_lower = query.lower()
-        
-        offer_keywords = ["have", "offering", "share", "give", "donate", "드려요", "나눔", "공유"]
-        request_keywords = ["need", "looking for", "want", "require", "필요해요", "구해요", "급해요"]
-        
-        resource_info = {
-            "query": query,
-            "confidence": 0.7,
-            "extracted_items": [],
-            "context": "Fallback keyword analysis",
-            "reasoning": "AI unavailable, using keyword matching",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        if any(keyword in query_lower for keyword in offer_keywords):
-            return "offer", resource_info
-        elif any(keyword in query_lower for keyword in request_keywords):
-            return "request", resource_info
-        else:
-            return "general", resource_info
-    
-    def _fallback_interests_analysis(self, interests_text: str) -> List[str]:
-        """Fallback method for interest analysis."""
-        interests_lower = interests_text.lower()
-        
-        interest_mapping = {
-            "fitness": ["운동", "헬스", "요가", "달리기", "fitness", "gym", "exercise", "workout"],
-            "cooking": ["요리", "음식", "베이킹", "cooking", "food", "recipe", "baking"],
-            "reading": ["독서", "책", "소설", "reading", "book", "novel", "literature"],
-            "games": ["게임", "체스", "보드게임", "games", "chess", "board", "card"],
-            "music": ["음악", "악기", "노래", "music", "instrument", "song"],
-            "art": ["미술", "그림", "사진", "art", "drawing", "photography"],
-            "nature": ["등산", "하이킹", "자연", "hiking", "mountain", "nature"],
-            "social": ["모임", "친구", "사교", "social", "meeting", "community"],
-        }
-        
-        parsed_interests = []
-        for category, keywords in interest_mapping.items():
-            if any(keyword in interests_lower for keyword in keywords):
-                parsed_interests.append(category)
-        
-        return parsed_interests if parsed_interests else ["social"]
-    
-    def _fallback_isolation_assessment(self, user_profile: Dict) -> Tuple[str, str]:
-        """Fallback method for isolation risk assessment."""
-        interests = user_profile.get('interests', '').lower()
-        risk_indicators = ["외롭", "혼자", "친구", "새로", "lonely", "alone", "new to", "no friends"]
-        
-        if any(indicator in interests for indicator in risk_indicators):
-            return "high", "키워드 기반 위험 신호 감지"
-        return "low", "특별한 위험 신호 없음"
+# All fallback methods removed - Urban Hive now uses real AI analysis only
 
 
 # Global instance

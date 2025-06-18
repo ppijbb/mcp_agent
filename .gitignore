@@ -5,3 +5,5 @@ __pycache__
 *_reports
 .env
 .venv
+node_modules
+*outputs*

@@ -69,7 +69,8 @@ class PRDWriterAgent:
             
         except Exception as e:
             logger.error(f"💥 Error in PRD writing: {e}", exc_info=True)
-            return await self._generate_fallback_prd(figma_analysis_result, str(e))
+            # No fallback - raise the actual error for proper handling
+            raise RuntimeError(f"PRD writing failed: {e}") from e
 
     async def _extract_key_information(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
         """분석 결과에서 PRD 작성에 필요한 핵심 정보 추출"""
@@ -311,51 +312,7 @@ This PRD outlines the requirements for a digital product based on design analysi
                 "timestamp": datetime.now().isoformat()
             }
 
-    async def _generate_fallback_prd(self, analysis_result: Dict[str, Any], error_msg: str) -> Dict[str, Any]:
-        """PRD 생성 실패 시 기본 PRD 생성"""
-        fallback_content = f"""# Product Requirements Document (Fallback)
 
-**Generation Error:** {error_msg}
-**Timestamp:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-## Analysis Summary
-
-Based on the available design analysis, this product appears to be a digital application with the following characteristics:
-
-### Key Findings
-- **Product Type:** Digital web/mobile application
-- **User Interface:** Modern, responsive design
-- **Core Functionality:** User interaction and content management
-- **Technical Approach:** Contemporary web technologies
-
-### Recommendations
-1. **Conduct detailed user research** to validate assumptions
-2. **Refine technical specifications** based on actual requirements
-3. **Define clear success metrics** for product validation
-4. **Plan iterative development approach** for rapid feedback
-
-### Next Steps
-- Review and enhance this PRD with specific project details
-- Conduct stakeholder interviews for requirement validation
-- Create detailed user stories and acceptance criteria
-- Define technical architecture and implementation plan
-
----
-
-*This is a fallback PRD generated due to processing limitations.*
-*Please refine with actual project requirements and stakeholder input.*
-"""
-        
-        # 기본 파일 저장 시도
-        file_info = await self._save_prd_file(fallback_content)
-        
-        return {
-            "prd_content": fallback_content,
-            "file_info": file_info,
-            "status": "fallback_generated",
-            "error": error_msg,
-            "timestamp": datetime.now().isoformat()
-        }
 
     async def refine_prd_section(self, section_name: str, current_content: str, additional_requirements: str) -> Dict[str, Any]:
         """특정 PRD 섹션 개선"""
