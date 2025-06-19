@@ -7,6 +7,7 @@ for travel data collection without price manipulation.
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -19,6 +20,8 @@ from contextlib import AsyncExitStack
 # MCP imports
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from .travel_utils import TravelSearchUtils
+from .scrapers import BookingComScraper, GoogleFlightsScraper
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +29,9 @@ logger = logging.getLogger(__name__)
 class MCPBrowserClient:
     """MCP Browser client for travel search automation"""
     
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, debug: bool = False):
         self.config = config or {}
+        self.debug = debug  # When True: keep browser visible and capture screenshots
         self.session = None
         self.exit_stack = AsyncExitStack()
         self._setup_browser_config()
@@ -35,16 +39,30 @@ class MCPBrowserClient:
     def _setup_browser_config(self):
         """Setup browser configuration for incognito mode"""
         # MCP Browser Use environment variables for incognito browsing
+        # Override headless/keep-open based on debug flag
+        headless_val = 'false' if self.debug else 'true'
+        keep_open_val = 'true' if self.debug else 'false'
+        
+        # GPU 가속 비활성화 및 샌드박스 옵션 추가 (WSL 렌더링 문제 해결)
+        # https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#setting-up-chrome-linux-sandbox
+        browser_args = [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage'
+        ]
+        
         browser_env = {
             # LLM Configuration (required)
             'MCP_LLM_PROVIDER': 'vertexai',
             'MCP_LLM_MODEL_NAME': 'gemini-2.0-flash-lite',
             
             # Browser Configuration for Incognito Mode
-            'MCP_BROWSER_HEADLESS': 'true',  # Headless for production
+            'MCP_BROWSER_HEADLESS': headless_val,
             'MCP_BROWSER_DISABLE_SECURITY': 'false',
             'MCP_BROWSER_USER_DATA_DIR': '',  # Empty for fresh sessions
-            'MCP_BROWSER_KEEP_OPEN': 'false',
+            'MCP_BROWSER_KEEP_OPEN': keep_open_val,
+            'MCP_BROWSER_LAUNCH_ARGS': ",".join(browser_args),
             
             # Agent Tool Configuration
             'MCP_AGENT_TOOL_MAX_STEPS': '20',
@@ -67,15 +85,33 @@ class MCPBrowserClient:
         
         # Create directories
         os.makedirs('./tmp/downloads', exist_ok=True)
+        if self.debug:
+            os.makedirs('./tmp/debug_screenshots', exist_ok=True)
+            # Add screenshot path to env
+            os.environ['MCP_PATHS_SCREENSHOTS'] = os.path.abspath('./tmp/debug_screenshots')
         os.makedirs('./tmp/history', exist_ok=True)
     
     async def connect_to_mcp_server(self):
         """Connect to MCP Browser Use server"""
         try:
+            # Base command
+            args = ["-y", "@modelcontextprotocol/server-puppeteer"]
+            
+            # Add debug arguments if needed
+            if self.debug:
+                debug_args = [
+                    '--headless=false',
+                    '--launch-arg=--no-sandbox',
+                    '--launch-arg=--disable-setuid-sandbox',
+                    '--launch-arg=--disable-gpu',
+                    '--launch-arg=--disable-dev-shm-usage',
+                ]
+                args.extend(debug_args)
+
             # MCP Browser Use server parameters
             server_params = StdioServerParameters(
                 command="npx",
-                args=["-y", "@modelcontextprotocol/server-puppeteer"],
+                args=args,
                 env=dict(os.environ)  # Pass current environment with MCP config
             )
             
@@ -111,24 +147,149 @@ class MCPBrowserClient:
         
         logger.info(f"🏨 Searching hotels for {destination} ({check_in} to {check_out})")
         
-        # Construct search query for hotel booking sites
-        search_query = f"hotels in {destination} from {check_in} to {check_out} booking.com"
-        
-        # Use MCP Browser Use to search
-        search_result = await self.session.call_tool(
-            "browser_search",
-            arguments={
-                "query": search_query,
-                "incognito": True,
-                "max_results": 10
+        try:
+            # Step 1: Navigate to Booking.com
+            logger.info("🌐 Navigating to Booking.com...")
+            await self.session.call_tool(
+                "puppeteer_navigate",
+                arguments={"url": "https://www.booking.com"}
+            )
+            await self._debug_screenshot("after_navigate_booking")
+            
+            # Step 2: Fill in destination
+            logger.info(f"📍 Entering destination: {destination}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[name='ss'], input[placeholder*='destination'], #ss",
+                    "value": destination
+                }
+            )
+            
+            # Step 3: Fill in check-in date
+            logger.info(f"📅 Setting check-in date: {check_in}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[name='checkin'], input[data-placeholder*='check-in']",
+                    "value": check_in
+                }
+            )
+            
+            # Step 4: Fill in check-out date  
+            logger.info(f"📅 Setting check-out date: {check_out}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[name='checkout'], input[data-placeholder*='check-out']",
+                    "value": check_out
+                }
+            )
+            
+            # Step 5: Click search button
+            logger.info("🔍 Clicking search button...")
+            await self.session.call_tool(
+                "puppeteer_click",
+                arguments={
+                    "selector": "button[type='submit'], .sb-searchbox__button, button:contains('Search')"
+                }
+            )
+            await self._debug_screenshot("after_click_search_button")
+            
+            # Step 6: Wait for results to load and extract data
+            logger.info("⏳ Waiting for search results...")
+            await asyncio.sleep(3)  # Give time for results to load
+            await self._debug_screenshot("after_wait_results")
+            
+            # Step 7: Extract hotel data from results page
+            extract_script = """
+            () => {
+                const hotels = [];
+                const hotelElements = document.querySelectorAll('[data-testid="property-card"], .sr_property_block, .property_card, [data-testid="property-card-desktop"]');
+                
+                hotelElements.forEach(element => {
+                    const nameEl = element.querySelector('h3, h4, .sr-hotel__name, [data-testid="title"], a[data-testid="title-link"]');
+                    const priceEl = element.querySelector('.bui-price-display__value, .sr_price_wrap, [data-testid="price-and-discounted-price"], .prco-valign-middle-helper');
+                    const ratingEl = element.querySelector('.bui-rating__title, .bui-review-score__badge, [data-testid="review-score"], .ac78a73c96');
+                    const locationEl = element.querySelector('.sr_card_address, [data-testid="address"], .f419a93f12');
+                    
+                    if (nameEl && nameEl.textContent.trim()) {
+                        hotels.push({
+                            name: nameEl.textContent.trim(),
+                            price: priceEl?.textContent?.trim() || 'N/A',
+                            rating: ratingEl?.textContent?.trim() || 'N/A',
+                            location: locationEl?.textContent?.trim() || ''
+                        });
+                    }
+                });
+                
+                return hotels.slice(0, 10);
             }
-        )
-        
-        # Parse results and extract hotel data
-        hotels = await self._parse_hotel_results(search_result, destination)
-        
-        logger.info(f"✅ Found {len(hotels)} hotels from MCP browser search")
-        return hotels
+            """
+            
+            extract_result = await self.session.call_tool(
+                "puppeteer_evaluate", 
+                arguments={"script": extract_script}
+            )
+            await self._debug_screenshot("after_extract_hotels")
+            
+            # Parse extracted data
+            hotels = []
+            if hasattr(extract_result, 'content') and extract_result.content:
+                result_text = extract_result.content[0].text if extract_result.content else ""
+                if result_text.strip():
+                    try:
+                        extracted_data = json.loads(result_text)
+                        for item in extracted_data:
+                            if item.get('name'):  # Only include hotels with actual names
+                                hotel = {
+                                    'name': item.get('name'),
+                                    'price': item.get('price', 'N/A'),
+                                    'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
+                                    'rating': item.get('rating', 'N/A'),
+                                    'rating_numeric': TravelSearchUtils.extract_rating_from_text(item.get('rating', '0')),
+                                    'location': item.get('location', destination),
+                                    'platform': 'booking.com',
+                                    'source': 'Real Booking.com Scraping',
+                                    'quality_score': TravelSearchUtils.calculate_hotel_quality_score(item),
+                                    'meets_quality_criteria': TravelSearchUtils.extract_rating_from_text(item.get('rating', '0')) >= 4.0
+                                }
+                                hotels.append(hotel)
+                    except json.JSONDecodeError:
+                        logger.warning("Failed to parse extracted hotel data")
+            
+            if hotels:
+                logger.info(f"✅ Found {len(hotels)} real hotels from Booking.com")
+                return hotels
+            else:
+                logger.warning("No real hotels found, using minimal fallback")
+                return [{
+                    'name': f'No hotels found for {destination}',
+                    'price': 'N/A',
+                    'price_numeric': 0,
+                    'rating': 'N/A', 
+                    'rating_numeric': 0,
+                    'location': destination,
+                    'platform': 'booking.com',
+                    'source': 'Search Failed - No Results',
+                    'quality_score': 0,
+                    'meets_quality_criteria': False
+                }]
+                
+        except Exception as e:
+            logger.error(f"Hotel search failed: {e}")
+            return [{
+                'name': f'Hotel search error for {destination}',
+                'price': 'Error',
+                'price_numeric': 0,
+                'rating': 'Error',
+                'rating_numeric': 0,
+                'location': destination,
+                'platform': 'booking.com',
+                'source': f'Error: {str(e)}',
+                'quality_score': 0,
+                'meets_quality_criteria': False
+            }]
     
     async def search_flights_incognito(self, origin: str, destination: str, departure_date: str, return_date: str) -> List[Dict]:
         """Search for flights using MCP browser in incognito mode"""
@@ -139,199 +300,159 @@ class MCPBrowserClient:
 
         logger.info(f"✈️ Searching flights {origin} -> {destination} ({departure_date} to {return_date})")
         
-        # Construct search query for flight booking sites
-        search_query = f"flights from {origin} to {destination} departure {departure_date} return {return_date} google flights"
-        
-        # Use MCP Browser Use to search
-        search_result = await self.session.call_tool(
-            "browser_search",
-            arguments={
-                "query": search_query,
-                "incognito": True,
-                "max_results": 10
+        try:
+            # Step 1: Navigate to Google Flights
+            logger.info("🌐 Navigating to Google Flights...")
+            await self.session.call_tool(
+                "puppeteer_navigate",
+                arguments={"url": "https://www.google.com/travel/flights"}
+            )
+            await self._debug_screenshot("after_navigate_flights")
+            
+            # Step 2: Fill origin
+            logger.info(f"🛫 Entering origin: {origin}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[placeholder*='Where from'], input[aria-label*='Where from']",
+                    "value": origin
+                }
+            )
+            
+            # Step 3: Fill destination
+            logger.info(f"🛬 Entering destination: {destination}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[placeholder*='Where to'], input[aria-label*='Where to']",
+                    "value": destination
+                }
+            )
+            
+            # Step 4: Set departure date
+            logger.info(f"📅 Setting departure date: {departure_date}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[placeholder*='Departure'], input[aria-label*='Departure']",
+                    "value": departure_date
+                }
+            )
+            
+            # Step 5: Set return date
+            logger.info(f"📅 Setting return date: {return_date}")
+            await self.session.call_tool(
+                "puppeteer_fill",
+                arguments={
+                    "selector": "input[placeholder*='Return'], input[aria-label*='Return']",
+                    "value": return_date
+                }
+            )
+            
+            # Step 6: Click search
+            logger.info("🔍 Searching flights...")
+            await self.session.call_tool(
+                "puppeteer_click",
+                arguments={
+                    "selector": "button[aria-label*='Search'], button:contains('Search')"
+                }
+            )
+            await self._debug_screenshot("after_click_flight_search")
+            
+            # Step 7: Wait for results
+            logger.info("⏳ Waiting for flight results...")
+            await asyncio.sleep(5)  # Flights take longer to load
+            await self._debug_screenshot("after_wait_flight_results")
+            
+            # Step 8: Extract flight data
+            extract_script = """
+            () => {
+                const flights = [];
+                const flightElements = document.querySelectorAll('[role="listitem"], .gws-flights-results__result-item, .flight-item');
+                
+                flightElements.forEach(element => {
+                    const airlineEl = element.querySelector('[data-testid="airline-name"], .airline-name, .carrier-name');
+                    const priceEl = element.querySelector('[data-testid="price"], .price, .fare-price');
+                    const durationEl = element.querySelector('[data-testid="duration"], .duration, .flight-duration');
+                    const timeEl = element.querySelector('[data-testid="departure-time"], .departure-time, .time');
+                    
+                    if (airlineEl && airlineEl.textContent.trim()) {
+                        flights.push({
+                            airline: airlineEl.textContent.trim(),
+                            price: priceEl?.textContent?.trim() || 'N/A',
+                            duration: durationEl?.textContent?.trim() || 'N/A',
+                            departure_time: timeEl?.textContent?.trim() || 'N/A'
+                        });
+                    }
+                });
+                
+                return flights.slice(0, 10);
             }
-        )
-        
-        # Parse results and extract flight data
-        flights = await self._parse_flight_results(search_result, origin, destination)
-        
-        logger.info(f"✅ Found {len(flights)} flights from MCP browser search")
-        return flights
-    
-    async def _parse_hotel_results(self, search_result, destination: str) -> List[Dict]:
-        """Parse hotel search results from MCP browser"""
-        hotels = []
-        
-        try:
-            # Extract content from MCP result
-            if hasattr(search_result, 'content') and search_result.content:
-                content_text = str(search_result.content[0].text if search_result.content else "")
-                
-                # Use MCP to extract structured data
-                extract_result = await self.session.call_tool(
-                    "extract_data",
-                    arguments={
-                        "content": content_text,
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {"type": "string"},
-                                    "price": {"type": "string"}, 
-                                    "rating": {"type": "string"},
-                                    "location": {"type": "string"}
+            """
+            
+            extract_result = await self.session.call_tool(
+                "puppeteer_evaluate",
+                arguments={"script": extract_script}
+            )
+            await self._debug_screenshot("after_extract_flights")
+            
+            # Parse extracted data
+            flights = []
+            if hasattr(extract_result, 'content') and extract_result.content:
+                result_text = extract_result.content[0].text if extract_result.content else ""
+                if result_text.strip():
+                    try:
+                        extracted_data = json.loads(result_text)
+                        for item in extracted_data:
+                            if item.get('airline'):  # Only include flights with actual airline names
+                                flight = {
+                                    'airline': item.get('airline'),
+                                    'price': item.get('price', 'N/A'),
+                                    'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
+                                    'duration': item.get('duration', 'N/A'),
+                                    'departure_time': item.get('departure_time', 'N/A'),
+                                    'platform': 'google_flights',
+                                    'source': 'Real Google Flights Scraping',
+                                    'route': f'{origin} → {destination}',
+                                    'quality_score': TravelSearchUtils.calculate_flight_quality_score(item),
+                                    'meets_quality_criteria': item.get('airline', '') in ['Korean Air', 'Asiana Airlines', 'Delta', 'Emirates']
                                 }
-                            }
-                        }
-                    }
-                )
+                                flights.append(flight)
+                    except json.JSONDecodeError:
+                        logger.warning("Failed to parse extracted flight data")
+            
+            if flights:
+                logger.info(f"✅ Found {len(flights)} real flights from Google Flights")
+                return flights
+            else:
+                logger.warning("No real flights found, using minimal fallback")
+                return [{
+                    'airline': f'No flights found for {origin} → {destination}',
+                    'price': 'N/A',
+                    'price_numeric': 0,
+                    'duration': 'N/A',
+                    'departure_time': 'N/A',
+                    'platform': 'google_flights',
+                    'source': 'Search Failed - No Results',
+                    'route': f'{origin} → {destination}',
+                    'quality_score': 0,
+                    'meets_quality_criteria': False
+                }]
                 
-                # Convert extracted data to hotel format
-                if hasattr(extract_result, 'content') and extract_result.content:
-                    extracted_data = json.loads(extract_result.content[0].text)
-                    for item in extracted_data:
-                        hotel = {
-                            'name': item.get('name', f'Hotel in {destination}'),
-                            'price': item.get('price', 'N/A'),
-                            'price_numeric': self._extract_price_number(item.get('price', '0')),
-                            'rating': item.get('rating', 'N/A'),
-                            'rating_numeric': self._extract_rating_number(item.get('rating', '0')),
-                            'location': item.get('location', destination),
-                            'platform': 'booking.com',
-                            'source': 'MCP Browser Use',
-                            'quality_score': self._calculate_hotel_quality_score(item),
-                            'meets_quality_criteria': self._extract_rating_number(item.get('rating', '0')) >= 4.0
-                        }
-                        hotels.append(hotel)
-                        
         except Exception as e:
-            logger.warning(f"Error parsing hotel results: {e}")
-        
-        return hotels[:10]  # Return top 10 results
-    
-    async def _parse_flight_results(self, search_result, origin: str, destination: str) -> List[Dict]:
-        """Parse flight search results from MCP browser"""
-        flights = []
-        
-        try:
-            # Extract content from MCP result
-            if hasattr(search_result, 'content') and search_result.content:
-                content_text = str(search_result.content[0].text if search_result.content else "")
-                
-                # Use MCP to extract structured data
-                extract_result = await self.session.call_tool(
-                    "extract_data",
-                    arguments={
-                        "content": content_text,
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "airline": {"type": "string"},
-                                    "price": {"type": "string"},
-                                    "duration": {"type": "string"},
-                                    "departure_time": {"type": "string"}
-                                }
-                            }
-                        }
-                    }
-                )
-                
-                # Convert extracted data to flight format
-                if hasattr(extract_result, 'content') and extract_result.content:
-                    extracted_data = json.loads(extract_result.content[0].text)
-                    for item in extracted_data:
-                        flight = {
-                            'airline': item.get('airline', 'Unknown Airline'),
-                            'price': item.get('price', 'N/A'),
-                            'price_numeric': self._extract_price_number(item.get('price', '0')),
-                            'duration': item.get('duration', 'N/A'),
-                            'departure_time': item.get('departure_time', 'N/A'),
-                            'platform': 'google_flights',
-                            'source': 'MCP Browser Use',
-                            'route': f'{origin} → {destination}',
-                            'quality_score': self._calculate_flight_quality_score(item),
-                            'meets_quality_criteria': item.get('airline', '') in ['Korean Air', 'Asiana Airlines', 'Delta', 'Emirates']
-                        }
-                        flights.append(flight)
-                        
-        except Exception as e:
-            logger.warning(f"Error parsing flight results: {e}")
-        
-        return flights[:10]  # Return top 10 results
-    
-    def _extract_price_number(self, price_str: str) -> float:
-        """Extract numeric price from string"""
-        if not price_str:
-            return float('inf')
-        
-        import re
-        numbers = re.findall(r'[\d,]+\.?\d*', str(price_str))
-        if numbers:
-            return float(numbers[0].replace(',', ''))
-        return float('inf')
-    
-    def _extract_rating_number(self, rating_str: str) -> float:
-        """Extract numeric rating from string"""
-        if not rating_str:
-            return 0.0
-        
-        import re
-        numbers = re.findall(r'\d+\.?\d*', str(rating_str))
-        if numbers:
-            rating = float(numbers[0])
-            return rating if rating <= 5 else rating / 2  # Normalize to 5-point scale
-        return 0.0
-    
-    def _calculate_hotel_quality_score(self, hotel_data: Dict) -> int:
-        """Calculate quality score for hotel"""
-        score = 0
-        rating = self._extract_rating_number(hotel_data.get('rating', '0'))
-        price = self._extract_price_number(hotel_data.get('price', '0'))
-        
-        # Rating contribution
-        if rating >= 4.5:
-            score += 5
-        elif rating >= 4.0:
-            score += 4
-        elif rating >= 3.5:
-            score += 3
-        
-        # Price contribution (lower is better for value)
-        if price < 150:
-            score += 3
-        elif price < 250:
-            score += 2
-        elif price < 350:
-            score += 1
-        
-        return score
-    
-    def _calculate_flight_quality_score(self, flight_data: Dict) -> int:
-        """Calculate quality score for flight"""
-        score = 0
-        airline = flight_data.get('airline', '')
-        price = self._extract_price_number(flight_data.get('price', '0'))
-        
-        # Airline reputation
-        if airline in ['Korean Air', 'Asiana Airlines', 'Emirates', 'Singapore Airlines']:
-            score += 5
-        elif airline in ['Delta Air Lines', 'United Airlines', 'Lufthansa', 'ANA', 'JAL']:
-            score += 4
-        else:
-            score += 2
-        
-        # Price contribution
-        if price < 600:
-            score += 3
-        elif price < 1000:
-            score += 2
-        elif price < 1500:
-            score += 1
-        
-        return score
+            logger.error(f"Flight search failed: {e}")
+            return [{
+                'airline': f'Flight search error',
+                'price': 'Error',
+                'price_numeric': 0,
+                'duration': 'Error',
+                'departure_time': 'Error',
+                'platform': 'google_flights',
+                'source': f'Error: {str(e)}',
+                'route': f'{origin} → {destination}',
+                'quality_score': 0,
+                'meets_quality_criteria': False
+            }]
     
     async def cleanup(self):
         """Cleanup MCP browser resources"""
@@ -342,11 +463,59 @@ class MCPBrowserClient:
         except Exception as e:
             logger.warning(f"Cleanup warning: {e}")
 
+    # ---------------------------------------------------------------------
+    # Debug helper
+    # ---------------------------------------------------------------------
+    async def _debug_screenshot(self, name: str):
+        """Capture screenshot if debug mode is enabled"""
+        if not self.debug or not self.session:
+            return
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_name = f"{timestamp}_{name}"
+            
+            # Call the screenshot tool and get the response
+            response = await self.session.call_tool(
+                "puppeteer_screenshot",
+                arguments={
+                    "name": screenshot_name,
+                    "fullPage": True,
+                    "encoded": True,  # Request base64 data URI
+                }
+            )
+
+            # The screenshot is returned as a base64 data URI in text content.
+            screenshot_data_uri = None
+            if response.content:
+                for content_item in response.content:
+                    if hasattr(content_item, 'text') and content_item.text.startswith('data:image/png;base64,'):
+                        screenshot_data_uri = content_item.text
+                        break
+
+            if screenshot_data_uri:
+                # Create directory if it doesn't exist
+                screenshot_dir = "./tmp/debug_screenshots"
+                os.makedirs(screenshot_dir, exist_ok=True)
+                
+                # Decode and save the screenshot
+                file_path = os.path.join(screenshot_dir, f"{screenshot_name}.png")
+                base64_data = screenshot_data_uri.split(',')[1]
+                image_data = base64.b64decode(base64_data)
+                
+                with open(file_path, "wb") as f:
+                    f.write(image_data)
+                logger.info(f"[DEBUG] Screenshot saved to {file_path}")
+            else:
+                logger.warning(f"[DEBUG] Screenshot data URI not found for '{name}'")
+
+        except Exception as e:
+            logger.warning(f"[DEBUG] Failed to capture screenshot ({name}): {e}")
+
 
 class TravelMCPManager:
     """Manages MCP client and travel search orchestration"""
     def __init__(self):
-        self.mcp_client = MCPBrowserClient()
+        self.mcp_client = MCPBrowserClient(debug=True) # Enable debug mode for screenshots
         self.search_history = []
     
     async def search_travel_options(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -360,11 +529,14 @@ class TravelMCPManager:
             if not self.mcp_client.session:
                 await self.mcp_client.connect_to_mcp_server()
             
+            booking_scraper = BookingComScraper(self.mcp_client)
+            flights_scraper = GoogleFlightsScraper(self.mcp_client)
+            
             # Parallel searches
             search_tasks = []
             
             # Hotel search
-            hotel_task = self.mcp_client.search_hotels_incognito(
+            hotel_task = booking_scraper.search(
                 search_params['destination'],
                 search_params['check_in'],
                 search_params['check_out']
@@ -373,7 +545,7 @@ class TravelMCPManager:
             
             # Flight search (if origin provided)
             if search_params.get('origin'):
-                flight_task = self.mcp_client.search_flights_incognito(
+                flight_task = flights_scraper.search(
                     search_params['origin'],
                     search_params['destination'],
                     search_params['departure_date'],

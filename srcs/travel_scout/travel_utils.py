@@ -543,4 +543,54 @@ class TravelSearchUtils:
             if match:
                 return match.group(1)
         
-        return "" 
+        return ""
+
+    @staticmethod
+    def calculate_hotel_quality_score(hotel_data: Dict) -> int:
+        """Calculate quality score for hotel"""
+        score = 0
+        rating = TravelSearchUtils.extract_rating_from_text(hotel_data.get('rating', '0'))
+        price = TravelSearchUtils.extract_price_from_text(hotel_data.get('price', '0'))
+        
+        # Rating contribution
+        if rating >= 4.5:
+            score += 5
+        elif rating >= 4.0:
+            score += 4
+        elif rating >= 3.5:
+            score += 3
+        
+        # Price contribution (lower is better for value)
+        if price < 150:
+            score += 3
+        elif price < 250:
+            score += 2
+        elif price < 350:
+            score += 1
+        
+        return score
+
+    @staticmethod
+    def calculate_flight_quality_score(flight_data: Dict) -> int:
+        """Calculate quality score for flight"""
+        score = 0
+        airline = flight_data.get('airline', '')
+        price = TravelSearchUtils.extract_price_from_text(flight_data.get('price', '0'))
+        
+        # Airline reputation
+        if airline in ['Korean Air', 'Asiana Airlines', 'Emirates', 'Singapore Airlines']:
+            score += 5
+        elif airline in ['Delta Air Lines', 'United Airlines', 'Lufthansa', 'ANA', 'JAL']:
+            score += 4
+        else:
+            score += 2
+        
+        # Price contribution
+        if price < 600:
+            score += 3
+        elif price < 1000:
+            score += 2
+        elif price < 1500:
+            score += 1
+        
+        return score 
