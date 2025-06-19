@@ -6,58 +6,12 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from dataclasses import dataclass
-from typing import Optional, Type, TypeVar
+from srcs.common.streamlit_utils import get_agent_state
 
-T = TypeVar("T", bound=OpenAIAugmentedLLM)
 app = MCPApp(
     name="mcp_basic_agent",
     settings=get_settings("configs/mcp_agent.config.yaml"),
 )
-
-@dataclass
-class AgentState:
-    """Container for agent and its associated LLM"""
-
-    agent: Agent
-    llm: Optional[OpenAIAugmentedLLM] = None
-
-
-async def get_agent_state(
-    key: str,
-    agent_class: Type[Agent],
-    llm_class: Optional[Type[T]] = None,
-    **agent_kwargs,
-) -> AgentState:
-    """
-    Get or create agent state, reinitializing connections if retrieved from session.
-
-    Args:
-        key: Session state key
-        agent_class: Agent class to instantiate
-        llm_class: Optional LLM class to attach
-        **agent_kwargs: Arguments for agent instantiation
-    """
-    if key not in st.session_state:
-        # Create new agent
-        agent = agent_class(
-            connection_persistence=False,
-            **agent_kwargs,
-        )
-        await agent.initialize()
-
-        # Attach LLM if specified
-        llm = None
-        if llm_class:
-            llm = await agent.attach_llm(llm_class)
-
-        state: AgentState = AgentState(agent=agent, llm=llm)
-        st.session_state[key] = state
-    else:
-        state = st.session_state[key]
-
-    return state
-
 
 def format_list_tools_result(list_tools_result: ListToolsResult):
     res = ""
