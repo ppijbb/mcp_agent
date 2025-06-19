@@ -1,0 +1,59 @@
+travel_scout:
+  # Default search settings
+  default_settings:
+    destination: "Seoul"
+    origin: "Seoul"
+    search_type: "Both"
+    guests: 2
+    days_ahead: 7
+    trip_duration: 3
+  
+  # Browser settings
+  browser:
+    headless: true
+    disable_gpu: true
+    window_size: [1280, 720]
+    timeout: 30000
+    debug_screenshots: true
+  
+  # UI settings
+  ui:
+    page_title: "Travel Scout - Live Browser"
+    page_icon: "✈️"
+    layout: "wide"
+    sidebar_state: "expanded"
+  
+  # Server settings
+  server:
+    default_port: 8505
+    backup_ports: [8506, 8507, 8508]
+    host: "localhost"
+  
+  # URLs
+  urls:
+    booking: "https://www.booking.com"
+    google_flights: "https://www.google.com/travel/flights"
+    default_search_sites:
+      - "https://www.booking.com"
+      - "https://www.google.com/travel/flights"
+  
+  # Destinations
+  destinations:
+    popular:
+      - "Seoul (서울)"
+      - "Tokyo (도쿄)"
+      - "Bangkok (방콕)"
+      - "Singapore (싱가포르)"
+      - "Hong Kong (홍콩)"
+    
+    origins:
+      - "Seoul (서울)"
+      - "Tokyo (도쿄)"
+      - "Bangkok (방콕)"
+      - "Singapore (싱가포르)"
+  
+  # Performance
+  performance:
+    max_screenshots: 10
+    cleanup_interval: 300  # seconds
+    max_search_time: 120   # seconds 

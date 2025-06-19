@@ -13,10 +13,15 @@ import json
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import logging
 
 from mcp_agent.app import MCPApp
 from mcp_agent.config import get_settings
-from srcs.travel_scout.mcp_browser_client import TravelMCPManager
+from .mcp_browser_client import MCPBrowserClient
+from .scrapers import BookingComScraper, GoogleFlightsScraper
+from .travel_utils import TravelSearchUtils
+
+logger = logging.getLogger(__name__)
 
 # ✅ P1-5: Travel Scout 메서드 구현 (5개 함수)
 
@@ -218,6 +223,10 @@ def save_travel_report(content: str, filename: str) -> str:
         
         # Markdown 보고서 저장
         full_content = report_header + content
+        
+        # 보고서 메타데이터 추가
+        full_content += f"\n\n---\n\n### Report Metadata\n\n```json\n{json.dumps(metadata, indent=2, ensure_ascii=False)}\n```"
+        
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(full_content)
         
@@ -456,134 +465,112 @@ An error occurred while generating the detailed report: {str(e)}
 """
 
 class TravelScoutAgent:
-    """Travel Scout Agent using the real MCP Browser backend"""
+    """Travel Scout Agent - Refactored for clarity and stability."""
     
-    def __init__(self, output_dir: str = "travel_results", config_path: str = "configs/mcp_agent.config.yaml"):
-        """Initialize Travel Scout Agent
-        
-        Args:
-            output_dir: Directory to save travel search results
-            config_path: Path to mcp_agent configuration file
-        """
-        self.output_dir = output_dir
-        self.search_history = []
-        self.quality_criteria = {
-            'min_hotel_rating': 4.0,
-            'max_hotel_price': 500,
-            'max_flight_price': 2000
-        }
-        self.mcp_manager = TravelMCPManager()
-        self.mcp_connected = False
-        
-        # Initialize app for potential future use with mcp_agent framework
-        self.app = MCPApp(
-            name="travel_scout_agent", 
-            settings=get_settings(config_path)
-        )
-    
-    def get_mcp_status(self) -> Dict[str, Any]:
-        """Get MCP Browser connection status"""
-        status = 'connected' if self.mcp_connected else 'disconnected'
-        return {
-            'status': status,
-            'browser_connected': self.mcp_connected,
-            'real_time_capability': self.mcp_connected,
-            'description': f'MCP Browser is {status}.'
-        }
+    def __init__(self, config: Optional[Dict] = None, browser_client: Optional[MCPBrowserClient] = None):
+        """에이전트 초기화. 연결 확인 로직 제거."""
+        self.mcp_client = browser_client or MCPBrowserClient()
+        self.booking_scraper = BookingComScraper(self.mcp_client)
+        self.flights_scraper = GoogleFlightsScraper(self.mcp_client)
+        self.config = config
+        logger.info("TravelScoutAgent initialized without immediate connection checks.")
 
-    async def initialize_mcp(self) -> bool:
-        """Initialize and connect to the MCP Browser server."""
-        try:
-            self.mcp_connected = await self.mcp_manager.mcp_client.connect_to_mcp_server()
-            return self.mcp_connected
-        except Exception as e:
-            print(f"Error during MCP initialization: {e}")
-            self.mcp_connected = False
-            return False
+    async def _ensure_mcp_connection(self):
+        """MCP 서버 연결을 확인하고, 필요시 연결."""
+        if not self.mcp_client.is_connected():
+            logger.info("MCP client not connected. Attempting to connect...")
+            connected = await self.mcp_client.connect_to_mcp_server()
+            if not connected:
+                raise ConnectionError("Failed to connect to MCP server.")
+            logger.info("Successfully connected to MCP server.")
 
-    def update_quality_criteria(self, criteria: Dict[str, Any]) -> None:
-        """Update quality criteria for search"""
-        self.quality_criteria.update(criteria)
-
-    async def search_travel_options(self, search_params: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        """
-        Search for travel options using the real TravelMCPManager.
-        This method replaces the previous mock/orchestrator logic.
-        """
-        search_start_time = time.time()
-        
-        if not self.mcp_connected:
-            raise ConnectionError("MCP Browser is not connected. Please connect before searching.")
+    async def search_travel_options(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
+        """주요 여행 옵션 검색 (호텔 및 항공편)"""
+        start_time = time.time()
+        search_type = search_params.get("search_type", "all")
+        destination = search_params.get("destination", "Unknown")
+        logger.info(f"🔍 Starting MCP travel search for {destination} (type: {search_type})")
 
         try:
-            search_params['quality_criteria'] = self.quality_criteria
-            
-            # Use the real MCP Manager to perform the search
-            search_result = await self.mcp_manager.search_travel_options(search_params)
-            
-            # Add metadata for the UI
-            total_duration = time.time() - search_start_time
-            search_result.setdefault('performance', {})['total_duration'] = total_duration
-            search_result['mcp_info'] = self.get_mcp_status()
-            search_result['status'] = 'completed'
+            await self._ensure_mcp_connection()
+            self.mcp_client.clear_screenshots()
 
-            self.search_history.append(search_result)
-            return search_result
+            tasks = []
+            if search_type in ["hotel", "all"]:
+                tasks.append(self.booking_scraper.search(search_params))
             
-        except Exception as e:
-            error_result = {
-                "status": "failed",
-                "error": str(e),
-                "search_params": search_params,
-                "execution_time": time.time() - search_start_time
+            if search_type in ["flight", "all"]:
+                tasks.append(self.flights_scraper.search(search_params))
+
+            if not tasks:
+                return {"error": "Invalid search type provided."}
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # 결과 처리
+            hotels = []
+            flights = []
+            
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error(f"Search task failed: {res}")
+                    continue
+                if res.get("type") == "hotel":
+                    hotels = res.get("data", [])
+                elif res.get("type") == "flight":
+                    flights = res.get("data", [])
+
+            performance = {
+                "total_duration_seconds": round(time.time() - start_time, 2),
+                "hotel_search_successful": any(res.get("type") == "hotel" and not isinstance(res, Exception) for res in results),
+                "flight_search_successful": any(res.get("type") == "flight" and not isinstance(res, Exception) for res in results),
             }
-            self.search_history.append(error_result)
-            return error_result
 
-    def get_search_history(self) -> List[Dict]:
-        """Get search history"""
-        return self.mcp_manager.get_search_history()
-
-    def get_search_stats(self) -> Dict:
-        """Get search statistics"""
-        history = self.get_search_history()
-        if not history:
             return {
-                "total_searches": 0, "success_rate": 0.0,
-                "real_time_data_percentage": 0.0, "average_search_duration": 0.0,
-                "message": "No searches performed yet"
+                "hotels": hotels,
+                "flights": flights,
+                "performance": performance,
+                "search_params": search_params
             }
-        
-        completed_searches = [s for s in history if s.get("status") == "completed"]
-        
-        success_rate = (len(completed_searches) / len(history)) * 100 if history else 0
-        
-        real_time_searches = [s for s in completed_searches if s.get('mcp_info', {}).get('browser_connected')]
-        real_time_percentage = (len(real_time_searches) / len(completed_searches)) * 100 if completed_searches else 0
-        
-        durations = [s.get("performance", {}).get("total_duration", 0) for s in history]
-        average_duration = sum(durations) / len(durations) if durations else 0
-        
-        return {
-            "total_searches": len(history), "completed_searches": len(completed_searches),
-            "success_rate": success_rate, "real_time_data_percentage": real_time_percentage,
-            "average_search_duration": average_duration, "history_count": len(history)
-        }
 
-    async def search(self, destination: str, check_in: str, check_out: str, use_orchestrator: bool = True) -> Dict[str, Any]:
-        """Convenience method for searching travel options (for CLI)"""
+        except Exception as e:
+            logger.error(f"❌ MCP travel search failed: {e}", exc_info=True)
+            return {"error": str(e), "hotels": [], "flights": []}
+
+    async def search_hotels(self, destination: str, check_in: str, check_out: str, guests: int = 2) -> Dict[str, Any]:
+        """호텔 검색 실행"""
         search_params = {
-            'destination': destination, 'origin': 'Seoul', 'check_in': check_in,
-            'check_out': check_out, 'departure_date': check_in, 'return_date': check_out
+            "destination": destination,
+            "check_in": check_in,
+            "check_out": check_out,
+            "guests": guests,
+            "search_type": "hotel"
         }
         return await self.search_travel_options(search_params)
+
+    async def search_flights(self, origin: str, destination: str, departure_date: str, return_date: str = None) -> Dict[str, Any]:
+        """항공편 검색 실행"""
+        search_params = {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "search_type": "flight"
+        }
+        return await self.search_travel_options(search_params)
+
+    async def cleanup(self):
+        """에이전트 리소스 정리"""
+        logger.info("Cleaning up TravelScoutAgent resources...")
+        if self.mcp_client:
+            await self.mcp_client.cleanup()
 
 
 # Convenience function for direct usage
 async def search_travel(destination: str, check_in: str, check_out: str) -> Dict[str, Any]:
     """Search for travel options using TravelScoutAgent"""
     agent = TravelScoutAgent()
-    return await agent.search(destination, check_in, check_out)
+    return await agent.search_travel_options({'destination': destination, 'check_in': check_in, 'check_out': check_out})
 
 
 if __name__ == "__main__":
@@ -598,30 +585,25 @@ if __name__ == "__main__":
     print(f"📅 Check-out: {CHECK_OUT}")
     print("-" * 50)
     
-    travel_agent = TravelScoutAgent()
-    
     async def run_search():
         print("🔌 Initializing MCP connection...")
-        if not await travel_agent.initialize_mcp():
-            print("❌ MCP connection failed. Please check your setup and try again.")
-            return
-
-        start_time = datetime.now()
-        result = await travel_agent.search(DESTINATION, CHECK_IN, CHECK_OUT)
-        end_time = datetime.now()
-        
-        duration = (end_time - start_time).total_seconds()
-        print(f"\n⏱️  Total execution time: {duration:.2f} seconds")
-        
-        stats = travel_agent.get_search_stats()
-        print(f"📊 Search Statistics: {stats}")
-        
-        if result.get("status") == "completed":
-            print("✅ Travel search completed successfully!")
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-        else:
-            print("❌ Travel search failed!")
-            if "error" in result:
-                print(f"Error: {result['error']}")
+        agent = TravelScoutAgent()
+        try:
+            start_time = datetime.now()
+            result = await agent.search_travel_options({'destination': DESTINATION, 'check_in': CHECK_IN, 'check_out': CHECK_OUT})
+            end_time = datetime.now()
+            
+            duration = (end_time - start_time).total_seconds()
+            print(f"\n⏱️  Total execution time: {duration:.2f} seconds")
+            
+            if result.get("status") == "completed":
+                print("✅ Travel search completed successfully!")
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            else:
+                print("❌ Travel search failed!")
+                if "error" in result:
+                    print(f"Error: {result['error']}")
+        finally:
+            await agent.cleanup()
     
     asyncio.run(run_search())

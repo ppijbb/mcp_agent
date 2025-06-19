@@ -91,4 +91,14 @@ google-api-python-client>=2.0.0
 beautifulsoup4>=4.13.4
 
 graphviz
-# Travel Scout dependencies
+
+# Travel Scout dependencies - Browser automation and MCP
+playwright>=1.52.0
+playwright-stealth>=1.0.6
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+undetected-chromedriver>=3.5.0
+
+# MCP Browser server for Travel Scout  
+asyncio-subprocess>=0.1.0
+websockets>=12.0

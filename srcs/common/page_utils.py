@@ -26,6 +26,12 @@ def add_project_root():
     project_root = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(project_root))
 
+def setup_page_header(title, subtitle=""):
+    """페이지 헤더 설정 (간단 버전)"""
+    st.title(f"🚀 {title}")
+    if subtitle:
+        st.subheader(subtitle)
+
 def render_page_header(page_type, title, subtitle):
     """페이지 헤더 렌더링"""
     header_html = get_page_header(page_type, title, subtitle)

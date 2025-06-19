@@ -6,7 +6,8 @@ Web Scrapers for Travel Scout
 import asyncio
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, Any
+from datetime import datetime, timedelta
 
 from .mcp_browser_client import MCPBrowserClient
 from .travel_utils import TravelSearchUtils
@@ -14,142 +15,119 @@ from .travel_utils import TravelSearchUtils
 logger = logging.getLogger(__name__)
 
 class BookingComScraper:
-    """Scraper for Booking.com"""
+    """booking.com 스크레이퍼"""
+    def __init__(self, mcp_client: MCPBrowserClient):
+        self.mcp_client = mcp_client
 
-    def __init__(self, client: MCPBrowserClient):
-        self.client = client
-        if not self.client.session:
-            raise ConnectionError("MCPBrowserClient session not initialized.")
-        self.session = self.client.session
-
-    async def search(self, destination: str, check_in: str, check_out: str) -> List[Dict]:
-        """Search for hotels on Booking.com"""
-        logger.info(f"🏨 Starting Booking.com search for {destination}")
+    async def search(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
+        """Booking.com에서 실제 호텔 데이터 스크레이핑"""
+        destination = search_params.get("destination", "Seoul")
+        check_in = search_params.get("check_in", (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'))
+        check_out = search_params.get("check_out", (datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d'))
+        guests = search_params.get("guests", 2)
         
-        try:
-            await self.session.call_tool("puppeteer_navigate", arguments={"url": "https://www.booking.com"})
-            await self.client._debug_screenshot("booking_home")
+        url = f"https://www.booking.com/searchresults.html?ss={destination}&checkin={check_in}&checkout={check_out}&group_adults={guests}"
+        
+        logger.info(f"Navigating to Booking.com: {url}")
+        nav_result = await self.mcp_client.navigate_and_capture(url)
+        if not nav_result.get("success"):
+            logger.error(f"Failed to navigate to booking.com: {nav_result.get('error')}")
+            return {"type": "hotel", "data": []}
 
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[name='ss']", "value": destination})
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[name='checkin']", "value": check_in})
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[name='checkout']", "value": check_out})
-            await self.session.call_tool("puppeteer_click", arguments={"selector": "button[type='submit']"})
-            await self.client._debug_screenshot("booking_search_results")
+        await asyncio.sleep(3)
 
-            await asyncio.sleep(3)
-
-            extract_script = """
-            () => {
-                const hotels = [];
-                document.querySelectorAll('[data-testid="property-card"]').forEach(element => {
-                    const nameEl = element.querySelector('[data-testid="title"]');
-                    const priceEl = element.querySelector('[data-testid="price-and-discounted-price"]');
-                    const ratingEl = element.querySelector('[data-testid="review-score"] .ac78a73c96');
-                    const locationEl = element.querySelector('[data-testid="address"]');
-                    if (nameEl) {
-                        hotels.push({
-                            name: nameEl.textContent.trim(),
-                            price: priceEl?.textContent?.trim() || 'N/A',
-                            rating: ratingEl?.textContent?.trim() || 'N/A',
-                            location: locationEl?.textContent?.trim() || ''
-                        });
-                    }
-                });
-                return hotels.slice(0, 10);
-            }
-            """
-            extract_result = await self.session.call_tool("puppeteer_evaluate", arguments={"script": extract_script})
-            
-            hotels = []
-            if hasattr(extract_result, 'content') and extract_result.content and extract_result.content[0].text:
-                extracted_data = json.loads(extract_result.content[0].text)
-                for item in extracted_data:
-                    if item.get('name'):
-                        hotel = {
-                            'name': item.get('name'),
-                            'price': item.get('price', 'N/A'),
-                            'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
-                            'rating': item.get('rating', 'N/A'),
-                            'rating_numeric': TravelSearchUtils.extract_rating_from_text(item.get('rating', '0')),
-                            'location': item.get('location', destination),
-                            'platform': 'booking.com',
-                            'source': 'Real Booking.com Scraping',
-                            'quality_score': TravelSearchUtils.calculate_hotel_quality_score(item),
-                            'meets_quality_criteria': TravelSearchUtils.extract_rating_from_text(item.get('rating', '0')) >= 4.0
-                        }
-                        hotels.append(hotel)
-            return hotels
-        except Exception as e:
-            logger.error(f"Booking.com search failed: {e}")
-            return []
+        extract_script = """
+        () => {
+            const hotels = [];
+            document.querySelectorAll('[data-testid="property-card"]').forEach(element => {
+                const nameEl = element.querySelector('[data-testid="title"]');
+                const priceEl = element.querySelector('[data-testid="price-and-discounted-price"]');
+                const ratingEl = element.querySelector('[data-testid="review-score"] .ac78a73c96');
+                if (nameEl) {
+                    hotels.push({
+                        name: nameEl.textContent.trim(),
+                        price: priceEl?.textContent?.trim() || 'N/A',
+                        rating: ratingEl?.textContent?.trim() || 'N/A',
+                    });
+                }
+            });
+            return hotels.slice(0, 10);
+        }
+        """
+        eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
+        
+        hotels_data = []
+        if eval_result and not eval_result.isError and eval_result.content:
+            raw_data = json.loads(eval_result.content[0].text)
+            for item in raw_data:
+                hotels_data.append({
+                    'name': item.get('name'),
+                    'price': item.get('price', 'N/A'),
+                    'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
+                    'rating': item.get('rating', 'N/A'),
+                    'rating_numeric': TravelSearchUtils.extract_rating_from_text(item.get('rating', '0')),
+                    'platform': 'booking.com'
+                })
+        
+        logger.info(f"Scraped {len(hotels_data)} hotels from Booking.com")
+        return {"type": "hotel", "data": hotels_data}
 
 class GoogleFlightsScraper:
-    """Scraper for Google Flights"""
+    """Google Flights 스크레이퍼"""
+    def __init__(self, mcp_client: MCPBrowserClient):
+        self.mcp_client = mcp_client
 
-    def __init__(self, client: MCPBrowserClient):
-        self.client = client
-        if not self.client.session:
-            raise ConnectionError("MCPBrowserClient session not initialized.")
-        self.session = self.client.session
+    async def search(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
+        """Google Flights에서 실제 항공편 데이터 스크레이핑"""
+        origin = search_params.get("origin", "ICN")
+        destination = search_params.get("destination", "NRT")
+        departure_date = search_params.get("departure_date", (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'))
+        return_date = search_params.get("return_date", (datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d'))
 
-    async def search(self, origin: str, destination: str, departure_date: str, return_date: str) -> List[Dict]:
-        """Search for flights on Google Flights"""
-        logger.info(f"✈️ Starting Google Flights search for {origin} -> {destination}")
+        origin_code = origin.split('(')[-1].replace(')', '') if '(' in origin else origin
+        dest_code = destination.split('(')[-1].replace(')', '') if '(' in destination else destination
 
-        try:
-            await self.session.call_tool("puppeteer_navigate", arguments={"url": "https://www.google.com/travel/flights"})
-            await self.client._debug_screenshot("flights_home")
+        url = f"https://www.google.com/travel/flights?q=Flights%20to%20{dest_code}%20from%20{origin_code}%20on%20{departure_date}%20through%20{return_date}"
+        
+        logger.info(f"Navigating to Google Flights: {url}")
+        nav_result = await self.mcp_client.navigate_and_capture(url)
+        if not nav_result.get("success"):
+            logger.error(f"Failed to navigate to Google Flights: {nav_result.get('error')}")
+            return {"type": "flight", "data": []}
 
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[placeholder*='Where from']", "value": origin})
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[placeholder*='Where to']", "value": destination})
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[placeholder*='Departure']", "value": departure_date})
-            await self.session.call_tool("puppeteer_fill", arguments={"selector": "input[placeholder*='Return']", "value": return_date})
-            await self.session.call_tool("puppeteer_click", arguments={"selector": "button[aria-label*='Search']"})
-            await self.client._debug_screenshot("flights_search_results")
-            
-            await asyncio.sleep(5)
+        await asyncio.sleep(5)
 
-            extract_script = """
-            () => {
-                const flights = [];
-                document.querySelectorAll('.gws-flights-results__result-item').forEach(element => {
-                    const airlineEl = element.querySelector('.gws-flights-results__airline-name');
-                    const priceEl = element.querySelector('.gws-flights-results__price');
-                    const durationEl = element.querySelector('.gws-flights-results__duration');
-                    const timeEl = element.querySelector('.gws-flights-results__leg-departure');
-                    if (airlineEl) {
-                        flights.push({
-                            airline: airlineEl.textContent.trim(),
-                            price: priceEl?.textContent?.trim() || 'N/A',
-                            duration: durationEl?.textContent?.trim() || 'N/A',
-                            departure_time: timeEl?.textContent?.trim() || 'N/A'
-                        });
-                    }
-                });
-                return flights.slice(0, 10);
-            }
-            """
-            extract_result = await self.session.call_tool("puppeteer_evaluate", arguments={"script": extract_script})
+        extract_script = """
+        () => {
+            const flights = [];
+            document.querySelectorAll('div.gws-flights-results__result-item-inner').forEach(element => {
+                const airlineEl = element.querySelector('.gws-flights-results__airline-name');
+                const priceEl = element.querySelector('.gws-flights-results__price');
+                const durationEl = element.querySelector('.gws-flights-results__duration');
+                if (airlineEl && priceEl) {
+                    flights.push({
+                        airline: airlineEl.textContent.trim(),
+                        price: priceEl?.textContent?.trim() || 'N/A',
+                        duration: durationEl?.textContent?.trim() || 'N/A',
+                    });
+                }
+            });
+            return flights.slice(0, 10);
+        }
+        """
+        eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
+        
+        flights_data = []
+        if eval_result and not eval_result.isError and eval_result.content:
+            raw_data = json.loads(eval_result.content[0].text)
+            for item in raw_data:
+                flights_data.append({
+                    'airline': item.get('airline'),
+                    'price': item.get('price', 'N/A'),
+                    'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
+                    'duration': item.get('duration', 'N/A'),
+                    'platform': 'google_flights'
+                })
 
-            flights = []
-            if hasattr(extract_result, 'content') and extract_result.content and extract_result.content[0].text:
-                extracted_data = json.loads(extract_result.content[0].text)
-                for item in extracted_data:
-                    if item.get('airline'):
-                        flight = {
-                            'airline': item.get('airline'),
-                            'price': item.get('price', 'N/A'),
-                            'price_numeric': TravelSearchUtils.extract_price_from_text(item.get('price', '0')),
-                            'duration': item.get('duration', 'N/A'),
-                            'departure_time': item.get('departure_time', 'N/A'),
-                            'platform': 'google_flights',
-                            'source': 'Real Google Flights Scraping',
-                            'route': f'{origin} → {destination}',
-                            'quality_score': TravelSearchUtils.calculate_flight_quality_score(item),
-                            'meets_quality_criteria': item.get('airline', '') in ['Korean Air', 'Asiana Airlines', 'Delta', 'Emirates']
-                        }
-                        flights.append(flight)
-            return flights
-        except Exception as e:
-            logger.error(f"Google Flights search failed: {e}")
-            return [] 
+        logger.info(f"Scraped {len(flights_data)} flights from Google Flights")
+        return {"type": "flight", "data": flights_data} 

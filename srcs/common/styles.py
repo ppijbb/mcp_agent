@@ -218,6 +218,11 @@ def get_mobile_styles():
     """모바일 최적화 스타일 반환"""
     return MOBILE_STYLES
 
+def apply_custom_styles():
+    """Streamlit에 공통 스타일 적용"""
+    import streamlit as st
+    st.markdown(get_common_styles(), unsafe_allow_html=True)
+
 def get_page_header(page_type, title, subtitle):
     """페이지별 헤더 HTML 생성"""
     background = HEADER_STYLES.get(page_type, HEADER_STYLES["main"])

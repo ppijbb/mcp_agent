@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Lighthouse integration for SEO Doctor",
   "dependencies": {
+    "@modelcontextprotocol/server-puppeteer": "^2025.5.12",
     "chrome-launcher": "^0.15.2",
     "lighthouse": "^10.4.0",
     "playwright": "^1.53.0"
