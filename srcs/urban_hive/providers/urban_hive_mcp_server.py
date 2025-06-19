@@ -24,6 +24,7 @@ from mcp.server import Server
 from .public_data_client import public_data_client
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
+from mcp.server import NotificationOptions
 from mcp.types import (
     Resource,
     Tool,
@@ -286,8 +287,8 @@ async def main():
                 server_name="urban-hive",
                 server_version="1.0.0",
                 capabilities=server.get_capabilities(
-                    notification_options=None,
-                    experimental_capabilities=None,
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
                 ),
             ),
         )
