@@ -26,25 +26,20 @@ from configs.settings import get_reports_path
 
 # Real SEO Doctor MCP Agent import
 try:
-    from srcs.seo_doctor.seo_doctor_mcp_agent import (
-        create_seo_doctor_agent,
+    # P1-4: Import from the correct agent file and only what's needed
+    from srcs.seo_doctor.seo_doctor_agent import (
         run_emergency_seo_diagnosis,
         SEOAnalysisResult,
-        SEOEmergencyLevel,
-        load_analysis_strategies,
-        load_seo_templates,
-        get_lighthouse_status,
-        save_seo_report,
-        generate_seo_report_content
+        SEOEmergencyLevel
     )
     SEO_AGENT_AVAILABLE = True
 except ImportError as e:
     st.error(f"⚠️ Real SEO Doctor MCP Agent를 불러올 수 없습니다: {e}")
-    st.info("새로운 MCP Agent 구현을 확인하고 필요한 의존성을 설치해주세요.")
+    st.info("srcs/seo_doctor/seo_doctor_agent.py 파일을 확인하고 필요한 의존성을 설치해주세요.")
     SEO_AGENT_AVAILABLE = False
 
 # ✅ P2: Lighthouse fallback system removed - Using real MCP Agent only
-# ✅ P1-4: 모든 함수는 srcs.seo_doctor.seo_doctor_mcp_agent에서 import
+# ✅ P1-4: 모든 함수는 이제 srcs.seo_doctor.seo_doctor_agent에서 import됩니다.
 
 def validate_seo_result(result):
     """SEO 분석 결과 검증"""
@@ -86,12 +81,8 @@ def main():
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
     
-    # 파일 저장 옵션 추가
-    save_to_file = st.checkbox(
-        "SEO 분석 결과를 파일로 저장", 
-        value=False,
-        help=f"체크하면 {get_reports_path('seo_doctor')}/ 디렉토리에 분석 결과를 파일로 저장합니다"
-    )
+    # 파일 저장 옵션 제거 - 에이전트가 항상 저장함
+    st.info(f"ℹ️ 분석 결과는 자동으로 {get_reports_path('seo_doctor')}/ 디렉토리에 저장됩니다.")
     
     st.markdown("---")
     
@@ -116,23 +107,9 @@ def render_real_seo_analysis():
             help="실시간으로 웹사이트를 분석합니다"
         )
         
-        # 분석 옵션 - 동적 로드
-        try:
-            strategies = load_analysis_strategies()
-            strategy = st.selectbox(
-                "📱 분석 환경",
-                strategies,
-                index=None,
-                placeholder="분석 환경을 선택하세요"
-            )
-        except Exception as e:
-            st.warning(f"분석 전략 로드 실패: {e}")
-            strategy = st.text_input(
-                "📱 분석 환경",
-                value=None,
-                placeholder="mobile 또는 desktop 입력"
-            )
-    
+        # 분석 옵션 제거 - 에이전트가 기본값(모바일)으로 처리
+        st.markdown("<p style='font-size: 0.9rem; color: #888;'>* 현재 모든 분석은 모바일 환경을 기준으로 수행됩니다.</p>", unsafe_allow_html=True)
+
     with col2:
         st.markdown("#### 🎯 실시간 분석 특징")
         st.markdown("""
@@ -146,8 +123,6 @@ def render_real_seo_analysis():
     # 필수 입력 검증
     if not url:
         st.warning("분석할 웹사이트 URL을 입력해주세요.")
-    elif not strategy:
-        st.warning("분석 환경을 선택하거나 입력해주세요.")
     else:
         # 분석 시작 버튼
         if st.button("🚨 실시간 SEO 진단 시작", type="primary", use_container_width=True):
@@ -155,15 +130,15 @@ def render_real_seo_analysis():
                 url = 'https://' + url
             
             # 실제 분석 수행
-            run_real_lighthouse_analysis(url, strategy)
+            run_real_lighthouse_analysis(url)
 
-def run_real_lighthouse_analysis(url: str, strategy: str):
+def run_real_lighthouse_analysis(url: str):
     """🚨 REAL MCP Agent Analysis - No More Mock Data"""
     
     # Check if real MCP Agent is available
     if not SEO_AGENT_AVAILABLE:
         st.error("🚨 Real SEO Doctor MCP Agent가 사용 불가능합니다!")
-        st.info("srcs/seo_doctor/seo_doctor_mcp_agent.py를 확인하고 필요한 의존성을 설치해주세요.")
+        st.info("srcs/seo_doctor/seo_doctor_agent.py를 확인하고 필요한 의존성을 설치해주세요.")
         return
     
     # 진행 상황 표시
@@ -242,24 +217,28 @@ def run_real_lighthouse_analysis(url: str, strategy: str):
             "analysis_timestamp": analysis_result.analysis_timestamp.isoformat(),
             "lighthouse_raw_data": analysis_result.lighthouse_raw_data
         }
-        display_real_analysis_results(display_data, strategy, url)
+        display_real_analysis_results(display_data, url)
     elif "error" in analysis_result:
         st.error(f"❌ 분석 실패: {analysis_result['error']}")
         return
     else:
         st.error("❌ 알 수 없는 분석 결과 형식입니다.")
 
-def display_real_analysis_results(result: dict, strategy: str, url: str):
+def display_real_analysis_results(result: dict, url: str):
     """실제 분석 결과 표시"""
     
     # 기본 정보 추출
     overall_score = result.get('overall_score', 0)
-    scores = result.get('scores', {})
-    metrics = result.get('metrics', {})
-    issues = result.get('issues', [])
-    recovery_days = result.get('recovery_days', 0)
+    scores = {
+        "performance": result.get('performance_score', 0),
+        "seo": result.get('seo_score', 0),
+        "accessibility": result.get('accessibility_score', 0),
+        "best_practices": result.get('best_practices_score', 0)
+    }
+    metrics = result.get('core_web_vitals', {})
+    issues = result.get('critical_issues', [])
+    recovery_days = result.get('estimated_recovery_days', 0)
     emergency_level = result.get('emergency_level', '⚠️ 분석 중')
-    improvement_potential = result.get('improvement_potential', 0)
     
     # 응급 레벨에 따른 색상 결정
     if overall_score >= 85:
@@ -283,7 +262,7 @@ def display_real_analysis_results(result: dict, strategy: str, url: str):
     ">
         <h2>{emergency_level}</h2>
         <h1 style="font-size: 3rem; margin: 0;">{overall_score}/100</h1>
-        <p style="font-size: 1.2rem;">실시간 SEO 건강도 점수 ({strategy.upper()})</p>
+        <p style="font-size: 1.2rem;">실시간 SEO 건강도 점수 (모바일 기준)</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -322,16 +301,13 @@ def display_real_analysis_results(result: dict, strategy: str, url: str):
     # 실시간 예측 메트릭
     st.markdown("### 📈 AI 예측 분석")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         st.metric("⏰ 회복 예상", f"{recovery_days}일")
     
     with col2:
         st.metric("🔍 발견된 문제", f"{len(issues)}개")
-    
-    with col3:
-        st.metric("📈 개선 가능성", f"+{improvement_potential}%")
     
     # 발견된 문제점들
     if issues:
@@ -345,19 +321,9 @@ def display_real_analysis_results(result: dict, strategy: str, url: str):
     # 차트 시각화
     render_score_visualization(scores)
     
-    # 파일 저장 처리
-    if st.session_state.get('save_to_file', False):
-        try:
-            report_content = generate_seo_report_content(result, strategy)
-            filename = f"seo_analysis_{url.replace('https://', '').replace('http://', '').replace('/', '_')}_{strategy}.md"
-            save_seo_report(report_content, filename)
-            st.success(f"📁 보고서가 저장되었습니다: {filename}")
-        except Exception as e:
-            st.warning(f"보고서 저장 실패: {e}")
-    
     # 상세 분석 보고서
     with st.expander("📋 상세 Lighthouse 보고서"):
-        st.json(result.get('raw_lighthouse_result', {}))
+        st.json(result.get('lighthouse_raw_data', {}))
 
 # ✅ P1-4: generate_seo_report_content 함수는 srcs.seo_doctor.seo_doctor_mcp_agent에서 import
 

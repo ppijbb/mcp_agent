@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 import os
 from datetime import datetime
+import asyncio
+import re
+import json
+from srcs.common.streamlit_log_handler import setup_streamlit_logging
+from srcs.basic_agents.enhanced_data_generator import SyntheticDataAgent
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -18,58 +23,103 @@ sys.path.insert(0, str(project_root))
 try:
     from configs.settings import get_reports_path
     REPORTS_PATH = get_reports_path('data_generator')
-except ImportError:
-    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
-    st.stop()
+except (ImportError, ModuleNotFoundError):
+    st.error("❌ 설정 파일을 찾을 수 없습니다. `configs/settings.py`를 확인해주세요.")
+    # Fallback path
+    REPORTS_PATH = os.path.join(project_root, "reports", "data_generator")
+    os.makedirs(REPORTS_PATH, exist_ok=True)
 
 # AI Data Generation Agent 임포트 - 필수 의존성
 try:
     from srcs.basic_agents.data_generator import AIDataGenerationAgent
 except ImportError as e:
-    st.error(f"❌ AI Data Generation Agent를 불러올 수 없습니다: {e}")
-    st.error("**시스템 요구사항**: AIDataGenerationAgent가 필수입니다.")
-    st.info("에이전트 모듈을 설치하고 다시 시도해주세요.")
+    st.error(f"❌ AI 에이전트를 불러올 수 없습니다: {e}")
+    st.error("시스템 요구사항: `AIDataGenerationAgent`와 `SyntheticDataAgent`가 필수입니다.")
+    st.info("에이전트 모듈을 설치하고 다시 시도해주세요: `srcs/basic_agents/`")
     st.stop()
 
 # 페이지 설정
 try:
     st.set_page_config(
-        page_title="📊 AI Data Generator",
-        page_icon="📊",
-        layout="wide"
+        page_title="🤖 AI 데이터 생성기",
+        page_icon="🤖",
+        layout="wide",
     )
 except Exception:
     pass
 
-def main():
-    """AI Data Generator 메인 페이지"""
-    
-    # 헤더
-    st.markdown("""
-    <div style="
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        text-align: center;
-        color: white;
-        margin-bottom: 2rem;
-    ">
-        <h1>📊 AI Data Generator</h1>
-        <p style="font-size: 1.2rem; margin: 0;">
-            AI 기반 지능형 데이터 생성 및 분석 도구
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 홈으로 돌아가기 버튼
-    if st.button("🏠 홈으로 돌아가기", key="home"):
-        st.switch_page("main.py")
-    
-    st.markdown("---")
-    
-    st.success("🤖 AI Data Generation Agent가 성공적으로 연결되었습니다!")
-    
-    # 에이전트 인터페이스
+st.title("🤖 AI 데이터 생성기")
+st.caption("🚀 필요한 모든 종류의 합성 데이터를 AI로 생성하세요")
+
+# --- Real-time Log Display ---
+log_expander = st.expander("실시간 실행 로그", expanded=False)
+log_container = log_expander.empty()
+# Capture logs from the root mcp_agent logger
+setup_streamlit_logging(["mcp_agent", "synthetic_data_orchestrator", "ai_data_generation_agent"], log_container)
+# --- End Log Display ---
+
+def parse_request(prompt: str) -> tuple[str | None, int | None]:
+    """
+    Parses a user prompt to extract data type and record count.
+    Example: "고객 데이터 100개 만들어줘" -> ("고객", 100)
+    """
+    # Regex to find a number and the text preceding "데이터" or a similar keyword
+    match = re.search(r"(.+?)(?: 데이터|)\s*(\d+)\s*개", prompt)
+    if match:
+        data_type = match.group(1).strip()
+        record_count = int(match.group(2))
+        return data_type, record_count
+    return None, None
+
+def render_chat_generator():
+    """Renders the chat-based data generator using SyntheticDataAgent."""
+    st.header("💬 채팅으로 간단하게 생성하기")
+    st.info("Meta의 Synthetic Data Kit을 활용하여 더 복잡한 데이터셋(Q&A, CoT 등)을 생성합니다.")
+
+    # Use the state management pattern for the agent
+    if 'enhanced_data_agent' not in st.session_state:
+        st.session_state.enhanced_data_agent = SyntheticDataAgent(output_dir="generated_data")
+    agent = st.session_state.enhanced_data_agent
+
+    # Initialize chat history
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = [{"role": "assistant", "content": "안녕하세요! 어떤 종류의 데이터를 몇 개나 생성해 드릴까요?\n\n예시: `고객 데이터 100개 생성해줘`"}]
+
+    # Display chat messages
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Handle user input
+    if prompt := st.chat_input("어떤 데이터를 생성할까요?"):
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        data_type, record_count = parse_request(prompt)
+
+        if data_type and record_count:
+            with st.chat_message("assistant"):
+                with st.spinner(f"'{data_type}' 데이터 {record_count}개를 생성하는 중... 잠시만 기다려주세요."):
+                    try:
+                        response = asyncio.run(agent.run(data_type=data_type, record_count=record_count))
+                        st.markdown(response)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": response})
+                    except Exception as e:
+                        error_msg = f"데이터 생성 중 오류 발생: {e}"
+                        st.error(error_msg)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+
+        else:
+            response = "요청을 이해하지 못했어요. `[데이터 종류] [숫자]개` 형식으로 말씀해주세요. (예: `제품 150개`)"
+            with st.chat_message("assistant"):
+                st.markdown(response)
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+
+def render_detailed_generator():
+    """Renders the detailed, form-based data generator using AIDataGenerationAgent."""
+    st.header("⚙️ 상세 설정으로 생성하기")
+    st.info("Orchestrator-based AI Agent를 활용하여 특정 비즈니스 요구사항에 맞는 데이터를 생성합니다.")
     render_real_ai_data_generator()
 
 def render_real_ai_data_generator():
@@ -112,7 +162,7 @@ def render_ai_smart_data_generation(agent):
     st.markdown("### 🤖 AI 스마트 데이터 생성")
     st.info("AI가 요구사항을 분석하여 지능적으로 데이터를 생성합니다.")
     
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("#### ⚙️ AI 데이터 생성 설정")
@@ -125,12 +175,9 @@ def render_ai_smart_data_generation(agent):
         
         # 동적으로 로드되어야 할 데이터 유형들
         data_types = load_data_types()
-        data_type = st.selectbox(
-            "데이터 유형",
-            data_types if data_types else ["비즈니스 데이터"]
-        )
+        data_type = st.text_input("데이터 유형", value="고객", help="생성할 데이터의 유형을 입력하세요 (예: 제품, 거래내역).")
         
-        records_count = st.number_input("레코드 수", min_value=10, max_value=10000, value=1000)
+        records_count = st.number_input("레코드 수", min_value=10, max_value=10000, value=100)
         
         # 동적으로 로드되어야 할 품질 수준들
         quality_levels = load_quality_levels()
@@ -219,6 +266,7 @@ def generate_ai_smart_data(agent, config, save_to_file=False):
                     st.error("파일 저장 중 오류가 발생했습니다.")
             
             st.success("✅ AI 스마트 데이터 생성이 완료되었습니다!")
+            st.rerun()
             
     except Exception as e:
         st.error(f"AI 데이터 생성 실패: {e}")
@@ -229,6 +277,8 @@ def format_data_generation_result(result, config):
     
     if not result:
         raise Exception("데이터 생성 결과가 없습니다.")
+    
+    agent_output_data = result.get('agent_output', '')
     
     # 실제 에이전트 데이터만 사용하여 출력 생성
     output_lines = [
@@ -241,27 +291,8 @@ def format_data_generation_result(result, config):
         ""
     ]
     
-    # 실제 생성된 데이터 정보
-    if 'generated_data' in result:
-        output_lines.append("생성된 데이터:")
-        data = result['generated_data']
-        if isinstance(data, list) and len(data) > 0:
-            for i, record in enumerate(data[:5]):  # 처음 5개만 표시
-                output_lines.append(f"- 레코드 {i+1}: {record}")
-            if len(data) > 5:
-                output_lines.append(f"... 총 {len(data)}개 레코드")
-        output_lines.append("")
-    
-    # 데이터 품질 분석
-    if 'quality_metrics' in result:
-        metrics = result['quality_metrics']
-        output_lines.extend([
-            "데이터 품질 분석:",
-            f"- 완성도: {metrics.get('completeness', 'N/A')}",
-            f"- 일관성: {metrics.get('consistency', 'N/A')}",
-            f"- 유효성: {metrics.get('validity', 'N/A')}",
-            f"- 관계형 무결성: {metrics.get('integrity', 'N/A')}"
-        ])
+    output_lines.append("--- 생성된 데이터 미리보기 ---")
+    output_lines.append(agent_output_data)
     
     return "\n".join(output_lines)
 
@@ -310,7 +341,7 @@ def render_ai_custom_datasets(agent):
         if 'ai_custom_dataset' in st.session_state:
             st.markdown("#### 📄 AI 생성 데이터셋")
             dataset = st.session_state['ai_custom_dataset']
-            st.json(dataset)
+            st.json(dataset.get('agent_output', dataset))
         else:
             st.info("👈 데이터셋 요구사항을 입력하고 'AI 맞춤형 데이터셋 생성' 버튼을 클릭하세요.")
 
@@ -321,11 +352,12 @@ def generate_ai_custom_dataset(agent, config):
         with st.spinner("AI가 맞춤형 데이터셋을 설계하고 생성 중입니다..."):
             result = agent.create_custom_dataset(config)
             
-            if not result:
-                raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
+            if not result or result.get('error'):
+                raise Exception(result.get('error', "에이전트가 유효한 결과를 반환하지 않았습니다."))
             
             st.session_state['ai_custom_dataset'] = result
             st.success("✅ AI 맞춤형 데이터셋이 생성되었습니다!")
+            st.rerun()
             
     except Exception as e:
         st.error(f"AI 데이터셋 생성 실패: {e}")
@@ -377,7 +409,7 @@ def render_ai_customer_profiles(agent):
         if 'ai_customer_profiles' in st.session_state:
             st.markdown("#### 👤 AI 생성 고객 프로필")
             profiles = st.session_state['ai_customer_profiles']
-            st.json(profiles)
+            st.json(profiles.get('agent_output', profiles))
         else:
             st.markdown("""
             #### 🤖 AI 고객 프로필 생성 기능
@@ -396,11 +428,12 @@ def generate_ai_customer_profiles(agent, config):
         with st.spinner("AI가 고객 프로필을 생성 중입니다..."):
             result = agent.generate_customer_profiles(config)
             
-            if not result:
-                raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
+            if not result or result.get('error'):
+                raise Exception(result.get('error', "에이전트가 유효한 결과를 반환하지 않았습니다."))
             
             st.session_state['ai_customer_profiles'] = result
             st.success("✅ AI 고객 프로필 생성이 완료되었습니다!")
+            st.rerun()
             
     except Exception as e:
         st.error(f"AI 고객 프로필 생성 실패: {e}")
@@ -455,7 +488,7 @@ def render_ai_timeseries_prediction(agent):
         if 'ai_timeseries_data' in st.session_state:
             st.markdown("#### 📊 AI 생성 시계열 데이터")
             timeseries = st.session_state['ai_timeseries_data']
-            st.json(timeseries)
+            st.json(timeseries.get('agent_output', timeseries))
         else:
             st.info("👈 시계열 설정을 완료하고 'AI 시계열 데이터 생성' 버튼을 클릭하세요.")
 
@@ -466,11 +499,12 @@ def generate_ai_timeseries_data(agent, config):
         with st.spinner("AI가 시계열 데이터를 생성 중입니다..."):
             result = agent.generate_timeseries_data(config)
             
-            if not result:
-                raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
+            if not result or result.get('error'):
+                raise Exception(result.get('error', "에이전트가 유효한 결과를 반환하지 않았습니다."))
             
             st.session_state['ai_timeseries_data'] = result
             st.success("✅ AI 시계열 데이터 생성이 완료되었습니다!")
+            st.rerun()
             
     except Exception as e:
         st.error(f"AI 시계열 데이터 생성 실패: {e}")
@@ -546,6 +580,7 @@ def save_data_generator_results(data_text, config):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write("# AI Data Generator 결과 보고서\n\n")
             f.write(f"**생성 시간**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"**요청 설정**: \n```json\n{json.dumps(config, indent=2, ensure_ascii=False)}\n```\n\n")
             f.write("---\n\n")
             f.write(data_text)
             f.write("\n\n---\n")
@@ -557,5 +592,11 @@ def save_data_generator_results(data_text, config):
         st.error(f"파일 저장 중 오류: {e}")
         return False, None
 
-if __name__ == "__main__":
-    main() 
+# --- Main App Structure ---
+tab1, tab2 = st.tabs(["💬 채팅으로 생성 (Enhanced SDK)", "⚙️ 상세 설정으로 생성 (Orchestrator)"])
+
+with tab1:
+    render_chat_generator()
+
+with tab2:
+    render_detailed_generator() 

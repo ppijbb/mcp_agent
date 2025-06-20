@@ -32,7 +32,7 @@ def parse_figma_url(url: str) -> tuple[str | None, str | None]:
     
     return file_id, node_id
 
-def get_input_params() -> tuple[str, str, str, str]:
+def get_input_params() -> tuple[str, str]:
     """
     커맨드 라인 인자와 환경 변수에서 필요한 파라미터를 가져옵니다.
     """
@@ -54,12 +54,20 @@ def get_input_params() -> tuple[str, str, str, str]:
         print("💡 .env 파일이나 시스템 환경 변수에 FIGMA_API_KEY를 추가해주세요.")
         sys.exit(1)
         
-    return figma_api_key, file_id, node_id, figma_url
+    return figma_url, figma_api_key
 
-async def main():
-    """Product Planner Agent 메인 실행 함수"""
-    figma_api_key, file_id, node_id, figma_url = get_input_params()
+async def run_agent_workflow(figma_url: str, figma_api_key: str) -> bool:
+    """Product Planner Agent 워크플로우 실행"""
+    file_id, node_id = parse_figma_url(figma_url)
     
+    if not file_id or not node_id:
+        print("❌ 유효하지 않은 Figma URL입니다. URL에 file_id와 node-id가 모두 포함되어 있는지 확인하세요.")
+        return False
+        
+    if not figma_api_key:
+        print("❌ FIGMA_API_KEY가 제공되지 않았습니다.")
+        return False
+
     print("=" * 60)
     print("🚀 Product Planner Agent v3.0 (Streamlined)")
     print(f"📊 분석 대상 Figma URL: {figma_url}")
@@ -99,6 +107,16 @@ async def main():
         success = False
         
     return success
+
+async def main():
+    """Product Planner Agent 메인 실행 함수 (CLI용)"""
+    figma_url, figma_api_key = get_input_params()
+    
+    # CLI에서 실행 시에는 Streamlit 안내 메시지를 약간 다르게 표시할 수 있습니다.
+    # 이 부분은 run_agent_workflow 내부와 중복되므로, 필요에 따라 조정이 가능합니다.
+    # 여기서는 run_agent_workflow의 출력에 의존합니다.
+    
+    return await run_agent_workflow(figma_url, figma_api_key)
 
 if __name__ == "__main__":
     # mcp-agent 라이브러리 관련 경고 메시지 무시

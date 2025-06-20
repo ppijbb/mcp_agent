@@ -6,17 +6,8 @@ Common Styles Module
 
 # 공통 헤더 스타일
 HEADER_STYLES = {
-    "main": """
+    "main_style_block": """
     <style>
-        .main-header {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            padding: 2rem;
-            border-radius: 10px;
-            text-align: center;
-            color: white;
-            margin-bottom: 2rem;
-        }
-        
         .page-header {
             padding: 2rem;
             border-radius: 10px;
@@ -26,7 +17,8 @@ HEADER_STYLES = {
         }
     </style>
     """,
-    
+    "main": "background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);",
+    "product": "background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);",
     "business": "background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);",
     "seo": "background: linear-gradient(45deg, #ff4757, #ff3838);",
     "finance": "background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);",
@@ -90,6 +82,24 @@ CARD_STYLES = """
         margin: 1rem 0;
         transition: transform 0.2s;
         border: 1px solid var(--secondary-background-color);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    
+    .agent-card-content {
+        flex-grow: 1;
+    }
+    
+    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
+        border: 1px solid var(--secondary-background-color);
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
     }
     
     .agent-card:hover {
@@ -212,7 +222,7 @@ MOBILE_STYLES = """
 
 def get_common_styles():
     """모든 공통 스타일을 결합하여 반환"""
-    return HEADER_STYLES["main"] + BUTTON_STYLES + CARD_STYLES + DARK_MODE_STYLES
+    return HEADER_STYLES["main_style_block"] + BUTTON_STYLES + CARD_STYLES + DARK_MODE_STYLES
 
 def get_mobile_styles():
     """모바일 최적화 스타일 반환"""

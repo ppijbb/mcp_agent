@@ -139,6 +139,106 @@ class SyntheticDataKitIntegration:
             return False, "", "Timeout during dataset saving"
 
 
+class SyntheticDataAgent:
+    """
+    An enhanced agent that orchestrates the entire synthetic data generation process.
+    It takes a simple request and returns the path to the generated data file.
+    """
+
+    def __init__(self, output_dir="generated_data"):
+        self.output_dir = output_dir
+        self.app = MCPApp(
+            name="synthetic_data_orchestrator",
+            settings=get_settings("configs/mcp_agent.config.yaml"),
+        )
+        os.makedirs(self.output_dir, exist_ok=True)
+
+    async def run(self, data_type: str, record_count: int) -> str:
+        """
+        Runs the full data generation workflow.
+
+        Args:
+            data_type: The type of data to generate (e.g., 'customer', 'product').
+            record_count: The number of records to generate.
+
+        Returns:
+            A message indicating the result, including the path to the output file on success.
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"{data_type}_data_{timestamp}.json"
+        output_path = os.path.join(self.output_dir, output_file)
+
+        async with self.app.run() as app_context:
+            logger = app_context.logger
+            logger.info(f"Starting orchestrated data generation for {record_count} {data_type} records.")
+
+            # Define the agents needed for the workflow
+            schema_agent = Agent(
+                name="schema_designer",
+                instruction=f"You are a data architect. Design a JSON schema for {data_type} data.",
+                server_names=[],
+            )
+            data_generator_agent = Agent(
+                name="data_generator",
+                instruction=f"You are a data specialist. Generate {record_count} realistic {data_type} records based on a schema.",
+                server_names=[],
+            )
+            validator_agent = Agent(
+                name="data_validator",
+                instruction=f"You are a data quality analyst. Validate the generated {data_type} data for schema compliance and realism.",
+                server_names=[],
+            )
+
+            # The orchestrator will manage the workflow
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=[schema_agent, data_generator_agent, validator_agent],
+                plan_type="full",
+            )
+
+            # The overall objective for the orchestrator
+            workflow_task = f"""
+            Generate a high-quality synthetic dataset with {record_count} records for the data type '{data_type}'.
+
+            Follow these steps meticulously:
+            1.  **Use schema_designer**: Create a comprehensive and realistic JSON schema for '{data_type}' entities. The schema must be detailed.
+            2.  **Use data_generator**: Generate {record_count} records adhering strictly to the schema designed in the previous step.
+            3.  **Use data_validator**: Thoroughly check the generated data for quality, consistency, and schema compliance. Provide a brief quality report.
+            4.  **Final Output**: Present the validated JSON data as the final result. Do not include a file writing step in the plan. The data itself is the final output.
+            """
+
+            try:
+                # The orchestrator returns the final generated data
+                generated_data_str = await orchestrator.generate_str(
+                    message=workflow_task,
+                    request_params=RequestParams(model="gpt-4o-mini")
+                )
+
+                # Save the final, validated data to the file
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    # Attempt to parse and re-dump for pretty formatting
+                    try:
+                        parsed_json = json.loads(generated_data_str)
+                        json.dump(parsed_json, f, indent=2, ensure_ascii=False)
+                    except json.JSONDecodeError:
+                        # If parsing fails, just write the raw string
+                        f.write(generated_data_str)
+                
+                file_size = os.path.getsize(output_path)
+                success_message = (
+                    f"✅ 데이터 생성에 성공했습니다!\n\n"
+                    f"📁 **파일 경로**: `{output_path}`\n"
+                    f"📊 **파일 크기**: {file_size / 1024:.2f} KB"
+                )
+                logger.info(success_message)
+                return success_message
+
+            except Exception as e:
+                error_message = f"❌ 데이터 생성 중 오류 발생: {e}"
+                logger.error(error_message, exc_info=True)
+                return error_message
+
+
 async def main():
     # Create output directory and SDK integration
     os.makedirs(OUTPUT_DIR, exist_ok=True)

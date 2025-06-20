@@ -34,6 +34,7 @@ class UrbanDataCategory(Enum):
     COMMUNITY_EVENTS = "🎉 Community Event Analytics"
     URBAN_PLANNING = "🏙️ Urban Planning Insights"
     ENVIRONMENTAL = "🌱 Environmental Monitoring"
+    REAL_ESTATE_TRENDS = "📈 Real Estate Market Trends"
 
 class UrbanThreatLevel(Enum):
     """Urban Issue Severity Classification"""
@@ -72,27 +73,42 @@ class UrbanActionPlan:
     stakeholders: List[str]
 
 class UrbanHiveMCPAgent:
-    """
-    Real Urban Hive MCP Agent Implementation
-    
-    Features:
-    - Real urban data collection via MCP servers
-    - Geographic information system integration
-    - Traffic monitoring system connectivity
-    - Public safety database access
-    - Environmental sensor network data
-    - Community engagement platform integration
-    - No mock data or simulations
-    """
-    
-    def __init__(self, output_dir: str = "urban_hive_reports"):
+    def __init__(
+        self,
+        output_dir: str = "urban_hive_reports",
+        app: Optional[MCPApp] = None,
+        llm: Optional[OpenAIAugmentedLLM] = None,
+        name: Optional[str] = None,
+        instruction: Optional[str] = None,
+        server_names: Optional[List[str]] = None,
+    ):
+        """
+        Real Urban Hive MCP Agent Implementation
+
+        Features:
+        - Real urban data collection via MCP servers
+        - Geographic information system integration
+        - Traffic monitoring system connectivity
+        - Public safety database access
+        - Environmental sensor network data
+        - Community engagement platform integration
+        - No mock data or simulations
+        """
         self.output_dir = output_dir
-        self.app = MCPApp(
-            name="urban_hive",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
-        
+        self.agent_name = name or "UrbanHiveAgent"
+        self.instruction = instruction # Can be used if needed later
+
+        if app:
+            self.app = app
+        else:
+            self.app = MCPApp(
+                name="urban_hive_standalone",
+                settings=get_settings("configs/mcp_agent.config.yaml"),
+                human_input_callback=None
+            )
+
+        self.parser_llm = llm if llm else OpenAIAugmentedLLM()
+
     async def analyze_urban_data(
         self, 
         category: UrbanDataCategory,
@@ -227,14 +243,99 @@ class UrbanHiveMCPAgent:
                     threat_level=UrbanThreatLevel.CRITICAL,
                     overall_score=0,
                     key_metrics={},
-                    critical_issues=[f"Analysis failed: {str(e)}"],
-                    recommendations=["Fix MCP server configuration", "Check data source connectivity"],
+                    critical_issues=[f"분석 실패: {str(e)}"],
+                    recommendations=["오류로 인해 추천 사항을 생성할 수 없습니다. 입력 값이나 시스템 설정을 확인하세요."],
                     affected_areas=[location],
-                    data_sources=["Error - no data sources available"],
+                    data_sources=["오류 - 사용 가능한 데이터 소스 없음"],
                     analysis_timestamp=datetime.now(timezone.utc),
                     geographic_data={},
-                    predicted_trends=["Unable to generate predictions due to data error"]
+                    predicted_trends=["오류로 인해 예측을 생성할 수 없음"]
                 )
+
+    async def run(self, prompt: str) -> str:
+        """
+        Parses a natural language prompt to determine analysis parameters,
+        runs the urban analysis, and returns a formatted string result.
+        """
+        parsing_prompt = f"""
+You are a helpful assistant that parses user queries for urban data analysis.
+Extract the location, a suitable data category, and a time range from the user's query.
+
+User Query: "{prompt}"
+
+Available Data Categories:
+- TRAFFIC_FLOW: "🚦 Traffic Flow Analysis"
+- PUBLIC_SAFETY: "🛡️ Public Safety Assessment"
+- ILLEGAL_DUMPING: "🗑️ Illegal Dumping Monitoring"
+- COMMUNITY_EVENTS: "🎉 Community Event Analytics"
+- URBAN_PLANNING: "🏙️ Urban Planning Insights"
+- ENVIRONMENTAL: "🌱 Environmental Monitoring"
+- REAL_ESTATE_TRENDS: "📈 Real Estate Market Trends"
+
+Time range format should be a string like "24h", "7d", "1m", "3m", "1y".
+If the user mentions a duration like "3개월", convert it to "3m". "하루" to "24h".
+If no specific duration is mentioned but implies recent trends (e.g. "최근 시세"), use "1m".
+
+Respond ONLY with a JSON object with the following keys: "location", "category", "time_range".
+If a value cannot be determined, use a string "None" for location, or a sensible default.
+For category, pick the one that best matches the query from the available categories. If no clear match, default to "URBAN_PLANNING".
+If no time range is specified or inferable, default to "1m" (1 month).
+Example for "서울 강남구 아파트의 최근 3개월 시세와 시장 동향을 알려줘":
+{{
+  "location": "서울 강남구",
+  "category": "REAL_ESTATE_TRENDS",
+  "time_range": "3m"
+}}
+Example for "오늘 서울 날씨 어때?":
+{{
+  "location": "서울",
+  "category": "ENVIRONMENTAL",
+  "time_range": "24h"
+}}
+"""
+        try:
+            parsed_params_str = await self.parser_llm.generate_str(
+                message=parsing_prompt,
+                request_params=RequestParams(model="gpt-4o-mini", temperature=0.0)
+            )
+            # Ensure the response is a valid JSON string before parsing
+            parsed_params_str = parsed_params_str.strip()
+            if parsed_params_str.startswith("```json"):
+                parsed_params_str = parsed_params_str[7:]
+            if parsed_params_str.endswith("```"):
+                parsed_params_str = parsed_params_str[:-3]
+            
+            params = json.loads(parsed_params_str)
+
+            location = params.get("location")
+            category_str = params.get("category", "URBAN_PLANNING")
+            time_range = params.get("time_range", "1m")
+
+            if not location or location.lower() == "none":
+                return "분석할 위치를 명확히 지정해주세요. 예: '서울 강남구의 부동산 동향'"
+
+            try:
+                category = UrbanDataCategory[category_str]
+            except KeyError:
+                self.app.logger.warning(f"Invalid category '{category_str}' from LLM, defaulting to URBAN_PLANNING.")
+                category = UrbanDataCategory.URBAN_PLANNING
+
+            analysis_result = await self.analyze_urban_data(
+                category=category,
+                location=location,
+                time_range=time_range,
+                include_predictions=True 
+            )
+            
+            # Format UrbanAnalysisResult to a markdown string
+            return self._format_analysis_result_to_markdown(analysis_result)
+
+        except json.JSONDecodeError as e:
+            self.app.logger.error(f"Failed to parse LLM response for parameters: {e}. Response was: {parsed_params_str}")
+            return "죄송합니다, 사용자님의 요청을 이해하는 데 실패했습니다. 조금 더 명확하게 말씀해주시겠어요?"
+        except Exception as e:
+            self.app.logger.error(f"Error in UrbanHiveMCPAgent.run: {e}")
+            return f"죄송합니다, 분석 중 오류가 발생했습니다: {str(e)}"
     
     async def _simple_react_chain(
         self,
@@ -430,11 +531,11 @@ class UrbanHiveMCPAgent:
             # Calculate threat level based on real data
             threat_level = await self._calculate_urban_threat_level(analysis_data, metrics_data)
             
-            # Extract real issues and recommendations
+            # Extract issues, recommendations, etc.
             critical_issues = await self._extract_urban_issues(analysis_data)
             recommendations = await self._extract_urban_recommendations(analysis_data)
             predicted_trends = await self._extract_trend_predictions(analysis_data)
-            affected_areas = await self._extract_affected_areas(analysis_data, location)
+            affected_areas = await self._extract_affected_areas(analysis_data) # location removed as direct param
             data_sources = await self._extract_data_sources(analysis_data)
             
             return UrbanAnalysisResult(
@@ -443,7 +544,7 @@ class UrbanHiveMCPAgent:
                 overall_score=metrics_data.get("overall_score", 0),
                 key_metrics=metrics_data.get("key_metrics", {}),
                 critical_issues=critical_issues,
-                recommendations=recommendations,
+                recommendations=recommendations, # Will be an empty list if none found
                 affected_areas=affected_areas,
                 data_sources=data_sources,
                 analysis_timestamp=datetime.now(timezone.utc),
@@ -558,11 +659,11 @@ class UrbanHiveMCPAgent:
                 }
             
             # Calculate overall score as average of available metrics
-            numeric_values = [v for v in metrics["key_metrics"].values() if isinstance(v, (int, float))]
+            numeric_values = [v for v in metrics["key_metrics"].values() if isinstance(v, (int, float)) and v is not None]
             if numeric_values:
                 metrics["overall_score"] = round(sum(numeric_values) / len(numeric_values), 1)
             else:
-                metrics["overall_score"] = 50  # Default if no metrics found
+                metrics["overall_score"] = 0 # Default to 0 if no valid metrics found
             
             return metrics
             
@@ -572,25 +673,25 @@ class UrbanHiveMCPAgent:
     def _extract_percentage(self, text: str, pattern: str) -> float:
         """Extract percentage values from text"""
         import re
-        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)%?", text, re.IGNORECASE)
-        return float(match.group(1)) if match else 0.0
+        match = re.search(rf"{pattern}[-:\s]*(\d+(?:\.\d+)?)%?", text, re.IGNORECASE) # Added hyphen for cases like "traffic-efficiency"
+        return float(match.group(1)) if match else None
     
     def _extract_number(self, text: str, pattern: str, unit: str = "") -> float:
         """Extract numerical values from text"""
         import re
-        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)\s*{unit}", text, re.IGNORECASE)
-        return float(match.group(1)) if match else 0.0
+        match = re.search(rf"{pattern}[-:\s]*(\d+(?:\.\d+)?)\s*{unit}", text, re.IGNORECASE)
+        return float(match.group(1)) if match else None
     
     def _extract_rating(self, text: str, pattern: str) -> float:
         """Extract rating values (e.g., 7.8/10)"""
         import re
-        match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)/10", text, re.IGNORECASE)
+        match = re.search(rf"{pattern}[-:\s]*(\d+(?:\.\d+)?)/10", text, re.IGNORECASE)
         if match:
             return float(match.group(1)) * 10  # Convert to 0-100 scale
         
         # Try simple number extraction
         match = re.search(rf"{pattern}[:\s]*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
-        return float(match.group(1)) if match else 0.0
+        return float(match.group(1)) if match else None
     
     async def _parse_geographic_data(self, raw_analysis: str, location: str) -> Dict[str, Any]:
         """Parse geographic and location data from analysis"""
@@ -649,7 +750,7 @@ class UrbanHiveMCPAgent:
             return UrbanThreatLevel.MEDIUM  # Safe default
     
     async def _extract_urban_issues(self, analysis_data: Dict[str, Any]) -> List[str]:
-        """Extract critical urban issues from analysis"""
+        """Extract critical urban issues from analysis. Returns empty list if none found."""
         try:
             critical_issues = []
             
@@ -671,10 +772,10 @@ class UrbanHiveMCPAgent:
             return unique_issues[:12]  # Limit to top 12 critical issues
             
         except Exception:
-            return ["Unable to extract critical issues from urban analysis"]
+            return [] # Return empty list on error or if no issues found
     
     async def _extract_urban_recommendations(self, analysis_data: Dict[str, Any]) -> List[str]:
-        """Extract urban recommendations from analysis"""
+        """Extract urban recommendations from analysis. Returns empty list if none found."""
         try:
             recommendations = analysis_data.get("recommendations", [])
             if not recommendations:
@@ -684,34 +785,31 @@ class UrbanHiveMCPAgent:
             return recommendations[:15]  # Limit to 15 recommendations
             
         except Exception:
-            return ["Conduct comprehensive urban assessment", "Implement smart city monitoring"]
+            return [] # Return empty list on error or if no recommendations found
     
     async def _extract_trend_predictions(self, analysis_data: Dict[str, Any]) -> List[str]:
-        """Extract trend predictions from analysis"""
+        """Extract trend predictions from analysis. Returns empty list if none found."""
         try:
             trends = analysis_data.get("trend_predictions", [])
-            if not trends:
-                trends = ["Monitor urban metrics for trend development"]
-            
             return trends[:8]  # Limit to 8 trend predictions
             
         except Exception:
-            return ["Trend analysis requires more data"]
+            return [] # Return empty list on error or if no trends found
     
-    async def _extract_affected_areas(self, analysis_data: Dict[str, Any], location: str) -> List[str]:
-        """Extract affected geographic areas"""
+    async def _extract_affected_areas(self, analysis_data: Dict[str, Any]) -> List[str]:
+        """Extract affected geographic areas. Returns empty list if none found."""
         try:
             areas = analysis_data.get("geographic_impacts", [])
-            if not areas:
-                areas = [location]  # Default to main location
-            
             return areas[:10]  # Limit to 10 affected areas
             
         except Exception:
-            return [location]
+            return [] # Return empty list on error or if no areas found
     
     async def _extract_data_sources(self, analysis_data: Dict[str, Any]) -> List[str]:
-        """Extract data sources used in analysis"""
+        """
+        Extract data sources used in analysis.
+        Returns a list of identified sources, or an empty list if none are explicitly found.
+        """
         try:
             # Look for mentions of data sources in the analysis
             sources = ["Urban monitoring systems", "Municipal databases", "Real-time sensors"]
@@ -728,7 +826,7 @@ class UrbanHiveMCPAgent:
             return sources[:6]  # Limit to 6 data sources
             
         except Exception:
-            return ["Municipal data systems"]
+            return [] # Return empty list on error or if no sources identified
     
     async def _generate_action_plan(
         self, 
@@ -852,6 +950,43 @@ class UrbanHiveMCPAgent:
             
         except Exception as e:
             raise Exception(f"Failed to save urban analysis: {e}")
+
+    def _format_analysis_result_to_markdown(self, result: UrbanAnalysisResult) -> str:
+        """Formats the UrbanAnalysisResult object into a Markdown string."""
+        if "Analysis failed" in result.critical_issues[0]:
+             return f"## 🚨 분석 실패\n\n**오류**: {result.critical_issues[0]}"
+
+        # Use the first affected area, or 'N/A' if the list is empty.
+        # If affected_areas is empty, it implies the analysis might be general or location was not parsed.
+        # The original `location` from `analyze_urban_data` could be passed here for a fallback.
+        # For now, we'll rely on what's in UrbanAnalysisResult.
+        display_location = result.affected_areas[0] if result.affected_areas else "지정되지 않은 위치"
+
+        md_lines = [
+            f"## 🏙️ 도시 데이터 분석 결과: {display_location}",
+            f"**분석 카테고리**: {result.data_category.value}",
+            f"**분석 시간**: {result.analysis_timestamp.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+            f"**위협 수준**: {result.threat_level.value}",
+            f"**도시 건강 점수**: {result.overall_score}/100",
+        ]
+        if result.key_metrics:
+            md_lines.append("\n### 📊 주요 지표:")
+            for key, value in result.key_metrics.items():
+                md_lines.append(f"- **{key.replace('_', ' ').title()}**: {value if value is not None else '데이터 없음'}")
+        
+        if result.critical_issues:
+            md_lines.append("\n### ⚠️ 주요 문제점:")
+            for issue in result.critical_issues: md_lines.append(f"- {issue}")
+        
+        if result.recommendations:
+            md_lines.append("\n### 💡 추천 사항:")
+            for rec in result.recommendations: md_lines.append(f"- {rec}")
+
+        if result.predicted_trends:
+            md_lines.append("\n### 📈 예측 동향:")
+            for trend in result.predicted_trends: md_lines.append(f"- {trend}")
+            
+        return "\n".join(md_lines)
 
 # Export main functions
 async def create_urban_hive_agent(output_dir: str = "urban_hive_reports") -> UrbanHiveMCPAgent:

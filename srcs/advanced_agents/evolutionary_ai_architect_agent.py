@@ -21,7 +21,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 # Import existing components
 try:
@@ -208,7 +208,7 @@ class EvolutionaryAIArchitectMCP:
         """ReAct pattern evolution process, without the faulty Orchestrator."""
 
         # Create a direct LLM for reasoning steps
-        reasoning_llm = OpenAIAugmentedLLM(
+        reasoning_llm = GoogleAugmentedLLM(
             app=self.app,
             name="reasoning_llm",
             instruction="You are a world-class AI architect reasoning engine.",
@@ -418,59 +418,55 @@ class EvolutionaryAIArchitectMCP:
         return new_population[:task.population_size]
     
     def _tournament_selection(self, population: List[ArchitectureGenome], tournament_size: int = 3) -> ArchitectureGenome:
-        """Tournament selection for parent choice"""
+        """Selects the best individual from a randomly selected tournament."""
+        if not population:
+            raise ValueError("Population cannot be empty for selection.")
         tournament = random.sample(population, min(tournament_size, len(population)))
         return max(tournament, key=lambda x: x.fitness_score)
     
     def _calculate_population_diversity(self, population: List[ArchitectureGenome]) -> float:
-        """Calculate population diversity based on layer types"""
+        """Calculates the diversity of the population based on layer structure."""
         if not population:
             return 0.0
         
-        all_layers = []
+        unique_architectures = set()
         for genome in population:
-            for layer in genome.layers:
-                all_layers.append(layer.get('type', 'unknown'))
-        
-        if not all_layers:
-            return 0.0
-            
-        unique_layers = set(all_layers)
-        return len(unique_layers) / len(all_layers)
+            # Create a frozenset of frozensets for nested layer dictionaries
+            try:
+                arch_tuple = tuple(frozenset(d.items()) for d in genome.layers)
+                unique_architectures.add(arch_tuple)
+            except (TypeError, AttributeError):
+                # Handle cases where layers are not structured as expected
+                continue
+
+        return len(unique_architectures) / len(population) if population else 0.0
     
-    async def _generate_recommendations(self, task: EvolutionaryTask, best_arch: ArchitectureGenome, history: List[Dict], llm: OpenAIAugmentedLLM) -> List[str]:
-        """Generate optimization recommendations using a direct LLM call."""
-        
-        history_summary = json.dumps(history[-3:]) # Summary of last 3 generations
-        
-        recommendation_task = f"""
-        Based on the final evolved architecture and its evolution history, provide 5 specific optimization recommendations.
-        
-        Problem: {task.problem_description}
-        Final Architecture ID: {best_arch.unique_id}
-        Final Fitness Score: {best_arch.fitness_score:.4f}
-        Evolution History (last 3 gens): {history_summary}
-        
-        The recommendations should be actionable and concrete.
+    async def _generate_recommendations(self, task: EvolutionaryTask, best_arch: ArchitectureGenome, history: List[Dict], llm: GoogleAugmentedLLM) -> List[str]:
+        """
+        Generates optimization recommendations using an LLM.
+        """
+        prompt = f"""
+        Given the following evolutionary process for an AI architecture:
+        - Problem: {task.problem_description}
+        - Best Architecture Fitness: {best_arch.fitness_score:.4f}
+        - Best Architecture Layers: {json.dumps(best_arch.layers, indent=2)}
+        - Evolution History Highlights:
+    """
+        # Add some history highlights
+        for i, entry in enumerate(history[-3:]): # last 3 generations
+            prompt += f"  - Gen {entry['generation']}: Best Fitness {entry['best_fitness']:.4f}, Diversity {entry['diversity']:.2f}\n"
+
+        prompt += """
+        Based on this, provide 3-5 specific, actionable recommendations for further improvement.
+        Focus on potential bottlenecks, hyperparameter tuning, or alternative layer types.
         """
         
-        recommendation_result = await llm.generate_str(
-            message=recommendation_task,
-            request_params=RequestParams(model="gpt-4o-mini")
-        )
-        
-        # Extract recommendations from the generated text
-        recommendations = []
-        for line in recommendation_result.split('\n'):
-            line = line.strip()
-            if line and any(char.isalnum() for char in line):
-                if line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '*')):
-                    recommendations.append(line.lstrip('12345.-* '))
-
-        return recommendations[:5]
+        response = await llm.generate(prompt)
+        # Simple parsing, assuming recommendations are separated by newlines
+        return [line.strip() for line in response.strip().split('\n') if line.strip()]
     
     async def _save_evolution_results(self, result: ArchitectureEvolutionResult, task_id: str):
-        """Save evolution results to a file"""
+        """Saves the final results of the evolution process to a file."""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"evolution_result_{task_id}_{timestamp}.md"

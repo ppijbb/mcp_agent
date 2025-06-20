@@ -64,8 +64,10 @@ mcp:
           server_uri_alias: "file:///mnt/data/"
 openai:
   # Secrets (API keys, etc.) are stored in an mcp_agent.secrets.yaml file which can be gitignored
-  #  default_model: "o3-mini"
-  default_model: "gpt-4o-mini"
+  default_model: "gpt-4o-mini" #Temporarily leave this for existing hardcoded calls
 
 google:
   default_model: "gemini-2.0-flash-lite-001"
+
+llm:
+  default_provider: "google"

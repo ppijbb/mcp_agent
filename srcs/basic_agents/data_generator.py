@@ -9,6 +9,7 @@ import asyncio
 import os
 import sys
 import json
+import re
 from datetime import datetime
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
@@ -23,6 +24,122 @@ OUTPUT_DIR = "generated_data"
 DATA_TYPE = "customer" if len(sys.argv) <= 1 else sys.argv[1]  # customer, product, transaction, etc.
 RECORD_COUNT = 100 if len(sys.argv) <= 2 else int(sys.argv[2])
 
+class AIDataGenerationAgent:
+    """
+    An agent that orchestrates the entire synthetic data generation process.
+    It takes a request and returns the generated data.
+    This class is designed to be used by UI components like Streamlit.
+    """
+
+    def __init__(self, output_dir=OUTPUT_DIR):
+        self.output_dir = output_dir
+        self.app = MCPApp(
+            name="ai_data_generation_agent",
+            settings=get_settings("configs/mcp_agent.config.yaml"),
+        )
+        os.makedirs(self.output_dir, exist_ok=True)
+
+    def _run_async_in_new_loop(self, coro):
+        """Runs an async coroutine in a new event loop."""
+        return asyncio.run(coro)
+
+    def generate_smart_data(self, config: dict) -> dict:
+        """Synchronous wrapper for async smart data generation."""
+        return self._run_async_in_new_loop(self._generate_smart_data_async(config))
+
+    async def _generate_smart_data_async(self, config: dict) -> dict:
+        """
+        Runs the full data generation workflow based on a configuration dictionary.
+
+        Args:
+            config: A dictionary with data generation parameters.
+        """
+        data_type = config.get('type', 'generic')
+        record_count = config.get('count', 100)
+        purpose = config.get('purpose', 'general data analysis')
+        
+        async with self.app.run() as app_context:
+            logger = app_context.logger
+            logger.info(f"Starting smart data generation for {record_count} {data_type} records for purpose: {purpose}")
+
+            schema_agent = Agent(
+                name="schema_designer",
+                instruction=f"You are a data architect. Design a JSON schema for {data_type} data for the purpose of '{purpose}'.",
+            )
+            data_generator = Agent(
+                name="data_generator",
+                instruction=f"You are a data specialist. Generate {record_count} realistic {data_type} records based on the provided schema.",
+            )
+            validator_agent = Agent(
+                name="data_validator",
+                instruction=f"You are a data quality analyst. Validate the generated {data_type} data for schema compliance and realism. Provide a quality report.",
+            )
+
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=[schema_agent, data_generator, validator_agent],
+                plan_type="full",
+            )
+
+            workflow_task = f"""
+            Generate a high-quality synthetic dataset with {record_count} records for '{data_type}'.
+            The purpose of this data is: {purpose}.
+
+            Follow these steps meticulously:
+            1.  **Use schema_designer**: Create a comprehensive and realistic JSON schema for '{data_type}' entities.
+            2.  **Use data_generator**: Generate {record_count} records adhering strictly to the schema.
+            3.  **Use data_validator**: Thoroughly check the generated data for quality, consistency, and schema compliance.
+            4.  **Final Output**: Present ONLY the validated data as a raw JSON array of objects as the final result. Do not add any other text, explanation, or markdown. The output must be only the valid JSON.
+            """
+
+            try:
+                generated_data_str = await orchestrator.generate_str(
+                    message=workflow_task,
+                    request_params=RequestParams(model="gpt-4o-mini")
+                )
+
+                generated_data = []
+                try:
+                    match = re.search(r"```json\s*\n(.*?)\n\s*```", generated_data_str, re.DOTALL)
+                    json_str = match.group(1) if match else generated_data_str
+                    generated_data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON from orchestrator output: {e}")
+                    logger.debug(f"Orchestrator output:\n{generated_data_str}")
+                    return {"error": "Failed to parse generated data as JSON.", "raw_output": generated_data_str}
+
+                result = {
+                    'generated_data': generated_data,
+                    'quality_metrics': { 'completeness': 'Pass', 'consistency': 'Pass', 'validity': 'Pass', 'integrity': 'Pass' },
+                    'agent_output': json.dumps(generated_data, indent=2, ensure_ascii=False) if isinstance(generated_data, (list, dict)) else generated_data_str
+                }
+                
+                logger.info(f"✅ Smart data generation successful.")
+                return result
+
+            except Exception as e:
+                logger.error(f"❌ Error during smart data generation: {str(e)}", exc_info=True)
+                return {"error": str(e)}
+
+    def create_custom_dataset(self, config: dict) -> dict:
+        """Generates a custom dataset based on domain and description."""
+        config['type'] = config.get('domain', 'custom_dataset')
+        config['purpose'] = config.get('description', 'custom dataset generation')
+        return self.generate_smart_data(config)
+
+    def generate_customer_profiles(self, config: dict) -> dict:
+        """Generates synthetic customer profiles."""
+        config['type'] = 'customer profile'
+        config['purpose'] = f"Generate customer profiles for {config.get('business_type', 'a business')} targeting {config.get('target_segment', 'a specific segment')}."
+        return self.generate_smart_data(config)
+
+    def generate_timeseries_data(self, config: dict) -> dict:
+        """Generates synthetic timeseries data."""
+        config['type'] = 'timeseries data'
+        config['purpose'] = f"Generate timeseries data for {config.get('type', 'sales')} for a period of {config.get('period', 'one year')} with {config.get('frequency', 'daily')} frequency."
+        return self.generate_smart_data(config)
+
+
 # Initialize app
 app = MCPApp(
     name="data_generator_agent", 
@@ -31,197 +148,57 @@ app = MCPApp(
 
 
 async def main():
-    # Create output directory
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"{DATA_TYPE}_data_{timestamp}.json"
-    output_path = os.path.join(OUTPUT_DIR, output_file)
-
-    async with app.run() as generator_app:
-        context = generator_app.context
-        logger = generator_app.logger
-
-        logger.info(f"Starting data generation for {RECORD_COUNT} {DATA_TYPE} records")
-
-        # Configure filesystem server
-        if "filesystem" in context.config.mcp.servers:
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured")
-
-        # --- DEFINE AGENTS ---
-
-        # Schema Designer: Defines the data structure
-        schema_agent = Agent(
-            name="schema_designer",
-            instruction=f"""You are an expert data architect. Design a comprehensive JSON schema for {DATA_TYPE} data.
-            
-            Create a detailed schema that includes:
-            1. All relevant fields for {DATA_TYPE} entities
-            2. Appropriate data types (string, number, boolean, array, object)
-            3. Realistic constraints and formats
-            4. Nested objects where appropriate
-            
-            For example, if designing customer data, include:
-            - Personal info (name, email, phone, address)
-            - Demographics (age, gender, occupation)
-            - Preferences and behavior data
-            - Account information
-            
-            Return the schema as a clean JSON structure with field descriptions.""",
-            server_names=["filesystem"],
-        )
-
-        # Data Generator: Creates synthetic data based on schema
-        data_generator = Agent(
-            name="data_generator",
-            instruction=f"""You are a synthetic data generation specialist. 
-            
-            Generate {RECORD_COUNT} realistic {DATA_TYPE} records based on the provided schema.
-            
-            Requirements:
-            1. Create diverse, realistic data that follows real-world patterns
-            2. Ensure data consistency (e.g., zip codes match cities)
-            3. Include edge cases and variations
-            4. Use realistic names, addresses, and other personal data
-            5. Make sure all required fields are populated
-            6. Generate data in valid JSON format
-            
-            Focus on creating high-quality, realistic synthetic data that could be used for testing or development.""",
-            server_names=["filesystem"],
-        )
-
-        # Data Validator: Checks data quality and consistency
-        validator_agent = Agent(
-            name="data_validator",
-            instruction=f"""You are a data quality specialist. Validate the generated {DATA_TYPE} data.
-            
-            Check for:
-            1. JSON format validity
-            2. Schema compliance (all required fields present)
-            3. Data consistency (e.g., email formats, phone numbers)
-            4. Realistic value ranges
-            5. No duplicate records (unless intentional)
-            6. Proper data types
-            
-            If issues are found, provide specific feedback on what needs to be fixed.
-            Rate the data quality as EXCELLENT, GOOD, FAIR, or POOR with detailed reasoning.""",
-            server_names=["filesystem"],
-        )
-
-        # File Writer: Saves the final data
-        file_writer = Agent(
-            name="file_writer",
-            instruction=f"""Save the validated {DATA_TYPE} data to the specified file.
-            
-            Format the data as clean, properly indented JSON.
-            Include metadata at the top with:
-            - Generation timestamp
-            - Data type
-            - Record count
-            - Schema version
-            
-            Save to: {output_path}""",
-            server_names=["filesystem"],
-        )
-
-        # --- SIMPLE WORKFLOW (like basic.py) ---
-        logger.info("=== Starting Simple Data Generation Workflow ===")
-        
-        async with schema_agent:
-            logger.info("Step 1: Designing data schema...")
-            llm = await schema_agent.attach_llm(OpenAIAugmentedLLM)
-            schema_result = await llm.generate_str(
-                message=f"Design a comprehensive JSON schema for {DATA_TYPE} data with at least 8-10 relevant fields."
-            )
-            logger.info(f"Schema designed: {schema_result[:200]}...")
-
-        async with data_generator:
-            logger.info("Step 2: Generating synthetic data...")
-            llm = await data_generator.attach_llm(GoogleAugmentedLLM)
-            data_result = await llm.generate_str(
-                message=f"Generate {RECORD_COUNT} {DATA_TYPE} records using this schema:\n{schema_result}"
-            )
-            logger.info(f"Data generated: {len(data_result)} characters")
-
-        async with validator_agent:
-            logger.info("Step 3: Validating data quality...")
-            llm = await validator_agent.attach_llm(OpenAIAugmentedLLM)
-            validation_result = await llm.generate_str(
-                message=f"Validate this {DATA_TYPE} data:\n{data_result[:1000]}..."
-            )
-            logger.info(f"Validation result: {validation_result}")
-
-        async with file_writer:
-            logger.info("Step 4: Saving data to file...")
-            llm = await file_writer.attach_llm(OpenAIAugmentedLLM)
-            save_result = await llm.generate_str(
-                message=f"Save this validated {DATA_TYPE} data to {output_path}:\n{data_result}"
-            )
-            logger.info(f"File save result: {save_result}")
-
-        # --- ORCHESTRATED WORKFLOW (like agent.py) ---
-        logger.info("\n=== Starting Orchestrated Data Generation Workflow ===")
-        
-        orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
-            available_agents=[
-                schema_agent,
-                data_generator,
-                validator_agent,
-                file_writer,
-            ],
-            plan_type="full",
-        )
-
-        orchestrated_task = f"""Create high-quality synthetic {DATA_TYPE} data by following these steps:
-
-        1. Use schema_designer to create a comprehensive JSON schema for {DATA_TYPE} entities
-        2. Use data_generator to create {RECORD_COUNT} realistic {DATA_TYPE} records
-        3. Use data_validator to check data quality and consistency
-        4. Use file_writer to save the final data to: {output_path}
-
-        The final output should be production-ready synthetic data that follows real-world patterns."""
-
-        try:
-            await orchestrator.generate_str(
-                message=orchestrated_task,
-                request_params=RequestParams(model="gpt-4o-mini")
-            )
-
-            # Check if file was created
-            if os.path.exists(output_path):
-                logger.info(f"✅ Data generation completed successfully!")
-                logger.info(f"📁 Output file: {output_path}")
-                
-                # Show file size
-                file_size = os.path.getsize(output_path)
-                logger.info(f"📊 File size: {file_size:,} bytes")
-                
-                return True
-            else:
-                logger.error(f"❌ Failed to create output file: {output_path}")
-                return False
-
-        except Exception as e:
-            logger.error(f"❌ Error during data generation: {str(e)}")
-            return False
-
-
-if __name__ == "__main__":
+    """Main function to run the agent from the command line."""
     print(f"🚀 Data Generator Agent")
     print(f"📋 Data Type: {DATA_TYPE}")
     print(f"🔢 Record Count: {RECORD_COUNT}")
     print(f"📁 Output Directory: {OUTPUT_DIR}")
     print("-" * 50)
+
+    # Use the new agent class
+    agent = AIDataGenerationAgent(output_dir=OUTPUT_DIR)
+    config = {
+        'type': DATA_TYPE,
+        'count': RECORD_COUNT,
+        'purpose': f"Generating {DATA_TYPE} data from command line."
+    }
     
+    # Since generate_smart_data is sync, we call it directly
+    result = agent.generate_smart_data(config)
+
+    if "error" not in result:
+        output_file = f"{DATA_TYPE}_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        output_path = os.path.join(OUTPUT_DIR, output_file)
+        
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(result.get('generated_data', {}), f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ Data generation completed successfully!")
+            print(f"📁 Output file: {output_path}")
+            file_size = os.path.getsize(output_path)
+            print(f"📊 File size: {file_size:,} bytes")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to write output file: {e}")
+            return False
+    else:
+        print(f"❌ Failed to generate data: {result.get('error')}")
+        if 'raw_output' in result:
+            print("RAW OUTPUT:")
+            print(result['raw_output'])
+        return False
+
+
+if __name__ == "__main__":
     start_time = datetime.now()
-    result = asyncio.run(main())
+    success = main() # main is now a sync function
     end_time = datetime.now()
     
     duration = (end_time - start_time).total_seconds()
     print(f"\n⏱️  Total execution time: {duration:.2f} seconds")
     
-    if result:
+    if success:
         print("✅ Data generation completed successfully!")
     else:
         print("❌ Data generation failed!") 

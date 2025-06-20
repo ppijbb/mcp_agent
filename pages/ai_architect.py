@@ -8,7 +8,6 @@ import streamlit as st
 import asyncio
 from mcp_agent.app import MCPApp
 from mcp_agent.config import get_settings
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 
 from srcs.common.streamlit_utils import get_agent_state
 from srcs.common.streamlit_log_handler import setup_streamlit_logging

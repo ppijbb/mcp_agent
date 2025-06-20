@@ -10,12 +10,34 @@ import os
 import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from pathlib import Path
+
+# Add project root to path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+
+# --- INSTRUCTIONS DEFINED LOCALLY ---
+BUSINESS_DATA_SCOUT_AGENT_INSTRUCTION = """
+You are a Business Data Scout. Your mission is to gather the latest and most relevant business data based on the given keywords and regions.
+You will use search tools to find news articles, market reports, social media trends, and community discussions.
+Focus on factual, up-to-date information.
+
+Keywords: {keywords}
+Regions: {regions}
+"""
+
+BUSINESS_DATA_SCOUT_EVALUATOR_INSTRUCTION = """
+You are a Quality Evaluator for business intelligence.
+Evaluate the gathered data based on relevance, accuracy, and timeliness.
+Provide a rating (EXCELLENT, GOOD, FAIR, POOR) and justify your assessment.
+"""
+# --- END LOCAL INSTRUCTIONS ---
 
 
 class BusinessDataScoutMCPAgent:
@@ -50,7 +72,7 @@ class BusinessDataScoutMCPAgent:
             
             # Create orchestrator
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
                 available_agents=agents,
                 plan_type="full"
             )
@@ -63,7 +85,7 @@ class BusinessDataScoutMCPAgent:
             try:
                 result = await orchestrator.generate_str(
                     message=task,
-                    request_params=RequestParams(model="gpt-4o-mini")
+                    request_params=RequestParams(model="gemini-2.0-flash-lite-001")
                 )
                 
                 return {
@@ -133,7 +155,8 @@ class BusinessDataScoutMCPAgent:
             
             Organize findings by relevance and business impact.
             Provide source URLs for verification.""",
-            server_names=["g-search", "fetch"]
+            server_names=["g-search", "fetch"],
+            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
         )
         
         # Social Media & Trends Collector
@@ -159,7 +182,8 @@ class BusinessDataScoutMCPAgent:
             - Consumer behavior patterns
             
             Focus on business-relevant social signals that indicate market opportunities.""",
-            server_names=["g-search", "fetch"]
+            server_names=["g-search", "fetch"],
+            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
         )
         
         # Market Intelligence Collector
@@ -185,7 +209,8 @@ class BusinessDataScoutMCPAgent:
             - Technology adoption trends
             
             Provide actionable market insights with supporting data and sources.""",
-            server_names=["g-search", "fetch"]
+            server_names=["g-search", "fetch"],
+            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
         )
         
         # Data Quality Evaluator
@@ -211,7 +236,8 @@ class BusinessDataScoutMCPAgent:
             
             Flag any inconsistencies or questionable data points.
             Prioritize high-quality, actionable business intelligence.""",
-            server_names=["fetch"]
+            server_names=["fetch"],
+            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
         )
         
         # Report Synthesizer
@@ -242,7 +268,8 @@ class BusinessDataScoutMCPAgent:
             
             Save the comprehensive report to: {output_path}
             Format as clean markdown with proper sections and citations.""",
-            server_names=["filesystem"]
+            server_names=["filesystem"],
+            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
         )
         
         return [news_collector, social_collector, market_collector, data_evaluator, report_synthesizer]
@@ -307,12 +334,69 @@ async def create_business_data_scout(output_dir: str = "business_strategy_report
 
 
 # Main execution function
-async def run_business_data_scout(keywords: List[str], regions: List[str] = None, 
-                                 output_dir: str = "business_strategy_reports") -> Dict[str, Any]:
-    """Run business data scout with specified parameters"""
-    
-    scout_agent = await create_business_data_scout(output_dir)
-    return await scout_agent.run_data_collection(keywords, regions)
+async def run_business_data_scout(
+    keywords: List[str],
+    regions: Optional[List[str]] = None,
+    output_dir: str = "business_strategy_reports",
+) -> Dict[str, Any]:
+    """Asynchronously run the Business Data Scout MCPAgent."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    llm_factory = lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
+
+    async with MCPApp(settings=get_settings("configs/mcp_agent.config.yaml")).run() as app:
+        # Create agents
+        scout = Agent(
+            name="business_data_scout",
+            instruction=BUSINESS_DATA_SCOUT_AGENT_INSTRUCTION.format(
+                keywords=", ".join(keywords),
+                regions=", ".join(regions) if regions else "Global",
+            ),
+            server_names=["g-search", "fetch"],
+            llm_factory=llm_factory,
+        )
+
+        evaluator = Agent(
+            name="quality_evaluator",
+            instruction=BUSINESS_DATA_SCOUT_EVALUATOR_INSTRUCTION,
+            llm_factory=llm_factory,
+        )
+
+        # Create orchestrator
+        orchestrator = Orchestrator(
+            available_agents=[scout, evaluator],
+            plan_type="full",
+            llm_factory=llm_factory,
+        )
+
+        # Define task
+        task = (
+            f"Conduct a comprehensive business data scout for keywords '{', '.join(keywords)}' "
+            f"in regions '{', '.join(regions) if regions else 'Global'}'. "
+            "Deliver a structured report with key findings, data sources, and strategic insights."
+        )
+
+        try:
+            # Run orchestrator
+            result = await orchestrator.generate_str(
+                message=task,
+                request_params=RequestParams(model="gemini-2.0-flash-lite-001"),
+            )
+
+            # Save result
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"{output_dir}/business_data_scout_report_{timestamp}.md"
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(result)
+
+            return {
+                "success": True,
+                "output_file": output_file,
+                "analysis_summary": "Business data scout completed successfully.",
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 # CLI execution

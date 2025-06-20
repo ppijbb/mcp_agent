@@ -5,7 +5,7 @@ Base templates and patterns for creating new agents with standardized structure.
 """
 
 from abc import ABC, abstractmethod
-from .imports import *
+
 from .config import *
 from .utils import *
 

@@ -14,6 +14,7 @@ from .marketing_strategist_agent import MarketingStrategistAgent
 from .operations_agent import OperationsAgent
 from .notion_document_agent import NotionDocumentAgent
 from .coordinator_agent import CoordinatorAgent
+from .business_planner_agent import BusinessPlannerAgent
 
 __all__ = [
     # 기존 Agent들
@@ -28,5 +29,6 @@ __all__ = [
     "MarketingStrategistAgent",
     "OperationsAgent",
     "NotionDocumentAgent",
-    "CoordinatorAgent"
+    "CoordinatorAgent",
+    "BusinessPlannerAgent"
 ] 

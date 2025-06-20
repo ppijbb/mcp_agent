@@ -3,19 +3,19 @@ Agent 설정 및 팩토리 클래스
 모든 Agent의 생성과 설정을 중앙에서 관리
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from datetime import datetime
 import os
 
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 from ..agents import (
     FigmaAnalyzerAgent, PRDWriterAgent, FigmaCreatorAgent,
     ConversationAgent, ProjectManagerAgent, KPIAnalystAgent,
     MarketingStrategistAgent, OperationsAgent, NotionDocumentAgent,
-    CoordinatorAgent
+    CoordinatorAgent, BusinessPlannerAgent
 )
 
 
@@ -157,7 +157,7 @@ class WorkflowOrchestrator:
     def __init__(self, agents: List[Agent]):
         self.agents = agents
         self.orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             available_agents=agents,
             plan_type="full"
         )
@@ -173,6 +173,225 @@ class WorkflowOrchestrator:
         Your first step is to run the 'Discovery & Requirements' phase.
         """
     
+    def print_workflow_info(self, config: AgentConfig):
+        """Multi-Agent 워크플로우 정보 출력"""
+        print("\n" + "="*80)
+        print("🚀 MULTI-AGENT PRODUCT PLANNING SYSTEM")
+        print("="*80)
+        print(f"📋 분석 대상: {config.figma_url}")
+        print(f"📁 출력 디렉토리: {config.output_dir}")
+        print(f"📄 결과 파일: {config.output_path}")
+        print(f"⏰ 타임스탬프: {config.timestamp}")
+        
+        print("\n🎯 MULTI-AGENT ECOSYSTEM:")
+        print("   💬 ConversationAgent - 사용자 대화 및 요구사항 수집")
+        print("   🔍 FigmaAnalyzer - 디자인 분석 및 UI/UX 평가") 
+        print("   �� PRDWriter - 제품 요구사항 문서 작성")
+        print("   🎨 FigmaCreator - 디자인 생성 및 프로토타이핑")
+        print("   📅 ProjectManager - 개발 계획 및 리소스 관리")
+        print("   📊 KPIAnalyst - 지표 정의 및 성과 추적")
+        print("   📈 MarketingStrategist - 마케팅 전략 및 GTM")
+        print("   ⚙️ OperationsAgent - 서비스 운영 및 인프라")
+        print("   📚 NotionDocument - 문서화 및 지식 관리")
+        print("   🎯 Coordinator - 워크플로우 조율 및 품질 관리")
+        
+        print("\n🔄 4-PHASE EXECUTION PLAN:")
+        print("   ▶️ PHASE 1: Discovery & Requirements (2-3 days)")
+        print("      └── 사용자 인터뷰 + 디자인 분석")
+        print("   ▶️ PHASE 2: Strategic Planning (3-5 days)")
+        print("      └── PRD + KPI 프레임워크 + 마케팅 전략")
+        print("   ▶️ PHASE 3: Operational Planning (2-3 days)")
+        print("      └── 개발 계획 + 운영 전략")
+        print("   ▶️ PHASE 4: Design & Documentation (3-4 days)")
+        print("      └── 비주얼 디자인 + 종합 문서화")
+        
+        print("\n📦 COMPREHENSIVE DELIVERABLES:")
+        print("   ✅ 전략 문서 (PRD, KPI, 마케팅)")
+        print("   ✅ 프로젝트 관리 (일정, 리소스, 리스크)")
+        print("   ✅ 디자인 자산 (목업, 프로토타입)")
+        print("   ✅ 종합 문서 (노션 워크스페이스)")
+        
+        print("="*80) 
+
+
+def get_agent_config(
+    figma_api_key: str | None = None, notion_api_key: str | None = None
+) -> list[dict[str, Any]]:
+    """에이전트 구성을 반환합니다."""
+
+    # LLM 팩토리 정의
+    llm_factory = lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
+
+    return [
+        {
+            "name": "prd_writer",
+            "description": "Writes Product Requirements Documents (PRDs).",
+            "agent_class": PRDWriterAgent,
+            "tools": ["notion"],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/prd_writer_prompt.md",
+            },
+        },
+        {
+            "name": "figma_analyzer",
+            "description": "Analyzes Figma designs to extract UI elements and specifications.",
+            "agent_class": FigmaAnalyzerAgent,
+            "tools": ["figma"],
+            "config": {
+                "llm_factory": llm_factory,
+                "api_key": figma_api_key,
+                "prompt_template": "prompts/figma_analyzer_prompt.md",
+            },
+        },
+        {
+            "name": "business_planner",
+            "description": "Creates business plans and strategies.",
+            "agent_class": BusinessPlannerAgent,
+            "tools": [],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/business_planner_prompt.md",
+            },
+        },
+        {
+            "name": "kpi_analyst",
+            "description": "Defines and analyzes Key Performance Indicators (KPIs).",
+            "agent_class": KPIAnalystAgent,
+            "tools": [],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/kpi_analyst_prompt.md",
+            },
+        },
+        {
+            "name": "marketing_strategist",
+            "description": "Develops marketing strategies.",
+            "agent_class": MarketingStrategistAgent,
+            "tools": [],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/marketing_strategist_prompt.md",
+            },
+        },
+        {
+            "name": "project_manager",
+            "description": "Manages projects, tasks, and timelines using Notion.",
+            "agent_class": ProjectManagerAgent,
+            "tools": ["notion"],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/project_manager_prompt.md",
+            },
+        },
+        {
+            "name": "figma_creator",
+            "description": "Creates or modifies Figma designs based on requirements.",
+            "agent_class": FigmaCreatorAgent,
+            "tools": ["figma"],
+            "config": {
+                "llm_factory": llm_factory,
+                "api_key": figma_api_key,
+                "prompt_template": "prompts/figma_creator_prompt.md",
+            },
+        },
+        {
+            "name": "notion_documenter",
+            "description": "Documents information and creates pages in Notion.",
+            "agent_class": NotionDocumentAgent,
+            "tools": ["notion"],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/notion_documenter_prompt.md",
+            },
+        },
+        {
+            "name": "operations_manager",
+            "description": "Manages operational tasks and workflows.",
+            "agent_class": OperationsAgent,
+            "tools": [],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/operations_manager_prompt.md",
+            },
+        },
+        {
+            "name": "conversation_handler",
+            "description": "Handles generic conversations and fallback scenarios.",
+            "agent_class": ConversationAgent,
+            "tools": [],
+            "config": {
+                "llm_factory": llm_factory,
+                "prompt_template": "prompts/conversation_prompt.md",
+            },
+        },
+    ]
+
+
+class AgentConfiguration:
+    def __init__(
+        self,
+        agents: list[Agent] | None = None,
+        llm_factory: Callable[[], GoogleAugmentedLLM] | None = None,
+        orchestrator: Orchestrator | None = None,
+    ):
+        """에이전트 구성을 초기화합니다."""
+        if orchestrator:
+            self.orchestrator = orchestrator
+        else:
+            llm_fact = (
+                llm_factory
+                if llm_factory
+                else lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
+            )
+            self.orchestrator = Orchestrator(
+                llm_factory=llm_fact,
+                available_agents=agents,
+                plan_type="full",
+            )
+        self.agents = agents or []
+        self.agent_map = {agent.name: agent for agent in self.agents}
+
+    def get_output_info(self) -> Dict[str, str]:
+        """출력 파일 정보 반환"""
+        return {
+            "output_dir": self.output_dir,
+            "output_file": self.output_file,
+            "output_path": self.output_path,
+            "timestamp": self.timestamp
+        }
+
+    def get_agents_info(self) -> Dict[str, Dict[str, Any]]:
+        """모든 Agent 정보 반환"""
+        return {
+            "figma_analyzer": {
+                "description": FigmaAnalyzerAgent.get_description(),
+                "capabilities": FigmaAnalyzerAgent.get_capabilities()
+            },
+            "prd_writer": {
+                "description": PRDWriterAgent.get_description(),
+                "capabilities": PRDWriterAgent.get_capabilities(),
+                "required_sections": PRDWriterAgent.get_required_sections()
+            },
+            "figma_creator": {
+                "description": FigmaCreatorAgent.get_description(),
+                "capabilities": FigmaCreatorAgent.get_capabilities(),
+                "creation_tools": FigmaCreatorAgent.get_creation_tools(),
+                "design_process": FigmaCreatorAgent.get_design_process()
+            }
+        }
+
+    def create_initial_prompt(self, config: AgentConfig) -> str:
+        """ReAct 루프를 시작하기 위한 초기 프롬프트 생성"""
+        # 이 프롬프트는 이제 CoordinatorAgent의 첫 번째 THOUGHT를 위해 사용됩니다.
+        # 전체 워크플로우를 지시하는 대신, 초기 목표만 설정합니다.
+        return f"""Start a new product planning project.
+        - **User's Goal**: Analyze the provided Figma URL and generate a complete business plan.
+        - **Figma URL**: {config.figma_url}
+        - **Output Path**: {config.output_path}
+        Your first step is to run the 'Discovery & Requirements' phase.
+        """
+
     def print_workflow_info(self, config: AgentConfig):
         """Multi-Agent 워크플로우 정보 출력"""
         print("\n" + "="*80)

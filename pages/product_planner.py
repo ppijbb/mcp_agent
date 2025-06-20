@@ -1,274 +1,190 @@
-"""
-🚀 Product Planner Agent Test Page
-
-실제 Product Planner Agent를 테스트할 수 있는 인터페이스
-"""
-
 import streamlit as st
-import sys
 from pathlib import Path
-import asyncio
-import os
+import sys
 import json
+import os
+import time
 from datetime import datetime
-import traceback
+import asyncio
+import threading
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# 공통 스타일 및 유틸리티 임포트
 from srcs.common.styles import get_common_styles, get_page_header
 from srcs.common.page_utils import setup_page, render_home_button
+from srcs.product_planner_agent.product_planner_agent import run_agent_workflow
 
-# Product Planner Agent 임포트
-try:
-    from srcs.product_planner_agent.agents.coordinator_agent import CoordinatorAgent
-    from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-    from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-    from srcs.product_planner_agent.utils.status_logger import StatusLogger
-except ImportError as e:
-    st.error(f"❌ Product Planner Agent를 불러올 수 없습니다: {e}")
-    st.error("**시스템 요구사항**: Product Planner Agent가 필수입니다.")
-    st.info("에이전트 모듈을 설치하고 다시 시도해주세요.")
-    st.stop()
+# --- 상수 정의 ---
+STATUS_FILE = project_root / "srcs" / "product_planner_agent" / "utils" / "status.json"
+FINAL_REPORT_DIR = project_root / "planning"
+REFRESH_INTERVAL = 3  # 초 단위
 
-# 페이지 설정
-setup_page("🚀 Product Planner Agent Test", "🚀")
-
-def parse_figma_url(url: str) -> tuple[str | None, str | None]:
-    """Figma URL에서 file_id와 node_id를 추출"""
-    import re
-    from urllib.parse import unquote
-    
-    # file_id: /file/ 다음에 오는 문자열
-    file_id_match = re.search(r'figma\.com/file/([^/]+)', url)
-    file_id = file_id_match.group(1) if file_id_match else None
-    
-    # node-id: 쿼리 파라미터에서 추출
-    node_id_match = re.search(r'node-id=([^&]+)', url)
-    node_id = unquote(node_id_match.group(1)) if node_id_match else None
-    
-    return file_id, node_id
-
-async def run_product_planner_agent(figma_api_key: str, figma_file_id: str, figma_node_id: str, task_description: str):
-    """Product Planner Agent 실행"""
+def agent_runner(figma_url: str, figma_api_key: str):
+    """에이전트 워크플로우를 별도의 스레드에서 실행하기 위한 래퍼 함수"""
     try:
-        # Orchestrator 및 LLM 팩토리 초기화
-        orchestrator = Orchestrator(llm_factory=OpenAIAugmentedLLM)
-        
-        # CoordinatorAgent 초기화
-        coordinator = CoordinatorAgent(orchestrator=orchestrator)
-        
-        # ReAct 패턴으로 작업 실행
-        task = f"""
-        Product Planning Task:
-        - Figma File ID: {figma_file_id}
-        - Figma Node ID: {figma_node_id}
-        - Task Description: {task_description}
-        - API Key Available: Yes
-        
-        Please analyze the Figma design, create a comprehensive PRD, and develop a business plan.
-        """
-        
-        result = await coordinator.run_react(task)
-        return result, None
-        
-    except Exception as e:
-        error_msg = f"Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-        return None, error_msg
-
-def run_sync_wrapper(coro):
-    """비동기 함수를 동기적으로 실행하는 래퍼"""
-    try:
-        # 기존 이벤트 루프가 있는지 확인
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # 이미 실행 중인 루프가 있으면 새 스레드에서 실행
-            import concurrent.futures
-            import threading
-            
-            def run_in_thread():
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    return new_loop.run_until_complete(coro)
-                finally:
-                    new_loop.close()
-            
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_thread)
-                return future.result()
+        # 새 이벤트 루프를 생성하고 설정
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        # 에이전트 워크플로우 실행
+        success = loop.run_until_complete(run_agent_workflow(figma_url, figma_api_key))
+        if success:
+            print("✅ Agent thread finished successfully.")
         else:
-            return asyncio.run(coro)
-    except RuntimeError:
-        return asyncio.run(coro)
+            print("❌ Agent thread finished with errors.")
+    except Exception as e:
+        print(f"💥 Critical error in agent runner thread: {e}")
+    finally:
+        # 세션 상태를 직접 수정하는 대신, 파일 기반 신호를 사용하거나
+        # 더 복잡한 상태 관리 메커니즘을 고려할 수 있습니다.
+        # 여기서는 단순화를 위해 별도 조치는 취하지 않습니다.
+        # Streamlit의 재실행 루프가 상태 파일 변경을 감지할 것입니다.
+        pass
+
+def read_status_file() -> dict:
+    """상태 파일을 읽어서 내용을 반환합니다."""
+    try:
+        if STATUS_FILE.exists():
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        st.error(f"상태 파일을 읽는 중 오류 발생: {e}")
+    return {}
+
+def find_latest_report() -> Path | None:
+    """`planning` 디렉토리에서 가장 최근에 생성된 마크다운 보고서 파일을 찾습니다."""
+    if not FINAL_REPORT_DIR.exists():
+        return None
+    
+    markdown_files = list(FINAL_REPORT_DIR.glob("*.md"))
+    if not markdown_files:
+        return None
+        
+    latest_file = max(markdown_files, key=lambda p: p.stat().st_mtime)
+    return latest_file
+
+def render_status(statuses: dict):
+    """현재 진행 상태를 UI에 렌더링합니다."""
+    if not statuses:
+        # st.session_state.agent_running이 True인데 상태 파일이 아직 안생겼을 수 있음
+        if st.session_state.get('agent_running', False):
+            st.info("에이전트 초기화 중... 잠시 후 진행 상황이 표시됩니다.")
+        else:
+            st.info("아래에 Figma 정보를 입력하고 분석을 시작하세요.")
+        return
+
+    st.markdown("#### 📊 실시간 진행 현황")
+
+    steps = list(statuses.keys())
+    status_values = list(statuses.values())
+    
+    # 각 단계별 상태 표시
+    cols = st.columns(len(steps))
+    for i, (step, status) in enumerate(statuses.items()):
+        with cols[i]:
+            if status == "completed":
+                st.success(f"**{i+1}. {step}**\n\n✅ 완료")
+            elif status == "in_progress":
+                st.info(f"**{i+1}. {step}**\n\n⏳ 진행 중...")
+            elif status == "failed":
+                st.error(f"**{i+1}. {step}**\n\n❌ 실패")
+            else:
+                st.warning(f"**{i+1}. {step}**\n\n🕒 대기 중")
+
+    # 전체 진행률 계산
+    completed_count = status_values.count("completed")
+    progress = completed_count / len(steps) if steps else 0
+    
+    st.progress(progress, text=f"전체 진행률: {progress:.0%}")
 
 def main():
-    """Product Planner Agent 테스트 페이지"""
-    
-    # 공통 스타일 적용
+    """Product Planner Agent 모니터링 페이지"""
+    setup_page("🚀 Product Planner Agent", "🚀")
     st.markdown(get_common_styles(), unsafe_allow_html=True)
-    
-    # 헤더 렌더링
-    header_html = get_page_header("product", "🚀 Product Planner Agent Test", 
-                                 "실제 Product Planner Agent 테스트 및 실행 인터페이스")
+    header_html = get_page_header("product", "🚀 Product Planner Agent", "Figma URL을 입력하여 프로덕트 기획 분석을 시작하고, 진행 상황을 실시간으로 확인합니다.")
     st.markdown(header_html, unsafe_allow_html=True)
-    
-    # 홈으로 돌아가기 버튼
     render_home_button()
+    st.markdown("---")
+
+    # --- 에이전트 실행 제어 ---
+    with st.container(border=True):
+        st.markdown("### 🎯 분석 시작하기")
+        
+        # 세션 상태 초기화
+        if 'agent_running' not in st.session_state:
+            st.session_state.agent_running = False
+
+        figma_url = st.text_input(
+            "Figma URL", 
+            placeholder="https://www.figma.com/file/your_file_id/your_project_name?node-id=your_node_id",
+            help="분석할 Figma 파일의 전체 URL을 입력하세요. 'node-id'가 포함되어야 합니다."
+        )
+        figma_api_key = st.text_input(
+            "Figma API Key", 
+            type="password",
+            help="Figma 계정 설정에서 발급받은 API 키를 입력하세요."
+        )
+
+        if st.button("🚀 분석 시작", disabled=st.session_state.agent_running):
+            if figma_url and figma_api_key and "figma.com/file/" in figma_url and "node-id=" in figma_url:
+                with st.spinner("에이전트 스레드를 시작하는 중입니다..."):
+                    st.session_state.agent_running = True
+                    # 별도 스레드에서 에이전트 실행
+                    thread = threading.Thread(
+                        target=agent_runner,
+                        args=(figma_url, figma_api_key),
+                        daemon=True
+                    )
+                    thread.start()
+                    st.success("에이전트가 백그라운드에서 실행을 시작했습니다. 아래에서 진행 상황을 확인하세요.")
+                    st.rerun() # 즉시 재실행하여 UI 업데이트
+            else:
+                st.error("올바른 Figma URL과 API 키를 모두 입력해주세요.")
     
     st.markdown("---")
+
+    # --- 실시간 모니터링 ---
+    status_placeholder = st.empty()
+    report_placeholder = st.empty()
+
+    statuses = read_status_file()
     
-    # 입력 섹션
-    st.markdown("### 📋 테스트 설정")
-    
-    # API Key 입력
-    figma_api_key = st.text_input(
-        "🔑 Figma API Key",
-        type="password",
-        help="Figma API Key를 입력하세요. 환경변수 FIGMA_API_KEY가 설정되어 있으면 자동으로 사용됩니다."
-    )
-    
-    # 환경변수에서 API Key 가져오기
-    if not figma_api_key:
-        figma_api_key = os.getenv("FIGMA_API_KEY")
-        if figma_api_key:
-            st.success("✅ 환경변수에서 Figma API Key를 가져왔습니다.")
-    
-    # Figma URL 입력
-    figma_url = st.text_input(
-        "🎨 Figma URL",
-        placeholder="https://www.figma.com/file/FILE_ID/File-Name?node-id=NODE_ID",
-        help="분석할 Figma 디자인의 URL을 입력하세요."
-    )
-    
-    # 작업 설명 입력
-    task_description = st.text_area(
-        "📝 작업 설명",
-        placeholder="예: 모바일 앱의 로그인 화면을 분석하고 PRD를 작성해주세요.",
-        help="Product Planner Agent가 수행할 작업에 대한 설명을 입력하세요."
-    )
-    
-    # 테스트 모드 선택
-    test_mode = st.selectbox(
-        "🧪 테스트 모드",
-        ["ReAct Pattern (권장)", "Static Workflow", "Agent Method Test"],
-        help="테스트할 실행 모드를 선택하세요."
-    )
-    
-    st.markdown("---")
-    
-    # 실행 버튼
-    if st.button("🚀 Product Planner Agent 실행", type="primary"):
+    with status_placeholder.container():
+        render_status(statuses)
+
+    is_complete = all(s == "completed" for s in statuses.values()) if statuses else False
+    is_failed = any(s == "failed" for s in statuses.values()) if statuses else False
+
+    if statuses and (is_complete or is_failed):
+        # 작업이 완료되거나 실패하면 실행 상태를 False로 변경
+        st.session_state.agent_running = False
         
-        # 입력 검증
-        if not figma_api_key:
-            st.error("❌ Figma API Key가 필요합니다.")
-            return
-            
-        if not figma_url:
-            st.error("❌ Figma URL이 필요합니다.")
-            return
-            
-        if not task_description:
-            st.error("❌ 작업 설명이 필요합니다.")
-            return
-        
-        # Figma URL 파싱
-        file_id, node_id = parse_figma_url(figma_url)
-        
-        if not file_id or not node_id:
-            st.error("❌ 유효하지 않은 Figma URL입니다. file_id와 node-id가 모두 포함되어 있는지 확인하세요.")
-            return
-        
-        # 실행 정보 표시
-        with st.expander("📊 실행 정보", expanded=True):
-            st.write(f"**Figma File ID**: {file_id}")
-            st.write(f"**Figma Node ID**: {node_id}")
-            st.write(f"**테스트 모드**: {test_mode}")
-            st.write(f"**작업 설명**: {task_description}")
-        
-        # 실행 시작
-        st.markdown("### 🔄 실행 중...")
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        try:
-            # 비동기 실행
-            with st.spinner("Product Planner Agent 실행 중..."):
-                status_text.text("초기화 중...")
-                progress_bar.progress(10)
+        if is_complete:
+            with report_placeholder.container():
+                st.balloons()
+                st.success("🎉 모든 작업이 성공적으로 완료되었습니다!")
+                st.markdown("### 📄 최종 보고서")
                 
-                # 실행
-                if test_mode == "ReAct Pattern (권장)":
-                    result, error = run_sync_wrapper(run_product_planner_agent(
-                        figma_api_key, file_id, node_id, task_description
-                    ))
-                elif test_mode == "Static Workflow":
-                    # Static workflow 실행
-                    async def run_static():
-                        orchestrator = Orchestrator(llm_factory=OpenAIAugmentedLLM)
-                        coordinator = CoordinatorAgent(orchestrator=orchestrator)
-                        return await coordinator.run_static_workflow(figma_api_key, file_id, node_id)
-                    
-                    result = run_sync_wrapper(run_static())
-                    error = None
+                latest_report = find_latest_report()
+                if latest_report:
+                    st.info(f"가장 최근에 생성된 보고서: `{latest_report.name}`")
+                    try:
+                        report_content = latest_report.read_text(encoding="utf-8")
+                        with st.expander("보고서 내용 보기", expanded=True):
+                            st.markdown(report_content)
+                    except Exception as e:
+                        st.error(f"보고서 파일을 읽는 중 오류 발생: {e}")
                 else:
-                    # Agent Method Test
-                    st.info("🧪 Agent Method Test 모드는 개발 중입니다.")
-                    result = "Agent Method Test - 개발 중"
-                    error = None
-                
-                progress_bar.progress(100)
-                status_text.text("완료!")
-                
-                # 결과 표시
-                st.markdown("### 📊 실행 결과")
-                
-                if error:
-                    st.error("❌ 실행 중 오류 발생:")
-                    st.code(error, language="python")
-                else:
-                    st.success("✅ 실행 완료!")
-                    
-                    # 결과 표시
-                    if result:
-                        if isinstance(result, str):
-                            try:
-                                # JSON 형태인지 확인
-                                parsed_result = json.loads(result)
-                                st.json(parsed_result)
-                            except json.JSONDecodeError:
-                                st.text_area("결과", result, height=300)
-                        else:
-                            st.json(result)
-                    else:
-                        st.warning("⚠️ 결과가 없습니다.")
-                
-        except Exception as e:
-            progress_bar.progress(100)
-            status_text.text("오류 발생!")
-            st.error(f"❌ 실행 중 오류 발생: {str(e)}")
-            st.code(traceback.format_exc(), language="python")
-    
-    # 디버깅 정보
-    with st.expander("🔧 디버깅 정보"):
-        st.write("**환경 변수**:")
-        st.write(f"- FIGMA_API_KEY: {'설정됨' if os.getenv('FIGMA_API_KEY') else '설정되지 않음'}")
-        
-        st.write("**시스템 정보**:")
-        st.write(f"- Python Path: {sys.path[:3]}...")
-        st.write(f"- 현재 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Agent 상태 확인
-        try:
-            orchestrator = Orchestrator(llm_factory=OpenAIAugmentedLLM)
-            coordinator = CoordinatorAgent(orchestrator=orchestrator)
-            st.write(f"- 사용 가능한 Agent: {coordinator.available_agents}")
-        except Exception as e:
-            st.write(f"- Agent 초기화 오류: {str(e)}")
+                    st.warning("생성된 보고서를 찾을 수 없습니다.")
+        elif is_failed:
+             with report_placeholder.container():
+                st.error("🚫 작업 중 오류가 발생하여 중단되었습니다. 터미널 로그를 확인해주세요.")
+
+    # 에이전트가 실행 중인 경우에만 주기적으로 페이지를 새로고침
+    if st.session_state.get('agent_running', False):
+        time.sleep(REFRESH_INTERVAL)
+        st.rerun()
 
 if __name__ == "__main__":
     main() 

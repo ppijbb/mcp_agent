@@ -8,7 +8,8 @@ import os
 import json
 from datetime import datetime
 from .config import get_timestamp, SUMMARY_TIMESTAMP_FORMAT, DEFAULT_COMPANY_NAME
-from .imports import MCPApp, get_settings
+from mcp_agent.app import MCPApp
+from mcp_agent.config import get_settings
 
 def setup_agent_app(app_name, config_path="configs/mcp_agent.config.yaml"):
     """Setup and configure MCP app with standard settings"""
