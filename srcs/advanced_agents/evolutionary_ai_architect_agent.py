@@ -183,10 +183,12 @@ class EvolutionaryAIArchitectMCP:
             
             logger.info(f"🧬 Starting architecture evolution: {problem_description}")
             
-            if use_react_pattern:
-                result = await self._react_evolution_process(task, context, logger)
-            else:
-                result = await self._simple_evolution_process(task, context, logger)
+            # --- CRITICAL FIX ---
+            # The ReAct process using the Orchestrator is unstable.
+            # Defaulting to the simple, stable evolution process to avoid errors.
+            # The ReAct process can be re-enabled after the Orchestrator is fully stabilized or replaced.
+            logger.warning("Orchestrator-based ReAct pattern is currently unstable. Using simple evolution process.")
+            result = await self._simple_evolution_process(task, context, logger)
             
             # Save results
             await self._save_evolution_results(result, task.task_id)
@@ -203,27 +205,28 @@ class EvolutionaryAIArchitectMCP:
             return result
     
     async def _react_evolution_process(self, task: EvolutionaryTask, context, logger) -> ArchitectureEvolutionResult:
-        """ReAct pattern evolution process"""
-        
-        # Create research agent
+        """ReAct pattern evolution process, without the faulty Orchestrator."""
+
+        # Create a direct LLM for reasoning steps
+        reasoning_llm = OpenAIAugmentedLLM(
+            app=self.app,
+            name="reasoning_llm",
+            instruction="You are a world-class AI architect reasoning engine.",
+            server_names=[]  # No tools needed for reasoning
+        )
+        await reasoning_llm.load()
+
+        # Create research agent for performing actual research
         researcher = Agent(
             name="architecture_researcher",
-            instruction=f"""You are an expert AI architecture researcher.
+            instruction=f"""You are an expert AI architecture researcher. Your goal is to provide specific, actionable insights based on the user's request.
             
-            Evolution Task: {task.problem_description}
+            Current Task: Evolution for '{task.problem_description}'
             Constraints: {json.dumps(task.constraints)}
-            Target Metrics: {json.dumps(task.target_metrics)}
-            
-            Research latest architecture techniques and provide optimization insights.""",
-            server_names=["g-search", "fetch", "filesystem"]
+            Target Metrics: {json.dumps(task.target_metrics)}""",
+            server_names=["g-search", "fetch"]
         )
-        
-        # Create orchestrator
-        orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
-            available_agents=[researcher],
-            plan_type="full"
-        )
+        await researcher.load(app=self.app)
         
         # Initialize variables
         reasoning_steps = []
@@ -235,6 +238,7 @@ class EvolutionaryAIArchitectMCP:
         logger.info(f"Initialized population: {len(population)} architectures")
         
         # Evolution loop
+        best_genome = population[0]
         for generation in range(1, task.max_generations + 1):
             logger.info(f"Generation {generation}/{task.max_generations}")
             
@@ -243,89 +247,74 @@ class EvolutionaryAIArchitectMCP:
             THOUGHT - Generation {generation}:
             Problem: {task.problem_description}
             Population size: {len(population)}
+            Best fitness so far: {best_genome.fitness_score:.4f}
             
-            Analyze current evolution state and decide next steps.
-            What architectural improvements should we focus on?
+            Analyze the current state of evolution. What architectural improvements should be the focus for this generation? 
+            Should I focus on mutation to explore new areas, or crossover to refine existing solutions?
             """
             
-            thought_result = await orchestrator.generate_str(
+            thought_result = await reasoning_llm.generate_str(
                 message=thought_task,
                 request_params=RequestParams(model="gpt-4o-mini")
             )
-            
-            reasoning_steps.append(f"Gen {generation} Thought: {thought_result[:200]}...")
-            
-            # ACTION: Research and optimize
+            reasoning_steps.append(f"Generation {generation} Thought: {thought_result}")
+
+            # ACTION: Research based on thought
             action_task = f"""
             ACTION - Generation {generation}:
-            Based on thought: {thought_result}
+            Based on the thought: "{thought_result}"
             
-            Research latest architecture improvements for: {task.problem_description}
-            Focus on techniques that could improve our evolution.
+            Research the latest techniques for '{task.architecture_type.value}' architectures related to '{task.problem_description}'.
+            Provide a concise summary of key findings that can be used to improve the architecture in this generation.
             """
-            
-            action_result = await orchestrator.generate_str(
-                message=action_task,
-                request_params=RequestParams(model="gpt-4o-mini")
-            )
-            
+            action_result = await researcher.run(action_task)
             research_insights.append(action_result)
-            reasoning_steps.append(f"Gen {generation} Action: {action_result[:200]}...")
+            reasoning_steps.append(f"Generation {generation} Action: Performed research, insights gathered.")
+
+            # OBSERVATION: Evaluate population and evolve
+            metrics = await self._evaluate_population(population, task, action_result)
+            population = await self._evolve_generation(population, task, metrics)
             
-            # OBSERVATION: Evaluate and evolve
-            population_metrics = await self._evaluate_population(population, task, action_result)
+            # Update best genome
+            best_genome = max(population, key=lambda g: g.fitness_score)
             
             observation_task = f"""
             OBSERVATION - Generation {generation}:
-            Research insights: {action_result}
-            Best fitness: {population_metrics['best_fitness']:.4f}
+            A new generation of {len(population)} architectures was created.
+            The best architecture now has a fitness score of {best_genome.fitness_score:.4f}.
+            The population diversity is {self._calculate_population_diversity(population):.3f}.
             
-            How effective were the insights? What patterns emerge?
+            Analyze the outcome of this generation. Is the evolution progressing as expected?
             """
-            
-            observation_result = await orchestrator.generate_str(
+            observation_result = await reasoning_llm.generate_str(
                 message=observation_task,
                 request_params=RequestParams(model="gpt-4o-mini")
             )
+            reasoning_steps.append(f"Generation {generation} Observation: {observation_result}")
             
-            reasoning_steps.append(f"Gen {generation} Observation: {observation_result[:200]}...")
-            
-            # Evolution step
-            population = await self._evolve_generation(population, task, population_metrics)
-            
-            # Track history
             evolution_history.append({
                 "generation": generation,
-                "best_fitness": population_metrics['best_fitness'],
-                "avg_fitness": population_metrics['avg_fitness'],
-                "diversity": population_metrics.get('diversity', 0.5)
+                "best_fitness": best_genome.fitness_score,
+                "avg_fitness": sum(g.fitness_score for g in population) / len(population),
+                "diversity": self._calculate_population_diversity(population)
             })
-        
-        # Get best architecture
-        best_architecture = max(population, key=lambda x: x.fitness_score)
-        
-        # Generate recommendations
-        recommendations = await self._generate_recommendations(task, best_architecture, orchestrator)
-        
-        # Final metrics
-        final_metrics = PerformanceMetrics(
-            accuracy=best_architecture.fitness_score,
-            training_time=time.time(),
-            inference_time=0.1,
-            memory_usage=sum(layer.get('parameters', 1000) for layer in best_architecture.layers),
-            energy_efficiency=0.8
+
+        # Final analysis and recommendations
+        final_metrics = self.improvement_engine.assess_performance(best_genome)
+        optimization_recommendations = await self._generate_recommendations(
+            task, best_genome, evolution_history, reasoning_llm
         )
-        
+
         return ArchitectureEvolutionResult(
             task=task,
-            best_architecture=best_architecture,
+            best_architecture=best_genome,
             evolution_history=evolution_history,
             final_metrics=final_metrics,
             reasoning_steps=reasoning_steps,
             research_insights=research_insights,
-            optimization_recommendations=recommendations,
+            optimization_recommendations=optimization_recommendations,
             generation_count=task.max_generations,
-            processing_time=0.0,
+            processing_time=0.0, # Will be updated outside
             success=True
         )
     
@@ -434,67 +423,54 @@ class EvolutionaryAIArchitectMCP:
         return max(tournament, key=lambda x: x.fitness_score)
     
     def _calculate_population_diversity(self, population: List[ArchitectureGenome]) -> float:
-        """Calculate genetic diversity"""
-        if len(population) < 2:
+        """Calculate population diversity based on layer types"""
+        if not population:
             return 0.0
         
-        total_differences = 0
-        comparisons = 0
+        all_layers = []
+        for genome in population:
+            for layer in genome.layers:
+                all_layers.append(layer.get('type', 'unknown'))
         
-        for i in range(len(population)):
-            for j in range(i + 1, len(population)):
-                layers1 = population[i].layers
-                layers2 = population[j].layers
-                
-                # Compare layer count
-                if len(layers1) != len(layers2):
-                    total_differences += 1
-                else:
-                    # Compare layer types
-                    for l1, l2 in zip(layers1, layers2):
-                        if l1.get('type') != l2.get('type'):
-                            total_differences += 1
-                
-                comparisons += 1
-        
-        return total_differences / max(comparisons, 1)
+        if not all_layers:
+            return 0.0
+            
+        unique_layers = set(all_layers)
+        return len(unique_layers) / len(all_layers)
     
-    async def _generate_recommendations(self, task: EvolutionaryTask, best_arch: ArchitectureGenome, orchestrator: Orchestrator) -> List[str]:
-        """Generate optimization recommendations"""
+    async def _generate_recommendations(self, task: EvolutionaryTask, best_arch: ArchitectureGenome, history: List[Dict], llm: OpenAIAugmentedLLM) -> List[str]:
+        """Generate optimization recommendations using a direct LLM call."""
         
-        rec_task = f"""
-        Generate optimization recommendations:
+        history_summary = json.dumps(history[-3:]) # Summary of last 3 generations
+        
+        recommendation_task = f"""
+        Based on the final evolved architecture and its evolution history, provide 5 specific optimization recommendations.
         
         Problem: {task.problem_description}
-        Best Architecture Fitness: {best_arch.fitness_score:.4f}
-        Architecture Layers: {len(best_arch.layers)}
-        Constraints: {json.dumps(task.constraints)}
+        Final Architecture ID: {best_arch.unique_id}
+        Final Fitness Score: {best_arch.fitness_score:.4f}
+        Evolution History (last 3 gens): {history_summary}
         
-        Provide 5 concrete recommendations for:
-        1. Architecture improvements
-        2. Training optimization
-        3. Performance tuning
-        4. Implementation strategies
-        5. Future enhancements
+        The recommendations should be actionable and concrete.
         """
         
-        rec_result = await orchestrator.generate_str(
-            message=rec_task,
+        recommendation_result = await llm.generate_str(
+            message=recommendation_task,
             request_params=RequestParams(model="gpt-4o-mini")
         )
         
-        # Extract recommendations
+        # Extract recommendations from the generated text
         recommendations = []
-        for line in rec_result.split('\n'):
+        for line in recommendation_result.split('\n'):
             line = line.strip()
             if line and any(char.isalnum() for char in line):
                 if line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '*')):
-                    recommendations.append(line)
-        
+                    recommendations.append(line.lstrip('12345.-* '))
+
         return recommendations[:5]
     
     async def _save_evolution_results(self, result: ArchitectureEvolutionResult, task_id: str):
-        """Save evolution results to file"""
+        """Save evolution results to a file"""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"evolution_result_{task_id}_{timestamp}.md"

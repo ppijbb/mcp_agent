@@ -20,7 +20,7 @@ mcp:
       args: ["-y", "g-search-mcp"]
     filesystem:
       command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-filesystem"]
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
     urban-hive: # Urban Hive data provider MCP server
       command: "python"
       args: ["-m", "uvicorn", "srcs.urban_hive.providers.urban_hive_mcp_server:app", "--port", "8002"]
