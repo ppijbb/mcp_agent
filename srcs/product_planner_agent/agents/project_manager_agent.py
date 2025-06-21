@@ -4,11 +4,61 @@ Project Manager Agent
 """
 
 from mcp_agent.agents.agent import Agent
+from typing import Dict, Any
+import json
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
 class ProjectManagerAgent:
     """프로젝트 관리 및 일정 계획 전문 Agent"""
     
+    def __init__(self, llm=None):
+        self.llm = llm
+        self.agent_instance = self.create_agent()
+
+    async def create_project_plan(self, prd_content: Dict[str, Any], business_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        PRD와 비즈니스 계획을 바탕으로 개발 로드맵, 스프린트 계획, 리소스 할당안을 포함하는 프로젝트 계획을 수립합니다.
+        """
+        if not self.llm:
+            # LLM이 없는 경우를 대비한 기본 목업 데이터
+            return {
+                "roadmap": "Q1: MVP 개발, Q2: 핵심 기능 구현, Q3: 베타 테스트, Q4: 정식 출시",
+                "sprint_plan": "2주 단위 스프린트 운영, 백로그 기반 작업 관리",
+                "resource_plan": "개발자 5명, 디자이너 1명, PM 1명",
+                "status": "created_mockup"
+            }
+
+        prompt = f"""
+        You are a senior project manager. Based on the provided PRD and business plan, create a comprehensive project plan.
+
+        **PRD Content:**
+        {json.dumps(prd_content, indent=2, ensure_ascii=False)}
+
+        **Business Plan:**
+        {json.dumps(business_plan, indent=2, ensure_ascii=False)}
+
+        **Instructions:**
+        1.  **Development Roadmap:** Create a high-level roadmap for the next 6-12 months.
+        2.  **Sprint Plan:** Suggest a sprint structure (e.g., duration, key ceremonies).
+        3.  **Resource Allocation:** Estimate the required team size and roles.
+        4.  **Risk Assessment:** Identify potential risks and suggest mitigation strategies.
+
+        Provide the output in a structured JSON format.
+        """
+        
+        try:
+            result_str = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.5, response_format="json"))
+            project_plan = json.loads(result_str)
+            project_plan["status"] = "created_successfully"
+            return project_plan
+        except Exception as e:
+            print(f"Error creating project plan: {e}")
+            return {
+                "error": str(e),
+                "status": "creation_failed"
+            }
+
     @staticmethod
     def create_agent() -> Agent:
         """

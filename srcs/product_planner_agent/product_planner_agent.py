@@ -14,7 +14,8 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from srcs.product_planner_agent.agents.coordinator_agent import CoordinatorAgent
+# 👉 새 계층형 아키텍처: ExecutiveCoordinator 사용
+from srcs.product_planner_agent.coordinators.executive_coordinator import ExecutiveCoordinator
 from srcs.product_planner_agent.utils.status_logger import STATUS_FILE
 
 def parse_figma_url(url: str) -> tuple[str | None, str | None]:
@@ -86,13 +87,17 @@ async def run_agent_workflow(figma_url: str, figma_api_key: str) -> bool:
     
     success = False
     try:
-        coordinator = CoordinatorAgent()
-        print("🚀 워크플로우를 시작합니다... (자세한 진행 상황은 Streamlit 페이지를 확인하세요)")
-        result = await coordinator.run(
-            figma_api_key=figma_api_key,
-            figma_file_id=file_id,
-            figma_node_id=node_id
+        executive = ExecutiveCoordinator()
+        print("🚀 계층형 워크플로우를 시작합니다... (자세한 진행 상황은 Streamlit 페이지를 확인하세요)")
+
+        # ExecutiveCoordinator는 단일 문자열 initial_prompt를 입력으로 받도록 설계됨
+        initial_prompt = (
+            f"Analyze the Figma design and create a comprehensive product plan.\n"
+            f"Figma URL: {figma_url}\n"
+            f"(file_id={file_id}, node_id={node_id})"
         )
+
+        result = await executive.run(initial_prompt=initial_prompt)
         if result:
             print("\n✅ 워크플로우가 성공적으로 완료되었습니다.")
             print("📄 최종 보고서가 'planning' 디렉토리에 생성되었습니다.")

@@ -73,6 +73,26 @@ class FigmaAnalyzerAgent:
             server_names=["figma-dev-mode", "fetch", "filesystem"]
         )
 
+    async def analyze_figma_for_prd(self, figma_api_key: str | None = None, figma_file_id: str | None = None, figma_node_id: str | None = None) -> dict:
+        """Figma 디자인을 분석해 PRD 작성을 위한 구조화 데이터를 반환합니다.
+
+        실제 Figma API 호출 로직은 TODO 이며, 더 이상 목업 데이터를 반환하지 않습니다.
+        환경변수에서 FIGMA_API_KEY / FIGMA_FILE_ID / FIGMA_NODE_ID 값을 자동으로 로드합니다.
+        """
+        import os
+
+        figma_api_key = figma_api_key or os.getenv("FIGMA_API_KEY")
+        figma_file_id = figma_file_id or os.getenv("FIGMA_FILE_ID")
+        figma_node_id = figma_node_id or os.getenv("FIGMA_NODE_ID")
+
+        if not all([figma_api_key, figma_file_id, figma_node_id]):
+            raise RuntimeError("FIGMA_API_KEY, FIGMA_FILE_ID, FIGMA_NODE_ID must be provided via args or environment variables.")
+
+        print(f"🎨 Figma 분석 시작: file_id={figma_file_id}, node_id={figma_node_id}")
+
+        # TODO: 실제 Figma API 호출 및 분석 로직 구현 후 결과 반환
+        raise NotImplementedError("Figma API integration not yet implemented. Provide actual implementation to remove this exception.")
+
     @staticmethod
     def get_description() -> str:
         """Agent 설명 반환"""

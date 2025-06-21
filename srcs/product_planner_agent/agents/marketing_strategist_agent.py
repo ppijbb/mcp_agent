@@ -4,11 +4,60 @@ Marketing Strategist Agent
 """
 
 from mcp_agent.agents.agent import Agent
+from typing import Dict, Any
+import json
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
 class MarketingStrategistAgent:
     """마케팅 전략 및 사용자 획득 전문 Agent"""
     
+    def __init__(self, llm=None):
+        self.llm = llm
+        self.agent_instance = self.create_agent()
+
+    async def develop_marketing_strategy(self, prd_content: Dict[str, Any], business_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        PRD와 비즈니스 계획을 바탕으로 Go-to-Market(GTM) 전략을 수립합니다.
+        """
+        if not self.llm:
+            return {
+                "target_audience": "10-20대 소셜 미디어 사용자",
+                "channels": ["Instagram", "TikTok", "YouTube"],
+                "initial_campaign": "인플루언서 협업을 통한 바이럴 마케팅",
+                "status": "created_mockup"
+            }
+
+        prompt = f"""
+        You are a senior marketing strategist. Based on the provided PRD and business plan, develop a Go-to-Market (GTM) strategy.
+
+        **PRD Content:**
+        {json.dumps(prd_content, indent=2, ensure_ascii=False)}
+
+        **Business Plan:**
+        {json.dumps(business_plan, indent=2, ensure_ascii=False)}
+
+        **Instructions:**
+        1.  **Target Audience:** Define the primary target audience and key personas.
+        2.  **Positioning:** Create a compelling product positioning statement.
+        3.  **Channel Strategy:** Recommend the most effective marketing channels (e.g., social media, content marketing, SEO).
+        4.  **Launch Campaign:** Outline a creative concept for the initial launch campaign.
+
+        Provide the output in a structured JSON format.
+        """
+        
+        try:
+            result_str = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.6, response_format="json"))
+            marketing_strategy = json.loads(result_str)
+            marketing_strategy["status"] = "created_successfully"
+            return marketing_strategy
+        except Exception as e:
+            print(f"Error developing marketing strategy: {e}")
+            return {
+                "error": str(e),
+                "status": "creation_failed"
+            }
+
     @staticmethod
     def create_agent() -> Agent:
         """

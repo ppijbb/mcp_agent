@@ -4,11 +4,60 @@ Operations Agent
 """
 
 from mcp_agent.agents.agent import Agent
+from typing import Dict, Any
+import json
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
 class OperationsAgent:
     """서비스 운영 및 비즈니스 운영 전문 Agent"""
     
+    def __init__(self, llm=None):
+        self.llm = llm
+        self.agent_instance = self.create_agent()
+
+    async def plan_operations(self, prd_content: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        PRD의 기술 사양을 바탕으로 서비스 운영 계획을 수립합니다.
+        """
+        if not self.llm:
+            return {
+                "infrastructure_plan": "AWS 또는 GCP 기반 클라우드 인프라, 쿠버네티스를 활용한 컨테이너 오케스트레이션",
+                "monitoring_plan": "Prometheus, Grafana를 이용한 실시간 모니터링",
+                "support_plan": "Zendesk를 통한 24/7 고객 지원 채널 운영",
+                "status": "created_mockup"
+            }
+
+        # PRD에서 기술 관련 정보 추출
+        technical_spec = prd_content.get("technical_specifications", {})
+
+        prompt = f"""
+        You are a senior operations manager. Based on the provided technical specifications from a PRD, create a service operations plan.
+
+        **Technical Specifications:**
+        {json.dumps(technical_spec, indent=2, ensure_ascii=False)}
+
+        **Instructions:**
+        1.  **Infrastructure Plan:** Recommend a cloud infrastructure setup (e.g., cloud provider, key services, architecture).
+        2.  **Monitoring Plan:** Suggest tools and strategies for monitoring system health and performance.
+        3.  **Customer Support Plan:** Outline a basic customer support process and required tools.
+        4.  **Deployment Plan:** Describe a CI/CD pipeline strategy.
+
+        Provide the output in a structured JSON format.
+        """
+        
+        try:
+            result_str = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.5, response_format="json"))
+            operations_plan = json.loads(result_str)
+            operations_plan["status"] = "created_successfully"
+            return operations_plan
+        except Exception as e:
+            print(f"Error planning operations: {e}")
+            return {
+                "error": str(e),
+                "status": "creation_failed"
+            }
+
     @staticmethod
     def create_agent() -> Agent:
         """

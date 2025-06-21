@@ -4,11 +4,57 @@ Conversation Agent
 """
 
 from mcp_agent.agents.agent import Agent
+from typing import Dict, Any
+import json
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
 class ConversationAgent:
     """사용자 대화 및 요구사항 수집 전문 Agent"""
     
+    def __init__(self, llm=None):
+        self.llm = llm
+        self.agent_instance = self.create_agent()
+
+    async def collect_requirements_via_chat(self, initial_query: str) -> Dict[str, Any]:
+        """
+        사용자의 초기 질문을 바탕으로 대화를 통해 제품 요구사항을 수집합니다.
+        (실제 채팅 기능은 추후 구현)
+        """
+        if not self.llm:
+            return {
+                "product_goal": "사용자 입력을 기반으로 한 기본 요구사항",
+                "key_features": ["Feature A from chat", "Feature B from chat"],
+                "status": "collected_mockup"
+            }
+
+        prompt = f"""
+        You are a product planning conversation specialist. A user has provided the following initial request. 
+        Your task is to interpret this request and formulate a structured summary of product requirements.
+
+        **User's Initial Request:**
+        "{initial_query}"
+
+        **Instructions:**
+        1.  **Identify Core Goal:** What is the main objective the user wants to achieve?
+        2.  **Extract Key Features:** List the key features or functionalities mentioned or implied.
+        3.  **Clarifying Questions:** Formulate 3-5 important follow-up questions to gather more details.
+        
+        Provide the output in a structured JSON format.
+        """
+        
+        try:
+            result_str = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4, response_format="json"))
+            requirements = json.loads(result_str)
+            requirements["status"] = "collected_successfully"
+            return requirements
+        except Exception as e:
+            print(f"Error collecting requirements: {e}")
+            return {
+                "error": str(e),
+                "status": "collection_failed"
+            }
+
     @staticmethod
     def create_agent() -> Agent:
         """
