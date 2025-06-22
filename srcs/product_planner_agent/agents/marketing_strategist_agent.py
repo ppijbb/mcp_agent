@@ -7,6 +7,10 @@ from mcp_agent.agents.agent import Agent
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.logging.logger import get_logger
+
+
+logger = get_logger("marketing_strategist_agent")
 
 
 class MarketingStrategistAgent:
@@ -52,7 +56,7 @@ class MarketingStrategistAgent:
             marketing_strategy["status"] = "created_successfully"
             return marketing_strategy
         except Exception as e:
-            print(f"Error developing marketing strategy: {e}")
+            logger.error("Error developing marketing strategy: %s", e, exc_info=True)
             return {
                 "error": str(e),
                 "status": "creation_failed"

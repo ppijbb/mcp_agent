@@ -7,6 +7,10 @@ from mcp_agent.agents.agent import Agent
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.logging.logger import get_logger
+
+
+logger = get_logger("operations_agent")
 
 
 class OperationsAgent:
@@ -52,7 +56,7 @@ class OperationsAgent:
             operations_plan["status"] = "created_successfully"
             return operations_plan
         except Exception as e:
-            print(f"Error planning operations: {e}")
+            logger.error("Error planning operations: %s", e, exc_info=True)
             return {
                 "error": str(e),
                 "status": "creation_failed"

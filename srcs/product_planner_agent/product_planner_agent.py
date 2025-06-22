@@ -18,6 +18,9 @@ sys.path.insert(0, str(project_root))
 from srcs.product_planner_agent.coordinators.executive_coordinator import ExecutiveCoordinator
 from srcs.product_planner_agent.utils.status_logger import STATUS_FILE
 
+# Centralized env helper
+from srcs.product_planner_agent.utils import env_settings as env
+
 def parse_figma_url(url: str) -> tuple[str | None, str | None]:
     """
     Figma URL에서 file_id와 node_id를 추출합니다.
@@ -49,12 +52,8 @@ def get_input_params() -> tuple[str, str]:
         print("❌ 유효하지 않은 Figma URL입니다. URL에 file_id와 node-id가 모두 포함되어 있는지 확인하세요.")
         sys.exit(1)
         
-    figma_api_key = os.getenv("FIGMA_API_KEY")
-    if not figma_api_key:
-        print("❌ FIGMA_API_KEY 환경 변수가 설정되지 않았습니다.")
-        print("💡 .env 파일이나 시스템 환경 변수에 FIGMA_API_KEY를 추가해주세요.")
-        sys.exit(1)
-        
+    figma_api_key = env.get("FIGMA_API_KEY", required=True)
+    
     return figma_url, figma_api_key
 
 async def run_agent_workflow(figma_url: str, figma_api_key: str) -> bool:

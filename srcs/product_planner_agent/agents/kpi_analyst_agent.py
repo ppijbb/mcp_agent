@@ -7,6 +7,10 @@ from mcp_agent.agents.agent import Agent
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.logging.logger import get_logger
+
+
+logger = get_logger("kpi_analyst_agent")
 
 
 class KPIAnalystAgent:
@@ -51,7 +55,7 @@ class KPIAnalystAgent:
             kpi_definition["status"] = "created_successfully"
             return kpi_definition
         except Exception as e:
-            print(f"Error defining KPIs: {e}")
+            logger.error("Error defining KPIs: %s", e, exc_info=True)
             return {
                 "error": str(e),
                 "status": "creation_failed"

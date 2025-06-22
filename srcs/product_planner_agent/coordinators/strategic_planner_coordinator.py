@@ -3,7 +3,7 @@
 """
 from typing import Dict, Any
 from mcp_agent.logging.logger import get_logger
-import os
+from srcs.product_planner_agent.utils import env_settings as env
 import asyncio
 
 from srcs.product_planner_agent.agents.figma_analyzer_agent import FigmaAnalyzerAgent
@@ -31,9 +31,9 @@ class StrategicPlannerCoordinator:
         results: Dict[str, Any] = {}
 
         # 1) 디자인 분석
-        figma_api_key = os.getenv("FIGMA_API_KEY")
-        figma_file_id = os.getenv("FIGMA_FILE_ID")
-        figma_node_id = os.getenv("FIGMA_NODE_ID")
+        figma_api_key = env.get("FIGMA_API_KEY")
+        figma_file_id = env.get("FIGMA_FILE_ID")
+        figma_node_id = env.get("FIGMA_NODE_ID")
 
         figma_analysis = await self.figma_analyzer.analyze_figma_for_prd(
             figma_api_key=figma_api_key,
