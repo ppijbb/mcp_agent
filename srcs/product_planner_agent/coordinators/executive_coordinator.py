@@ -9,6 +9,10 @@ from srcs.product_planner_agent.coordinators.market_research_coordinator import 
 from srcs.product_planner_agent.coordinators.strategic_planner_coordinator import StrategicPlannerCoordinator
 from srcs.product_planner_agent.coordinators.execution_planner_coordinator import ExecutionPlannerCoordinator
 
+# orchestrator utils
+from srcs.product_planner_agent.utils.orchestrator_factory import orchestrator_factory as _default_orch_factory
+from srcs.product_planner_agent.utils.retry import async_retry
+
 logger = get_logger("executive_coordinator")
 
 class ExecutiveCoordinator:
@@ -16,6 +20,8 @@ class ExecutiveCoordinator:
 
     def __init__(self, orchestrator_factory=None):
         self.orchestrator_factory = orchestrator_factory  # 추후 LLM·툴 공유 목적
+        if self.orchestrator_factory is None:
+            self.orchestrator_factory = _default_orch_factory()
         self.reporting = ReportingCoordinator(orchestrator_factory=orchestrator_factory)
         self.market = MarketResearchCoordinator(orchestrator_factory=orchestrator_factory)
         self.strategic = StrategicPlannerCoordinator(orchestrator_factory=orchestrator_factory)
@@ -39,32 +45,32 @@ class ExecutiveCoordinator:
 
         # 1. 사용자 요구사항 수집 및 초기 보고
         self._consume_turns()
-        logger.info("🔹 Phase: Reporting/Conversation 시작")
-        convo_results = await self.reporting.collect_initial_requirements(initial_prompt)
+        logger.info("🗣️ collect_initial_requirements 실행")
+        convo_results = await async_retry(self.reporting.collect_initial_requirements, initial_prompt)
         results["conversation"] = convo_results
 
         # 2. 시장 조사
         self._consume_turns()
         logger.info("🔹 Phase: Market Research 시작")
-        market_results = await self.market.perform_market_research(convo_results)
+        market_results = await async_retry(self.market.perform_market_research, convo_results)
         results["market_research"] = market_results
 
         # 3. 전략 기획(디자인 분석, PRD, 비즈니스 플랜)
         self._consume_turns()
         logger.info("🔹 Phase: Strategic Planning 시작")
-        strategic_results = await self.strategic.create_strategic_plan(market_results)
+        strategic_results = await async_retry(self.strategic.create_strategic_plan, market_results)
         results.update(strategic_results)
 
         # 4. 실행 계획(프로젝트·운영)
         self._consume_turns()
         logger.info("🔹 Phase: Execution Planning 시작")
-        execution_results = await self.execution.create_execution_plan(strategic_results)
+        execution_results = await async_retry(self.execution.create_execution_plan, strategic_results)
         results.update(execution_results)
 
         # 5. 최종 보고서 작성
         self._consume_turns()
         logger.info("🔹 Phase: Final Reporting 시작")
-        final_report = await self.reporting.generate_final_report(results)
+        final_report = await async_retry(self.reporting.generate_final_report, results)
         results["final_report"] = final_report
 
         logger.info("✅ ExecutiveCoordinator 모든 단계 완료")
