@@ -4,6 +4,7 @@
 from typing import Dict, Any
 from mcp_agent.logging.logger import get_logger
 import os
+import asyncio
 
 from srcs.product_planner_agent.agents.figma_analyzer_agent import FigmaAnalyzerAgent
 from srcs.product_planner_agent.agents.prd_writer_agent import PRDWriterAgent
@@ -49,12 +50,13 @@ class StrategicPlannerCoordinator:
         business_plan = await self.business_planner.create_business_plan(prd_content=prd)
         results["business_plan"] = business_plan
 
-        # 4) KPI 정의
-        kpis = await self.kpi_analyst.define_kpis(prd_content=prd, business_plan=business_plan)
-        results["kpi"] = kpis
+        # KPI 정의와 마케팅 전략은 서로 의존성이 없으므로 병렬 실행
+        kpis, marketing = await asyncio.gather(
+            self.kpi_analyst.define_kpis(prd_content=prd, business_plan=business_plan),
+            self.marketing_strategist.develop_marketing_strategy(prd_content=prd, business_plan=business_plan)
+        )
 
-        # 5) 마케팅 전략
-        marketing = await self.marketing_strategist.develop_marketing_strategy(prd_content=prd, business_plan=business_plan)
+        results["kpi"] = kpis
         results["marketing_strategy"] = marketing
 
         return results 

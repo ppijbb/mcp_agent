@@ -21,31 +21,48 @@ class ExecutiveCoordinator:
         self.strategic = StrategicPlannerCoordinator(orchestrator_factory=orchestrator_factory)
         self.execution = ExecutionPlannerCoordinator(orchestrator_factory=orchestrator_factory)
 
+        import os
+        self.turn_budget = int(os.getenv("AGENT_MAX_TURNS", 20))
+
+    # ---------------------------------------------
+    # Turn / Step Budget Helpers
+    # ---------------------------------------------
+    def _consume_turns(self, n: int = 1):
+        """간단한 전역 턴 예산 관리. n 만큼 차감 후 잔여 턴이 0 미만이면 예외 발생."""
+        self.turn_budget -= n
+        if self.turn_budget < 0:
+            raise RuntimeError("Turn budget exhausted: AGENT_MAX_TURNS limit reached.")
+
     async def run(self, initial_prompt: str) -> Dict[str, Any]:
         """전체 플로우를 순차적으로 실행하고 결과를 종합해 반환합니다."""
         results: Dict[str, Any] = {}
 
         # 1. 사용자 요구사항 수집 및 초기 보고
+        self._consume_turns()
         logger.info("🔹 Phase: Reporting/Conversation 시작")
         convo_results = await self.reporting.collect_initial_requirements(initial_prompt)
         results["conversation"] = convo_results
 
         # 2. 시장 조사
+        self._consume_turns()
         logger.info("🔹 Phase: Market Research 시작")
         market_results = await self.market.perform_market_research(convo_results)
         results["market_research"] = market_results
 
         # 3. 전략 기획(디자인 분석, PRD, 비즈니스 플랜)
+        self._consume_turns()
         logger.info("🔹 Phase: Strategic Planning 시작")
         strategic_results = await self.strategic.create_strategic_plan(market_results)
         results.update(strategic_results)
 
         # 4. 실행 계획(프로젝트·운영)
+        self._consume_turns()
         logger.info("🔹 Phase: Execution Planning 시작")
         execution_results = await self.execution.create_execution_plan(strategic_results)
         results.update(execution_results)
 
         # 5. 최종 보고서 작성
+        self._consume_turns()
         logger.info("🔹 Phase: Final Reporting 시작")
         final_report = await self.reporting.generate_final_report(results)
         results["final_report"] = final_report
