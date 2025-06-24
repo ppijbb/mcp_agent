@@ -25,9 +25,9 @@ from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 # Import existing components
 try:
-    from srcs.advanced_agents.genome import ArchitectureGenome, PerformanceMetrics
-    from srcs.advanced_agents.architect import AIArchitectureDesigner
-    from srcs.advanced_agents.improvement_engine import SelfImprovementEngine
+    from .genome import ArchitectureGenome, PerformanceMetrics
+    from .architect import AIArchitectureDesigner
+    from .improvement_engine import SelfImprovementEngine
 except ImportError:
     # Fallback if imports fail
     # Real components will be defined below

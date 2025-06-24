@@ -11,7 +11,7 @@ from mcp_agent.config import get_settings
 
 from srcs.common.streamlit_utils import get_agent_state
 from srcs.common.streamlit_log_handler import setup_streamlit_logging
-from srcs.advanced_agents.evolutionary_ai_architect_agent import EvolutionaryAIArchitectMCP
+from srcs.evolutionary_ai_architect.evolutionary_ai_architect_agent import EvolutionaryAIArchitectMCP
 import json
 
 app = MCPApp(

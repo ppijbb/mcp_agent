@@ -10,11 +10,8 @@ Available Agents:
 - DecisionAgent: Mobile interaction-based automatic decision system
 """
 
-try:
-    from .evolutionary_ai_architect_agent import EvolutionaryAIArchitectAgent
-except ImportError as e:
-    print(f"Warning: Could not import EvolutionaryAIArchitectAgent: {e}")
-    EvolutionaryAIArchitectAgent = None
+# EvolutionaryAIArchitectAgent moved to srcs/evolutionary_ai_architect/
+# from srcs.evolutionary_ai_architect import EvolutionaryAIArchitectAgent
 
 try:
     from .decision_agent import DecisionAgent
@@ -22,9 +19,15 @@ except ImportError as e:
     print(f"Warning: Could not import DecisionAgent: {e}")
     DecisionAgent = None
 
+try:
+    from .graph_react_agent import GraphReActAgent
+except ImportError as e:
+    print(f"Warning: Could not import GraphReActAgent: {e}")
+    GraphReActAgent = None
+
 __all__ = [
-    'EvolutionaryAIArchitectAgent',
-    'DecisionAgent'
+    'DecisionAgent',
+    'GraphReActAgent'
 ]
 
 __version__ = '1.0.0' 
