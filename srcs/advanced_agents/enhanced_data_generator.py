@@ -153,7 +153,7 @@ class SyntheticDataAgent:
         )
         os.makedirs(self.output_dir, exist_ok=True)
 
-    async def run(self, data_type: str, record_count: int) -> str:
+    async def run(self, data_type: str, record_count: int, max_refine_iters: int = 2) -> str:
         """
         Runs the full data generation workflow.
 
@@ -185,14 +185,19 @@ class SyntheticDataAgent:
             )
             validator_agent = Agent(
                 name="data_validator",
-                instruction=f"You are a data quality analyst. Validate the generated {data_type} data for schema compliance and realism.",
+                instruction=f"You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
+                server_names=[],
+            )
+            refiner_agent = Agent(
+                name="data_refiner",
+                instruction="You are a data specialist. Given a dataset and its validation report, refine the dataset by addressing issues. Output only the refined dataset in valid JSON format.",
                 server_names=[],
             )
 
             # The orchestrator will manage the workflow
             orchestrator = Orchestrator(
                 llm_factory=OpenAIAugmentedLLM,
-                available_agents=[schema_agent, data_generator_agent, validator_agent],
+                available_agents=[schema_agent, data_generator_agent, validator_agent, refiner_agent],
                 plan_type="full",
             )
 
@@ -204,29 +209,54 @@ class SyntheticDataAgent:
             1.  **Use schema_designer**: Create a comprehensive and realistic JSON schema for '{data_type}' entities. The schema must be detailed.
             2.  **Use data_generator**: Generate {record_count} records adhering strictly to the schema designed in the previous step.
             3.  **Use data_validator**: Thoroughly check the generated data for quality, consistency, and schema compliance. Provide a brief quality report.
-            4.  **Final Output**: Present the validated JSON data as the final result. Do not include a file writing step in the plan. The data itself is the final output.
+            4.  **Use data_refiner**: Given the validation report, refine the dataset by addressing issues.
+            5.  **Final Output**: Present the refined JSON data as the final result. Do not include a file writing step in the plan. The data itself is the final output.
             """
 
             try:
-                # The orchestrator returns the final generated data
+                # Initial dataset generation
                 generated_data_str = await orchestrator.generate_str(
                     message=workflow_task,
                     request_params=RequestParams(model="gpt-4o-mini")
                 )
 
-                # Save the final, validated data to the file
+                # --- Generator–Validator–Refiner Feedback Loop ---
+                # Define validator and refiner agents
+                validator_agent = Agent(
+                    name="data_validator",
+                    instruction=f"You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
+                    server_names=[],
+                )
+                refiner_agent = Agent(
+                    name="data_refiner",
+                    instruction="You are a data specialist. Given a dataset and its validation report, refine the dataset by addressing issues. Output only the refined dataset in valid JSON format.",
+                    server_names=[],
+                )
+                current_data = generated_data_str
+                for iteration in range(max_refine_iters):
+                    # Validation step
+                    async with validator_agent:
+                        val_llm = await validator_agent.attach_llm(OpenAIAugmentedLLM)
+                        validation_report = await val_llm.generate_str(message=current_data)
+                    # Refinement step
+                    async with refiner_agent:
+                        ref_llm = await refiner_agent.attach_llm(OpenAIAugmentedLLM)
+                        current_data = await ref_llm.generate_str(
+                            message=f"Dataset: {current_data}\nValidation Report: {validation_report}\nPlease refine the dataset accordingly."
+                        )
+                final_data = current_data
+
+                # Save the final, refined data to the file
                 with open(output_path, 'w', encoding='utf-8') as f:
-                    # Attempt to parse and re-dump for pretty formatting
                     try:
-                        parsed_json = json.loads(generated_data_str)
+                        parsed_json = json.loads(final_data)
                         json.dump(parsed_json, f, indent=2, ensure_ascii=False)
                     except json.JSONDecodeError:
-                        # If parsing fails, just write the raw string
-                        f.write(generated_data_str)
+                        f.write(final_data)
                 
                 file_size = os.path.getsize(output_path)
                 success_message = (
-                    f"✅ 데이터 생성에 성공했습니다!\n\n"
+                    f"✅ 데이터 생성 및 정제에 성공했습니다!\n\n"
                     f"📁 **파일 경로**: `{output_path}`\n"
                     f"📊 **파일 크기**: {file_size / 1024:.2f} KB"
                 )

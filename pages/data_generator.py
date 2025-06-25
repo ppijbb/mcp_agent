@@ -13,7 +13,7 @@ import asyncio
 import re
 import json
 from srcs.common.streamlit_log_handler import setup_streamlit_logging
-from srcs.basic_agents.enhanced_data_generator import SyntheticDataAgent
+from srcs.advanced_agents.enhanced_data_generator import SyntheticDataAgent
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent

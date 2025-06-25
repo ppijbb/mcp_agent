@@ -20,7 +20,7 @@ from srcs.common.page_utils import create_agent_page
 
 # Research Agent 임포트 시도
 try:
-    from srcs.basic_agents.researcher_v2 import (
+    from srcs.advanced_agents.researcher_v2 import (
         ResearcherAgent,
         load_research_focus_options,
         load_research_templates,
