@@ -16,6 +16,8 @@ from enum import Enum
 import asyncio
 import logging
 from datetime import datetime, timezone
+import subprocess
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -553,7 +555,7 @@ async def connect_urban_hive_server(command: str, args: List[str], port: int = 8
             full_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=Path(__file__).parent.parent.parent  # 프로젝트 루트
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # 프로젝트 루트
         )
         
         # 서버 시작 대기 (최대 10초)
