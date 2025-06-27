@@ -80,7 +80,7 @@ def main():
                 placeholder="예: North America, Europe, Asia",
                 help="분석 대상 지역을 입력하세요"
             )
-        
+    
         # 고급 설정
         st.subheader("⚙️ 고급 설정")
         

@@ -1,23 +1,20 @@
 import streamlit as st
-import asyncio
 import json
+import os
 from datetime import datetime
+import streamlit_process_manager as spm
+from streamlit_process_manager.process import Process
 
-from srcs.common.streamlit_log_handler import setup_streamlit_logging
+from configs.settings import get_reports_path
 from srcs.advanced_agents.decision_agent import (
-    DecisionAgentMCP,
     MobileInteraction,
     UserProfile,
     InteractionType,
 )
 
-# --- Agent Initialization ---
-@st.cache_resource
-def get_decision_agent():
-    """Initializes and caches the DecisionAgentMCP."""
-    return DecisionAgentMCP(output_dir="decision_reports")
-
-agent = get_decision_agent()
+# 경로 설정
+REPORTS_PATH = get_reports_path('decision')
+os.makedirs(REPORTS_PATH, exist_ok=True)
 
 # --- Page Configuration ---
 st.set_page_config(page_title="🤔 의사결정 에이전트", page_icon="🤔", layout="wide")
@@ -82,47 +79,68 @@ with col2:
 
 st.markdown("---")
 
-# --- Real-time Log Display ---
-log_expander = st.expander("실시간 실행 로그", expanded=False)
-log_container = log_expander.empty()
-setup_streamlit_logging(["mcp_agent", "decision_agent"], log_container)
-# --- End Log Display ---
-
-if st.button("🧠 분석 시작", type="primary", use_container_width=True):
+# 입력 양식 및 실행
+with st.form("decision_form"):
+    st.subheader("🚀 분석 시작하기")
+    interaction_type = st.selectbox(
+        "상호작용 유형 선택",
+        options=[e for e in InteractionType],
+        format_func=lambda x: x.value
+    )
+    app_name = st.text_input("앱/서비스 이름", value="Amazon")
+    context_json = st.text_area("상황 상세 (JSON)",
+                                value=context_json, height=150)
+    submitted = st.form_submit_button("🧠 분석 시작", use_container_width=True)
+    
+if submitted:
+    # 검증
     try:
         context_dict = json.loads(context_json)
-        interaction = MobileInteraction(
-            interaction_type=interaction_type,
-            app_name=app_name,
-            timestamp=datetime.now(),
-            context=context_dict
-        )
-        
-        with st.spinner("의사결정 분석 중... ReAct 패턴을 사용하여 심층 분석을 수행합니다."):
-            result = asyncio.run(agent.analyze_and_decide(
-                interaction=interaction,
-                user_profile=profile
-            ))
-        
-        st.header("3. 분석 결과")
-        st.success("✅ 분석 완료!")
-        
-        decision = result.decision
-        st.subheader(f"결정: {decision.recommendation}")
-        st.metric("신뢰도 점수", f"{decision.confidence_score:.2%}")
-        
-        with st.expander("상세 분석 결과 보기", expanded=True):
-            st.markdown(f"**- 위험 수준:** {decision.risk_level}")
-            st.markdown("**- 핵심 근거:**")
-            st.info(decision.reasoning)
-            st.markdown("**- 대안:**")
-            for alt in decision.alternatives:
-                st.markdown(f"  - {alt}")
-            st.markdown("**- 증거 데이터:**")
-            st.json(decision.evidence)
-        
     except json.JSONDecodeError:
-        st.error("오류: '상황 상세'에 유효한 JSON 형식의 데이터를 입력해주세요.")
+        st.error("유효한 JSON 형식의 상황 상세를 입력해주세요.")
+        st.stop()
+    
+    # 세션 상태에 경로 저장
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(REPORTS_PATH, f"decision_output_{timestamp}.log")
+    result_file = os.path.join(REPORTS_PATH, f"decision_result_{timestamp}.json")
+    os.makedirs(REPORTS_PATH, exist_ok=True)
+    
+    # CLI 명령 생성
+    command = [
+        "python", "-u",
+        "srcs/advanced_agents/run_decision_agent.py",
+        "--user-profile", json.dumps(profile.__dict__, ensure_ascii=False),
+        "--interaction-type", interaction_type.name,
+        "--app-name", app_name,
+        "--context", json.dumps(context_dict, ensure_ascii=False),
+        "--result-json-path", result_file
+    ]
+    
+    process = Process(command, output_file=log_file).start()
+    spm.st_process_monitor(process, label="의사결정 분석").loop_until_finished()
+    st.success(f"✅ 분석 완료. 전체 로그: {log_file}")
+    
+    # 결과 표시
+    try:
+        with open(result_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if data.get('success'):
+            st.header("3. 분석 결과")
+            st.success("✅ 분석 완료!")
+            st.subheader(f"결정: {data.get('recommendation')}")
+            st.metric("신뢰도 점수", f"{data.get('confidence_score',0):.2%}")
+            st.markdown(f"**위험 수준:** {data.get('risk_level')} ")
+            st.markdown("**핵심 근거:**")
+            st.info(data.get('reasoning',''))
+            st.markdown("**대안:**")
+            for alt in data.get('alternatives',[]):
+                st.markdown(f"- {alt}")
+            st.markdown("**증거 데이터:**")
+            st.json(data.get('evidence', {}))
+        else:
+            st.error(f"분석 실패: {data.get('error')}")
+    except FileNotFoundError:
+        st.error("결과 파일을 찾을 수 없습니다.")
     except Exception as e:
-        st.error(f"분석 중 예기치 않은 오류가 발생했습니다: {e}")
-        st.exception(e) # Show full traceback 
+        st.error(f"결과 표시 중 오류 발생: {e}") 

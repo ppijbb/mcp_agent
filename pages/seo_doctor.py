@@ -78,7 +78,7 @@ def main():
     st.markdown("---")
     
     if SEO_AGENT_AVAILABLE:
-        st.success("🤖 Lighthouse 실시간 분석기가 준비되었습니다!")
+    st.success("🤖 Lighthouse 실시간 분석기가 준비되었습니다!")
         render_seo_analysis_interface()
     else:
         st.error("SEO Doctor 에이전트를 찾을 수 없습니다. srcs/seo_doctor 폴더를 확인해주세요.")
@@ -92,8 +92,8 @@ def render_seo_analysis_interface():
     
     with col1:
         with st.form("seo_form"):
-            url = st.text_input(
-                "🌐 분석할 웹사이트 URL", 
+        url = st.text_input(
+            "🌐 분석할 웹사이트 URL", 
                 placeholder="https://example.com"
             )
             include_competitors = st.checkbox("🕵️ 경쟁사 분석 포함", value=True)
@@ -127,7 +127,7 @@ def render_seo_analysis_interface():
                 
                 st.session_state['seo_doctor_command'] = command
                 st.session_state['seo_doctor_url'] = final_url
-                
+
     with col2:
         if 'seo_doctor_command' in st.session_state:
             st.info("🔄 SEO Doctor 실행 중...")
@@ -159,14 +159,14 @@ def render_seo_analysis_interface():
                 if key in st.session_state:
                     del st.session_state[key]
         else:
-            st.markdown("""
+        st.markdown("""
             #### 🎯 실시간 분석 특징
-            - ✅ **Google Lighthouse** 엔진 사용
-            - 🚀 **Core Web Vitals** 측정
-            - 🔍 **SEO 점수** 실시간 계산
-            - ♿ **접근성** 진단
-            - 🛡️ **Best Practices** 검사
-            """)
+        - ✅ **Google Lighthouse** 엔진 사용
+        - 🚀 **Core Web Vitals** 측정
+        - 🔍 **SEO 점수** 실시간 계산
+        - ♿ **접근성** 진단
+        - 🛡️ **Best Practices** 검사
+        """)
 
 def display_real_analysis_results(result: dict, url: str):
     """실제 분석 결과 표시"""

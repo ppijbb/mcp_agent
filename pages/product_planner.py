@@ -42,25 +42,25 @@ def main():
 
     with col1:
         with st.form("product_planner_form"):
-            st.markdown("### 🎯 분석 시작하기")
-            
-            figma_url = st.text_input(
-                "Figma URL", 
+        st.markdown("### 🎯 분석 시작하기")
+
+        figma_url = st.text_input(
+            "Figma URL", 
                 placeholder="https://www.figma.com/file/your_file_id/...",
-                help="분석할 Figma 파일의 전체 URL을 입력하세요. 'node-id'가 포함되어야 합니다."
-            )
-            figma_api_key = st.text_input(
-                "Figma API Key", 
-                type="password",
-                help="Figma 계정 설정에서 발급받은 API 키를 입력하세요."
-            )
+            help="분석할 Figma 파일의 전체 URL을 입력하세요. 'node-id'가 포함되어야 합니다."
+        )
+        figma_api_key = st.text_input(
+            "Figma API Key", 
+            type="password",
+            help="Figma 계정 설정에서 발급받은 API 키를 입력하세요."
+        )
 
             submitted = st.form_submit_button("🚀 분석 시작", use_container_width=True)
 
             if submitted:
                 if not (figma_url and figma_api_key and "figma.com/file/" in figma_url and "node-id=" in figma_url):
                     st.error("올바른 Figma URL과 API 키를 모두 입력해주세요.")
-                else:
+            else:
                     command = [
                         "python", "-u",
                         "srcs/product_planner_agent/run_product_planner.py",
