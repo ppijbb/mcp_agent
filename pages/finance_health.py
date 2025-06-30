@@ -16,6 +16,8 @@ import json
 import yfinance as yf
 from typing import Dict, List, Any, Optional
 import os
+import streamlit_process_manager as spm
+from streamlit_process_manager.process import Process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -371,94 +373,73 @@ def main():
     render_real_finance_agent(save_to_file)
 
 def render_real_finance_agent(save_to_file=False):
-    """Finance Health Agent 인터페이스"""
-    
+    """Finance Health Agent 인터페이스 (실시간 프로세스 모니터링)"""
     st.markdown("### 🤖 AI 재무 건강도 분석")
     st.info("Personal Finance Health Agent를 사용하여 맞춤형 재무 분석을 제공합니다.")
-    
-    # 에이전트 초기화
     try:
-        # PersonalFinanceHealthAgent 클래스는 존재하지 않으므로 finance_health_main 함수 사용
-        if 'finance_agent_ready' not in st.session_state:
-            st.session_state.finance_agent_ready = True
-        
-        # agent = st.session_state.finance_agent  # 삭제
-        
         col1, col2 = st.columns([1, 2])
-        
         with col1:
             st.markdown("#### 📊 재무 정보 입력")
-            
-            # 동적 기본값 로딩
             defaults = load_user_financial_defaults()
-            
-            # 기본 정보
             age = st.slider(
-                "나이", 
-                defaults["age_min"], 
-                defaults["age_max"], 
+                "나이",
+                defaults["age_min"],
+                defaults["age_max"],
                 value=None,
                 help="사용자의 나이를 입력하세요"
             )
             income = st.number_input(
-                "월 소득 (만원)", 
-                min_value=0, 
-                value=None, 
+                "월 소득 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["income_step"],
                 help="월 소득을 입력하세요"
             )
             expenses = st.number_input(
-                "월 지출 (만원)", 
-                min_value=0, 
-                value=None, 
+                "월 지출 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["income_step"],
                 help="월 지출을 입력하세요"
             )
-            
-            # 자산 정보
             st.markdown("##### 💰 자산 현황")
             savings = st.number_input(
-                "예금/적금 (만원)", 
-                min_value=0, 
-                value=None, 
+                "예금/적금 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["asset_step"],
                 help="예금 및 적금 총액을 입력하세요"
             )
             investments = st.number_input(
-                "투자자산 (만원)", 
-                min_value=0, 
-                value=None, 
+                "투자자산 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["asset_step"],
                 help="주식, 펀드 등 투자자산을 입력하세요"
             )
             real_estate = st.number_input(
-                "부동산 (만원)", 
-                min_value=0, 
-                value=None, 
+                "부동산 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["asset_step"],
                 help="부동산 자산 가치를 입력하세요"
             )
-            
-            # 부채 정보
             st.markdown("##### 📉 부채 현황")
             debt = st.number_input(
-                "총 부채 (만원)", 
-                min_value=0, 
-                value=None, 
+                "총 부채 (만원)",
+                min_value=0,
+                value=None,
                 step=defaults["asset_step"],
                 help="대출, 신용카드 등 총 부채를 입력하세요"
             )
-            
-            # 재무 목표
             st.markdown("##### 🎯 재무 목표")
             retirement_age = st.slider(
-                "희망 은퇴 나이", 
-                defaults["retirement_age_min"], 
-                defaults["retirement_age_max"], 
+                "희망 은퇴 나이",
+                defaults["retirement_age_min"],
+                defaults["retirement_age_max"],
                 value=None,
                 help="희망하는 은퇴 나이를 선택하세요"
             )
-            
             goal_options = load_financial_goal_options()
             financial_goal = st.selectbox(
                 "주요 재무 목표",
@@ -466,12 +447,16 @@ def render_real_finance_agent(save_to_file=False):
                 index=None,
                 placeholder="재무 목표를 선택하세요"
             )
-            
-            # 필수 입력값 검증
             required_fields = [age, income, expenses, savings, investments, debt, retirement_age, financial_goal]
             if all(field is not None for field in required_fields):
                 if st.button("🔍 AI 재무 분석 시작", use_container_width=True):
-                    analyze_with_real_agent({
+                    # 입력값을 JSON으로 저장
+                    reports_path = get_reports_path('finance_health')
+                    os.makedirs(reports_path, exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    input_json_path = os.path.join(reports_path, f"finance_input_{timestamp}.json")
+                    result_json_path = os.path.join(reports_path, f"finance_result_{timestamp}.json")
+                    user_input = {
                         'age': age,
                         'income': income,
                         'expenses': expenses,
@@ -481,20 +466,45 @@ def render_real_finance_agent(save_to_file=False):
                         'debt': debt,
                         'retirement_age': retirement_age,
                         'financial_goal': financial_goal
-                    }, save_to_file)
+                    }
+                    with open(input_json_path, 'w', encoding='utf-8') as f:
+                        json.dump(user_input, f, ensure_ascii=False, indent=2)
+                    command = [
+                        "python", "-u",
+                        "srcs/enterprise_agents/run_finance_health_agent.py",
+                        "--input-json-path", input_json_path,
+                        "--result-json-path", result_json_path
+                    ]
+                    st.session_state['finance_command'] = command
+                    st.session_state['finance_result_json_path'] = result_json_path
             else:
                 st.warning("모든 필수 정보를 입력해주세요.")
-        
         with col2:
-            if 'real_analysis_result' in st.session_state:
-                result = st.session_state['real_analysis_result']
-                st.markdown("#### 🎯 AI 분석 결과")
-                
-                # 결과 검증
-                if not result:
-                    st.error("AI 분석 결과를 받을 수 없습니다.")
-                else:
-                    display_analysis_results(result, save_to_file)
+            if 'finance_command' in st.session_state:
+                st.info("🔄 Finance Health Agent 실행 중...")
+                process = Process(
+                    st.session_state['finance_command'],
+                    output_file=None
+                ).start()
+                spm.st_process_monitor(
+                    process,
+                    label="재무 분석"
+                ).loop_until_finished()
+                # 결과 파일 읽기 및 표시
+                try:
+                    with open(st.session_state['finance_result_json_path'], 'r', encoding='utf-8') as f:
+                        result = json.load(f)
+                    if result.get('status') == 'success':
+                        st.success("✅ Finance Health Agent 실행 완료!")
+                        display_analysis_results(result, save_to_file)
+                    else:
+                        st.error("❌ 실행 중 오류 발생")
+                        st.error(f"**오류**: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    st.error(f"결과 파일을 읽는 중 오류 발생: {e}")
+                # 실행 후 상태 초기화
+                del st.session_state['finance_command']
+                del st.session_state['finance_result_json_path']
             else:
                 st.markdown("""
                 #### 🤖 AI 재무 분석 기능
@@ -511,99 +521,9 @@ def render_real_finance_agent(save_to_file=False):
                 - 🚨 AI 리스크 평가
                 - 📱 실시간 AI 모니터링
                 """)
-                
     except Exception as e:
         st.error(f"Finance Health Agent 초기화 중 오류: {e}")
         st.info("에이전트 모듈을 확인해주세요.")
-
-def analyze_with_real_agent(financial_data, save_to_file=False):
-    """에이전트를 사용한 재무 분석"""
-    
-    try:
-        with st.spinner("AI 에이전트가 분석 중입니다..."):
-            # finance_health_main 함수 호출 (실제로는 asyncio.run() 필요할 수 있음)
-            # 현재는 간단한 시뮬레이션으로 대체
-            result = simulate_financial_analysis(financial_data)
-            
-            if not result:
-                st.error("AI 분석에 실패했습니다.")
-                return
-            
-            st.session_state['real_analysis_result'] = result
-            st.success("✅ AI 분석이 완료되었습니다!")
-            
-            # 파일 저장 처리
-            if save_to_file:
-                save_analysis_to_file(financial_data, result)
-            
-    except Exception as e:
-        st.error(f"AI 분석 중 오류 발생: {e}")
-        st.info("시뮬레이션된 분석 결과를 제공합니다.")
-        
-        # 시뮬레이션된 결과 제공
-        result = simulate_financial_analysis(financial_data)
-        if result:
-            st.session_state['real_analysis_result'] = result
-            st.success("✅ 시뮬레이션 분석이 완료되었습니다!")
-
-def simulate_financial_analysis(financial_data):
-    """재무 분석 시뮬레이션"""
-    try:
-        # 기본적인 재무 건강도 계산
-        monthly_surplus = financial_data['income'] - financial_data['expenses']
-        total_assets = financial_data['savings'] + financial_data['investments'] + financial_data['real_estate']
-        debt_ratio = financial_data['debt'] / max(total_assets, 1)
-        
-        # 건강도 점수 계산 (0-100)
-        health_score = 60  # 기본 점수
-        if monthly_surplus > 0:
-            health_score += 15
-        if debt_ratio < 0.3:
-            health_score += 15
-        if financial_data['savings'] > financial_data['expenses'] * 6:
-            health_score += 10
-            
-        # 분석 결과 생성
-        result = {
-            "health_score": min(health_score, 100),
-            "monthly_surplus": monthly_surplus,
-            "total_assets": total_assets,
-            "debt_ratio": round(debt_ratio * 100, 1),
-            "emergency_fund_months": round(financial_data['savings'] / max(financial_data['expenses'], 1), 1),
-            "recommendations": [
-                f"월 여유 자금: {monthly_surplus}만원",
-                f"총 자산: {total_assets}만원",
-                f"부채 비율: {debt_ratio*100:.1f}%",
-                "정기적인 저축 습관 유지 권장" if monthly_surplus > 0 else "지출 관리 개선 필요"
-            ],
-            "analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        return result
-        
-    except Exception as e:
-        st.error(f"시뮬레이션 분석 중 오류: {e}")
-        return None
-
-def display_analysis_results(result, save_to_file=False):
-    """AI 분석 결과 표시"""
-    
-    # 결과 구조 검증
-    if not isinstance(result, dict):
-        st.error("분석 결과 형식이 올바르지 않습니다.")
-        return
-    
-    # 기본 결과 표시
-    st.json(result)
-    
-    # 추가 시각화 (결과 구조에 따라)
-    if 'health_score' in result:
-        st.metric("재무 건강도", f"{result['health_score']}/100")
-    
-    if 'recommendations' in result:
-        st.markdown("#### 💡 AI 추천사항")
-        for i, rec in enumerate(result['recommendations'], 1):
-            st.write(f"{i}. {rec}")
 
 def render_investment_analysis():
     """투자 분석 섹션"""

@@ -11,6 +11,8 @@ import os
 import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+import streamlit_process_manager as spm
+from streamlit_process_manager.process import Process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -226,82 +228,86 @@ def main():
     render_hr_agent_interface(save_to_file)
 
 def render_hr_agent_interface(save_to_file=False):
-    """HR Agent 실행 인터페이스"""
-    
+    """HR Agent 실행 인터페이스 (실시간 프로세스 모니터링)"""
     st.markdown("### 🚀 HR Recruitment Agent 실행")
-    
-    # 에이전트 초기화
     try:
-        if 'hr_agent' not in st.session_state:
-            st.session_state.hr_agent = HRRecruitmentAgent()
-        
-        agent = st.session_state.hr_agent
-        
-        # 실행 설정
         col1, col2 = st.columns([1, 2])
-        
         with col1:
             st.markdown("#### ⚙️ 채용 프로젝트 설정")
-            
-            # 사용자 회사 정보 로딩
             company_info = get_user_company_info()
-            
             position_name = st.text_input(
-                "채용 포지션", 
+                "채용 포지션",
                 value=None,
                 placeholder="채용하려는 직책명을 입력하세요",
                 help="채용하려는 직책명을 입력하세요"
             )
-            
             company_name = st.text_input(
-                "회사명", 
+                "회사명",
                 value=company_info.get("company_name"),
                 placeholder="회사명을 입력하세요",
                 help="회사명을 입력하세요"
             )
-            
-            # 워크플로우 옵션 동적 로딩
             workflow_options = load_workflow_options()
             default_workflows = load_default_workflows()
-            
             workflow_scope = st.multiselect(
                 "실행할 워크플로우",
                 workflow_options,
                 default=default_workflows,
                 help="실행할 채용 워크플로우를 선택하세요"
             )
-            
-            # 필수 입력값 검증
             if all([position_name, company_name, workflow_scope]):
                 if st.button("🚀 HR Agent 실행", type="primary", use_container_width=True):
-                    execute_hr_agent(agent, position_name, company_name, workflow_scope, save_to_file)
+                    # 결과 파일 경로 생성
+                    reports_path = get_reports_path('hr_recruitment')
+                    os.makedirs(reports_path, exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    result_json_path = os.path.join(reports_path, f"hr_result_{timestamp}.json")
+                    # 커맨드 생성
+                    command = [
+                        "python", "-u",
+                        "srcs/enterprise_agents/run_hr_agent.py",
+                        "--position", position_name,
+                        "--company", company_name,
+                        "--result-json-path", result_json_path
+                    ]
+                    if workflow_scope:
+                        command += ["--workflows"] + workflow_scope
+                    if save_to_file:
+                        command.append("--save-to-file")
+                    st.session_state['hr_command'] = command
+                    st.session_state['hr_result_json_path'] = result_json_path
             else:
                 st.warning("모든 필수 정보를 입력해주세요.")
                 if st.button("🚀 HR Agent 실행", type="primary", use_container_width=True, disabled=True):
                     pass
-        
         with col2:
-            if 'hr_execution_result' in st.session_state:
-                result = st.session_state['hr_execution_result']
-                
-                if result.get('success', False):
-                    st.success("✅ HR Recruitment Agent 실행 완료!")
-                    
-                    # 결과 검증
-                    if not result:
-                        st.error("HR Agent 실행 결과를 받을 수 없습니다.")
-                        return
-                    
-                    # 결과 정보 표시
-                    display_hr_results(result, position_name if 'position_name' in locals() else 'unknown')
-                        
-                else:
-                    st.error("❌ 실행 중 오류 발생")
-                    st.error(f"**오류**: {result.get('message', 'Unknown error')}")
-                    
-                    with st.expander("🔍 오류 상세"):
-                        st.code(result.get('error', 'Unknown error'))
-                        
+            if 'hr_command' in st.session_state:
+                st.info("🔄 HR Recruitment Agent 실행 중...")
+                process = Process(
+                    st.session_state['hr_command'],
+                    output_file=None
+                ).start()
+                spm.st_process_monitor(
+                    process,
+                    label="HR 채용 분석"
+                ).loop_until_finished()
+                # 결과 파일 읽기 및 표시
+                try:
+                    with open(st.session_state['hr_result_json_path'], 'r', encoding='utf-8') as f:
+                        result = json.load(f)
+                    if result.get('success'):
+                        st.success("✅ HR Recruitment Agent 실행 완료!")
+                        display_hr_results(result, position_name if position_name else 'unknown')
+                    else:
+                        st.error("❌ 실행 중 오류 발생")
+                        st.error(f"**오류**: {result.get('message', 'Unknown error')}")
+                        with st.expander("🔍 오류 상세"):
+                            st.code(result.get('error', 'Unknown error'))
+                except Exception as e:
+                    st.error(f"결과 파일을 읽는 중 오류 발생: {e}")
+                # 실행 후 상태 초기화
+                del st.session_state['hr_command']
+                del st.session_state['hr_result_json_path']
             else:
                 st.markdown("""
                 #### 🤖 Agent 실행 정보
@@ -324,7 +330,6 @@ def render_hr_agent_interface(save_to_file=False):
                 - 🖥️ **화면 표시**: 즉시 결과 확인 (기본값)
                 - 💾 **파일 저장**: 동적 경로에 저장
                 """)
-                
     except Exception as e:
         st.error(f"Agent 초기화 중 오류: {e}")
         st.info("에이전트 클래스를 확인해주세요.")
@@ -377,41 +382,6 @@ def display_hr_results(result, position_name):
             'content_length': len(result.get('content', '')) if result.get('content') else 0
         }
         st.json(debug_info)
-
-def execute_hr_agent(agent, position, company, workflows, save_to_file):
-    """HR Agent 실행"""
-    
-    try:
-        with st.spinner("🔄 HR Recruitment Agent를 실행하는 중..."):
-            # 에이전트 실행
-            result = agent.run_recruitment_workflow(
-                position=position,
-                company=company,
-                workflows=workflows,
-                save_to_file=save_to_file
-            )
-            
-            # 결과 검증
-            if not result:
-                st.session_state['hr_execution_result'] = {
-                    'success': False,
-                    'message': 'HR Agent가 결과를 반환하지 않았습니다.',
-                    'error': 'Empty result from agent',
-                    'save_to_file': save_to_file
-                }
-            else:
-                st.session_state['hr_execution_result'] = result
-            
-            st.rerun()
-            
-    except Exception as e:
-        st.session_state['hr_execution_result'] = {
-            'success': False,
-            'message': f'Agent 실행 중 오류 발생: {str(e)}',
-            'error': str(e),
-            'save_to_file': save_to_file
-        }
-        st.rerun()
 
 if __name__ == "__main__":
     main() 
