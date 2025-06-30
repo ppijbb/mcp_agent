@@ -88,15 +88,18 @@ from rich import print
 app = MCPApp(name="assignment_grader_orchestrator")
 
 
-async def example_usage():
+async def run_workflow(task: str, model_name: str, plan_type: str):
+    """
+    주어진 태스크를 실행하고 결과를 반환하는 워크플로우
+    """
     async with app.run() as orchestrator_app:
         logger = orchestrator_app.logger
 
         context = orchestrator_app.context
-        logger.info("Current config:", data=context.config.model_dump())
-
-        # Add the current directory to the filesystem server's args
-        context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+        
+        # 파일시스템 서버의 인자에 현재 디렉토리 추가
+        if "filesystem" in context.config.mcp.servers:
+            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
 
         finder_agent = Agent(
             name="finder",
@@ -117,36 +120,27 @@ async def example_usage():
 
         proofreader = Agent(
             name="proofreader",
-            instruction=""""Review the short story for grammar, spelling, and punctuation errors.
+            instruction=""""Review the provided text for grammar, spelling, and punctuation errors.
             Identify any awkward phrasing or structural issues that could improve clarity. 
             Provide detailed feedback on corrections.""",
-            server_names=["fetch"],
+            server_names=[], # No servers needed, works on input text
         )
 
         fact_checker = Agent(
             name="fact_checker",
-            instruction="""Verify the factual consistency within the story. Identify any contradictions,
-            logical inconsistencies, or inaccuracies in the plot, character actions, or setting. 
+            instruction="""Verify the factual consistency within the provided text. Identify any contradictions,
+            logical inconsistencies, or inaccuracies. 
             Highlight potential issues with reasoning or coherence.""",
-            server_names=["fetch"],
+            server_names=[], # No servers needed
         )
 
         style_enforcer = Agent(
             name="style_enforcer",
-            instruction="""Analyze the story for adherence to style guidelines.
+            instruction="""Analyze the provided text for adherence to style guidelines.
             Evaluate the narrative flow, clarity of expression, and tone. Suggest improvements to 
             enhance storytelling, readability, and engagement.""",
-            server_names=["fetch"],
+            server_names=[], # No servers needed
         )
-
-        # We give the orchestrator a very varied task, which
-        # requires the use of multiple agents and MCP servers.
-        task = """Load the student's short story from short_story.md, 
-        and generate a report with feedback across proofreading, 
-        factuality/logical consistency and style adherence. Use the style rules from 
-        https://apastyle.apa.org/learn/quick-guide-on-formatting and 
-        https://apastyle.apa.org/learn/quick-guide-on-references.
-        Write the graded report to graded_report.md in the same directory as short_story.md"""
 
         orchestrator = Orchestrator(
             llm_factory=OpenAIAugmentedLLM,
@@ -157,22 +151,41 @@ async def example_usage():
                 fact_checker,
                 style_enforcer,
             ],
-            # We will let the orchestrator iteratively plan the task at every step
-            plan_type="full",
+            plan_type=plan_type,
         )
 
         result = await orchestrator.generate_str(
-            message=task, request_params=RequestParams(model="gpt-4o-mini")
+            message=task, request_params=RequestParams(model=model_name)
         )
-        logger.info(f"{result}")
+        logger.info(f"Workflow result: {result}")
+        return result
 
 
 if __name__ == "__main__":
     import time
 
+    # 기본 작업을 사용하여 테스트
+    default_task = """Load the student's short story from a file named 'short_story.md', 
+    and generate a report with feedback across proofreading, 
+    factuality/logical consistency and style adherence.
+    Write the graded report to 'graded_report.md' in the same directory."""
+    
+    # 테스트용 임시 파일 생성
+    with open("short_story.md", "w") as f:
+        f.write("This is a tale of bravery and waffles. The knight sir Reginald ate 12 waffles before the dragon came.")
+
     start = time.time()
-    asyncio.run(example_usage())
+    # 수정된 함수 호출
+    final_result = asyncio.run(run_workflow(default_task, "gpt-4o-mini", "full"))
+    print("--- FINAL ORCHESTRATOR RESULT ---")
+    print(final_result)
     end = time.time()
     t = end - start
 
     print(f"Total run time: {t:.2f}s")
+    
+    # 생성된 파일 내용 확인
+    if os.path.exists("graded_report.md"):
+        print("\n--- GRADED REPORT CONTENT ---")
+        with open("graded_report.md", "r") as f:
+            print(f.read())

@@ -35,7 +35,8 @@ class MCPBrowserClient:
     def __init__(self, 
                  headless: bool = True, 
                  disable_gpu: bool = True,
-                 streamlit_container = None):
+                 streamlit_container = None,
+                 screenshot_dir: Optional[str] = None):
         
         # 기본 설정값 직접 지정
         self.browser_settings = {
@@ -59,15 +60,15 @@ class MCPBrowserClient:
         self.process = None  # MCP 서버 프로세스 관리
         self.current_url: Optional[str] = None
         self.last_screenshot: Optional[str] = None
-        self.screenshots: List[Dict] = []
+        self.screenshots: List[str] = [] # 파일 경로만 저장하도록 변경
         
         # 성능 설정
-        self.max_screenshots = 10
+        self.max_screenshots = 20 # 스크린샷 최대 개수 증가
         self.timeout = self.browser_settings.get('timeout', 30000)
         
         # 디버그 설정
         self.debug_screenshots = self.browser_settings.get('debug_screenshots', True)
-        self.screenshots_dir = self._setup_screenshots_dir()
+        self.screenshots_dir = screenshot_dir or self._setup_screenshots_dir()
     
     def _setup_screenshots_dir(self) -> str:
         """스크린샷 디렉토리 설정"""
@@ -212,64 +213,62 @@ class MCPBrowserClient:
                 # Base64 데이터 처리
                 screenshot_data = result.content[0].text
                 
-                # 파일 저장
-                if self.debug_screenshots:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"{timestamp}_screenshot.png"
-                    filepath = os.path.join(self.screenshots_dir, filename)
+                # 파일 저장은 항상 시도
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                filename = f"{timestamp}_screenshot.png"
+                filepath = os.path.join(self.screenshots_dir, filename)
+                
+                try:
+                    # Base64 데이터에서 이미지 저장
+                    if screenshot_data.startswith('data:image'):
+                        base64_data = screenshot_data.split(',')[1]
+                    else:
+                        base64_data = screenshot_data
                     
-                    try:
-                        # Base64 데이터에서 이미지 저장
-                        if screenshot_data.startswith('data:image'):
-                            # data:image/png;base64, 제거
-                            base64_data = screenshot_data.split(',')[1]
-                        else:
-                            base64_data = screenshot_data
-                        
-                        with open(filepath, 'wb') as f:
-                            f.write(base64.b64decode(base64_data))
-                        
-                        logger.info(f"📸 스크린샷 저장: {filepath}")
-                    except Exception as save_error:
-                        logger.warning(f"스크린샷 저장 실패: {save_error}")
-                        filepath = None
-                
-                # 스크린샷 메타데이터 저장
-                screenshot_info = {
-                    "timestamp": datetime.now().isoformat(),
-                    "url": self.current_url,
-                    "data": screenshot_data,
-                    "filepath": filepath if self.debug_screenshots else None
-                }
-                
-                self.screenshots.append(screenshot_info)
-                self.last_screenshot = screenshot_data
-                
+                    with open(filepath, 'wb') as f:
+                        f.write(base64.b64decode(base64_data))
+                    
+                    logger.info(f"📸 스크린샷 저장: {filepath}")
+                    
+                    # 성공적으로 저장된 경우에만 경로를 리스트에 추가
+                    self.screenshots.append(filepath)
+                    
+                    # 마지막 스크린샷은 base64 데이터로 streamlit UI에 표시하기 위해 유지
+                    self.last_screenshot = screenshot_data
+
+                except Exception as save_error:
+                    logger.warning(f"스크린샷 저장 실패: {save_error}")
+                    filepath = None
+
                 # 최대 개수 제한
                 if len(self.screenshots) > self.max_screenshots:
+                    # 오래된 파일 삭제
+                    try:
+                        os.remove(self.screenshots[0])
+                    except OSError as e:
+                        logger.warning(f"오래된 스크린샷 파일 삭제 실패: {e}")
                     self.screenshots = self.screenshots[-self.max_screenshots:]
                 
-                # Streamlit에 표시
-                if self.streamlit_container and st:
-                    with self.streamlit_container:
-                        try:
-                            # 기존 내용 지우고 최신 스크린샷 표시
-                            self.streamlit_container.image(
-                                base64.b64decode(base64_data),
-                                caption=f"[{timestamp}] {self.current_url}",
-                                use_column_width=True
-                            )
-                        except Exception as display_error:
-                            logger.warning(f"Streamlit 스크린샷 표시 실패: {display_error}")
-                
-                return {"success": True, "data": screenshot_data, "filepath": filepath}
+                # Streamlit UI 업데이트 (컨테이너가 있는 경우)
+                if self.streamlit_container:
+                    try:
+                        self.streamlit_container.image(
+                            base64.b64decode(base64_data),
+                            caption=f"[{datetime.now().strftime('%H:%M:%S')}] {self.current_url}",
+                            use_column_width=True
+                        )
+                    except Exception as e:
+                        logger.warning(f"Streamlit에 스크린샷 표시 실패: {e}")
+
+                return {"success": True, "filepath": filepath, "data": screenshot_data}
+            
             else:
-                error_msg = result.content[0].text if result and result.content else "알 수 없는 스크린샷 오류"
-                logger.error(f"❌ 스크린샷 캡처 실패: {error_msg}")
+                error_msg = result.content[0].text if result and result.content else "스크린샷 캡처 실패"
+                logger.error(error_msg)
                 return {"success": False, "error": error_msg}
                 
         except Exception as e:
-            logger.error(f"❌ 스크린샷 캡처 중 오류: {e}")
+            logger.error(f"❌ 스크린샷 캡처 중 오류: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
     
     def take_screenshot(self) -> Dict[str, Any]:

@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Travel Scout - REAL MCP Integration (v2 - Normalized)
+Travel Scout - REAL MCP Integration (v3 - Process Manager)
 
 ✅ st.session_state 기반의 안정적인 상태 관리
-✅ 실시간 브라우저 뷰 컨테이너
+✅ 분리된 프로세스 실행으로 UI 행(hang) 문제 해결
 ✅ 통합된 제어판 및 명확한 워크플로우
-✅ 스크린샷 갤러리
+✅ 실행 후 스크린샷 갤러리 표시
 """
 
 import streamlit as st
 import sys
 import os
-import asyncio
+import json
 import base64
 from pathlib import Path
 from datetime import datetime, timedelta
+import streamlit_process_manager as spm
+from streamlit_process_manager.process import Process
 
 # --- 1. 프로젝트 경로 설정 ---
 project_root = Path(__file__).parent.parent
@@ -31,9 +33,8 @@ st.set_page_config(
 try:
     from srcs.common.page_utils import setup_page_header
     from srcs.common.styles import apply_custom_styles
-    from srcs.travel_scout.mcp_browser_client import MCPBrowserClient
+    from configs.settings import get_reports_path
     from srcs.travel_scout.travel_scout_agent import (
-        TravelScoutAgent, 
         load_destination_options, 
         load_origin_options
     )
@@ -48,123 +49,126 @@ except ImportError as e:
 setup_page_header("Travel Scout", "Integrated Agent View")
 apply_custom_styles()
 
-
 # --- 5. UI 및 상태 관리 ---
-
-# 🖥️ 실시간 브라우저 뷰 컨테이너
-st.markdown("## 🖥️ Real-time Browser View")
-browser_view_container = st.container(border=True, height=600)
-
-# ⚙️ 서비스 초기화 (session_state 사용)
-if 'services_initialized' not in st.session_state:
-    with st.spinner("Initializing MCP services..."):
-        try:
-            # 브라우저 뷰 컨테이너를 클라이언트에 전달
-            client = MCPBrowserClient(
-                headless=True,
-                disable_gpu=True,
-                streamlit_container=browser_view_container
-            )
-            st.session_state.browser_client = client
-            st.session_state.travel_agent = TravelScoutAgent(browser_client=client)
-            st.session_state.mcp_connected = False
-            st.session_state.services_initialized = True
-            st.session_state.hotel_results = None
-            st.session_state.flight_results = None
-            st.success("✅ MCP Services Initialized.")
-        except Exception as e:
-            st.error(f"❌ MCP 서비스 초기화 실패: {e}")
-            st.session_state.services_initialized = False
-            st.stop()
+if 'hotel_results' not in st.session_state:
+    st.session_state.hotel_results = None
+if 'flight_results' not in st.session_state:
+    st.session_state.flight_results = None
+if 'screenshots' not in st.session_state:
+    st.session_state.screenshots = []
 
 # --- 🎮 통합 제어판 ---
 st.markdown("---")
 st.markdown("## 🎮 Integrated Control Panel")
 
-# 🔌 MCP 서버 연결 관리
-if not st.session_state.get('mcp_connected', False):
-    if st.button("🔌 Connect to MCP Server", type="primary", use_container_width=True):
-        with st.spinner("MCP 서버에 연결 중... 브라우저를 시작합니다."):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            client = st.session_state.browser_client
-            connected = loop.run_until_complete(client.connect_to_mcp_server())
-            loop.close()
-            if connected:
-                st.session_state.mcp_connected = True
-                st.success("✅ MCP 서버 연결 성공!")
-                st.rerun()
-            else:
-                st.error("❌ MCP 서버 연결 실패. 콘솔 로그를 확인하세요.")
-                st.stop()
-else:
-    st.success("✅ MCP Server Connected")
+with st.form(key="travel_scout_form"):
+    st.markdown("#### 🎯 Search Parameters")
+    
+    try:
+        destination_options = load_destination_options()
+        origin_options = load_origin_options()
+    except Exception as e:
+        st.error(f"❌ 목적지/출발지 목록 로드 실패: {e}")
+        destination_options = ["Seoul", "Tokyo", "London", "New York"]
+        origin_options = ["Seoul", "Busan", "New York", "London"]
 
-# ✈️ 에이전트 작업 제어 (연결된 경우에만 표시)
-if st.session_state.get('mcp_connected', False):
-    with st.container(border=True):
-        st.markdown("#### 🎯 Search Parameters")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        destination = st.selectbox("🏖️ Destination", options=destination_options, index=0)
+    with c2:
+        origin = st.selectbox("✈️ Origin", options=origin_options, index=0)
+    with c3:
+        guests = st.number_input("👥 Guests", min_value=1, value=2)
+    with c4:
+        days = st.number_input("📅 Days from today", min_value=1, value=7)
+    
+    st.markdown("---")
+    
+    b1, b2 = st.columns(2)
+    with b1:
+        search_hotels_submitted = st.form_submit_button("🏨 Search Hotels", use_container_width=True)
+    with b2:
+        search_flights_submitted = st.form_submit_button("✈️ Search Flights", use_container_width=True)
+
+# --- 🤖 에이전트 실행 로직 ---
+task_to_run = None
+if search_hotels_submitted:
+    task_to_run = 'search_hotels'
+elif search_flights_submitted:
+    task_to_run = 'search_flights'
+
+if task_to_run:
+    # 새로운 검색이 시작될 때마다 이전 결과와 스크린샷 초기화
+    st.session_state.screenshots = []
+    if task_to_run == 'search_hotels':
+        st.session_state.hotel_results = None
+    else:
+        st.session_state.flight_results = None
+
+    reports_path = get_reports_path('travel_scout')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = reports_path / f"run_{timestamp}"
+    run_output_dir.mkdir(parents=True, exist_ok=True)
+    result_json_path = run_output_dir / "results.json"
+    
+    py_executable = sys.executable
+    command = [py_executable, "-u", "-m", "srcs.travel_scout.run_travel_scout_agent",
+               "--task", task_to_run,
+               "--result-json-path", str(result_json_path)]
+    
+    # 작업에 따른 인자 추가
+    if task_to_run == 'search_hotels':
+        check_in = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+        check_out = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
+        command.extend([
+            "--destination", destination,
+            "--check-in", check_in,
+            "--check-out", check_out,
+            "--guests", str(guests)
+        ])
+        st.info(f"🏨 {destination} 호텔 검색을 시작합니다...")
+
+    elif task_to_run == 'search_flights':
+        departure = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+        ret_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
+        command.extend([
+            "--origin", origin,
+            "--destination", destination,
+            "--departure-date", departure,
+            "--return-date", ret_date
+        ])
+        st.info(f"✈️ {origin} -> {destination} 항공편 검색을 시작합니다...")
+
+    log_expander = st.expander("실시간 실행 로그", expanded=True)
+    with log_expander:
+        process_key = f"travel_scout_{timestamp}"
+        process = Process(command, key=process_key).start()
+        monitor_placeholder = st.empty()
+        for stdout_line in process.read_stdout_live(auto_close=True):
+            monitor_placeholder.code(stdout_line, language="log")
         
+        return_code = process.wait()
+    
+    if return_code == 0:
+        st.success("✅ 검색 완료!")
         try:
-            destination_options = load_destination_options()
-            origin_options = load_origin_options()
+            with open(result_json_path) as f:
+                final_result = json.load(f)
+            
+            if final_result.get("success"):
+                if task_to_run == 'search_hotels':
+                    st.session_state.hotel_results = final_result.get("data")
+                else:
+                    st.session_state.flight_results = final_result.get("data")
+                st.session_state.screenshots = final_result.get("screenshots", [])
+            else:
+                st.error(f"❌ 에이전트 실행 중 오류 발생: {final_result.get('error', '알 수 없는 오류')}")
         except Exception as e:
-            st.error(f"❌ 목적지/출발지 목록 로드 실패: {e}")
-            destination_options = ["Seoul", "Tokyo", "London", "New York"]
-            origin_options = ["Seoul", "Busan", "New York", "London"]
-
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            destination = st.selectbox("🏖️ Destination", options=destination_options, index=0)
-        with c2:
-            origin = st.selectbox("✈️ Origin", options=origin_options, index=0)
-        with c3:
-            guests = st.number_input("👥 Guests", min_value=1, value=2)
-        with c4:
-            days = st.number_input("📅 Days from today", min_value=1, value=7)
-        
-        st.markdown("---")
-        
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button("🏨 Search Hotels", use_container_width=True, type="secondary"):
-                with st.spinner(f"🏨 {destination} 호텔 검색 중... (브라우저 뷰를 확인하세요)"):
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        agent = st.session_state.travel_agent
-                        check_in = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-                        check_out = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
-                        
-                        results = loop.run_until_complete(
-                            agent.search_hotels(destination, check_in, check_out, guests)
-                        )
-                        loop.close()
-                        st.session_state.hotel_results = results
-                        st.success("호텔 검색 완료!")
-                    except Exception as e:
-                        st.error(f"❌ 호텔 검색 중 오류 발생: {e}")
-                        st.exception(e)
-
-        with b2:
-            if st.button("✈️ Search Flights", use_container_width=True, type="secondary"):
-                with st.spinner(f"✈️ {origin} -> {destination} 항공편 검색 중... (브라우저 뷰를 확인하세요)"):
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        agent = st.session_state.travel_agent
-                        departure = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-                        ret_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
-
-                        results = loop.run_until_complete(
-                            agent.search_flights(origin, destination, departure, ret_date)
-                        )
-                        loop.close()
-                        st.session_state.flight_results = results
-                        st.success("항공편 검색 완료!")
-                    except Exception as e:
-                        st.error(f"❌ 항공편 검색 중 오류 발생: {e}")
-                        st.exception(e)
+            st.error(f"결과 파일을 읽거나 처리하는 중 오류 발생: {e}")
+    else:
+        st.error(f"❌ 에이전트 실행 실패 (Return Code: {return_code}). 로그를 확인하세요.")
+    
+    st.rerun()
 
 # --- 📊 검색 결과 표시 ---
 st.markdown("---")
@@ -174,7 +178,7 @@ res1, res2 = st.columns(2)
 
 with res1:
     st.markdown("#### 🏨 Hotel Results")
-    if st.session_state.get('hotel_results'):
+    if st.session_state.hotel_results:
         results = st.session_state.hotel_results
         if isinstance(results, dict):
             if 'hotels' in results and results['hotels']:
@@ -188,7 +192,7 @@ with res1:
 
 with res2:
     st.markdown("#### ✈️ Flight Results")
-    if st.session_state.get('flight_results'):
+    if st.session_state.flight_results:
         results = st.session_state.flight_results
         if isinstance(results, dict):
             if 'flights' in results and results['flights']:
@@ -201,27 +205,15 @@ with res2:
         st.info("항공편을 검색하여 결과를 확인하세요.")
 
 # --- 🖼️ 스크린샷 갤러리 ---
-if st.session_state.get('browser_client') and st.session_state.browser_client.screenshots:
+if st.session_state.screenshots:
     st.markdown("---")
     st.markdown("## 🖼️ Screenshot History")
     
-    screenshots_to_show = st.session_state.browser_client.screenshots
-    
     cols = st.columns(3)
-    for i, screenshot in enumerate(reversed(screenshots_to_show)):
+    for i, screenshot_path in enumerate(reversed(st.session_state.screenshots)):
         with cols[i % 3]:
-            img_data = screenshot.get('data')
-            if not img_data:
-                continue
-                
-            if img_data.startswith('data:image'):
-                img_data = img_data.split(',')[1]
-            
             try:
-                st.image(
-                    base64.b64decode(img_data),
-                    caption=f"[{screenshot.get('timestamp', '')[-8:]}] {screenshot.get('url', 'N/A')}",
-                    use_column_width=True
-                )
+                # 스크린샷 파일 경로로부터 이미지 표시
+                st.image(screenshot_path, caption=f"Screenshot {i+1}", use_column_width=True)
             except Exception as e:
                 st.warning(f"Screenshot display error: {e}")

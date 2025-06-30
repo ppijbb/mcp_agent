@@ -3,42 +3,25 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from srcs.seo_doctor.seo_doctor_agent import SEODoctorMCPAgent, SEOAnalysisResult
-
-# Dataclass를 dict로 변환하기 위한 헬퍼
-from dataclasses import asdict, is_dataclass
-from datetime import datetime
-from enum import Enum
-
-class EnhancedJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if is_dataclass(o):
-            return asdict(o)
-        if isinstance(o, datetime):
-            return o.isoformat()
-        if isinstance(o, Enum):
-            return o.value
-        return super().default(o)
+from srcs.basic_agents.rag_agent import RAGAgent
 
 async def main():
-    """SEO Doctor 실행 스크립트"""
-    parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent.")
-    parser.add_argument("--url", required=True, help="The URL to analyze.")
-    parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
-    parser.add_argument("--competitor-urls", nargs='*', help="List of competitor URLs.")
+    """RAG Agent 실행 스크립트"""
+    parser = argparse.ArgumentParser(description="Run the RAG Agent with a query.")
+    parser.add_argument("--query", required=True, help="The user's query.")
+    parser.add_argument("--history", default="[]", help="The conversation history as a JSON string.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
     
     args = parser.parse_args()
 
-    print(f"🔄 Starting SEO Doctor...")
-    print(f"   - URL: {args.url}")
+    print(f"🔄 Starting RAG Agent...")
+    print(f"   - Query: {args.query}")
     print("-" * 30)
 
     result_json_path = Path(args.result_json_path)
@@ -47,17 +30,14 @@ async def main():
     final_result = {"success": False, "data": None, "error": None}
 
     try:
-        agent = SEODoctorMCPAgent()
+        agent = RAGAgent()
         
-        analysis_result: SEOAnalysisResult = await agent.emergency_seo_diagnosis(
-            url=args.url,
-            include_competitors=args.include_competitors,
-            competitor_urls=args.competitor_urls
-        )
+        history = json.loads(args.history)
+        response_text = await agent.chat(query=args.query, history=history)
         
         print("✅ Agent finished successfully.")
         final_result["success"] = True
-        final_result["data"] = analysis_result
+        final_result["data"] = {"response": response_text}
 
     except Exception as e:
         import traceback
@@ -69,7 +49,7 @@ async def main():
         print(f"💾 Saving final results to {result_json_path}...")
         try:
             with open(result_json_path, 'w', encoding='utf-8') as f:
-                json.dump(final_result, f, indent=2, ensure_ascii=False, cls=EnhancedJSONEncoder)
+                json.dump(final_result, f, indent=2, ensure_ascii=False)
             print("🎉 Results saved.")
         except Exception as e:
             print(f"❌ Failed to save result JSON: {e}")

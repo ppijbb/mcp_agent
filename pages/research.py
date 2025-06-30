@@ -78,121 +78,112 @@ def main():
 def render_research_agent_interface():
     """Research Agent 실행 인터페이스 (실시간 프로세스 모니터링)"""
     st.markdown("### 🚀 Research Agent 실행")
-    try:
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.markdown("#### 🎯 연구 설정")
-            research_topic = st.text_input(
-                "연구 주제",
-                value=None,
-                placeholder="조사하고 싶은 주제를 입력하세요",
-                help="조사하고 싶은 주제를 입력하세요"
+    
+    process_key = "research_process"
+
+    with st.form(key="research_form"):
+        st.markdown("#### 🎯 연구 설정")
+        research_topic = st.text_input(
+            "연구 주제",
+            placeholder="예: 인공지능이 채용 시장에 미치는 영향",
+            help="조사하고 싶은 주제를 입력하세요"
+        )
+        try:
+            focus_options = load_research_focus_options()
+            research_focus = st.selectbox(
+                "연구 초점",
+                focus_options,
+                index=None,
+                placeholder="연구 초점을 선택하세요"
             )
+        except Exception as e:
+            st.warning(f"연구 초점 옵션 로드 실패: {e}")
+            research_focus = st.text_input(
+                "연구 초점",
+                placeholder="연구 초점을 직접 입력하세요"
+            )
+
+        submitted = st.form_submit_button("🚀 Research Agent 실행", type="primary", use_container_width=True)
+
+    if submitted:
+        if not research_topic or not research_focus:
+            st.warning("연구 주제와 초점을 모두 입력(선택)해주세요.")
+            st.stop()
+            
+        reports_path = get_reports_path('research')
+        reports_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_topic = "".join(c for c in research_topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        result_json_path = reports_path / f"research_result_{safe_topic}_{timestamp}.json"
+        
+        py_executable = sys.executable
+        command = [
+            py_executable, "-u", "-m", "srcs.advanced_agents.run_research_agent",
+            "--topic", research_topic,
+            "--focus", research_focus,
+            "--result-json-path", str(result_json_path),
+            "--save-to-file" # Always save report file from script
+        ]
+        
+        st.info("🔄 Research Agent 실행 중...")
+        
+        process = Process(command, key=process_key).start()
+        
+        st_process_monitor = spm.st_process_monitor(process, key=f"monitor_{process_key}")
+        st_process_monitor.loop_until_finished()
+        
+        if process.get_return_code() == 0:
+            st.success("✅ Research Agent 실행 완료!")
             try:
-                focus_options = load_research_focus_options()
-                research_focus = st.selectbox(
-                    "연구 초점",
-                    focus_options,
-                    index=None,
-                    placeholder="연구 초점을 선택하세요"
-                )
+                with open(result_json_path, 'r', encoding='utf-8') as f:
+                    result = json.load(f)
+                
+                if result.get('success'):
+                    display_research_results(result)
+                else:
+                    st.error(f"❌ 실행 중 오류가 보고되었습니다: {result.get('message', '알 수 없는 오류')}")
+                    with st.expander("🔍 오류 상세 정보"):
+                        st.code(result.get('error', '상세 정보 없음'))
+
             except Exception as e:
-                st.warning(f"연구 초점 옵션 로드 실패: {e}")
-                research_focus = st.text_input(
-                    "연구 초점",
-                    value=None,
-                    placeholder="연구 초점을 직접 입력하세요"
-                )
-            save_to_file = st.checkbox(
-                "파일로 저장",
-                value=False,
-                help=f"체크하면 {get_reports_path('research')}/ 디렉토리에 파일로 저장합니다"
-            )
-            if not research_topic:
-                st.warning("연구 주제를 입력해주세요.")
-            elif not research_focus:
-                st.warning("연구 초점을 선택하거나 입력해주세요.")
-            else:
-                if st.button("🚀 Research Agent 실행", type="primary", use_container_width=True):
-                    # 결과 파일 경로 생성
-                    reports_path = get_reports_path('research')
-                    os.makedirs(reports_path, exist_ok=True)
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    result_json_path = os.path.join(reports_path, f"research_result_{timestamp}.json")
-                    # 커맨드 생성
-                    command = [
-                        "python", "-u",
-                        "srcs/advanced_agents/run_research_agent.py",
-                        "--topic", research_topic,
-                        "--focus", research_focus,
-                        "--result-json-path", result_json_path
-                    ]
-                    if save_to_file:
-                        command.append("--save-to-file")
-                    st.session_state['research_command'] = command
-                    st.session_state['research_result_json_path'] = result_json_path
-        with col2:
-            if 'research_command' in st.session_state:
-                st.info("🔄 Research Agent 실행 중...")
-                process = Process(
-                    st.session_state['research_command'],
-                    output_file=None
-                ).start()
-                spm.st_process_monitor(
-                    process,
-                    label="연구 분석"
-                ).loop_until_finished()
-                # 결과 파일 읽기 및 표시
-                try:
-                    with open(st.session_state['research_result_json_path'], 'r', encoding='utf-8') as f:
-                        result = json.load(f)
-                    if result.get('success'):
-                        st.success("✅ Research Agent 실행 완료!")
-                        st.markdown("#### 📊 실행 결과")
-                        st.info(f"**메시지**: {result['message']}")
-                        st.info(f"**연구 주제**: {result['topic']}")
-                        if result.get('save_to_file') and result.get('output_dir'):
-                            st.info(f"**출력 디렉토리**: {result['output_dir']}")
-                        st.info(f"**연구 초점**: {result['focus']}")
-                        if 'content' in result and result['content']:
-                            st.markdown("#### 📄 생성된 연구 결과")
-                            content = result['content']
-                            if len(content) > 1500:
-                                with st.expander("📋 전체 연구 결과 보기", expanded=True):
-                                    st.markdown(content)
-                            else:
-                                st.markdown(content)
-                            st.download_button(
-                                label="📥 연구 결과 다운로드",
-                                data=content,
-                                file_name=f"research_result_{result['topic'].replace(' ', '_').lower()}_{result['focus'].replace(' ', '_')}.md",
-                                mime="text/markdown"
-                            )
-                        with st.expander("🔍 상세 실행 정보"):
-                            st.json({
-                                'success': result['success'],
-                                'message': result['message'],
-                                'topic': result['topic'],
-                                'focus': result['focus'],
-                                'save_to_file': result['save_to_file'],
-                                'output_dir': result.get('output_dir'),
-                                'timestamp': result.get('timestamp'),
-                                'content_length': len(result.get('content', '')) if result.get('content') else 0
-                            })
-                    else:
-                        st.error("❌ 실행 중 오류 발생")
-                        st.error(f"**오류**: {result.get('message')}")
-                        with st.expander("🔍 오류 상세"):
-                            st.code(result.get('error', 'Unknown error'))
-                except Exception as e:
-                    st.error(f"결과 파일을 읽는 중 오류 발생: {e}")
-                # 실행 후 상태 초기화
-                del st.session_state['research_command']
-                del st.session_state['research_result_json_path']
-            else:
-                display_research_info()
-    except Exception as e:
-        st.error(f"Agent 초기화 중 오류: {e}")
+                st.error(f"결과 파일을 읽거나 처리하는 중 오류가 발생했습니다: {e}")
+        else:
+            st.error(f"❌ 에이전트 실행에 실패했습니다. (Return Code: {process.get_return_code()})")
+            with st.expander("에러 로그 보기"):
+                st.code(process.get_stdout() + process.get_stderr(), language="log")
+
+
+def display_research_results(result: dict):
+    """연구 결과 표시"""
+    st.markdown("---")
+    st.markdown("#### 📊 실행 결과 요약")
+    
+    summary_cols = st.columns(2)
+    with summary_cols[0]:
+        st.info(f"**주제**: {result.get('topic', 'N/A')}")
+    with summary_cols[1]:
+        st.info(f"**초점**: {result.get('focus', 'N/A')}")
+
+    if result.get('output_dir'):
+        st.success(f"**보고서 파일 경로**: `{result['output_dir']}`")
+    
+    if 'content' in result and result['content']:
+        st.markdown("#### 📄 생성된 연구 보고서")
+        content = result['content']
+        
+        with st.container(border=True):
+            st.markdown(content)
+        
+        st.download_button(
+            label="📥 연구 결과 전문 다운로드 (.md)",
+            data=content,
+            file_name=f"research_report_{result.get('topic', 'untitled').replace(' ', '_')}.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
+
+    with st.expander("🔍 상세 실행 정보 (JSON)"):
+        st.json(result)
 
 def display_research_info():
     """연구 에이전트 정보 표시"""

@@ -3,6 +3,8 @@
 """
 from typing import Dict, Any, Optional
 from mcp_agent.logging.logger import get_logger
+import re
+from urllib.parse import unquote
 
 from srcs.product_planner_agent.coordinators.reporting_coordinator import ReportingCoordinator
 from srcs.product_planner_agent.coordinators.market_research_coordinator import MarketResearchCoordinator
@@ -38,6 +40,25 @@ class ExecutiveCoordinator:
         self.turn_budget -= n
         if self.turn_budget < 0:
             raise RuntimeError("Turn budget exhausted: AGENT_MAX_TURNS limit reached.")
+
+    async def run_with_figma_url(self, figma_url: str) -> Dict[str, Any]:
+        """Figma URL을 받아 initial_prompt를 생성하고 전체 워크플로우를 실행합니다."""
+        
+        file_id_match = re.search(r'figma\.com/file/([^/]+)', figma_url)
+        file_id = file_id_match.group(1) if file_id_match else None
+        
+        node_id_match = re.search(r'node-id=([^&]+)', figma_url)
+        node_id = unquote(node_id_match.group(1)) if node_id_match else None
+
+        if not file_id or not node_id:
+            raise ValueError("유효하지 않은 Figma URL입니다. file_id와 node-id를 포함해야 합니다.")
+
+        initial_prompt = (
+            f"Analyze the Figma design and create a comprehensive product plan.\n"
+            f"Figma URL: {figma_url}\n"
+            f"(file_id={file_id}, node_id={node_id})"
+        )
+        return await self.run(initial_prompt)
 
     async def run(self, initial_prompt: str) -> Dict[str, Any]:
         """전체 플로우를 순차적으로 실행하고 결과를 종합해 반환합니다."""

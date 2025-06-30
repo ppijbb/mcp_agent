@@ -846,33 +846,71 @@ class DecisionAgentMCP:
         return user_decisions
 
     def update_user_preferences(self, user_id: str, preferences: Dict[str, Any]):
-        """Update user preferences"""
+        """Update user preferences for decision making"""
         if user_id in self.user_profiles:
             self.user_profiles[user_id].preferences.update(preferences)
+            print(f"✅ Updated preferences for user {user_id}")
+        else:
+            print(f"❌ User {user_id} not found")
 
 # Export main functions
 async def create_decision_agent(output_dir: str = "decision_agent_reports") -> DecisionAgentMCP:
-    """Create and return configured Decision Agent MCP"""
+    """Factory function to create a DecisionAgentMCP instance."""
     return DecisionAgentMCP(output_dir=output_dir)
 
-async def run_decision_analysis(
-    interaction: MobileInteraction,
-    user_profile: UserProfile,
-    use_react_pattern: bool = True,
-    max_iterations: int = 3,
+async def run_simplified_decision_analysis(
+    user_id: str,
+    interaction_type: str, # From InteractionType Enum
+    context_json: str, # JSON string for context dict
     output_dir: str = "decision_agent_reports"
-) -> DecisionAnalysisResult:
-    """Run decision analysis using real MCP Agent with ReAct pattern"""
-    
+) -> dict:
+    """
+    A simplified wrapper for running decision analysis, suitable for script execution.
+    It constructs the necessary data classes internally.
+    """
     agent = await create_decision_agent(output_dir)
-    return await agent.analyze_and_decide(
-        interaction=interaction,
-        user_profile=user_profile,
-        use_react_pattern=use_react_pattern,
-        max_iterations=max_iterations
+    
+    # --- Dummy Data Generation for Demonstration ---
+    # In a real app, this would come from a database or user session
+    user_profile = UserProfile(
+        user_id=user_id,
+        age=30,
+        gender="Male",
+        occupation="Software Engineer",
+        income_level="High",
+        risk_tolerance="Medium",
+        preferences={"preferred_brands": ["BrandA", "BrandB"]},
+        financial_goals=["save_for_retirement", "buy_a_house"],
+        spending_patterns={"average_monthly_spend": 2000}
     )
+    
+    interaction = MobileInteraction(
+        interaction_type=InteractionType(interaction_type),
+        app_name="SampleApp",
+        timestamp=datetime.now(timezone.utc),
+        context=json.loads(context_json)
+    )
+    
+    result: DecisionAnalysisResult = await agent.analyze_and_decide(
+        interaction=interaction,
+        user_profile=user_profile
+    )
+    
+    # Convert dataclass to dict for JSON serialization
+    def dataclass_to_dict(obj):
+        if hasattr(obj, '__dict__'):
+            return {k: dataclass_to_dict(v) for k, v in obj.__dict__.items()}
+        elif isinstance(obj, list):
+            return [dataclass_to_dict(i) for i in obj]
+        elif isinstance(obj, Enum):
+            return obj.value
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        else:
+            return obj
 
-# Demo and testing functions
+    return dataclass_to_dict(result)
+
 async def run_mcp_monitoring_demo():
     """
     🚀 MCP Decision Agent Monitoring Demo

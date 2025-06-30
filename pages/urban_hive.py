@@ -1,22 +1,60 @@
 import streamlit as st
-import asyncio
-from mcp_agent.app import MCPApp
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+import json
+import sys
+from pathlib import Path
+from datetime import datetime
+import streamlit_process_manager as spm
+from streamlit_process_manager.process import Process
 
-from srcs.urban_hive.urban_hive_agent import UrbanHiveMCPAgent, UrbanDataCategory
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from srcs.urban_hive.urban_hive_agent import UrbanDataCategory
 from srcs.common.page_utils import setup_page, render_home_button
 from srcs.common.styles import get_common_styles, get_page_header
-from srcs.common.streamlit_log_handler import setup_streamlit_logging
+from configs.settings import get_reports_path
 
-app = MCPApp(
-    name="urban_hive_app",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-)
+def format_urban_hive_output(result: dict) -> str:
+    """Formats the result dictionary from the agent into a Markdown string."""
+    if not result.get('critical_issues') or "분석 실패" in result['critical_issues'][0]:
+        return f"## 🚨 분석 실패\n\n**오류**: {result.get('critical_issues', ['알 수 없는 오류'])[0]}"
 
-async def main():
-    await app.initialize()
+    display_location = result.get('affected_areas', ["지정되지 않은 위치"])[0]
+
+    md_lines = [
+        f"## 🏙️ 도시 데이터 분석 결과: {display_location}",
+        f"**분석 카테고리**: {result.get('data_category', 'N/A')}",
+        f"**분석 시간**: {result.get('analysis_timestamp', 'N/A')}",
+        f"**위협 수준**: {result.get('threat_level', 'N/A')}",
+        f"**도시 건강 점수**: {result.get('overall_score', 0)}/100",
+    ]
+    
+    key_metrics = result.get('key_metrics', {})
+    if key_metrics:
+        md_lines.append("\n### 📊 주요 지표:")
+        for key, value in key_metrics.items():
+            md_lines.append(f"- **{key.replace('_', ' ').title()}**: {value if value is not None else '데이터 없음'}")
+    
+    critical_issues = result.get('critical_issues', [])
+    if critical_issues:
+        md_lines.append("\n### ⚠️ 주요 문제점:")
+        for issue in critical_issues: md_lines.append(f"- {issue}")
+    
+    recommendations = result.get('recommendations', [])
+    if recommendations:
+        md_lines.append("\n### 💡 추천 사항:")
+        for rec in recommendations: md_lines.append(f"- {rec}")
+
+    predicted_trends = result.get('predicted_trends', [])
+    if predicted_trends:
+        md_lines.append("\n### 📈 예측 동향:")
+        for trend in predicted_trends: md_lines.append(f"- {trend}")
+        
+    return "\n".join(md_lines)
+
+
+def main():
     setup_page("🏙️ Urban Hive Agent", "🏙️")
     st.markdown(get_common_styles(), unsafe_allow_html=True)
     header_html = get_page_header(
@@ -27,31 +65,17 @@ async def main():
     st.markdown(header_html, unsafe_allow_html=True)
     render_home_button()
 
-    # --- Real-time Log Display ---
-    log_expander = st.expander("실시간 실행 로그", expanded=False)
-    log_container = log_expander.empty()
-    setup_streamlit_logging(["mcp_agent", "urban_hive_agent"], log_container) # 에이전트 로거 추가
-    # --- End Log Display ---
-
     st.markdown("---")
 
-    # 메인 콘텐츠 영역에 채팅 인터페이스와 정보 표시
     main_content_col, agent_info_col = st.columns([2, 1])
 
     with main_content_col:
-        # 채팅 인터페이스
         st.subheader("💬 도시 데이터 분석 요청")
         st.markdown(
             "아래 채팅창에 분석하고 싶은 도시 문제에 대해 질문해주세요. "
             "예를 들어, 특정 지역의 부동산 동향, 교통 상황, 환경 문제 등을 물어볼 수 있습니다."
         )
 
-    # Initialize UrbanHiveMCPAgent directly in session state
-    if 'urban_hive_agent' not in st.session_state:
-        llm_instance = OpenAIAugmentedLLM()
-        st.session_state.urban_hive_agent = UrbanHiveMCPAgent(app=app, llm=llm_instance)
-
-    with main_content_col: # 채팅 인터페이스 아래에 표시
         if "messages" not in st.session_state:
             st.session_state["messages"] = [
                 {
@@ -72,13 +96,51 @@ async def main():
             st.chat_message("user").write(prompt)
 
             with st.chat_message("assistant"):
-                response = ""
-                with st.spinner("데이터 분석 중..."):
-                    agent: UrbanHiveMCPAgent = st.session_state.urban_hive_agent
-                    response = await agent.run(prompt)
-                st.markdown(response)
+                reports_path = get_reports_path('urban_hive')
+                reports_path.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                result_json_path = reports_path / f"urban_hive_result_{timestamp}.json"
+                
+                py_executable = sys.executable
+                command = [
+                    py_executable, "-u", "-m", "srcs.urban_hive.run_urban_hive_agent",
+                    "--prompt", prompt,
+                    "--result-json-path", str(result_json_path)
+                ]
+                
+                process_key = f"urban_hive_{timestamp}"
 
-            st.session_state["messages"].append({"role": "assistant", "content": response})
+                with st.spinner("🏙️ 도시 데이터 분석을 시작합니다..."):
+                    log_expander = st.expander("실시간 실행 로그", expanded=True)
+                    log_container = log_expander.empty()
+                    log_container.info("프로세스 초기화 중...")
+
+                    process = Process(command, key=process_key).start()
+                    
+                    monitor_placeholder = log_container.container()
+                    for stdout_line in process.read_stdout_live(auto_close=True):
+                        monitor_placeholder.code(stdout_line, language="log")
+                    
+                    return_code = process.wait()
+
+                if return_code == 0:
+                    st.success("✅ 도시 분석 완료!")
+                    try:
+                        with open(result_json_path, 'r', encoding='utf-8') as f:
+                            result_data = json.load(f)
+                        
+                        response_md = format_urban_hive_output(result_data)
+                        st.markdown(response_md)
+                        st.session_state["messages"].append({"role": "assistant", "content": response_md})
+
+                    except Exception as e:
+                        error_msg = f"결과를 처리하는 중 예기치 않은 오류가 발생했습니다: {e}"
+                        st.error(error_msg)
+                        st.session_state["messages"].append({"role": "assistant", "content": error_msg})
+                else:
+                    error_msg = f"❌ 에이전트 실행에 실패했습니다. (Return Code: {return_code})"
+                    st.error(error_msg)
+                    st.session_state["messages"].append({"role": "assistant", "content": error_msg})
 
     with agent_info_col:
         st.markdown("### ✨ Urban Hive 특징")
@@ -87,7 +149,6 @@ async def main():
         st.markdown("- **예측 모델링**: 미래 도시 변화 예측 및 선제적 대응 방안 제시")
         st.markdown("- **실행 가능한 솔루션**: 데이터 기반 정책 제언 및 실행 계획 수립 지원")
 
-    # 에이전트 정보 및 기능 안내 (메인 콘텐츠 영역으로 이동)
     st.markdown("---")
     with st.expander("💡 Urban Hive Agent 정보 더보기", expanded=False):
         st.markdown("## 💡 Urban Hive Agent란?")
@@ -98,7 +159,6 @@ async def main():
         )
         st.markdown("---")
         st.markdown("###  주요 분석 카테고리")
-        # 카테고리를 2열로 표시
         cat_cols = st.columns(2)
         for i, category in enumerate(UrbanDataCategory):
             with cat_cols[i % 2]:
@@ -112,4 +172,4 @@ async def main():
         st.markdown("- '대전 유성구의 신규 아파트 단지 주변 상권 활성화 가능성은?'")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
