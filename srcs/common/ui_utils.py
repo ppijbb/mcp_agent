@@ -7,7 +7,7 @@ import streamlit_process_manager as spm
 from streamlit_process_manager.process import Process
 
 def run_agent_process(
-    placeholder: st.container,
+    placeholder,
     command: list[str], 
     process_key_prefix: str,
     log_expander_title: str = "실시간 실행 로그"

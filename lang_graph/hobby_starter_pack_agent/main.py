@@ -30,9 +30,9 @@ print("📝 새로운 app.py를 사용해주세요:")
 print("   python app.py")
 print("\n🔄 기존 테스트 코드 실행 중... (하위 호환성)")
 
-from langgraph.hobby_starter_pack_agent.autogen.agents import HSPAutoGenAgents
-from langgraph.hobby_starter_pack_agent.mcp.manager import MCPServerManager
-from langgraph.hobby_starter_pack_agent.langgraph_workflow.workflow import HSPLangGraphWorkflow
+from .autogen.agents import HSPAutoGenAgents
+from .mcp.manager import MCPServerManager
+from .langgraph_workflow.workflow import HSPLangGraphWorkflow
 
 async def main():
     """Main function to run the Hobby Starter Pack Agent."""

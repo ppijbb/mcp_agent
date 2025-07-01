@@ -1,5 +1,5 @@
 import uuid
-from langgraph.ann_system.graph import AnnWorkflow
+from .graph import AnnWorkflow
 
 def main():
     """

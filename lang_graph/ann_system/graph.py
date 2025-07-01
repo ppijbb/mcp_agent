@@ -1,6 +1,6 @@
 from typing import List, TypedDict, Optional, Dict
 from langgraph.graph import StateGraph, END
-from langgraph.ann_system.nodes import planner_node_logic, executor_node_logic, critique_node_logic
+from .nodes import planner_node_logic, executor_node_logic, critique_node_logic
 
 class AgentState(TypedDict):
     """
