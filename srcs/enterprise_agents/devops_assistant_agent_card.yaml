@@ -1,0 +1,138 @@
+agent_card:
+  metadata:
+    name: "DevOps Assistant"
+    version: "1.0.0"
+    description: "코드 리뷰, 배포, 모니터링을 자동화하는 개발자 생산성 에이전트"
+    author: "MCP Agent Team"
+    created_date: "2025-01-21"
+    license: "MIT"
+    
+  capabilities:
+    primary_function: "개발 워크플로우 자동화 및 생산성 향상"
+    core_features:
+      - "GitHub 코드 리뷰 자동화"
+      - "CI/CD 파이프라인 관리"
+      - "시스템 모니터링 및 알림"
+      - "이슈 트래킹 및 우선순위 지정"
+      - "팀 커뮤니케이션 자동화"
+      - "개발 메트릭 분석 및 리포팅"
+    
+    supported_workflows:
+      - "Pull Request 리뷰 및 머지"
+      - "배포 상태 모니터링"
+      - "버그 리포트 분석"
+      - "팀 스탠드업 준비"
+      - "기술 부채 분석"
+      - "성능 최적화 제안"
+
+  model_configuration:
+    primary_model: "gemini-2.5-flash-lite-preview-0607"
+    temperature: 0.2
+    max_tokens: 4000
+    fallback_models:
+      - "gpt-4o-mini"
+      - "claude-3-haiku"
+
+  mcp_tools:
+    github_integration:
+      description: "GitHub API를 통한 코드 저장소 관리"
+      endpoints:
+        - "list_repositories"
+        - "create_pull_request"
+        - "review_code_changes"
+        - "merge_pull_request"
+        - "create_issue"
+        - "list_commits"
+      
+    slack_notifications:
+      description: "Slack을 통한 팀 커뮤니케이션"
+      endpoints:
+        - "send_message"
+        - "create_channel"
+        - "post_code_review_summary"
+        - "alert_deployment_status"
+      
+    monitoring_tools:
+      description: "시스템 상태 모니터링"
+      endpoints:
+        - "check_server_health"
+        - "get_error_logs"
+        - "monitor_performance_metrics"
+        - "alert_system_issues"
+        
+    jira_integration:
+      description: "이슈 트래킹 및 프로젝트 관리"
+      endpoints:
+        - "create_ticket"
+        - "update_ticket_status"
+        - "assign_developer"
+        - "prioritize_backlog"
+
+  interaction_patterns:
+    trigger_events:
+      - "Pull Request 생성"
+      - "빌드 실패"
+      - "배포 완료"
+      - "시스템 오류 발생"
+      - "수동 요청"
+    
+    response_types:
+      - "자동 코드 리뷰"
+      - "배포 상태 리포트"
+      - "이슈 우선순위 제안"
+      - "팀 알림"
+      - "성능 분석 리포트"
+
+  security_considerations:
+    authentication:
+      - "GitHub Personal Access Token"
+      - "Slack Bot Token"
+      - "Jira API Key"
+    
+    permissions:
+      - "Read access to repositories"
+      - "Write access for PR comments"
+      - "Deployment status updates"
+      - "Team communication channels"
+    
+    data_handling:
+      - "코드는 로컬에서만 분석"
+      - "민감한 정보 마스킹"
+      - "로그 데이터 암호화"
+
+  performance_metrics:
+    success_indicators:
+      - "코드 리뷰 시간 단축 (목표: 50%)"
+      - "배포 실패율 감소 (목표: 30%)"
+      - "이슈 해결 시간 단축 (목표: 40%)"
+      - "팀 커뮤니케이션 효율성 향상"
+    
+    monitoring_kpis:
+      - "처리된 PR 수"
+      - "자동화된 리뷰 정확도"
+      - "시스템 가동시간"
+      - "사용자 만족도"
+
+  limitations:
+    technical:
+      - "복잡한 아키텍처 결정은 인간 개발자 필요"
+      - "보안 취약점 분석은 전문 도구 보완 필요"
+      - "대규모 리팩토링은 수동 검토 필수"
+    
+    operational:
+      - "API 요청 제한"
+      - "네트워크 연결 의존성"
+      - "외부 서비스 가용성 의존"
+
+  integration_requirements:
+    prerequisites:
+      - "GitHub API 액세스"
+      - "Slack Workspace 권한"
+      - "Jira 프로젝트 접근권"
+      - "모니터링 시스템 연결"
+    
+    dependencies:
+      - "mcp-server-github"
+      - "mcp-server-slack"
+      - "mcp-server-monitoring"
+      - "mcp-server-jira" 
