@@ -1,29 +1,20 @@
-# DevOps Assistant Agent Requirements
-# MCP Agent 기반 개발자 생산성 자동화 도구
-
-# Core MCP Agent dependencies
-mcp_agent>=0.1.0
-google-generativeai>=0.8.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-
-# Async and HTTP
+# DevOps API Dependencies
 aiohttp>=3.9.0
-asyncio-throttle>=1.0.0
-httpx>=0.25.0
+mcp-agent>=1.0.0
+google-generativeai>=0.5.0
 
-# Data processing
-pandas>=2.0.0
-numpy>=1.24.0
+# Environment and Config
+python-dotenv>=1.0.0
+pyyaml>=6.0
 
-# Date and time
-python-dateutil>=2.8.0
+# Async Support
+asyncio
 
-# GitHub API (optional - for real GitHub integration)
-PyGithub>=1.59.0
-gitpython>=3.1.0
+# Data Processing
+dataclasses
+typing-extensions>=4.5.0
 
-# Development and testing
+# Development
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 black>=23.0.0
@@ -32,10 +23,6 @@ flake8>=6.0.0
 # Logging and monitoring
 structlog>=23.0.0
 prometheus-client>=0.17.0
-
-# Configuration
-python-dotenv>=1.0.0
-PyYAML>=6.0
 
 # Additional utilities
 click>=8.0.0

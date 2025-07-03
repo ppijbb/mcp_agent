@@ -1,320 +1,261 @@
 #!/usr/bin/env python3
 """
-DevOps Assistant Agent Runner
-============================
-대화형 DevOps Assistant Agent 실행 스크립트
-
-Usage:
-    python run_devops_assistant.py
-
-Features:
-- 🔍 코드 리뷰 분석
-- 🚀 배포 상태 확인  
-- 🎯 이슈 우선순위 분석
-- 👥 팀 스탠드업 생성
-- 📊 성능 분석
-- 🔒 보안 스캔
-
-Model: gemini-2.5-flash-lite-preview-0607
+Interactive runner for the production DevOps Assistant Agent
+with GitHub and Prometheus API integrations
 """
 
 import asyncio
-import sys
 import os
-from typing import Dict, Any
+import sys
 import json
-from datetime import datetime
+from typing import Dict, Any
 
-# 현재 디렉토리를 Python 경로에 추가
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.devops_assistant_agent import (
-    DevOpsAssistantMCPAgent,
-    DevOpsTaskType,
-    create_devops_assistant,
-    run_code_review,
-    run_deployment_check,
-    run_issue_analysis,
-    run_team_standup,
-    run_performance_analysis,
-    run_security_scan
-)
+from agents.devops_assistant_agent import DevOpsAssistantAgent
+
 
 class DevOpsAssistantRunner:
-    """DevOps Assistant Agent 실행기"""
+    """Interactive DevOps Assistant runner with error handling"""
     
     def __init__(self):
-        self.agent = None
-        self.session_start = datetime.now()
-        
-    async def initialize(self):
-        """에이전트 초기화"""
-        print("🚀 DevOps Assistant Agent 초기화 중...")
-        try:
-            self.agent = await create_devops_assistant()
-            print("✅ 에이전트 초기화 완료!")
-            print(f"📅 세션 시작: {self.session_start.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"🤖 모델: {self.agent.model_name}")
-            print()
-        except Exception as e:
-            print(f"❌ 초기화 실패: {e}")
-            sys.exit(1)
+        self.agent = DevOpsAssistantAgent()
+        self.commands = {
+            "1": ("🔍 Analyze GitHub Repositories", self.analyze_repos),
+            "2": ("🚀 Monitor CI/CD Pipelines", self.monitor_pipelines),
+            "3": ("📊 Check Infrastructure Health", self.check_health),
+            "4": ("💬 Custom Request", self.custom_request),
+            "5": ("🚪 Exit", self.exit_app)
+        }
     
-    def show_menu(self):
-        """메뉴 표시"""
-        print("=" * 60)
-        print("🛠️  DevOps Assistant Agent - Main Menu")
-        print("=" * 60)
-        print("1. 🔍 코드 리뷰 분석 (Code Review)")
-        print("2. 🚀 배포 상태 확인 (Deployment Check)")
-        print("3. 🎯 이슈 우선순위 분석 (Issue Analysis)")
-        print("4. 👥 팀 스탠드업 생성 (Team Standup)")
-        print("5. 📊 성능 분석 (Performance Analysis)")
-        print("6. 🔒 보안 스캔 (Security Scan)")
-        print("7. 📋 작업 히스토리 (Task History)")
-        print("8. 📈 종합 리포트 (Summary Report)")
-        print("9. 🏢 팀 메트릭 (Team Metrics)")
-        print("0. 🚪 종료 (Exit)")
-        print("=" * 60)
+    def display_banner(self):
+        """Display application banner"""
+        print("\n" + "="*60)
+        print("🚀 DEVOPS ASSISTANT AGENT")
+        print("Production-level DevOps automation with GitHub and Prometheus integrations")
+        print("="*60)
+        print("\nAPI Integrations:")
+        print("• GitHub API for repositories and CI/CD")
+        print("• Prometheus API for metrics and monitoring")
+        print("\nConfiguration required:")
+        print("• GITHUB_TOKEN environment variable")
+        print("• PROMETHEUS_URL environment variable")
+        print("• GOOGLE_API_KEY environment variable")
+        print("="*60)
     
-    async def handle_code_review(self):
-        """코드 리뷰 처리"""
-        print("\n🔍 GitHub Pull Request 코드 리뷰 분석")
-        print("-" * 40)
-        
-        try:
-            owner = input("GitHub Owner/Organization: ").strip() or "example-org"
-            repo = input("Repository 이름: ").strip() or "example-repo"
-            pr_number = int(input("PR 번호: ").strip() or "123")
-            
-            print(f"\n📝 분석 중: {owner}/{repo}#{pr_number}")
-            result = await run_code_review(self.agent, owner, repo, pr_number)
-            
-            self.display_result(result)
-            
-        except ValueError:
-            print("❌ PR 번호는 숫자여야 합니다.")
-        except Exception as e:
-            print(f"❌ 코드 리뷰 분석 실패: {e}")
+    def display_menu(self):
+        """Display main menu"""
+        print("\n📋 Available Commands:")
+        for key, (description, _) in self.commands.items():
+            print(f"{key}. {description}")
+        print()
     
-    async def handle_deployment_check(self):
-        """배포 상태 확인 처리"""
-        print("\n🚀 서비스 배포 상태 확인")
-        print("-" * 40)
+    async def analyze_repos(self):
+        """Analyze GitHub repositories"""
+        print("\n🔍 GitHub Repository Analysis")
+        org = input("Enter GitHub organization (e.g., microsoft): ").strip()
         
-        try:
-            service_name = input("서비스 이름: ").strip() or "web-api"
-            environment = input("환경 (production/staging/dev): ").strip() or "production"
-            
-            print(f"\n📊 확인 중: {service_name} ({environment})")
-            result = await run_deployment_check(self.agent, service_name, environment)
-            
-            self.display_result(result)
-            
-        except Exception as e:
-            print(f"❌ 배포 상태 확인 실패: {e}")
-    
-    async def handle_issue_analysis(self):
-        """이슈 분석 처리"""
-        print("\n🎯 GitHub 이슈 우선순위 분석")
-        print("-" * 40)
-        
-        try:
-            owner = input("GitHub Owner/Organization: ").strip() or "example-org"
-            repo = input("Repository 이름: ").strip() or "example-repo"
-            
-            print(f"\n🔍 분석 중: {owner}/{repo} 이슈들")
-            result = await run_issue_analysis(self.agent, owner, repo)
-            
-            self.display_result(result)
-            
-        except Exception as e:
-            print(f"❌ 이슈 분석 실패: {e}")
-    
-    async def handle_team_standup(self):
-        """팀 스탠드업 처리"""
-        print("\n👥 팀 스탠드업 요약 생성")
-        print("-" * 40)
-        
-        try:
-            team_name = input("팀 이름: ").strip() or "Backend Team"
-            
-            print(f"\n📝 생성 중: {team_name} 스탠드업")
-            result = await run_team_standup(self.agent, team_name)
-            
-            self.display_result(result)
-            
-        except Exception as e:
-            print(f"❌ 팀 스탠드업 생성 실패: {e}")
-    
-    async def handle_performance_analysis(self):
-        """성능 분석 처리"""
-        print("\n📊 서비스 성능 분석")
-        print("-" * 40)
-        
-        try:
-            service_name = input("서비스 이름: ").strip() or "web-api"
-            timeframe = input("분석 기간 (24h/7d/30d): ").strip() or "24h"
-            
-            print(f"\n🔍 분석 중: {service_name} ({timeframe})")
-            result = await run_performance_analysis(self.agent, service_name, timeframe)
-            
-            self.display_result(result)
-            
-        except Exception as e:
-            print(f"❌ 성능 분석 실패: {e}")
-    
-    async def handle_security_scan(self):
-        """보안 스캔 처리"""
-        print("\n🔒 보안 스캔 실행")
-        print("-" * 40)
-        
-        try:
-            target = input("스캔 대상 (URL/IP/Service): ").strip() or "https://api.example.com"
-            scan_type = input("스캔 유형 (full/quick/specific): ").strip() or "full"
-            
-            print(f"\n🛡️ 스캔 중: {target} ({scan_type})")
-            result = await run_security_scan(self.agent, target, scan_type)
-            
-            self.display_result(result)
-            
-        except Exception as e:
-            print(f"❌ 보안 스캔 실패: {e}")
-    
-    def handle_task_history(self):
-        """작업 히스토리 표시"""
-        print("\n📋 작업 히스토리")
-        print("-" * 40)
-        
-        history = self.agent.get_task_history()
-        
-        if not history:
-            print("📝 아직 수행된 작업이 없습니다.")
+        if not org:
+            print("❌ Organization name is required")
             return
         
-        for i, task in enumerate(history, 1):
-            print(f"\n{i}. {task.task_type.value}")
-            print(f"   ⏰ 시간: {task.timestamp}")
-            print(f"   ✅ 상태: {task.status}")
-            print(f"   🚀 처리시간: {task.processing_time:.2f}초")
-            print(f"   💡 권장사항: {len(task.recommendations)}개")
+        print(f"\n⏳ Analyzing repositories in '{org}' organization...")
+        
+        try:
+            result = await self.agent.analyze_github_repositories(org=org)
+            
+            if "error" in result:
+                print(f"❌ Error: {result['error']}")
+                return
+            
+            print(f"\n✅ Analysis Results:")
+            print(f"• Total repositories: {result['total_repositories']}")
+            print(f"• Total stars: {result['stars_total']}")
+            
+            if result.get('languages'):
+                print(f"• Languages: {', '.join(result['languages'].keys())}")
+            
+            if result.get('repositories'):
+                print(f"\n🏆 Top repositories:")
+                top_repos = sorted(result['repositories'], 
+                                 key=lambda x: x['stars'], reverse=True)[:5]
+                for repo in top_repos:
+                    print(f"  • {repo['name']} ({repo['stars']} ⭐)")
+            
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
     
-    def handle_summary_report(self):
-        """종합 리포트 표시"""
-        print("\n📈 종합 요약 리포트")
-        print("-" * 40)
+    async def monitor_pipelines(self):
+        """Monitor CI/CD pipelines"""
+        print("\n🚀 CI/CD Pipeline Monitoring")
+        owner = input("Enter repository owner: ").strip()
+        repo = input("Enter repository name: ").strip()
+        branch = input("Enter branch name (optional): ").strip() or None
         
-        report = self.agent.get_summary_report()
-        
-        if "message" in report:
-            print(f"📝 {report['message']}")
+        if not owner or not repo:
+            print("❌ Both owner and repository name are required")
             return
         
-        print(f"📊 총 작업 수: {report['total_tasks']}")
-        print(f"⏱️ 총 처리시간: {report['total_processing_time']}")
-        print(f"⚡ 평균 처리시간: {report['avg_processing_time']}")
-        print(f"🤖 사용 모델: {report['model_used']}")
-        print(f"🕐 마지막 업데이트: {report['last_updated']}")
+        print(f"\n⏳ Monitoring pipelines for {owner}/{repo}...")
         
-        print("\n📋 작업 유형별 분석:")
-        for task_type, count in report['task_breakdown'].items():
-            print(f"   {task_type}: {count}회")
+        try:
+            result = await self.agent.monitor_ci_cd_pipelines(owner=owner, repo=repo, branch=branch)
+            
+            if "error" in result:
+                print(f"❌ Error: {result['error']}")
+                return
+            
+            print(f"\n✅ Pipeline Status:")
+            print(f"• Total runs: {result['total_runs']}")
+            print(f"• Successful: {result['success_count']}")
+            print(f"• Failed: {result['failure_count']}")
+            
+            if 'success_rate' in result:
+                print(f"• Success rate: {result['success_rate']}%")
+            
+            if result.get('recent_runs'):
+                print(f"\n📋 Recent runs:")
+                for run in result['recent_runs'][:5]:
+                    status = run.get('conclusion') or run.get('status') or 'unknown'
+                    branch_info = f" ({run['branch']})" if run.get('branch') else ""
+                    print(f"  • Run #{run['id']} - {status}{branch_info}")
+            
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
     
-    def handle_team_metrics(self):
-        """팀 메트릭 표시"""
-        print("\n🏢 팀 메트릭")
-        print("-" * 40)
+    async def check_health(self):
+        """Check infrastructure health"""
+        print("\n📊 Infrastructure Health Check")
+        print("⏳ Checking system metrics...")
         
-        metrics = self.agent.get_team_metrics()
+        try:
+            result = await self.agent.check_infrastructure_health()
+            
+            if "error" in result:
+                print(f"❌ Error: {result['error']}")
+                return
+            
+            print(f"\n✅ Health Status:")
+            print(f"• Overall status: {result['overall_status']}")
+            
+            if result.get('metrics'):
+                for metric_name, metric_value in result['metrics'].items():
+                    if metric_name == 'cpu_usage_percent' and isinstance(metric_value, (int, float)):
+                        print(f"• CPU usage: {metric_value}%")
+                    elif metric_name == 'error':
+                        print(f"• Error: {metric_value}")
+                    else:
+                        print(f"• {metric_name}: {metric_value}")
+            
+            print(f"• Timestamp: {result['timestamp']}")
+            
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+    
+    async def custom_request(self):
+        """Process custom request"""
+        print("\n💬 Custom DevOps Request")
+        request = input("Enter your DevOps request: ").strip()
         
-        if not metrics:
-            print("📝 아직 기록된 팀 메트릭이 없습니다.")
+        if not request:
+            print("❌ Request cannot be empty")
             return
         
-        for team_name, activity in metrics.items():
-            print(f"\n👥 {team_name}")
-            print(f"   📝 오늘 커밋: {activity.commits_today}")
-            print(f"   🔄 PR 열림: {activity.prs_opened}")
-            print(f"   ✅ PR 머지: {activity.prs_merged}")
-            print(f"   🎯 이슈 해결: {activity.issues_resolved}")
-            print(f"   🏗️ 빌드 성공률: {activity.build_success_rate}%")
-            print(f"   ⏰ 평균 리뷰시간: {activity.avg_review_time}시간")
+        print(f"\n⏳ Processing request: '{request}'...")
+        
+        try:
+            result = await self.agent.process_request(request)
+            
+            if "error" in result:
+                print(f"❌ Error: {result['error']}")
+                return
+                
+            print(f"\n✅ Response:")
+            print(f"• Action: {result.get('action', 'unknown')}")
+            
+            if result.get('parameters'):
+                print(f"• Parameters: {json.dumps(result['parameters'])}")
+                
+            print(f"• Timestamp: {result.get('timestamp', 'unknown')}")
+            
+            if result.get('result'):
+                if isinstance(result['result'], dict) and len(result['result']) > 10:
+                    print(f"• Result summary: {len(result['result'])} data points")
+                    show_details = input("\nShow full result details? (y/N): ").strip().lower() == 'y'
+                    if show_details:
+                        print(f"\n{json.dumps(result['result'], indent=2)}")
+                else:
+                    print(f"• Result: {json.dumps(result['result'], indent=2)}")
+            
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
     
-    def display_result(self, result):
-        """결과 표시"""
-        print(f"\n✅ {result.task_type.value} 완료!")
-        print(f"⏰ 처리시간: {result.processing_time:.2f}초")
-        print(f"📝 상태: {result.status}")
+    def exit_app(self):
+        """Exit the application"""
+        print("\n👋 Thanks for using DevOps Assistant!")
+        sys.exit(0)
+    
+    def check_configuration(self):
+        """Check if required environment variables are set"""
+        required_vars = {
+            "GITHUB_TOKEN": "GitHub API access",
+            "GOOGLE_API_KEY": "Google Gemini API access"
+        }
         
-        print(f"\n💡 권장사항:")
-        for i, rec in enumerate(result.recommendations, 1):
-            print(f"   {i}. {rec}")
+        missing_vars = []
+        for var, description in required_vars.items():
+            if not os.getenv(var):
+                missing_vars.append(f"  • {var}: {description}")
         
-        # 상세 결과 표시 (선택적)
-        show_details = input("\n📄 상세 결과를 보시겠습니까? (y/N): ").strip().lower()
-        if show_details == 'y':
-            print(f"\n📊 상세 결과:")
-            print(json.dumps(result.result_data, ensure_ascii=False, indent=2))
+        if missing_vars:
+            print("\n⚠️ Missing required environment variables:")
+            for var in missing_vars:
+                print(var)
+            print("\nPlease set these variables before running the agent.")
+            return False
+        
+        return True
     
     async def run(self):
-        """메인 실행 루프"""
-        await self.initialize()
+        """Main application loop with error handling"""
+        self.display_banner()
+        
+        if not self.check_configuration():
+            return
+        
+        print("\n✅ Configuration check passed")
         
         while True:
             try:
-                self.show_menu()
-                choice = input("\n선택하세요 (0-9): ").strip()
+                self.display_menu()
+                choice = input("Select an option (1-5): ").strip()
                 
-                if choice == '0':
-                    print("\n👋 DevOps Assistant Agent를 종료합니다.")
-                    break
-                elif choice == '1':
-                    await self.handle_code_review()
-                elif choice == '2':
-                    await self.handle_deployment_check()
-                elif choice == '3':
-                    await self.handle_issue_analysis()
-                elif choice == '4':
-                    await self.handle_team_standup()
-                elif choice == '5':
-                    await self.handle_performance_analysis()
-                elif choice == '6':
-                    await self.handle_security_scan()
-                elif choice == '7':
-                    self.handle_task_history()
-                elif choice == '8':
-                    self.handle_summary_report()
-                elif choice == '9':
-                    self.handle_team_metrics()
+                if choice in self.commands:
+                    _, action = self.commands[choice]
+                    await action()
                 else:
-                    print("❌ 잘못된 선택입니다. 0-9 사이의 숫자를 입력하세요.")
+                    print("❌ Invalid choice. Please select 1-5.")
                 
-                input("\n⏸️  계속하려면 Enter를 누르세요...")
-                print()
+                input("\nPress Enter to continue...")
                 
             except KeyboardInterrupt:
-                print("\n\n👋 사용자가 중단했습니다. 프로그램을 종료합니다.")
+                print("\n\n👋 Goodbye!")
                 break
             except Exception as e:
-                print(f"\n❌ 예상치 못한 오류: {e}")
-                input("⏸️  계속하려면 Enter를 누르세요...")
+                print(f"\n❌ Unexpected error: {str(e)}")
+                input("Press Enter to continue...")
+
 
 async def main():
-    """메인 함수"""
-    print("🚀 DevOps Assistant Agent")
-    print("=" * 60)
-    print("MCP 기반 개발자 생산성 자동화 도구")
-    print("Model: gemini-2.5-flash-lite-preview-0607")
-    print("=" * 60)
-    
-    runner = DevOpsAssistantRunner()
-    await runner.run()
+    """Main entry point with error handling"""
+    try:
+        runner = DevOpsAssistantRunner()
+        await runner.run()
+    except Exception as e:
+        print(f"\n❌ Fatal error: {str(e)}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
-    # Windows 환경에서의 asyncio 이벤트 루프 설정
-    if sys.platform.startswith('win'):
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
     asyncio.run(main()) 
