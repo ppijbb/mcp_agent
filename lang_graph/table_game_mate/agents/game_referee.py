@@ -27,6 +27,10 @@ class GameRefereeAgent(BaseAgent):
         """
         심판을 위한 환경 인식
         """
+        # 게임 규칙 업데이트
+        if "parsed_rules" in environment:
+            self.game_rules = environment["parsed_rules"]
+
         action_to_validate = environment.get("player_action", {})
         game_state = environment.get("game_state", {})
         
@@ -44,15 +48,28 @@ class GameRefereeAgent(BaseAgent):
             return {"decision": "no_validation_needed"}
         
         action = perception.get("action_to_validate", {})
+        game_rules = self.game_rules or "No specific rules loaded. Use general game knowledge."
         
         prompt = f"""
-게임 행동 유효성 검증:
+당신은 엄격한 게임 심판입니다. 주어진 게임 규칙과 현재 상태를 바탕으로 플레이어의 행동이 유효한지 판단해주세요.
 
-행동: {action}
-현재 게임 상태: {perception.get('game_state', {})}
+**게임 규칙:**
+{game_rules}
 
-이 행동이 게임 규칙에 위반되는지 검증해주세요.
-JSON 형태로 응답해주세요.
+**현재 게임 상태:** 
+{perception.get('game_state', {})}
+
+**검증할 플레이어 행동:**
+{action}
+
+**요청:**
+이 행동이 게임 규칙에 따라 유효한지(valid) 아닌지(invalid) 판단하고, 그 이유를 설명해주세요.
+
+**응답 형식 (반드시 JSON만 반환):**
+{{
+  "is_valid": true/false,
+  "reason": "판단에 대한 구체적인 이유"
+}}
 """
         
         llm_response = await self.llm_client.complete(prompt)
@@ -69,10 +86,23 @@ JSON 형태로 응답해주세요.
         decision = reasoning.get("decision", "no_action")
         
         if decision == "validate_action":
-            return {
-                "action": "validation_complete",
-                "is_valid": True,  # 실제로는 LLM 응답 파싱 결과
-                "message": "행동이 유효합니다"
-            }
+            try:
+                import json
+                validation_data = json.loads(reasoning.get("validation_result", "{}"))
+                is_valid = validation_data.get("is_valid", False)
+                reason = validation_data.get("reason", "Could not parse LLM response.")
+                
+                return {
+                    "action": "validation_complete",
+                    "is_valid": is_valid,
+                    "message": reason
+                }
+            except (json.JSONDecodeError, AttributeError):
+                 return {
+                    "action": "validation_failed",
+                    "is_valid": False, # 파싱 실패 시 안전하게 무효 처리
+                    "message": "LLM의 응답을 파싱하는 데 실패했습니다."
+                }
+
         
         return {"action": "no_validation_performed"} 

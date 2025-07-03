@@ -26,6 +26,7 @@ from ..agents.player_manager import PlayerManagerAgent
 from ..agents.persona_generator import PersonaGeneratorAgent
 from ..agents.game_referee import GameRefereeAgent
 from ..agents.score_calculator import ScoreCalculatorAgent
+from ..agents.player_agent import PlayerAgent
 from ..core.llm_client import LLMClient
 from ..utils.mcp_client import MCPClient
 
@@ -70,6 +71,7 @@ class GameMasterGraph:
         self.persona_generator = PersonaGeneratorAgent(llm_client, mcp_client, "persona_generator")
         self.game_referee = GameRefereeAgent(llm_client, mcp_client, "game_referee")
         self.score_calculator = ScoreCalculatorAgent(llm_client, mcp_client, "score_calculator")
+        self.player_agents: Dict[str, PlayerAgent] = {}
         
         # 그래프 및 실행 상태
         self.graph = None
@@ -240,6 +242,32 @@ class GameMasterGraph:
             
             return state
         
+        # 4.5. 플레이어 에이전트 생성 노드
+        async def create_player_agents_node(state: GameMasterState) -> GameMasterState:
+            """생성된 플레이어와 페르소나를 바탕으로 PlayerAgent 인스턴스 생성"""
+            print("🤖 플레이어 AI 에이전트 생성 시작...")
+            state["workflow_step"] = "creating_player_agents"
+            
+            try:
+                personas = state.get("assigned_personas", {}).get("persona_profiles", {})
+                for player in state["players"]:
+                    if player.is_ai and player.id not in self.player_agents:
+                        persona_profile = personas.get(player.id)
+                        if persona_profile:
+                            self.player_agents[player.id] = PlayerAgent(
+                                self.llm_client,
+                                self.mcp_client,
+                                player_info=player,
+                                persona=persona_profile
+                            )
+                print(f"✅ AI 에이전트 {len(self.player_agents)}명 생성 완료")
+            except Exception as e:
+                error_info = {"agent": "player_agent_creation", "error": str(e), "timestamp": datetime.now()}
+                state["agent_errors"].append(error_info)
+                print(f"❌ 플레이어 AI 에이전트 생성 오류: {e}")
+                
+            return state
+        
         # 5. 게임 시작 노드
         async def setup_game_node(state: GameMasterState) -> GameMasterState:
             """GameRefereeAgent를 호출하여 게임 초기화 및 시작"""
@@ -286,50 +314,80 @@ class GameMasterGraph:
             
             try:
                 current_player = state["players"][state["current_player_index"]]
-                print(f"   현재 플레이어: {current_player.name}")
-                
-                # 게임 레퍼리가 턴 진행
-                environment = {
-                    "current_player": current_player,
-                    "game_board": state["game_board"],
+                print(f"   현재 플레이어: {current_player.name} ({current_player.player_type})")
+
+                # 1. 플레이어 행동 결정
+                player_action = None
+                if current_player.is_ai:
+                    player_agent = self.player_agents.get(current_player.id)
+                    if player_agent:
+                        print(f"   AI ({player_agent.persona.persona_type}) 행동 결정 중...")
+                        env_for_player = {
+                            "game_state": state,
+                            "parsed_rules": state["parsed_rules"],
+                            "other_players": [p for p in state["players"] if p.id != current_player.id],
+                            "is_my_turn": True,
+                        }
+                        action_result = await player_agent.run_cycle(env_for_player)
+                        player_action = action_result.get("action_result", {})
+                    else:
+                        raise Exception(f"PlayerAgent for {current_player.id} not found!")
+                else:
+                    # TODO: 인간 플레이어의 입력을 받는 로직
+                    print("   인간 플레이어 턴. (현재는 자동 패스)")
+                    player_action = {"action_type": "pass", "action_data": {}}
+
+                # 2. 행동 유효성 검증
+                print(f"   심판이 행동 검증 중: {player_action}")
+                env_for_referee = {
+                    "player_action": player_action,
+                    "game_state": state,
                     "parsed_rules": state["parsed_rules"],
-                    "turn_count": state["turn_count"],
-                    "current_state": state
                 }
+                validation_result = await self.game_referee.run_cycle(env_for_referee)
+                validation_data = validation_result.get("action_result", {})
                 
-                result = await self.game_referee.run_cycle(environment)
-                
-                if result["cycle_complete"]:
-                    turn_result = result["action_result"]
-                    state["current_turn_result"] = turn_result
+                if validation_data.get("is_valid"):
+                    print(f"   ✅ 행동 유효: {validation_data.get('message')}")
+                    state["current_turn_result"] = player_action
                     
-                    # 게임 상태 업데이트
-                    state["game_board"].update(turn_result.get("board_changes", {}))
+                    # 3. 게임 상태 업데이트
+                    # TODO: 실제 게임 로직에 따라 상태를 변경하는 더 정교한 방법 필요
+                    # 현재는 PlayerAgent가 action_data에 board_changes를 포함한다고 가정
+                    state["game_board"].update(player_action.get("action_data", {}).get("board_changes", {}))
                     state["game_history"].append(GameAction(
                         player_id=current_player.id,
-                        action_type=turn_result.get("action_type", "turn"),
-                        action_data=turn_result.get("action_data", {}),
+                        action_type=player_action.get("action_type", "turn"),
+                        action_data=player_action.get("action_data", {}),
                         is_valid=True
                     ))
                     
-                    # 다음 플레이어로
-                    state["current_player_index"] = (state["current_player_index"] + 1) % len(state["players"])
-                    if state["current_player_index"] == 0:
-                        state["turn_count"] += 1
-                    
-                    # 승리 조건 체크
-                    if turn_result.get("game_ended", False):
+                    # 4. 승리 조건 체크 (Referee가 판단할 수도 있음)
+                    if player_action.get("action_data", {}).get("game_ended", False):
                         state["phase"] = GamePhase.SCORE_CALCULATION
                         state["game_ended"] = True
                         print("🏁 게임 종료 조건 달성!")
-                    
-                    print(f"✅ 턴 진행 완료")
+
                 else:
-                    state["agent_errors"].append(result["error"])
-                    print(f"❌ 턴 진행 실패: {result['error']}")
+                    print(f"   ❌ 행동 무효: {validation_data.get('message')}")
+                    # 잘못된 행동에 대한 처리 (예: 턴 넘김)
+                    state["game_history"].append(GameAction(
+                        player_id=current_player.id,
+                        action_type=player_action.get("action_type", "invalid_turn"),
+                        action_data=player_action.get("action_data", {}),
+                        is_valid=False,
+                        reason=validation_data.get('message')
+                    ))
+
+                # 5. 다음 턴으로
+                state["current_player_index"] = (state["current_player_index"] + 1) % len(state["players"])
+                if state["current_player_index"] == 0:
+                    state["turn_count"] += 1
+                
+                print(f"✅ 턴 진행 완료")
                 
             except Exception as e:
-                error_info = {"agent": "game_referee", "error": str(e), "timestamp": datetime.now()}
+                error_info = {"agent": "play_turn_node", "error": str(e), "timestamp": datetime.now()}
                 state["agent_errors"].append(error_info)
                 print(f"❌ 턴 진행 노드 오류: {e}")
             
@@ -379,6 +437,7 @@ class GameMasterGraph:
         workflow.add_node("parse_rules", parse_rules_node)
         workflow.add_node("manage_players", manage_players_node)
         workflow.add_node("generate_personas", generate_personas_node)
+        workflow.add_node("create_player_agents", create_player_agents_node)
         workflow.add_node("setup_game", setup_game_node)
         workflow.add_node("play_turn", play_turn_node)
         workflow.add_node("calculate_scores", calculate_scores_node)
@@ -388,7 +447,8 @@ class GameMasterGraph:
         workflow.add_edge("analyze_game", "parse_rules")
         workflow.add_edge("parse_rules", "manage_players")
         workflow.add_edge("manage_players", "generate_personas")
-        workflow.add_edge("generate_personas", "setup_game")
+        workflow.add_edge("generate_personas", "create_player_agents")
+        workflow.add_edge("create_player_agents", "setup_game")
         workflow.add_edge("setup_game", "play_turn")
         
         # 조건부 엣지: 게임 계속 vs 종료
