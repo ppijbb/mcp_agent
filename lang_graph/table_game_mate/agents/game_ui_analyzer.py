@@ -33,15 +33,15 @@ class GameUIAnalyzerAgent:
         if model_name is None:
             model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         
-        # Google API Key 확인
-        if not os.getenv("GOOGLE_API_KEY"):
-            print("경고: GOOGLE_API_KEY 환경변수가 설정되지 않았습니다.")
+        # Gemini API Key 확인
+        if not os.getenv("GEMINI_API_KEY"):
+            print("경고: GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
         
         self.llm = ChatGoogleGenerativeAI(
             model=model_name, 
             temperature=0.1,
             convert_system_message_to_human=True,  # Gemini용 설정
-            google_api_key=os.getenv("GOOGLE_API_KEY")  # 직접 API 키 전달
+            google_api_key=os.getenv("GEMINI_API_KEY")  # 직접 API 키 전달
         )
         self.workflow = self._create_workflow()
         self.app = self.workflow.compile()
@@ -122,13 +122,24 @@ JSON 형식으로 응답해주세요.
             return {
                 **state,
                 "error_message": f"게임 분석 실패: {str(e)}",
-                "analysis_result": self._fallback_analysis(state["game_description"])
+                "analysis_result": {"error": f"Failed to analyze game: {e}"}
             }
     
     def _determine_ui_type(self, state: GameAnalysisState) -> Dict[str, Any]:
         """UI 타입 결정"""
         
-        analysis = state["analysis_result"]
+        # 만약 이전 단계에서 에러가 있었다면, UI 타입 결정을 건너뜀
+        if state.get("error_message"):
+            return {**state, "ui_spec": {"error": "Cannot determine UI type due to previous error."}}
+
+        analysis = state.get("analysis_result", {})
+        if not analysis or "error" in analysis:
+            return {
+                **state,
+                "error_message": "UI 타입을 결정할 수 없습니다. 게임 분석 결과가 유효하지 않습니다.",
+                "ui_spec": {"error": "Analysis result is invalid."}
+            }
+            
         board_type = analysis.get("보드_타입", "grid")
         category = analysis.get("게임_카테고리", "기타")
         mechanisms = analysis.get("핵심_메커니즘", [])
@@ -258,7 +269,7 @@ UI 타입: {ui_type}
             return {
                 **state,
                 "error_message": f"UI 명세 생성 실패: {str(e)}",
-                "ui_spec": {**state["ui_spec"], **self._fallback_ui_spec(state["ui_spec"]["board_type"])}
+                "ui_spec": {**state.get("ui_spec", {}), "error": f"Failed to generate UI spec: {e}"}
             }
     
     def _validate_spec(self, state: GameAnalysisState) -> Dict[str, Any]:
@@ -266,6 +277,14 @@ UI 타입: {ui_type}
         
         ui_spec = state["ui_spec"]
         analysis = state["analysis_result"]
+        
+        # 이전 단계 에러 확인
+        if "error" in ui_spec or "error" in analysis:
+            return {
+                **state,
+                "confidence_score": 0.0,
+                "error_message": state.get("error_message", "검증 실패: 이전 단계에서 오류 발생")
+            }
         
         # 신뢰도 계산
         confidence_factors = []
@@ -311,49 +330,6 @@ UI 타입: {ui_type}
             }
         }
     
-    def _fallback_analysis(self, description: str) -> Dict[str, Any]:
-        """분석 실패시 폴백"""
-        return {
-            "게임명": "Unknown Game",
-            "게임_카테고리": "기타",
-            "보드_타입": "grid",
-            "플레이어_수": "2-4",
-            "복잡도": "medium",
-            "핵심_메커니즘": ["턴제"],
-            "특수_기능": []
-        }
-    
-    def _fallback_ui_spec(self, board_type: str) -> Dict[str, Any]:
-        """UI 명세 생성 실패시 폴백"""
-        fallback_specs = {
-            "grid": {
-                "layout_structure": {
-                    "main_area": {"rows": 8, "cols": 8},
-                    "sidebar": {"controls": True}
-                },
-                "interaction_patterns": ["click_select"],
-                "special_features": {}
-            },
-            "card_layout": {
-                "layout_structure": {
-                    "main_area": {"community_area": True},
-                    "bottom_panel": {"hand_display": True}
-                },
-                "interaction_patterns": ["card_select"],
-                "special_features": {}
-            },
-            "text_based": {
-                "layout_structure": {
-                    "main_area": {"player_list": True},
-                    "bottom_panel": {"chat": True}
-                },
-                "interaction_patterns": ["text_input"],
-                "special_features": {}
-            }
-        }
-        
-        return fallback_specs.get(board_type, fallback_specs["grid"])
-    
     async def analyze_game_for_ui(self, game_description: str, detailed_rules: str = "") -> Dict[str, Any]:
         """게임 분석 및 UI 명세 생성 (메인 인터페이스)"""
         
@@ -371,17 +347,20 @@ UI 타입: {ui_type}
             # 워크플로우 실행
             result = await self.app.ainvoke(initial_state)
             
+            # 최종 결과에 에러가 있는지 확인
+            success = not result.get("error_message")
+
             return {
-                "success": True,
-                "game_name": result["ui_spec"].get("game_name", "Unknown Game"),
-                "board_type": result["ui_spec"].get("board_type", "grid"),
-                "required_components": result["ui_spec"].get("required_components", []),
-                "layout_structure": result["ui_spec"].get("layout_structure", {}),
-                "interaction_patterns": result["ui_spec"].get("interaction_patterns", []),
-                "special_features": result["ui_spec"].get("special_features", {}),
-                "complexity": result["ui_spec"].get("complexity", "medium"),
-                "confidence_score": result["confidence_score"],
-                "analysis_result": result["analysis_result"],
+                "success": success,
+                "game_name": result.get("ui_spec", {}).get("game_name", "Unknown Game"),
+                "board_type": result.get("ui_spec", {}).get("board_type", "grid"),
+                "required_components": result.get("ui_spec", {}).get("required_components", []),
+                "layout_structure": result.get("ui_spec", {}).get("layout_structure", {}),
+                "interaction_patterns": result.get("ui_spec", {}).get("interaction_patterns", []),
+                "special_features": result.get("ui_spec", {}).get("special_features", {}),
+                "complexity": result.get("ui_spec", {}).get("complexity", "medium"),
+                "confidence_score": result.get("confidence_score", 0.0),
+                "analysis_result": result.get("analysis_result", {}),
                 "error_message": result.get("error_message", ""),
                 "generated_at": datetime.now()
             }

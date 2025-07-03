@@ -26,11 +26,11 @@ class GeminiLLMClient:
     def __init__(self, api_key: Optional[str] = None):
         """
         Args:
-            api_key: Google API 키 (환경변수 GOOGLE_API_KEY에서 자동 로드)
+            api_key: Gemini API 키 (환경변수 GEMINI_API_KEY에서 자동 로드)
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
-            raise ValueError("Google API key is required. Set GOOGLE_API_KEY environment variable.")
+            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable.")
         
         # Gemini 설정
         genai.configure(api_key=self.api_key)
