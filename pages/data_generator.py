@@ -15,7 +15,7 @@ import json
 from srcs.common.streamlit_log_handler import setup_streamlit_logging
 from srcs.advanced_agents.enhanced_data_generator import SyntheticDataAgent
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError):
 
 # AI Data Generation Agent 임포트 - 필수 의존성
 try:
-    from srcs.basic_agents.data_generator import AIDataGenerationAgent
+    from srcs.basic_agents.data_generator import AIDataGenerationAgent as agent
 except ImportError as e:
     st.error(f"❌ AI 에이전트를 불러올 수 없습니다: {e}")
     st.error("시스템 요구사항: `AIDataGenerationAgent`와 `SyntheticDataAgent`가 필수입니다.")
@@ -300,7 +300,8 @@ def execute_detailed_data_agent_process(agent_method: str, config: dict):
 
     with placeholder.container():
         with st.spinner(f"AI가 데이터를 생성 중입니다... (Method: {agent_method})"):
-            reports_path = get_reports_path('data_generator')
+            reports_path = Path(get_reports_path('data_generator'))
+            reports_path.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             result_json_path = reports_path / f"detailed_data_result_{agent_method}_{timestamp}.json"
             
@@ -312,27 +313,18 @@ def execute_detailed_data_agent_process(agent_method: str, config: dict):
                 "--result-json-path", str(result_json_path)
             ]
             
-            process_key = f"detailed_data_agent_{timestamp}"
-            process = Process(command, key=process_key).start()
-
-            log_expander = st.expander("실시간 실행 로그", expanded=True)
-            with log_expander:
-                spm.st_process_monitor(process, key=f"monitor_{process_key}").loop_until_finished()
-                
-            if process.get_return_code() == 0:
-                try:
-                    with open(result_json_path, 'r', encoding='utf-8') as f:
-                        result = json.load(f)
-                    
-                    if result.get("success"):
-                        st.success("✅ 데이터 생성이 성공적으로 완료되었습니다!")
-                        display_detailed_data_results(result.get("data", {}), config)
-                    else:
-                        st.error(f"❌ 실행은 완료되었지만 오류가 보고되었습니다: {result.get('error', '알 수 없는 오류')}")
-                except Exception as e:
-                    st.error(f"결과 파일을 읽거나 처리하는 중 오류가 발생했습니다: {e}")
-            else:
-                st.error(f"❌ 에이전트 실행에 실패했습니다. (Return Code: {process.get_return_code()})")
+            result = run_agent_process(
+                placeholder=placeholder,
+                command=command,
+                process_key_prefix="detailed_data_agent",
+                log_expander_title="실시간 실행 로그"
+            )
+            
+            if result:
+                if result.get("success"):
+                    display_detailed_data_results(result.get("data", {}), config)
+                else:
+                    st.error(f"❌ 실행은 완료되었지만 오류가 보고되었습니다: {result.get('error', '알 수 없는 오류')}")
 
 def display_detailed_data_results(result: dict, config: dict):
     """상세 생성기 결과를 포맷하여 표시합니다."""

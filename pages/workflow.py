@@ -13,7 +13,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -269,7 +269,8 @@ def render_workflow_examples():
 def execute_workflow_process(task: str, model_name: str, plan_type: str):
     """워크플로우를 별도 프로세스로 실행하고 결과를 표시합니다."""
     
-    reports_path = get_reports_path('workflow')
+    reports_path = Path(get_reports_path('workflow'))
+    reports_path.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result_json_path = reports_path / f"workflow_result_{timestamp}.json"
     
@@ -280,26 +281,16 @@ def execute_workflow_process(task: str, model_name: str, plan_type: str):
                "--plan-type", plan_type,
                "--result-json-path", str(result_json_path)]
     
-    st.info("🔄 워크플로우 실행 중...")
+    placeholder = st.empty()
+    result = run_agent_process(
+        placeholder=placeholder,
+        command=command,
+        process_key_prefix="workflow",
+        log_expander_title="실시간 실행 로그"
+    )
     
-    process_key = f"workflow_{timestamp}"
-    process = Process(command, key=process_key).start()
-    
-    log_expander = st.expander("실시간 실행 로그", expanded=True)
-    with log_expander:
-        st_process_monitor = spm.st_process_monitor(process, key=f"monitor_{process_key}")
-        st_process_monitor.loop_until_finished()
-        
-    if process.get_return_code() == 0:
-        try:
-            with open(result_json_path, 'r', encoding='utf-8') as f:
-                result_data = json.load(f)
-            render_results(result_data)
-        except Exception as e:
-            st.error(f"결과 파일을 읽거나 처리하는 중 오류가 발생했습니다: {e}")
-    else:
-        st.error(f"❌ 에이전트 실행에 실패했습니다. (Return Code: {process.get_return_code()})")
-        st.text("자세한 내용은 위의 실행 로그를 확인하세요.")
+    if result:
+        render_results(result)
 
 def render_info_panels():
     """정보 패널들을 메인 화면에 렌더링합니다."""

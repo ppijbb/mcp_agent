@@ -33,38 +33,57 @@ def run_agent_process(
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             process_key = f"{process_key_prefix}_{timestamp}"
             
-            process = Process(command, key=process_key).start()
-
-            log_expander = st.expander(log_expander_title, expanded=True)
-            with log_expander:
-                spm.st_process_monitor(process, key=f"monitor_{process_key}").loop_until_finished()
+            process = Process(command, output_file=process_key).start()
+            
+            # expander 중첩 문제를 피하기 위해 직접 process monitor 사용
+            st.info(f"🔄 {log_expander_title}")
+            spm.st_process_monitor(process, label=f"monitor_{process_key}").loop_until_finished()
                 
             if process.get_return_code() == 0:
-                # The command should have included a --result-json-path argument.
-                # We need to find it to read the result file.
-                result_json_path_str = None
+                # 먼저 --result-json-path 인자를 찾아보고, 없으면 --result-txt-path를 찾아봄
+                result_path_str = None
+                is_json_format = False
+                
                 try:
-                    # 커맨드에서 --result-json-path 인자의 위치를 찾아 그 다음 값을 가져옴
+                    # JSON 파일 경로 찾기
                     idx = command.index("--result-json-path")
-                    result_json_path_str = command[idx + 1]
+                    result_path_str = command[idx + 1]
+                    is_json_format = True
                 except (ValueError, IndexError):
-                    st.error("❌ 내부 오류: 실행 커맨드에서 결과 파일 경로를 찾을 수 없습니다.")
-                    return None
-
-                try:
-                    with open(result_json_path_str, 'r', encoding='utf-8') as f:
-                        result = json.load(f)
-                    
-                    if "success" in result and not result.get("success"):
-                        st.error(f"❌ 작업은 완료되었지만 오류가 보고되었습니다: {result.get('error', '알 수 없는 오류')}")
+                    try:
+                        # 텍스트 파일 경로 찾기
+                        idx = command.index("--result-txt-path")
+                        result_path_str = command[idx + 1]
+                        is_json_format = False
+                    except (ValueError, IndexError):
+                        st.error("❌ 내부 오류: 실행 커맨드에서 결과 파일 경로를 찾을 수 없습니다.")
                         return None
 
-                    st.success("✅ 작업이 성공적으로 완료되었습니다!")
-                    # 'data' 키가 있으면 해당 값을, 없으면 전체 result 객체를 반환
-                    return result.get("data", result)
+                try:
+                    with open(result_path_str, 'r', encoding='utf-8') as f:
+                        if is_json_format:
+                            result = json.load(f)
+                            
+                            if "success" in result and not result.get("success"):
+                                st.error(f"❌ 작업은 완료되었지만 오류가 보고되었습니다: {result.get('error', '알 수 없는 오류')}")
+                                return None
+
+                            st.success("✅ 작업이 성공적으로 완료되었습니다!")
+                            # 'data' 키가 있으면 해당 값을, 없으면 전체 result 객체를 반환
+                            return result.get("data", result)
+                        else:
+                            # 텍스트 파일 처리
+                            result_text = f.read()
+                            
+                            if result_text.strip():
+                                st.success("✅ 작업이 성공적으로 완료되었습니다!")
+                                return {"result_text": result_text}
+                            else:
+                                st.error("❌ 결과 파일이 비어있습니다.")
+                                return None
 
                 except FileNotFoundError:
-                    st.error(f"❌ 결과 파일({result_json_path_str})을 찾을 수 없습니다.")
+                    st.error(f"❌ 결과 파일({result_path_str})을 찾을 수 없습니다.")
                     return None
                 except Exception as e:
                     st.error(f"결과 파일을 읽거나 처리하는 중 오류가 발생했습니다: {e}")

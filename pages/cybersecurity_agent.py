@@ -40,9 +40,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "🛡️ Cybersecurity Agent",
-        "사이버 위협으로부터 조직을 보호하기 위한 AI 기반 보안 솔루션",
-        "pages/cybersecurity_agent.py"
+        agent_name="Cybersecurity Agent",
+        page_icon="🛡️",
+        page_type="cybersecurity",
+        title="Cybersecurity Agent",
+        subtitle="사이버 위협으로부터 조직을 보호하기 위한 AI 기반 보안 솔루션",
+        module_path="srcs.enterprise_agents.cybersecurity_infrastructure_agent"
     )
 
     result_placeholder = st.empty()
@@ -64,7 +67,7 @@ def main():
         if not company_name.strip():
             st.warning("회사명을 입력해주세요.")
         else:
-            reports_path = get_reports_path('cybersecurity')
+            reports_path = Path(get_reports_path('cybersecurity'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"cybersecurity_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             

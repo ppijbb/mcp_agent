@@ -8,7 +8,7 @@ import streamlit as st
 import sys
 from pathlib import Path
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 import tempfile
 import json
 import os
@@ -47,28 +47,14 @@ def validate_research_result(result):
 def main():
     """Research Agent 메인 페이지"""
     
-    # 헤더
-    st.markdown("""
-    <div style="
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 10px;
-        text-align: center;
-        color: white;
-        margin-bottom: 2rem;
-    ">
-        <h1>🔍 Research Agent</h1>
-        <p style="font-size: 1.2rem; margin: 0;">
-            AI 기반 정보 검색 및 분석 시스템
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 홈으로 돌아가기 버튼
-    if st.button("🏠 홈으로 돌아가기", key="home"):
-        st.switch_page("main.py")
-    
-    st.markdown("---")
+    create_agent_page(
+        agent_name="Research Agent",
+        page_icon="🔍",
+        page_type="research",
+        title="Research Agent",
+        subtitle="AI 기반 정보 검색 및 분석 시스템",
+        module_path="srcs.advanced_agents.researcher_v2"
+    )
     
     st.success("🤖 Research Agent v2가 성공적으로 연결되었습니다!")
     
@@ -110,7 +96,7 @@ def render_research_agent_interface():
             st.warning("연구 주제와 초점을 모두 입력(선택)해주세요.")
             st.stop()
             
-        reports_path = get_reports_path('research')
+        reports_path = Path(get_reports_path('research'))
         reports_path.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_topic = "".join(c for c in research_topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
@@ -125,32 +111,21 @@ def render_research_agent_interface():
             "--save-to-file" # Always save report file from script
         ]
         
-        st.info("🔄 Research Agent 실행 중...")
+        placeholder = st.empty()
+        result = run_agent_process(
+            placeholder=placeholder,
+            command=command,
+            process_key_prefix="research",
+            log_expander_title="실시간 실행 로그"
+        )
         
-        process = Process(command, key=process_key).start()
-        
-        st_process_monitor = spm.st_process_monitor(process, key=f"monitor_{process_key}")
-        st_process_monitor.loop_until_finished()
-        
-        if process.get_return_code() == 0:
-            st.success("✅ Research Agent 실행 완료!")
-            try:
-                with open(result_json_path, 'r', encoding='utf-8') as f:
-                    result = json.load(f)
-                
-                if result.get('success'):
-                    display_research_results(result)
-                else:
-                    st.error(f"❌ 실행 중 오류가 보고되었습니다: {result.get('message', '알 수 없는 오류')}")
-                    with st.expander("🔍 오류 상세 정보"):
-                        st.code(result.get('error', '상세 정보 없음'))
-
-            except Exception as e:
-                st.error(f"결과 파일을 읽거나 처리하는 중 오류가 발생했습니다: {e}")
-        else:
-            st.error(f"❌ 에이전트 실행에 실패했습니다. (Return Code: {process.get_return_code()})")
-            with st.expander("에러 로그 보기"):
-                st.code(process.get_stdout() + process.get_stderr(), language="log")
+        if result:
+            if result.get('success'):
+                display_research_results(result)
+            else:
+                st.error(f"❌ 실행 중 오류가 보고되었습니다: {result.get('message', '알 수 없는 오류')}")
+                with st.expander("🔍 오류 상세 정보"):
+                    st.code(result.get('error', '상세 정보 없음'))
 
 
 def display_research_results(result: dict):

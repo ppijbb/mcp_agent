@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+
 
 from configs.settings import get_reports_path
 from srcs.advanced_agents.decision_agent import (
@@ -52,9 +52,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "🧠 Decision Agent",
-        "복잡한 상황을 분석하고 최적의 결정을 내리는 AI 에이전트",
-        "pages/decision_agent.py"
+        agent_name="Decision Agent",
+        page_icon="🧠",
+        page_type="decision",
+        title="Decision Agent",
+        subtitle="복잡한 상황을 분석하고 최적의 결정을 내리는 AI 에이전트",
+        module_path="srcs.advanced_agents.decision_agent"
     )
 
     result_placeholder = st.empty()
@@ -88,7 +91,7 @@ def main():
                 st.error("상호작용 컨텍스트가 유효한 JSON 형식이 아닙니다.")
                 st.stop()
 
-            reports_path = get_reports_path('decision')
+            reports_path = Path(get_reports_path('decision'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"decision_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             

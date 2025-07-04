@@ -16,7 +16,7 @@ import base64
 from pathlib import Path
 from datetime import datetime, timedelta
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 
 # --- 1. 프로젝트 경로 설정 ---
 project_root = Path(__file__).parent.parent
@@ -105,16 +105,16 @@ if task_to_run:
     else:
         st.session_state.flight_results = None
 
-    reports_path = get_reports_path('travel_scout')
+    reports_path = Path(get_reports_path('travel_scout'))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_output_dir = reports_path / f"run_{timestamp}"
     run_output_dir.mkdir(parents=True, exist_ok=True)
-    result_json_path = run_output_dir / "results.json"
+    result_txt_path = run_output_dir / "results.txt"
     
     py_executable = sys.executable
     command = [py_executable, "-u", "-m", "srcs.travel_scout.run_travel_scout_agent",
                "--task", task_to_run,
-               "--result-json-path", str(result_json_path)]
+               "--result-txt-path", str(result_txt_path)]
     
     # 작업에 따른 인자 추가
     if task_to_run == 'search_hotels':
@@ -139,34 +139,25 @@ if task_to_run:
         ])
         st.info(f"✈️ {origin} -> {destination} 항공편 검색을 시작합니다...")
 
-    log_expander = st.expander("실시간 실행 로그", expanded=True)
-    with log_expander:
-        process_key = f"travel_scout_{timestamp}"
-        process = Process(command, key=process_key).start()
-        monitor_placeholder = st.empty()
-        for stdout_line in process.read_stdout_live(auto_close=True):
-            monitor_placeholder.code(stdout_line, language="log")
-        
-        return_code = process.wait()
+    placeholder = st.empty()
+    result = run_agent_process(
+        placeholder=placeholder,
+        command=command,
+        process_key_prefix="travel_scout",
+        log_expander_title="실시간 실행 로그"
+    )
     
-    if return_code == 0:
-        st.success("✅ 검색 완료!")
-        try:
-            with open(result_json_path) as f:
-                final_result = json.load(f)
-            
-            if final_result.get("success"):
-                if task_to_run == 'search_hotels':
-                    st.session_state.hotel_results = final_result.get("data")
-                else:
-                    st.session_state.flight_results = final_result.get("data")
-                st.session_state.screenshots = final_result.get("screenshots", [])
-            else:
-                st.error(f"❌ 에이전트 실행 중 오류 발생: {final_result.get('error', '알 수 없는 오류')}")
-        except Exception as e:
-            st.error(f"결과 파일을 읽거나 처리하는 중 오류 발생: {e}")
-    else:
-        st.error(f"❌ 에이전트 실행 실패 (Return Code: {return_code}). 로그를 확인하세요.")
+    if result:
+        if task_to_run == 'search_hotels':
+            st.session_state.hotel_results = result
+        else:
+            st.session_state.flight_results = result
+        
+        # 스크린샷 경로는 output 디렉토리에서 찾기
+        screenshot_files = []
+        for ext in ['*.png', '*.jpg', '*.jpeg']:
+            screenshot_files.extend(Path(run_output_dir).glob(ext))
+        st.session_state.screenshots = [str(f) for f in screenshot_files]
     
     st.rerun()
 
@@ -180,13 +171,10 @@ with res1:
     st.markdown("#### 🏨 Hotel Results")
     if st.session_state.hotel_results:
         results = st.session_state.hotel_results
-        if isinstance(results, dict):
-            if 'hotels' in results and results['hotels']:
-                st.dataframe(results['hotels'])
-            elif 'error' in results:
-                st.error(results['error'])
-            else:
-                st.json(results)
+        if isinstance(results, dict) and 'result_text' in results:
+            st.text_area("검색 결과", results['result_text'], height=300)
+        else:
+            st.text(str(results))
     else:
         st.info("호텔을 검색하여 결과를 확인하세요.")
 
@@ -194,13 +182,10 @@ with res2:
     st.markdown("#### ✈️ Flight Results")
     if st.session_state.flight_results:
         results = st.session_state.flight_results
-        if isinstance(results, dict):
-            if 'flights' in results and results['flights']:
-                st.dataframe(results['flights'])
-            elif 'error' in results:
-                st.error(results['error'])
-            else:
-                st.json(results)
+        if isinstance(results, dict) and 'result_text' in results:
+            st.text_area("검색 결과", results['result_text'], height=300)
+        else:
+            st.text(str(results))
     else:
         st.info("항공편을 검색하여 결과를 확인하세요.")
 

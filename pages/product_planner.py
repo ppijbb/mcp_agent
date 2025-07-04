@@ -40,9 +40,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "🚀 Product Planner Agent",
-        "Figma 디자인을 분석하여 시장 조사, 전략, 실행 계획까지 한번에 수립합니다.",
-        "pages/product_planner.py"
+        agent_name="Product Planner Agent",
+        page_icon="🚀",
+        page_type="product",
+        title="Product Planner Agent",
+        subtitle="Figma 디자인을 분석하여 시장 조사, 전략, 실행 계획까지 한번에 수립합니다.",
+        module_path="srcs.product_planner_agent.run_product_planner"
     )
     result_placeholder = st.empty()
 
@@ -64,7 +67,7 @@ def main():
         if not figma_url or "figma.com" not in figma_url:
             st.warning("유효한 Figma URL을 입력해주세요.")
         else:
-            reports_path = get_reports_path('product_planner')
+            reports_path = Path(get_reports_path('product_planner'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"planner_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

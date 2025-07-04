@@ -93,9 +93,12 @@ def display_results(result_data):
 def main():
     """드론 스카우트 에이전트 페이지 메인 함수"""
     create_agent_page(
-        "🛸 Drone Scout Agent",
-        "자연어 임무를 입력하여 자율 드론 정찰을 시작합니다.",
-        "pages/drone_scout.py"
+        agent_name="Drone Scout Agent",
+        page_icon="🛸",
+        page_type="drone",
+        title="Drone Scout Agent",
+        subtitle="자연어 임무를 입력하여 자율 드론 정찰을 시작합니다.",
+        module_path="srcs.drone_scout.run_drone_scout"
     )
 
     result_placeholder = st.empty()
@@ -113,7 +116,7 @@ def main():
         if not mission_text:
             st.warning("Please enter mission details.")
         else:
-            reports_path = get_reports_path('drone_scout')
+            reports_path = Path(get_reports_path('drone_scout'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"drone_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

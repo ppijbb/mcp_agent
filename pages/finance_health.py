@@ -17,7 +17,7 @@ import yfinance as yf
 from typing import Dict, List, Any, Optional
 import os
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -481,27 +481,21 @@ def render_real_finance_agent(save_to_file=False):
                 st.warning("모든 필수 정보를 입력해주세요.")
         with col2:
             if 'finance_command' in st.session_state:
-                st.info("🔄 Finance Health Agent 실행 중...")
-                process = Process(
-                    st.session_state['finance_command'],
-                    output_file=None
-                ).start()
-                spm.st_process_monitor(
-                    process,
-                    label="재무 분석"
-                ).loop_until_finished()
-                # 결과 파일 읽기 및 표시
-                try:
-                    with open(st.session_state['finance_result_json_path'], 'r', encoding='utf-8') as f:
-                        result = json.load(f)
+                placeholder = st.empty()
+                result = run_agent_process(
+                    placeholder=placeholder,
+                    command=st.session_state['finance_command'],
+                    process_key_prefix="finance_health",
+                    log_expander_title="재무 분석 실행 로그"
+                )
+                
+                if result:
                     if result.get('status') == 'success':
-                        st.success("✅ Finance Health Agent 실행 완료!")
                         display_analysis_results(result, save_to_file)
                     else:
                         st.error("❌ 실행 중 오류 발생")
                         st.error(f"**오류**: {result.get('error', 'Unknown error')}")
-                except Exception as e:
-                    st.error(f"결과 파일을 읽는 중 오류 발생: {e}")
+                
                 # 실행 후 상태 초기화
                 del st.session_state['finance_command']
                 del st.session_state['finance_result_json_path']

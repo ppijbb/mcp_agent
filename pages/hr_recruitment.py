@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
@@ -64,9 +64,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "📄 HR Recruitment Agent",
-        "AI 기반 채용 프로세스 자동화 및 최적화 솔루션",
-        "pages/hr_recruitment.py"
+        agent_name="HR Recruitment Agent",
+        page_icon="👥",
+        page_type="hr",
+        title="HR Recruitment Agent",
+        subtitle="AI 기반 채용 프로세스 자동화 및 최적화 솔루션",
+        module_path="srcs.enterprise_agents.hr_recruitment_agent"
     )
     result_placeholder = st.empty()
 
@@ -88,7 +91,7 @@ def main():
         if not position.strip() or not company.strip():
             st.warning("포지션과 회사명을 모두 입력해주세요.")
         else:
-            reports_path = get_reports_path('recruitment')
+            reports_path = Path(get_reports_path('recruitment'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"recruitment_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             

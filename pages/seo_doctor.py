@@ -52,9 +52,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "🩺 SEO Doctor Agent",
-        "웹사이트를 정밀 진단하고 검색 엔진 최적화(SEO)를 위한 처방을 내립니다.",
-        "pages/seo_doctor.py"
+        agent_name="SEO Doctor Agent",
+        page_icon="🏥",
+        page_type="seo",
+        title="SEO Doctor Agent",
+        subtitle="웹사이트를 정밀 진단하고 검색 엔진 최적화(SEO)를 위한 처방을 내립니다.",
+        module_path="srcs.seo_doctor.run_seo_doctor"
     )
     result_placeholder = st.empty()
 
@@ -77,7 +80,7 @@ def main():
         if not url or "http" not in url:
             st.warning("유효한 URL을 입력해주세요. (http:// 또는 https:// 포함)")
         else:
-            reports_path = get_reports_path('seo_doctor')
+            reports_path = Path(get_reports_path('seo_doctor'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"seo_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

@@ -55,9 +55,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "🧬 Evolutionary AI Architect",
-        "진화 알고리즘을 사용하여 주어진 문제에 대한 최적의 AI 아키텍처를 설계합니다.",
-        "pages/ai_architect.py"
+        agent_name="Evolutionary AI Architect",
+        page_icon="🏗️",
+        page_type="architect",
+        title="AI Architect Agent",
+        subtitle="진화 알고리즘을 사용하여 주어진 문제에 대한 최적의 AI 아키텍처를 설계합니다.",
+        module_path="srcs.evolutionary_ai_architect.run_ai_architect_agent"
     )
     result_placeholder = st.empty()
 
@@ -79,7 +82,7 @@ def main():
         if not problem_description.strip():
             st.warning("문제 설명을 입력해주세요.")
         else:
-            reports_path = get_reports_path('ai_architect')
+            reports_path = Path(get_reports_path('ai_architect'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"architecture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             

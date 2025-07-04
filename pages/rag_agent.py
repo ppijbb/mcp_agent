@@ -18,9 +18,12 @@ from srcs.basic_agents.rag_agent import get_qdrant_status
 
 def main():
     create_agent_page(
-        "💬 RAG Agent",
-        "Qdrant 벡터 데이터베이스와 연동하여 질문에 답변하는 RAG 챗봇",
-        "pages/rag_agent.py"
+        agent_name="RAG Agent",
+        page_icon="📝",
+        page_type="rag",
+        title="RAG Agent",
+        subtitle="Qdrant 벡터 데이터베이스와 연동하여 질문에 답변하는 RAG 챗봇",
+        module_path="srcs.basic_agents.rag_agent"
     )
 
     # Qdrant 서버 상태 확인
@@ -54,7 +57,7 @@ def main():
         with st.chat_message("assistant"):
             result_placeholder = st.empty()
             
-            reports_path = get_reports_path('rag')
+            reports_path = Path(get_reports_path('rag'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"rag_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

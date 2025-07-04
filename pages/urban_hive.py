@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+from srcs.common.ui_utils import run_agent_process
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -96,7 +96,7 @@ def main():
             st.chat_message("user").write(prompt)
 
             with st.chat_message("assistant"):
-                reports_path = get_reports_path('urban_hive')
+                reports_path = Path(get_reports_path('urban_hive'))
                 reports_path.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 result_json_path = reports_path / f"urban_hive_result_{timestamp}.json"
@@ -110,35 +110,20 @@ def main():
                 
                 process_key = f"urban_hive_{timestamp}"
 
-                with st.spinner("🏙️ 도시 데이터 분석을 시작합니다..."):
-                    log_expander = st.expander("실시간 실행 로그", expanded=True)
-                    log_container = log_expander.empty()
-                    log_container.info("프로세스 초기화 중...")
-
-                    process = Process(command, key=process_key).start()
-                    
-                    monitor_placeholder = log_container.container()
-                    for stdout_line in process.read_stdout_live(auto_close=True):
-                        monitor_placeholder.code(stdout_line, language="log")
-                    
-                    return_code = process.wait()
-
-                if return_code == 0:
-                    st.success("✅ 도시 분석 완료!")
-                    try:
-                        with open(result_json_path, 'r', encoding='utf-8') as f:
-                            result_data = json.load(f)
-                        
-                        response_md = format_urban_hive_output(result_data)
-                        st.markdown(response_md)
-                        st.session_state["messages"].append({"role": "assistant", "content": response_md})
-
-                    except Exception as e:
-                        error_msg = f"결과를 처리하는 중 예기치 않은 오류가 발생했습니다: {e}"
-                        st.error(error_msg)
-                        st.session_state["messages"].append({"role": "assistant", "content": error_msg})
+                placeholder = st.empty()
+                result = run_agent_process(
+                    placeholder=placeholder,
+                    command=command,
+                    process_key_prefix="urban_hive",
+                    log_expander_title="실시간 실행 로그"
+                )
+                
+                if result:
+                    response_md = format_urban_hive_output(result)
+                    st.markdown(response_md)
+                    st.session_state["messages"].append({"role": "assistant", "content": response_md})
                 else:
-                    error_msg = f"❌ 에이전트 실행에 실패했습니다. (Return Code: {return_code})"
+                    error_msg = "❌ 에이전트 실행에 실패했습니다."
                     st.error(error_msg)
                     st.session_state["messages"].append({"role": "assistant", "content": error_msg})
 

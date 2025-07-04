@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 import json
 import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
+
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -64,9 +64,12 @@ def display_results(result_data):
 
 def main():
     create_agent_page(
-        "📈 Business Strategy Agent",
-        "AI 기반 비즈니스 전략 수립 및 시장 분석 플랫폼",
-        "pages/business_strategy.py"
+        agent_name="Business Strategy Agent",
+        page_icon="🎯",
+        page_type="business",
+        title="Business Strategy Agent",
+        subtitle="AI 기반 비즈니스 전략 수립 및 시장 분석 플랫폼",
+        module_path="srcs.business_strategy_agents.run_business_strategy_agents"
     )
 
     result_placeholder = st.empty()
@@ -95,7 +98,7 @@ def main():
         if not keywords_input.strip():
             st.warning("핵심 키워드를 입력해주세요.")
         else:
-            reports_path = get_reports_path('business_strategy')
+            reports_path = Path(get_reports_path('business_strategy'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"strategy_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             
