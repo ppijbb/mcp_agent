@@ -98,7 +98,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder,
                 command=command,
-                process_key_prefix="ai_architect"
+                process_key_prefix="logs/ai_architect"
             )
 
             if result:

@@ -316,7 +316,7 @@ def execute_detailed_data_agent_process(agent_method: str, config: dict):
             result = run_agent_process(
                 placeholder=placeholder,
                 command=command,
-                process_key_prefix="detailed_data_agent",
+                process_key_prefix="logs/detailed_data_agent",
                 log_expander_title="실시간 실행 로그"
             )
             

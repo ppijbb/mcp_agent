@@ -115,7 +115,7 @@ def render_research_agent_interface():
         result = run_agent_process(
             placeholder=placeholder,
             command=command,
-            process_key_prefix="research",
+            process_key_prefix="logs/research",
             log_expander_title="실시간 실행 로그"
         )
         

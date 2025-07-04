@@ -143,7 +143,7 @@ if task_to_run:
     result = run_agent_process(
         placeholder=placeholder,
         command=command,
-        process_key_prefix="travel_scout",
+        process_key_prefix="logs/travel_scout",
         log_expander_title="실시간 실행 로그"
     )
     

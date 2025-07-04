@@ -285,7 +285,7 @@ def execute_workflow_process(task: str, model_name: str, plan_type: str):
     result = run_agent_process(
         placeholder=placeholder,
         command=command,
-        process_key_prefix="workflow",
+        process_key_prefix="logs/workflow",
         log_expander_title="실시간 실행 로그"
     )
     

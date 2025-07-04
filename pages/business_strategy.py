@@ -125,7 +125,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder, 
                 command=command, 
-                process_key_prefix="business_strategy"
+                process_key_prefix="logs/business_strategy"
             )
 
             if result and "data" in result:

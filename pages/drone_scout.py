@@ -130,7 +130,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder,
                 command=command,
-                process_key_prefix="drone_scout"
+                process_key_prefix="logs/drone_scout"
             )
 
             if result and "data" in result:

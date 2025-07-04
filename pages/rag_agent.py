@@ -78,7 +78,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder,
                 command=command,
-                process_key_prefix="rag_agent"
+                process_key_prefix="logs/rag_agent"
             )
             
             response_text = "죄송합니다, 답변을 생성하는 데 실패했습니다."

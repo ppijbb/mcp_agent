@@ -114,7 +114,7 @@ def main():
                 result = run_agent_process(
                     placeholder=placeholder,
                     command=command,
-                    process_key_prefix="urban_hive",
+                    process_key_prefix="logs/urban_hive",
                     log_expander_title="실시간 실행 로그"
                 )
                 

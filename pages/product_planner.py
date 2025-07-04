@@ -81,7 +81,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder,
                 command=command,
-                process_key_prefix="product_planner"
+                process_key_prefix="logs/product_planner"
             )
 
             if result and "data" in result:

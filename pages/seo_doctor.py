@@ -100,7 +100,7 @@ def main():
             result = run_agent_process(
                 placeholder=result_placeholder,
                 command=command,
-                process_key_prefix="seo_doctor"
+                process_key_prefix="logs/seo_doctor"
             )
 
             if result and "data" in result:
