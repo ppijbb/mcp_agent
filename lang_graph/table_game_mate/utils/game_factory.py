@@ -10,9 +10,11 @@ from enum import Enum
 from dataclasses import dataclass
 import json
 import os
+import uuid
 
-from ..models.game_state import GameMetadata, GameType
-from ..models.persona import PersonaType
+from ..models.game_state import GameMetadata, GameType, GameState, GamePhase
+from ..models.persona import PersonaArchetype
+from ..models.action import ActionType
 
 
 class GameComplexity(Enum):
@@ -45,7 +47,7 @@ class GameTemplate:
     player_elimination: bool = False
     
     # 추천 페르소나 타입
-    recommended_personas: List[PersonaType] = None
+    recommended_personas: List[PersonaArchetype] = None
     
     # 특수 규칙 힌트
     special_mechanics: List[str] = None
@@ -53,7 +55,7 @@ class GameTemplate:
     
     def __post_init__(self):
         if self.recommended_personas is None:
-            self.recommended_personas = [PersonaType.CASUAL, PersonaType.STRATEGIC]
+            self.recommended_personas = [PersonaArchetype.CASUAL, PersonaArchetype.STRATEGIC]
         if self.special_mechanics is None:
             self.special_mechanics = []
         if self.victory_conditions is None:
@@ -90,7 +92,7 @@ class GameFactory:
             ai_risk_tolerance=0.4,
             hidden_information=False,
             player_elimination=True,
-            recommended_personas=[PersonaType.STRATEGIC, PersonaType.ANALYTICAL],
+            recommended_personas=[PersonaArchetype.STRATEGIC, PersonaArchetype.ANALYTICAL],
             special_mechanics=["체크", "캐슬링", "앙파상"],
             victory_conditions=["체크메이트", "시간 승부"]
         )
@@ -104,7 +106,7 @@ class GameFactory:
             estimated_duration=5,
             ai_decision_time=1.0,
             ai_creativity_factor=0.3,
-            recommended_personas=[PersonaType.CASUAL],
+            recommended_personas=[PersonaArchetype.CASUAL],
             victory_conditions=["3개 연속 배치"]
         )
         
@@ -120,7 +122,7 @@ class GameFactory:
             ai_risk_tolerance=0.6,
             hidden_information=True,
             player_elimination=True,
-            recommended_personas=[PersonaType.SOCIAL, PersonaType.DECEPTIVE, PersonaType.ANALYTICAL],
+            recommended_personas=[PersonaArchetype.SOCIAL, PersonaArchetype.DECEPTIVE, PersonaArchetype.ANALYTICAL],
             special_mechanics=["투표", "역할 공개", "밤 페이즈"],
             victory_conditions=["마피아 전멸", "마피아가 시민과 동수"]
         )
@@ -136,7 +138,7 @@ class GameFactory:
             ai_risk_tolerance=0.7,
             hidden_information=True,
             player_elimination=True,
-            recommended_personas=[PersonaType.AGGRESSIVE, PersonaType.STRATEGIC, PersonaType.SOCIAL],
+            recommended_personas=[PersonaArchetype.AGGRESSIVE, PersonaArchetype.STRATEGIC, PersonaArchetype.SOCIAL],
             special_mechanics=["거리 제한", "역할 카드", "장비 카드"],
             victory_conditions=["역할별 승리 조건"]
         )
@@ -151,7 +153,7 @@ class GameFactory:
             estimated_duration=90,
             ai_creativity_factor=0.6,
             ai_risk_tolerance=0.5,
-            recommended_personas=[PersonaType.STRATEGIC, PersonaType.DIPLOMATIC],
+            recommended_personas=[PersonaArchetype.STRATEGIC, PersonaArchetype.DIPLOMATIC],
             special_mechanics=["자원 수집", "교역", "도적"],
             victory_conditions=["10점 달성"]
         )
@@ -369,6 +371,44 @@ class GameFactory:
                 
         except Exception as e:
             print(f"⚠️ 커스텀 템플릿 저장 실패: {e}")
+
+    @classmethod
+    def create_game_from_info(cls, game_info: 'GameInfo') -> GameState:
+        # Implementation of create_game_from_info method
+        pass
+
+    @classmethod
+    def create_avalon(cls) -> GameState:
+        return cls.create_game_from_info(
+            GameInfo(
+                game_id="avalon",
+                name="아발론",
+                description="아서왕의 기사들과 모드레드의 하수인 간의 숨막히는 심리전",
+                player_count=10,
+                avg_play_time=45,
+                game_mechanics=["Social Deduction", "Hidden Roles", "Team-Based"],
+                recommended_personas=[PersonaArchetype.AGGRESSIVE, PersonaArchetype.STRATEGIC, PersonaArchetype.SOCIAL],
+            )
+        )
+
+    @classmethod
+    def create_uno(cls) -> GameState:
+        return cls.create_game_from_info(
+            GameInfo(
+                game_id="uno",
+                name="우노",
+                description="같은 색이나 숫자의 카드를 내는 간단한 카드 게임",
+                player_count=4,
+                avg_play_time=20,
+                game_mechanics=["Hand Management", "Matching"],
+                recommended_personas=[PersonaArchetype.CASUAL],
+            )
+        )
+    
+    @classmethod
+    def create_custom_game(cls, name: str, description: str, player_count: int = 4) -> GameState:
+        # Implementation of create_custom_game method
+        pass
 
 
 # 전역 팩토리 인스턴스

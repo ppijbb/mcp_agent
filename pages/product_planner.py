@@ -53,6 +53,7 @@ def main():
     figma_api_key = env.get("FIGMA_API_KEY")
     if not figma_api_key:
         st.error("FIGMA_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 확인해주세요.")
+        st.info("Product Planner Agent는 Figma API 키가 있어야 실행할 수 있습니다.")
         st.stop()
 
     with st.form("product_planner_form"):

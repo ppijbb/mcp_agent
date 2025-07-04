@@ -23,7 +23,7 @@ def main():
         page_type="rag",
         title="RAG Agent",
         subtitle="Qdrant 벡터 데이터베이스와 연동하여 질문에 답변하는 RAG 챗봇",
-        module_path="srcs.basic_agents.rag_agent"
+        module_path="srcs.basic_agents.run_rag_agent"
     )
 
     # Qdrant 서버 상태 확인
@@ -56,30 +56,31 @@ def main():
         # UI에 즉시 로딩 스피너 표시
         with st.chat_message("assistant"):
             result_placeholder = st.empty()
-            
-            reports_path = Path(get_reports_path('rag'))
-            reports_path.mkdir(parents=True, exist_ok=True)
-            result_json_path = reports_path / f"rag_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with result_placeholder.container():
+                with st.spinner("답변 생성 중..."):
+                    reports_path = Path(get_reports_path('rag'))
+                    reports_path.mkdir(parents=True, exist_ok=True)
+                    result_json_path = reports_path / f"rag_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            # 이전 대화 기록 (마지막 응답 제외)
-            history = [msg for msg in st.session_state.rag_messages if msg['role'] != 'assistant']
+                    # 이전 대화 기록 (마지막 응답 제외)
+                    history = [msg for msg in st.session_state.rag_messages if msg['role'] != 'assistant']
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.basic_agents.run_rag_agent",
-                "--query", prompt,
-                "--history", json.dumps(history),
-                "--result-json-path", str(result_json_path)
-            ]
-            
-            # run_agent_process는 자체적으로 spinner를 표시하지만, 
-            # 여기서는 chat_message 컨텍스트 내에서 결과를 바로 표시하기 위해
-            # placeholder를 사용합니다.
-            result = run_agent_process(
-                placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/rag_agent"
-            )
+                    py_executable = sys.executable
+                    command = [
+                        py_executable, "-m", "srcs.basic_agents.run_rag_agent",
+                        "--query", prompt,
+                        "--history", json.dumps(history),
+                        "--result-json-path", str(result_json_path)
+                    ]
+                    
+                    # run_agent_process는 자체적으로 spinner를 표시하지만, 
+                    # 여기서는 chat_message 컨텍스트 내에서 결과를 바로 표시하기 위해
+                    # placeholder를 사용합니다.
+                    result = run_agent_process(
+                        placeholder=st.empty(), # ui_utils의 spinner를 숨기기 위해 빈 컨테이너 전달
+                        command=command,
+                        process_key_prefix="logs/rag_agent"
+                    )
             
             response_text = "죄송합니다, 답변을 생성하는 데 실패했습니다."
             if result and "data" in result and "response" in result["data"]:

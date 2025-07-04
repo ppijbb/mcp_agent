@@ -148,10 +148,13 @@ if task_to_run:
     )
     
     if result:
+        # 결과에서 텍스트 추출 (결과는 {'result_text': '...'} 형태일 수 있음)
+        result_text = result.get('result_text', str(result))
+
         if task_to_run == 'search_hotels':
-            st.session_state.hotel_results = result
+            st.session_state.hotel_results = result_text
         else:
-            st.session_state.flight_results = result
+            st.session_state.flight_results = result_text
         
         # 스크린샷 경로는 output 디렉토리에서 찾기
         screenshot_files = []
@@ -159,8 +162,6 @@ if task_to_run:
             screenshot_files.extend(Path(run_output_dir).glob(ext))
         st.session_state.screenshots = [str(f) for f in screenshot_files]
     
-    st.rerun()
-
 # --- 📊 검색 결과 표시 ---
 st.markdown("---")
 st.markdown("## 📊 Search Results")
@@ -170,22 +171,14 @@ res1, res2 = st.columns(2)
 with res1:
     st.markdown("#### 🏨 Hotel Results")
     if st.session_state.hotel_results:
-        results = st.session_state.hotel_results
-        if isinstance(results, dict) and 'result_text' in results:
-            st.text_area("검색 결과", results['result_text'], height=300)
-        else:
-            st.text(str(results))
+        st.text_area("검색 결과", st.session_state.hotel_results, height=300)
     else:
         st.info("호텔을 검색하여 결과를 확인하세요.")
 
 with res2:
     st.markdown("#### ✈️ Flight Results")
     if st.session_state.flight_results:
-        results = st.session_state.flight_results
-        if isinstance(results, dict) and 'result_text' in results:
-            st.text_area("검색 결과", results['result_text'], height=300)
-        else:
-            st.text(str(results))
+        st.text_area("검색 결과", st.session_state.flight_results, height=300)
     else:
         st.info("항공편을 검색하여 결과를 확인하세요.")
 

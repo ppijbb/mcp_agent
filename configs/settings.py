@@ -17,6 +17,7 @@ AGENT_REPORT_PATHS = {
     'ai_architect': 'ai_architect_reports',
     'business_strategy': 'business_strategy_reports', 
     'cybersecurity': 'cybersecurity_infrastructure_reports',
+    'decision': 'decision_reports',
     'data_generator': 'data_generator_reports',
     'decision_agent': 'decision_agent_reports',
     'finance_health': 'finance_health_reports',

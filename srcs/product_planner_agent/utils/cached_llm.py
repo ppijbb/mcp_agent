@@ -45,9 +45,8 @@ class CachedLLM:
         """Cache-aware generate_str. If stream=True, just forward to base LLM (no cache)."""
         # If streaming requested, bypass cache (streaming responses are unique)
         if stream:
-            async for chunk in self._llm.generate_str(prompt, request_params=request_params, stream=True):
-                yield chunk
-            return
+            # Delegate streaming call directly
+            return await self._llm.generate_str(prompt, request_params=request_params, stream=True)
 
         key: Tuple[str, str] = (prompt, str(request_params))
         if key in self._cache:

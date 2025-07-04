@@ -10,10 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any, Callable
 
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
-from mcp_agent.workflows.planner.react_planner import ReActPlanner
-from mcp_agent.mcp.mcp_aggregator import MCPAggregator
+from srcs.basic_agents.workflow_orchestration import Orchestrator, OpenAIAugmentedLLM
 
 from .cached_llm import CachedLLM
 
@@ -27,25 +24,19 @@ def get_orchestrator() -> Orchestrator:
 
     # ---------- LLM Factory with caching ----------
     def llm_factory():
-        base_llm = GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
+        base_llm = OpenAIAugmentedLLM(model="gpt-4o-mini")
         return CachedLLM(base_llm)
 
     # ---------- Planner with iteration limit ----------
     max_turns = int(os.getenv("AGENT_MAX_TURNS", 20))
-    planner = ReActPlanner(max_iterations=max_turns)
-
+    
     # ---------- Optional Aggregator for fetch+filesystem ----------
     aggregator = None
-    if os.getenv("AGENT_USE_AGGREGATOR", "0") == "1":
-        try:
-            aggregator = MCPAggregator(server_names=["fetch", "filesystem"])
-        except Exception:
-            aggregator = None  # Fallback if servers unavailable
 
     _ORCHESTRATOR_CACHE = Orchestrator(
         llm_factory=llm_factory,
         available_agents=[],  # Agents will register later
-        planner=planner,
+        plan_type='react',
         durable=bool(int(os.getenv("AGENT_DURABLE", "0"))),
         max_loops=max_turns,
         server_registry=aggregator,

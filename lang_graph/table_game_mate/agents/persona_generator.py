@@ -7,8 +7,11 @@
 from typing import Dict, List, Any, Optional
 import json
 import random
+import re
 from ..core.agent_base import BaseAgent
-from ..models.persona import PersonaType, PersonaProfile
+from ..models.persona import PersonaArchetype, PersonaProfile
+from ..models.llm import LLMResponse, ParsedLLMResponse
+from ..utils.llm_utils import get_llm_client
 
 
 class PersonaGeneratorAgent(BaseAgent):
@@ -203,7 +206,7 @@ class PersonaGeneratorAgent(BaseAgent):
                 profile = PersonaProfile(
                     persona_id=f"ai_player_{i+1}",
                     name=persona_data.get("name", f"플레이어 {i+1}"),
-                    persona_type=PersonaType(persona_data.get("type", "casual")),
+                    archetype=PersonaArchetype(persona_data.get("type", "casual")),
                     personality_traits=persona_data.get("personality_traits", ["balanced"]),
                     decision_style=persona_data.get("decision_style", "균형잡힌 의사결정"),
                     risk_preference=persona_data.get("risk_preference", 5),
@@ -211,7 +214,9 @@ class PersonaGeneratorAgent(BaseAgent):
                     aggression_level=persona_data.get("aggression_level", 5),
                     adaptability=persona_data.get("adaptability", 5),
                     game_focus=persona_data.get("game_focus", "overall_strategy"),
-                    catchphrase=persona_data.get("catchphrase", "좋은 게임이네요!")
+                    catchphrase=persona_data.get("catchphrase", "좋은 게임이네요!"),
+                    communication_style=persona_data.get("communication_style"),
+                    background_story=persona_data.get("background_story")
                 )
                 persona_profiles.append(profile)
             except Exception as e:
@@ -255,7 +260,9 @@ class PersonaGeneratorAgent(BaseAgent):
                 "aggression_level": {"minimal": 2, "social": 6, "confrontational": 8, "responsive": 5, "chaotic": 7}.get(base_template["interaction_style"], 5),
                 "adaptability": 5,
                 "game_focus": "general_strategy",
-                "catchphrase": f"{base_template['name']}답게 플레이하겠습니다!"
+                "catchphrase": f"{base_template['name']}답게 플레이하겠습니다!",
+                "communication_style": base_template.get("communication_style"),
+                "background_story": base_template.get("background_story")
             }
             fallback_personas.append(persona)
         
@@ -273,7 +280,9 @@ class PersonaGeneratorAgent(BaseAgent):
             "aggression_level": max(1, min(10, persona_data.get("aggression_level", 5))),
             "adaptability": max(1, min(10, persona_data.get("adaptability", 5))),
             "game_focus": persona_data.get("game_focus", "general_strategy"),
-            "catchphrase": persona_data.get("catchphrase", "재미있는 게임이네요!")
+            "catchphrase": persona_data.get("catchphrase", "재미있는 게임이네요!"),
+            "communication_style": persona_data.get("communication_style"),
+            "background_story": persona_data.get("background_story")
         }
         
         # 타입이 유효하지 않으면 기본값 사용
@@ -287,7 +296,7 @@ class PersonaGeneratorAgent(BaseAgent):
         return PersonaProfile(
             persona_id=f"default_ai_{index+1}",
             name=f"기본 AI {index+1}",
-            persona_type=PersonaType.CASUAL,
+            archetype=PersonaArchetype.CASUAL,
             personality_traits=["balanced", "friendly"],
             decision_style="균형잡힌 의사결정",
             risk_preference=5,
@@ -295,7 +304,9 @@ class PersonaGeneratorAgent(BaseAgent):
             aggression_level=3,
             adaptability=6,
             game_focus="general_strategy",
-            catchphrase="함께 즐거운 게임을 해봅시다!"
+            catchphrase="함께 즐거운 게임을 해봅시다!",
+            communication_style="friendly",
+            background_story="게임을 즐기는 평범한 플레이어입니다."
         )
     
     def _analyze_persona_balance(self, personas: List[PersonaProfile]) -> Dict[str, Any]:
@@ -322,7 +333,7 @@ class PersonaGeneratorAgent(BaseAgent):
                 "adaptability": avg_adapt
             },
             "diversity_score": risk_diversity,
-            "persona_types": [p.persona_type.value for p in personas],
+            "persona_types": [p.archetype.value for p in personas],
             "recommendations": self._get_balance_recommendations(avg_risk, avg_coop, avg_aggr, risk_diversity)
         }
     

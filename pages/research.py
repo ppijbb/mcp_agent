@@ -129,7 +129,7 @@ def render_research_agent_interface():
 
 
 def display_research_results(result: dict):
-    """연구 결과 표시"""
+    """연구 결과 표시 (탭 형식으로 개선)"""
     st.markdown("---")
     st.markdown("#### 📊 실행 결과 요약")
     
@@ -146,15 +146,38 @@ def display_research_results(result: dict):
         st.markdown("#### 📄 생성된 연구 보고서")
         content = result['content']
         
-        with st.container(border=True):
-            st.markdown(content)
+        # Markdown 내용을 섹션별로 분리
+        sections = content.split('## ')
         
+        # 첫 번째 요소는 보통 제목 이전의 내용이므로, 비어있지 않으면 '소개'로 처리
+        tabs_data = {}
+        if sections[0].strip():
+            tabs_data["소개"] = sections[0]
+        
+        for section in sections[1:]:
+            parts = section.split('\\n', 1)
+            title = parts[0].strip().replace('#', '')
+            body = parts[1].strip() if len(parts) > 1 else ""
+            if title:
+                tabs_data[title] = "## " + section # 원래 마크다운 형식 유지
+
+        # '전체 보고서' 탭 추가
+        tabs_data["전체 보고서 보기"] = content
+
+        tab_titles = list(tabs_data.keys())
+        tabs = st.tabs(tab_titles)
+        
+        for i, title in enumerate(tab_titles):
+            with tabs[i]:
+                st.markdown(tabs_data[title])
+
         st.download_button(
             label="📥 연구 결과 전문 다운로드 (.md)",
             data=content,
             file_name=f"research_report_{result.get('topic', 'untitled').replace(' ', '_')}.md",
             mime="text/markdown",
-            use_container_width=True
+            use_container_width=True,
+            key="research_download"
         )
 
     with st.expander("🔍 상세 실행 정보 (JSON)"):

@@ -97,8 +97,7 @@ def main():
         page_icon="🛸",
         page_type="drone",
         title="Drone Scout Agent",
-        subtitle="자연어 임무를 입력하여 자율 드론 정찰을 시작합니다.",
-        module_path="srcs.drone_scout.run_drone_scout"
+        subtitle="자연어 임무를 입력하여 자율 드론 정찰을 시작합니다."
     )
 
     result_placeholder = st.empty()

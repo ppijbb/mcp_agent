@@ -11,7 +11,11 @@ import random
 from datetime import datetime
 
 from ..core.agent_base import BaseAgent
-from ..models.persona import PersonaProfile, PersonaType
+from ..core.action_executor import ActionExecutor
+from ..models.game_state import GameState, GamePhase
+from ..models.persona import PersonaProfile, PersonaArchetype
+from ..models.action import Action, ActionType, ActionContext
+from ..models.llm import LLMResponse, ParsedLLMResponse
 from ..models.game_state import GameAction, PlayerInfo
 
 
@@ -62,25 +66,25 @@ class PlayerAgent(BaseAgent):
         }
         
         # 페르소나 타입별 특화 전략
-        if self.persona.persona_type == PersonaType.AGGRESSIVE:
+        if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
             base_strategy.update({
                 "preferred_actions": ["attack", "challenge", "compete"],
                 "avoid_actions": ["cooperate", "defend", "wait"],
                 "interaction_style": "confrontational"
             })
-        elif self.persona.persona_type == PersonaType.STRATEGIC:
+        elif self.persona.archetype == PersonaArchetype.STRATEGIC:
             base_strategy.update({
                 "preferred_actions": ["analyze", "plan", "optimize"],
                 "avoid_actions": ["random", "impulsive"],
                 "interaction_style": "calculated"
             })
-        elif self.persona.persona_type == PersonaType.SOCIAL:
+        elif self.persona.archetype == PersonaArchetype.SOCIAL:
             base_strategy.update({
                 "preferred_actions": ["cooperate", "negotiate", "alliance"],
                 "avoid_actions": ["isolate", "betray"],
                 "interaction_style": "collaborative"
             })
-        elif self.persona.persona_type == PersonaType.CASUAL:
+        elif self.persona.archetype == PersonaArchetype.CASUAL:
             base_strategy.update({
                 "preferred_actions": ["simple", "fun", "balanced"],
                 "avoid_actions": ["complex", "stressful"],
@@ -432,7 +436,7 @@ class PlayerAgent(BaseAgent):
         threats = situation.get("immediate_threats", [])
         
         # 페르소나별 해석
-        if self.persona.persona_type == PersonaType.AGGRESSIVE:
+        if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
             if winning_prob < 0.4:
                 interpretation["situation_assessment"] = "도전적인 상황, 공격적 행동 필요"
                 interpretation["strategic_priority"] = "적극적 공격"
@@ -440,12 +444,12 @@ class PlayerAgent(BaseAgent):
                 interpretation["situation_assessment"] = "우위 유지, 압박 지속"
                 interpretation["strategic_priority"] = "주도권 유지"
         
-        elif self.persona.persona_type == PersonaType.STRATEGIC:
+        elif self.persona.archetype == PersonaArchetype.STRATEGIC:
             interpretation["situation_assessment"] = f"현재 {my_position.get('rank', '?')}위, 분석적 접근 필요"
             interpretation["strategic_priority"] = "최적화된 선택"
             interpretation["risk_assessment"] = "계산된 위험만 감수"
         
-        elif self.persona.persona_type == PersonaType.SOCIAL:
+        elif self.persona.archetype == PersonaArchetype.SOCIAL:
             if len(threats) > 1:
                 interpretation["situation_assessment"] = "협력이 필요한 상황"
                 interpretation["strategic_priority"] = "동맹 구축"
@@ -453,7 +457,7 @@ class PlayerAgent(BaseAgent):
                 interpretation["situation_assessment"] = "안정적 관계 유지"
                 interpretation["strategic_priority"] = "상호 이익"
         
-        elif self.persona.persona_type == PersonaType.CASUAL:
+        elif self.persona.archetype == PersonaArchetype.CASUAL:
             interpretation["situation_assessment"] = "재미있는 게임 진행 중"
             interpretation["strategic_priority"] = "즐거운 플레이"
             interpretation["risk_assessment"] = "부담스럽지 않은 선택"
@@ -478,46 +482,53 @@ class PlayerAgent(BaseAgent):
         
         try:
             if self.llm_client:
-                # LLM 프롬프트 구성
-                prompt = f"""
-게임 상황 분석 및 행동 평가:
+                # 현재 페르소나와 게임 상태에 기반한 동적 프롬프트 생성
+                prompt = "당신은 보드게임 플레이어 AI입니다.\n"
+                
+                # 페르소나 유형에 따른 기본 지침 추가
+                if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
+                    prompt += "당신은 매우 공격적이고, 항상 승리를 위해 과감한 수를 둡니다. 다른 플레이어들을 견제하고 점수 획득을 최우선으로 생각하세요.\n"
+                elif self.persona.archetype == PersonaArchetype.STRATEGIC:
+                    prompt += "당신은 신중한 전략가입니다. 장기적인 관점에서 최적의 수를 계산하고, 효율적인 자원 관리를 통해 승리하세요.\n"
+                elif self.persona.archetype == PersonaArchetype.SOCIAL:
+                    prompt += "당신은 사교적인 플레이어입니다. 다른 플레이어와의 상호작용을 즐기며, 협상과 동맹을 통해 유리한 상황을 만드세요.\n"
+                elif self.persona.archetype == PersonaArchetype.CASUAL:
+                    prompt += "당신은 게임 자체를 즐기는 캐주얼 플레이어입니다. 너무 복잡한 계산보다는 재미있는 플레이를 선호합니다.\n"
+                
+                # 게임 상태 정보 추가
+                prompt += f"\n--- 현재 게임 정보 ---\n"
+                prompt += f"게임명: {game_state.game_name}\n"
+                prompt += f"현재 턴: {situation.get('turn_count', 0)}\n"
+                prompt += f"현재 점수: {self.player_info.score}\n"
+                prompt += f"현재 순위: {situation.get('my_position', {}).get('rank', '?')}위\n"
+                prompt += f"승리 확률: {situation.get('winning_probability', 0.5):.1%}\n"
+                prompt += f"위협 요소: {len(situation.get('immediate_threats', []))}개\n"
+                prompt += f"기회 요소: {len(situation.get('opportunities', []))}개\n"
+                
+                # 페르소나 기반 동적 프롬프트 생성
+                prompt = "당신은 AI 보드게임 플레이어입니다. 다른 플레이어의 행동에 대해 어떻게 생각하는지 말해주세요.\n"
 
-플레이어 정보:
-- 이름: {self.player_info.name}
-- 페르소나: {self.persona.persona_type.value}
-- 성격: {', '.join(self.persona.personality_traits)}
-- 의사결정 스타일: {self.persona.decision_style}
+                if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
+                    prompt += f"'{action.player_id}'의 행동은 나에게 위협적인가? 나의 승리에 방해가 되는가? 어떻게 대응해야 할까?\n"
+                elif self.persona.archetype == PersonaArchetype.SOCIAL:
+                    prompt += f"'{action.player_id}'의 행동은 우리에게 어떤 영향을 미칠까? 협력의 기회가 될 수 있을까, 아니면 경계해야 할까?\n"
+                
+                prompt += f"\n--- 방금 일어난 행동 ---\n"
+                prompt += f"플레이어: {action.player_id}\n"
+                
+                # 페르소나 기반 동적 프롬프트 생성
+                prompt = "당신은 AI 보드게임 플레이어입니다. 지금은 게임이 종료되었고, 다른 플레이어들과 대화를 나누는 상황입니다.\n"
 
-현재 상황:
-- 순위: {situation.get('my_position', {}).get('rank', '?')}위
-- 승리 확률: {situation.get('winning_probability', 0.5):.1%}
-- 위협 요소: {len(situation.get('immediate_threats', []))}개
-- 기회 요소: {len(situation.get('opportunities', []))}개
-
-페르소나 해석:
-- 상황 평가: {interpretation.get('situation_assessment', '')}
-- 전략 우선순위: {interpretation.get('strategic_priority', '')}
-
-사용 가능한 행동들: {', '.join(available_actions)}
-
-각 행동에 대해 다음을 JSON 형태로 평가해주세요:
-1. score (0-1): 이 상황에서 해당 행동의 적합도
-2. reasoning: 점수를 준 이유
-3. persona_alignment: 페르소나와의 일치도 (0-1)
-4. risk_level: 위험도 (low/medium/high)
-5. expected_outcome: 예상 결과
-
-응답 형식:
-{{
-    "action_name": {{
-        "score": 0.8,
-        "reasoning": "이유...",
-        "persona_alignment": 0.9,
-        "risk_level": "medium",
-        "expected_outcome": "예상 결과..."
-    }}
-}}
-"""
+                if self.persona.archetype == PersonaArchetype.SOCIAL:
+                    prompt += "사교적인 플레이어로서 게임이 아주 재미있었다고 말하며, 다음 게임을 기약하는 인사를 건네세요.\n"
+                elif self.persona.archetype == PersonaArchetype.AGGRESSIVE:
+                    prompt += "승부욕이 강한 플레이어로서, 이겼다면 승리를 자축하고, 졌다면 아쉬움을 표현하며 다음엔 꼭 이기겠다고 다짐하는 말을 하세요.\n"
+                elif self.persona.archetype == PersonaArchetype.DECEPTIVE:
+                    prompt += "정체를 숨기는 플레이어로서, 자신의 정체나 전략에 대해 모호하게 말하며 다른 플레이어들을 헷갈리게 하는 작별 인사를 하세요.\n"
+                else:
+                    prompt += "게임이 끝났습니다. 수고했다는 의미로 간단한 작별 인사를 하세요.\n"
+                
+                prompt += f"\n--- 최종 게임 결과 ---\n"
                 
                 llm_response = await self.llm_client.complete(prompt)
                 
@@ -573,10 +584,10 @@ class PlayerAgent(BaseAgent):
             base_score = 0.5
             
             # 행동 이름 기반 간단한 평가
-            if self.persona.persona_type == PersonaType.AGGRESSIVE:
+            if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
                 if any(word in action.lower() for word in ["attack", "challenge", "aggressive"]):
                     base_score = 0.8
-            elif self.persona.persona_type == PersonaType.SOCIAL:
+            elif self.persona.archetype == PersonaArchetype.SOCIAL:
                 if any(word in action.lower() for word in ["cooperate", "trade", "alliance"]):
                     base_score = 0.8
             elif action.lower() in ["pass", "wait", "observe"]:
@@ -585,7 +596,7 @@ class PlayerAgent(BaseAgent):
             evaluations[action] = {
                 "score": base_score,
                 "final_score": base_score,
-                "reasoning": f"기본 페르소나 평가: {self.persona.persona_type.value}",
+                "reasoning": f"기본 페르소나 평가: {self.persona.archetype.value}",
                 "persona_alignment": 0.6,
                 "risk_level": "medium",
                 "expected_outcome": "표준적인 결과 예상"
@@ -659,7 +670,7 @@ class PlayerAgent(BaseAgent):
             "action_data": {
                 "player_id": self.player_info.id,
                 "player_name": self.player_info.name,
-                "persona_type": self.persona.persona_type.value,
+                "persona_type": self.persona.archetype.value,
                 "confidence": reasoning.get("confidence", 0.5),
                 "reasoning_summary": reasoning.get("action_reasoning", {}).get("reasoning", ""),
                 "timestamp": datetime.now().isoformat()
@@ -718,7 +729,7 @@ class PlayerAgent(BaseAgent):
         interpretation = reasoning.get("situation_interpretation", {})
         strategic_priority = interpretation.get("strategic_priority", "")
         
-        return f"{self.persona.persona_type.value} 성향으로 {strategic_priority} 중심의 판단"
+        return f"{self.persona.archetype.value} 성향으로 {strategic_priority} 중심의 판단"
     
     def get_memory_summary(self) -> Dict[str, Any]:
         """게임 메모리 요약"""
@@ -729,7 +740,7 @@ class PlayerAgent(BaseAgent):
             "current_strategy": self.current_strategy,
             "recent_decisions": self.game_memory["decisions_made"][-3:],  # 최근 3개
             "persona_summary": {
-                "type": self.persona.persona_type.value,
+                "type": self.persona.archetype.value,
                 "traits": self.persona.personality_traits,
                 "decision_style": self.persona.decision_style
             }
@@ -747,11 +758,11 @@ class PlayerAgent(BaseAgent):
         self.game_memory["interactions"].append(interaction_record)
         
         # 페르소나 기반 상호작용 응답
-        if self.persona.persona_type == PersonaType.SOCIAL:
+        if self.persona.archetype == PersonaArchetype.SOCIAL:
             response_style = "cooperative"
-        elif self.persona.persona_type == PersonaType.AGGRESSIVE:
+        elif self.persona.archetype == PersonaArchetype.AGGRESSIVE:
             response_style = "competitive"
-        elif self.persona.persona_type == PersonaType.DECEPTIVE:
+        elif self.persona.archetype == PersonaArchetype.DECEPTIVE:
             response_style = "strategic"
         else:
             response_style = "neutral"
@@ -760,6 +771,6 @@ class PlayerAgent(BaseAgent):
             "interaction_response": f"{response_style} 방식으로 응답",
             "response_data": {
                 "style": response_style,
-                "persona_influence": self.persona.persona_type.value
+                "persona_influence": self.persona.archetype.value
             }
         } 
