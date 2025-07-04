@@ -144,7 +144,7 @@ def render_workflow_interface():
             )
 
         st.markdown("#### 🎛️ 실행 옵션")
-        model_name = st.selectbox("실행할 모델:", ["gpt-4o-mini"], key="model_name")
+        model_name = st.selectbox("실행할 모델:", ["gemini-2.5-flash-lite-preview-06-07"], key="model_name")
         plan_type = st.selectbox("플래닝 방식:", ["full", "step", "none"], key="plan_type")
 
         submitted = st.form_submit_button("🚀 워크플로우 실행", type="primary", use_container_width=True)

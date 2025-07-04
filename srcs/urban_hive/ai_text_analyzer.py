@@ -44,7 +44,7 @@ class AITextAnalyzer:
         try:
             import openai
             self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = "gpt-4o-mini"
+            self.model = "gemini-2.5-flash-lite-preview-06-07"
             self.llm_provider = "openai"
         except ImportError:
             print("No LLM client available")

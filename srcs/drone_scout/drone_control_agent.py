@@ -154,7 +154,7 @@ Your main goal is to interpret, plan, and execute the user's mission. Use your s
         try:
             agent_result_string = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             logger.info("Drone Scout workflow completed successfully.")
 

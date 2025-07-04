@@ -174,7 +174,7 @@ class CybersecurityAgent:
             logger.info(f"Starting cybersecurity infrastructure workflow for {COMPANY_NAME}")
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             logger.info("Cybersecurity infrastructure workflow completed successfully")
@@ -868,7 +868,7 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             logger.info("Cybersecurity infrastructure workflow completed successfully")

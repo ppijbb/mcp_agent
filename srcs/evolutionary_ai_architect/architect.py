@@ -266,7 +266,7 @@ class AIArchitectMCP:
             
             thought_result = await orchestrator.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Iteration {iteration} Thought: {thought_result[:200]}...")
@@ -282,7 +282,7 @@ class AIArchitectMCP:
             
             action_result = await orchestrator.generate_str(
                 message=action_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             research_insights.append(action_result)
@@ -302,7 +302,7 @@ class AIArchitectMCP:
             
             observation_result = await orchestrator.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Iteration {iteration} Observation: {observation_result[:200]}...")
@@ -422,7 +422,7 @@ class AIArchitectMCP:
         
         analysis_result = await orchestrator.generate_str(
             message=analysis_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         return {
@@ -447,7 +447,7 @@ class AIArchitectMCP:
         
         suggestions_result = await orchestrator.generate_str(
             message=suggestion_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         # Extract suggestions

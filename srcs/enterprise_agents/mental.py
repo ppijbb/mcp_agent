@@ -345,7 +345,7 @@ class MentalCareOrchestrator:
         
         counselor_response = await orchestrator.generate_str(
             message=counselor_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         # 상담사 응답 저장
@@ -378,12 +378,12 @@ class MentalCareOrchestrator:
         # 비동기적으로 분석 실행 (응답 속도 향상)
         emotion_analysis_task = orchestrator.generate_str(
             message=emotion_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         schema_analysis_task = orchestrator.generate_str(
             message=schema_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         print(f"\n🤖 상담사: {counselor_response}\n")
@@ -464,7 +464,7 @@ class MentalCareOrchestrator:
         try:
             report_result = await orchestrator.generate_str(
                 message=report_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             # 보고서 파일 직접 저장

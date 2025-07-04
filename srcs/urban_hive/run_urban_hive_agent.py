@@ -73,7 +73,7 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
         print("1. Parsing prompt to extract parameters...")
         parsed_params_str = await agent.parser_llm.generate_str(
             message=parsing_prompt,
-            request_params=RequestParams(model="gpt-4o-mini", temperature=0.0)
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.0)
         )
         parsed_params_str = parsed_params_str.strip().removeprefix("```json").removesuffix("```").strip()
         params = json.loads(parsed_params_str)

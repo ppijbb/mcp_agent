@@ -73,8 +73,8 @@ async def main():
     config = MultiAgentConfig(
         openai_api_key=openai_api_key,
         data_file_path=args.data_file,
-        graph_model_name="gpt-4o-mini",
-        rag_model_name="gpt-4o-mini",
+        graph_model_name="gemini-2.5-flash-lite-preview-06-07",
+        rag_model_name="gemini-2.5-flash-lite-preview-06-07",
         max_search_results=5,
         context_window_size=4000
     )

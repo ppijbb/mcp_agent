@@ -303,7 +303,7 @@ class DecisionAgentMCP:
             
             thought_result = await orchestrator.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Thought {iteration}: {thought_result}")
@@ -325,7 +325,7 @@ class DecisionAgentMCP:
             
             action_result = await orchestrator.generate_str(
                 message=action_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Action {iteration}: {action_result}")
@@ -348,7 +348,7 @@ class DecisionAgentMCP:
             
             observation_result = await orchestrator.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Observation {iteration}: {observation_result}")
@@ -373,7 +373,7 @@ class DecisionAgentMCP:
             
             reflection_result = await orchestrator.generate_str(
                 message=reflection_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             reasoning_steps.append(f"Reflection {iteration}: {reflection_result}")
@@ -455,7 +455,7 @@ class DecisionAgentMCP:
         
         decision_result = await orchestrator.generate_str(
             message=decision_task,
-            request_params=RequestParams(model="gpt-4o-mini")
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
         )
         
         # Parse the decision result and create Decision object

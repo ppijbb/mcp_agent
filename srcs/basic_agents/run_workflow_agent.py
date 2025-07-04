@@ -14,7 +14,7 @@ async def main():
     """Workflow Agent 실행 스크립트"""
     parser = argparse.ArgumentParser(description="Run the Workflow Orchestrator from the command line.")
     parser.add_argument("--task", required=True, help="The task description for the workflow.")
-    parser.add_argument("--model", default="gpt-4o-mini", help="The model to use for the workflow.")
+    parser.add_argument("--model", default="gemini-2.5-flash-lite-preview-06-07", help="The model to use for the workflow.")
     parser.add_argument("--plan-type", default="full", choices=['full', 'step', 'none'], help="The planning type for the orchestrator.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
     

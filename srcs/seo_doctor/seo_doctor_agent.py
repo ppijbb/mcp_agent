@@ -219,7 +219,7 @@ class SEODoctorMCPAgent:
             Provide a concise summary of findings, focusing on critical issues.
             """
             try:
-                seo_research_result = await llm.generate_str(message=prompt, request_params=RequestParams(model="gpt-4o-mini", temperature=0.1))
+                seo_research_result = await llm.generate_str(message=prompt, request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1))
                 full_analysis += f"SEO Research Results:\n{seo_research_result}\n\n"
                 logger.info("REACT CHAIN: SEO research completed.")
             except Exception as e:
@@ -248,7 +248,7 @@ class SEODoctorMCPAgent:
         - Competitor Analysis: [Summary of competitor landscape, if analyzed]
         - Recommendations: [List of 10-15 detailed, consolidated recommendations]
         """
-        final_report = await llm.generate_str(message=synthesis_prompt, request_params=RequestParams(model="gpt-4o-mini", temperature=0.1))
+        final_report = await llm.generate_str(message=synthesis_prompt, request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1))
         logger.info("REACT CHAIN: Synthesis complete.")
         # Embed the raw JSON again in the final report to ensure it's not lost
         return lighthouse_result_str + final_report

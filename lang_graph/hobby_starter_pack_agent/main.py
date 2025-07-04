@@ -42,7 +42,7 @@ async def main():
     llm_config = {
         "config_list": [
             {
-                "model": "gpt-4",
+                "model": "gemini-4",
                 # "api_key": "sk-...", # Use environment variable OPENAI_API_KEY
             }
         ],

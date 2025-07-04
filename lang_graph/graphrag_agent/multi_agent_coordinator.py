@@ -35,8 +35,8 @@ class MultiAgentConfig(BaseModel):
     """Configuration for Multi-Agent System"""
     openai_api_key: str = Field(..., description="OpenAI API key")
     data_file_path: str = Field(..., description="Path to the data file")
-    graph_model_name: str = Field(default="gpt-4o-mini", description="Model for graph generation")
-    rag_model_name: str = Field(default="gpt-4o-mini", description="Model for RAG responses")
+    graph_model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="Model for graph generation")
+    rag_model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="Model for RAG responses")
     max_search_results: int = Field(default=5, description="Max search results for RAG")
     context_window_size: int = Field(default=4000, description="Context window size")
 

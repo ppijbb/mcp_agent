@@ -296,7 +296,7 @@ Example for "오늘 서울 날씨 어때?":
         try:
             parsed_params_str = await self.parser_llm.generate_str(
                 message=parsing_prompt,
-                request_params=RequestParams(model="gpt-4o-mini", temperature=0.0)
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.0)
             )
             # Ensure the response is a valid JSON string before parsing
             parsed_params_str = parsed_params_str.strip()
@@ -388,7 +388,7 @@ Example for "오늘 서울 날씨 어때?":
                 # A more advanced implementation would use agent.invoke() if available.
                 response = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o-mini", temperature=0.1)
+                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
                 )
 
                 # OBSERVATION: Store the result
@@ -430,7 +430,7 @@ Example for "오늘 서울 날씨 어때?":
         
         final_report = await llm.generate_str(
             message=synthesis_prompt,
-            request_params=RequestParams(model="gpt-4o-mini", temperature=0.1)
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
         )
 
         logger.info("REACT CHAIN: Synthesis complete.")

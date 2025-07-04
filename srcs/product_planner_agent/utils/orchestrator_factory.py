@@ -24,7 +24,7 @@ def get_orchestrator() -> Orchestrator:
 
     # ---------- LLM Factory with caching ----------
     def llm_factory():
-        base_llm = OpenAIAugmentedLLM(model="gpt-4o-mini")
+        base_llm = OpenAIAugmentedLLM(model="gemini-2.5-flash-lite-preview-06-07")
         return CachedLLM(base_llm)
 
     # ---------- Planner with iteration limit ----------

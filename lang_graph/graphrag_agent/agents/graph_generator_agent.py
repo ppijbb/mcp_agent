@@ -36,7 +36,7 @@ class GraphGeneratorState(TypedDict):
 class GraphGeneratorConfig(BaseModel):
     """Configuration for Graph Generator Agent"""
     openai_api_key: str = Field(..., description="OpenAI API key")
-    model_name: str = Field(default="gpt-4o-mini", description="LLM model name")
+    model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="LLM model name")
     temperature: float = Field(default=0.0, description="LLM temperature")
     cache_file: str = Field(default="graph_cache.db", description="Cache file path")
     max_concurrency: int = Field(default=1, description="Max concurrency for processing")

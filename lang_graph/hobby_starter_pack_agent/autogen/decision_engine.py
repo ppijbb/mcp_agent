@@ -34,7 +34,7 @@ class AutoGenDecisionEngine:
             client = openai.AsyncOpenAI()
             
             response = await client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model="gemini-4-turbo-preview",
                 messages=[
                     {"role": "system", "content": f"{agent_type} 전문가로서 답변해주세요."},
                     {"role": "user", "content": prompt}

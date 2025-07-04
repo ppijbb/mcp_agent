@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
     start = time.time()
     # 수정된 함수 호출
-    final_result = asyncio.run(run_workflow(default_task, "gpt-4o-mini", "full"))
+    final_result = asyncio.run(run_workflow(default_task, "gemini-2.5-flash-lite-preview-06-07", "full"))
     print("--- FINAL ORCHESTRATOR RESULT ---")
     print(final_result)
     end = time.time()

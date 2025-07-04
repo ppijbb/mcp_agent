@@ -33,7 +33,7 @@ class RAGAgentState(TypedDict):
 class RAGAgentConfig(BaseModel):
     """Configuration for RAG Agent"""
     openai_api_key: str = Field(..., description="OpenAI API key")
-    model_name: str = Field(default="gpt-4o-mini", description="LLM model name")
+    model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="LLM model name")
     temperature: float = Field(default=0.1, description="LLM temperature for generation")
     max_search_results: int = Field(default=5, description="Maximum search results to retrieve")
     context_window_size: int = Field(default=4000, description="Maximum context window size")

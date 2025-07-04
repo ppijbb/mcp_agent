@@ -200,7 +200,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT THOUGHT: Planning AIOps analysis approach")
         thought_result = await orchestrator.generate_str(
             message=thought_task,
-            request_params=RequestParams(model="gpt-4o-mini", temperature=0.1)
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
         )
         
         # ⚡ ACTION PHASE: Execute the monitoring and data collection
@@ -239,7 +239,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT ACTION: Executing monitoring and data collection")
         action_result = await orchestrator.generate_str(
             message=action_task,
-            request_params=RequestParams(model="gpt-4o-mini", temperature=0.2)
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.2)
         )
         
         # 🔍 OBSERVATION PHASE: Analyze results and generate conclusions
@@ -277,7 +277,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT OBSERVATION: Analyzing results and generating recommendations")
         observation_result = await orchestrator.generate_str(
             message=observation_task,
-            request_params=RequestParams(model="gpt-4o-mini", temperature=0.1)
+            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
         )
         
         # Combine all ReAct results for comprehensive analysis

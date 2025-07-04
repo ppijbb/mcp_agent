@@ -66,7 +66,7 @@ mcp:
 # Execute real SEO analysis
 analysis_result = await orchestrator.generate_str(
     message=analysis_task,
-    request_params=RequestParams(model="gpt-4o-mini")
+    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
 )
 # ✅ NO random.* functions
 # ✅ NO mock simulations

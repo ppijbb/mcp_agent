@@ -104,7 +104,7 @@ class HRRecruitmentAgent:
             logger.info("Starting HR recruitment workflow")
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             logger.info("HR recruitment workflow completed successfully")
@@ -490,7 +490,7 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             
             logger.info("HR recruitment workflow completed successfully")

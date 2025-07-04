@@ -7,5 +7,5 @@ search_tool = TavilySearchResults(max_results=5, name="web_search")
 
 # LLM 모델 정의
 # 모든 에이전트들이 공통으로 사용하는 언어 모델입니다.
-# gpt-4o 모델을 사용하여 강력한 추론 능력을 활용합니다.
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0, streaming=True) 
+# gemini-4o 모델을 사용하여 강력한 추론 능력을 활용합니다.
+model = ChatOpenAI(model="gemini-2.5-flash-lite-preview-06-07", temperature=0, streaming=True) 

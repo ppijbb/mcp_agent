@@ -13,13 +13,13 @@ if not api_key:
 
 client = openai.OpenAI(api_key=api_key)
 
-def call_llm(prompt: str, model: str = "gpt-4o") -> str:
+def call_llm(prompt: str, model: str = "gemini-4o") -> str:
     """
     A utility function to call the specified LLM model.
     
     Args:
         prompt (str): The prompt to send to the LLM.
-        model (str): The model to use (e.g., "gpt-4o", "gpt-3.5-turbo").
+        model (str): The model to use (e.g., "gemini-4o", "gemini-3.5-turbo").
         
     Returns:
         str: The content of the LLM's response.

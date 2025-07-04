@@ -30,7 +30,7 @@ agent_card:
     temperature: 0.2
     max_tokens: 4000
     fallback_models:
-      - "gpt-4o-mini"
+      - "gemini-2.5-flash-lite-preview-06-07"
       - "claude-3-haiku"
 
   mcp_tools:

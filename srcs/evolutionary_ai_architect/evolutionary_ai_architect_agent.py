@@ -255,7 +255,7 @@ class EvolutionaryAIArchitectMCP:
             
             thought_result = await reasoning_llm.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             reasoning_steps.append(f"Generation {generation} Thought: {thought_result}")
 
@@ -288,7 +288,7 @@ class EvolutionaryAIArchitectMCP:
             """
             observation_result = await reasoning_llm.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             reasoning_steps.append(f"Generation {generation} Observation: {observation_result}")
             

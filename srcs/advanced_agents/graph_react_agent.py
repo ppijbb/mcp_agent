@@ -46,7 +46,7 @@ class GraphReActAgent(Agent):
             # server_names can be specified here if needed, e.g., server_names=["g-search"]
         )
         self.max_iterations = 10
-        self.model = "gpt-4o-mini"
+        self.model = "gemini-2.5-flash-lite-preview-06-07"
         self.graph = Neo4jConnector()
         # The base Agent class will provide self.orchestrator and self.logger
         # once this agent is added to an orchestrator.
@@ -293,7 +293,7 @@ Thought:
             
             llm_response = await self.orchestrator.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4o-mini",
+                model="gemini-2.5-flash-lite-preview-06-07",
                 json_response=True
             )
             

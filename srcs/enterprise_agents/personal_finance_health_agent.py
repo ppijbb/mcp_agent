@@ -66,7 +66,7 @@ class PersonalFinanceAgent:
             logger.info(f"Starting personal finance analysis for user.")
             result_str = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
             logger.info("Personal finance analysis completed successfully.")
             

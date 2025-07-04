@@ -16,7 +16,7 @@ class HSPAutoGenAgents:
     """AutoGen 기반 전문 에이전트들"""
     
     def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
-        self.llm_config = llm_config or {"model": "gpt-4", "temperature": 0.7}
+        self.llm_config = llm_config or {"model": "gemini-4", "temperature": 0.7}
         self.agents = self._initialize_agents()
         logger.info("HSPAutoGenAgents 초기화 완료")
         

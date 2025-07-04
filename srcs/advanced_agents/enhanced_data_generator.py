@@ -217,7 +217,7 @@ class SyntheticDataAgent:
                 # Initial dataset generation
                 generated_data_str = await orchestrator.generate_str(
                     message=workflow_task,
-                    request_params=RequestParams(model="gpt-4o-mini")
+                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
                 )
 
                 # --- Generator–Validator–Refiner Feedback Loop ---
@@ -532,7 +532,7 @@ async def main():
         try:
             await orchestrator.generate_str(
                 message=orchestrated_task,
-                request_params=RequestParams(model="gpt-4o-mini")
+                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
             )
 
             # Check final outputs
