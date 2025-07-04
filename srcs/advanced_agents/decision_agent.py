@@ -168,7 +168,9 @@ class DecisionAgentMCP:
         interaction: MobileInteraction,
         user_profile: UserProfile,
         use_react_pattern: bool = True,
-        max_iterations: int = 3
+        max_iterations: int = 3,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None
     ) -> DecisionAnalysisResult:
         """
         🧠 Real Decision Analysis using ReAct Pattern
@@ -195,7 +197,7 @@ class DecisionAgentMCP:
             if use_react_pattern:
                 # Use ReAct pattern following Priyanthan's implementation
                 decision_result = await self._react_decision_process(
-                    interaction, user_profile, context, logger, max_iterations
+                    interaction, user_profile, context, logger, max_iterations, base_url, api_key
                 )
             else:
                 # Direct analysis without iterative reasoning
@@ -214,7 +216,9 @@ class DecisionAgentMCP:
         user_profile: UserProfile,
         context,
         logger,
-        max_iterations: int
+        max_iterations: int,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None
     ) -> DecisionAnalysisResult:
         """
         ReAct Decision Process Implementation
@@ -276,6 +280,13 @@ class DecisionAgentMCP:
         data_sources = []
         iteration = 0
         
+        # Prepare metadata for request_params if overrides are provided
+        request_metadata = {}
+        if base_url:
+            request_metadata["base_url"] = base_url
+        if api_key:
+            request_metadata["api_key"] = api_key
+        
         # ReAct Loop - Following Priyanthan's pattern
         while iteration < max_iterations:
             iteration += 1
@@ -303,7 +314,10 @@ class DecisionAgentMCP:
             
             thought_result = await orchestrator.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(
+                    model="gemini-2.5-flash-lite-preview-06-07",
+                    metadata=request_metadata if request_metadata else None
+                )
             )
             
             reasoning_steps.append(f"Thought {iteration}: {thought_result}")
@@ -325,7 +339,10 @@ class DecisionAgentMCP:
             
             action_result = await orchestrator.generate_str(
                 message=action_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(
+                    model="gemini-2.5-flash-lite-preview-06-07",
+                    metadata=request_metadata if request_metadata else None
+                )
             )
             
             reasoning_steps.append(f"Action {iteration}: {action_result}")
@@ -348,7 +365,10 @@ class DecisionAgentMCP:
             
             observation_result = await orchestrator.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(
+                    model="gemini-2.5-flash-lite-preview-06-07",
+                    metadata=request_metadata if request_metadata else None
+                )
             )
             
             reasoning_steps.append(f"Observation {iteration}: {observation_result}")
@@ -373,7 +393,10 @@ class DecisionAgentMCP:
             
             reflection_result = await orchestrator.generate_str(
                 message=reflection_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(
+                    model="gemini-2.5-flash-lite-preview-06-07",
+                    metadata=request_metadata if request_metadata else None
+                )
             )
             
             reasoning_steps.append(f"Reflection {iteration}: {reflection_result}")
@@ -385,7 +408,7 @@ class DecisionAgentMCP:
         
         # Generate final decision based on ReAct analysis
         final_decision = await self._generate_final_decision(
-            interaction, user_profile, reasoning_steps, data_sources, orchestrator
+            interaction, user_profile, reasoning_steps, data_sources, orchestrator, base_url, api_key
         )
         
         # Determine confidence and complexity levels
@@ -427,10 +450,19 @@ class DecisionAgentMCP:
         user_profile: UserProfile,
         reasoning_steps: List[str],
         data_sources: List[str],
-        orchestrator: Orchestrator
+        orchestrator: Orchestrator,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None
     ) -> Decision:
         """Generate final decision based on ReAct analysis"""
         
+        # Prepare metadata for request_params if overrides are provided
+        request_metadata = {}
+        if base_url:
+            request_metadata["base_url"] = base_url
+        if api_key:
+            request_metadata["api_key"] = api_key
+            
         decision_task = f"""
         FINAL DECISION GENERATION:
         
@@ -455,7 +487,10 @@ class DecisionAgentMCP:
         
         decision_result = await orchestrator.generate_str(
             message=decision_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(
+                model="gemini-2.5-flash-lite-preview-06-07",
+                metadata=request_metadata if request_metadata else None
+            )
         )
         
         # Parse the decision result and create Decision object
@@ -881,7 +916,9 @@ async def run_simplified_decision_analysis(
         risk_tolerance="Medium",
         preferences={"preferred_brands": ["BrandA", "BrandB"]},
         financial_goals=["save_for_retirement", "buy_a_house"],
-        spending_patterns={"average_monthly_spend": 2000}
+        spending_patterns={"average_monthly_spend": 2000},
+        base_url="https://http://34.47.83.72/llmservice/v1/generate",
+        api_key="sk-proj-1234567890"
     )
     
     interaction = MobileInteraction(

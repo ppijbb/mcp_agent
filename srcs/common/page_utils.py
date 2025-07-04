@@ -7,6 +7,7 @@ Page Utilities Module
 import streamlit as st
 import sys
 from pathlib import Path
+import asyncio
 from .styles import get_common_styles, get_page_header
 
 def setup_page(title, icon, layout="wide"):
@@ -123,7 +124,7 @@ def create_agent_page(
             try:
                 # 메인 함수 실행
                 main_func = getattr(module, main_function_name)
-                main_func()
+                asyncio.run(main_func())
                 
             except Exception as e:
                 st.error(f"{agent_name} 실행 중 오류가 발생했습니다: {e}")
