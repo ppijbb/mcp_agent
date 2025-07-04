@@ -45,11 +45,12 @@ def run_agent_process(
             except Exception as e:
                 st.warning(f"로그 디렉토리를 생성하는 중 오류 발생: {e}")
 
-            process = Process(command, key=process_key).start()
+            log_path = Path(process_key)
+            process = Process(command, log_path, label=process_key).start()
             
             # expander 중첩 문제를 피하기 위해 직접 process monitor 사용
             st.info(f"🔄 {log_expander_title}")
-            spm.st_process_monitor(process, key=f"monitor_{process_key}").loop_until_finished()
+            spm.st_process_monitor(process, label=f"monitor_{process_key}").loop_until_finished()
                 
             if process.get_return_code() == 0:
                 # 먼저 --result-json-path 인자를 찾아보고, 없으면 --result-txt-path를 찾아봄
