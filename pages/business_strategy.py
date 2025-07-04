@@ -47,20 +47,26 @@ def display_results(result_data):
 
     st.metric("총 실행 시간", f"{summary.get('execution_time', 0):.2f}초")
     
-    st.markdown("#### 📄 생성된 보고서 목록")
+    st.markdown("#### 📄 생성된 보고서 목록 및 내용")
     for agent_name, result in results.items():
         if result.get("success") and "output_file" in result:
-            st.success(f"**{agent_name.replace('_', ' ').title()}**: `{result['output_file']}`")
+            file_path = result['output_file']
+            agent_title = agent_name.replace('_', ' ').title()
+            
+            with st.expander(f"📄 {agent_title} 보고서 보기", expanded=(agent_name == 'unified_strategy')):
+                st.success(f"**보고서 위치**: `{file_path}`")
+                try:
+                    if os.path.exists(file_path):
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            report_content = f.read()
+                        st.markdown(report_content)
+                    else:
+                        st.warning(f"보고서 파일({file_path})을 찾을 수 없습니다.")
+                except Exception as e:
+                    st.error(f"보고서 파일을 읽는 중 오류 발생: {e}")
         else:
-            st.error(f"**{agent_name.replace('_', ' ').title()}**: 실패 - {result.get('error', '알 수 없는 오류')}")
-
-    # Display content of the unified strategy report if it exists
-    unified_report_path = results.get("unified_strategy", {}).get("output_file")
-    if unified_report_path and os.path.exists(unified_report_path):
-        with st.expander("📈 통합 전략 보고서 보기", expanded=True):
-            with open(unified_report_path, 'r', encoding='utf-8') as f:
-                report_content = f.read()
-            st.markdown(report_content)
+            agent_title = agent_name.replace('_', ' ').title()
+            st.error(f"**{agent_title}**: 실패 - {result.get('error', '알 수 없는 오류')}")
 
 def main():
     create_agent_page(

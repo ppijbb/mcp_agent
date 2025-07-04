@@ -485,8 +485,9 @@ def render_real_finance_agent(save_to_file=False):
                 result = run_agent_process(
                     placeholder=placeholder,
                     command=st.session_state['finance_command'],
-                    process_key_prefix="logs/finance_health",
-                    log_expander_title="재무 분석 실행 로그"
+                    process_key_prefix="finance_health",
+                    log_expander_title="재무 건강 분석 실시간 로그",
+                    display_callback=display_financial_report
                 )
                 
                 if result:

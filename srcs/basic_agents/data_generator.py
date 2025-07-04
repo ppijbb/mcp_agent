@@ -76,7 +76,7 @@ class AIDataGenerationAgent:
             )
 
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=GoogleAugmentedLLM,
                 available_agents=[schema_agent, data_generator, validator_agent],
                 plan_type="full",
             )
@@ -95,7 +95,7 @@ class AIDataGenerationAgent:
             try:
                 generated_data_str = await orchestrator.generate_str(
                     message=workflow_task,
-                    request_params=RequestParams(model="gpt-4o-mini")
+                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
                 )
 
                 generated_data = []
