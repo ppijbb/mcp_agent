@@ -72,6 +72,15 @@ class UserProfile:
     financial_goals: List[str]
     spending_patterns: Dict[str, Any]
 
+    # --- Fields added to match usage in the code ---
+    name: Optional[str] = None
+    behavior_patterns: Optional[Dict[str, Any]] = None
+    decision_history: Optional[List[Any]] = None
+    financial_profile: Optional[Dict[str, Any]] = None
+    values: Optional[Dict[str, Any]] = None
+    goals: Optional[List[str]] = None
+    constraints: Optional[Dict[str, Any]] = None
+
 @dataclass 
 class Decision:
     """Decision result structure"""
@@ -79,10 +88,17 @@ class Decision:
     recommendation: str
     confidence_score: float
     reasoning: str
-    risk_level: str
     alternatives: List[str]
     timestamp: datetime
-    evidence: Dict[str, Any]
+
+    # --- Fields added/modified to match usage in the code ---
+    decision_type: Optional[str] = None
+    risk_level: Optional[str] = None
+    risk_assessment: Optional[Dict[str, Any]] = None
+    evidence: Optional[Dict[str, Any]] = None
+    expected_outcome: Optional[Dict[str, Any]] = None
+    auto_execute: bool = False
+    execution_plan: Optional[Any] = None
 
 class DecisionConfidenceLevel(Enum):
     """Decision Confidence Classification"""
@@ -505,16 +521,15 @@ class DecisionAgentMCP:
             confidence_score=0.85,  # Should be parsed from analysis
             reasoning=decision_result[:500],  # Truncated reasoning
             alternatives=["Parsed from analysis"],
-            expected_outcome={
-                "benefit": "Evidence-based decision making",
-                "risk": "Comprehensive risk assessment completed"
-            },
             risk_assessment={
                 "level": "medium",
                 "factors": ["Analyzed via MCP research"]
             },
+            expected_outcome={
+                "benefit": "Evidence-based decision making",
+                "risk": "Comprehensive risk assessment completed"
+            },
             auto_execute=False,  # Conservative approach
-            execution_plan=None
         )
     
     def _assess_confidence_level(self, decision: Decision, reasoning_steps: List[str]) -> DecisionConfidenceLevel:
@@ -737,7 +752,6 @@ class DecisionAgentMCP:
             expected_outcome={"result": "적절한 결정"},
             risk_assessment={"level": "low", "factors": ["일반적 위험"]},
             auto_execute=False,
-            execution_plan=None
         )
 
     async def _detect_interaction(self) -> Optional[MobileInteraction]:
@@ -897,7 +911,9 @@ async def run_simplified_decision_analysis(
     user_id: str,
     interaction_type: str, # From InteractionType Enum
     context_json: str, # JSON string for context dict
-    output_dir: str = "decision_agent_reports"
+    output_dir: str = "decision_agent_reports",
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None
 ) -> dict:
     """
     A simplified wrapper for running decision analysis, suitable for script execution.
@@ -916,9 +932,7 @@ async def run_simplified_decision_analysis(
         risk_tolerance="Medium",
         preferences={"preferred_brands": ["BrandA", "BrandB"]},
         financial_goals=["save_for_retirement", "buy_a_house"],
-        spending_patterns={"average_monthly_spend": 2000},
-        base_url="https://http://34.47.83.72/llmservice/v1/generate",
-        api_key="sk-proj-1234567890"
+        spending_patterns={"average_monthly_spend": 2000}
     )
     
     interaction = MobileInteraction(
@@ -928,9 +942,15 @@ async def run_simplified_decision_analysis(
         context=json.loads(context_json)
     )
     
+    # Use provided URL/key or fallback to defaults
+    final_base_url = base_url or "http://34.47.83.72/llmservice/v1/generate"
+    final_api_key = api_key # Can add a default if needed, e.g., os.environ.get("API_KEY")
+
     result: DecisionAnalysisResult = await agent.analyze_and_decide(
         interaction=interaction,
-        user_profile=user_profile
+        user_profile=user_profile,
+        base_url=final_base_url,
+        api_key=final_api_key
     )
     
     # Convert dataclass to dict for JSON serialization
@@ -1035,6 +1055,7 @@ async def run_single_mcp_analysis_demo():
         print(f"- Recommendation: {decision.recommendation}")
         print(f"- Confidence: {decision.confidence_score:.0%}")
         print(f"- Reasoning: {decision.reasoning}")
+        print(f"- Risk Level: {decision.risk_assessment.get('level', 'N/A') if decision.risk_assessment else 'N/A'}")
         
     except Exception as e:
         print(f"❌ Error during analysis: {e}")
@@ -1050,20 +1071,19 @@ async def main():
     
     choice = input("\nSelect demo type: ").strip()
     
-    try:
-        if choice == "1":
-            await run_mcp_monitoring_demo()
-        elif choice == "2":
-            await run_single_mcp_analysis_demo()
-        elif choice == "0":
-            print("👋 Goodbye!")
-        else:
-            print("❌ Invalid choice")
-    except Exception as e:
-        print(f"❌ Main execution error: {e}")
+    if choice == "1":
+        await run_mcp_monitoring_demo()
+    elif choice == "2":
+        await run_single_mcp_analysis_demo()
+    elif choice == "0":
+        print("👋 Goodbye!")
+    else:
+        print("❌ Invalid choice")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 MCP Decision Agent demo terminated.") 
+    except (KeyboardInterrupt, EOFError):
+        print("\n👋 MCP Decision Agent demo terminated.")
+    except Exception as e:
+        print(f"❌ Main execution error: {e}") 
