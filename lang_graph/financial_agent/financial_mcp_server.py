@@ -1,7 +1,12 @@
 import yfinance as yf
 import pandas as pd
 from typing import Dict, List
+from mcp.server.fastmcp import FastMCP
 
+# MCP 서버 초기화
+mcp = FastMCP("FinancialTools")
+
+@mcp.tool()
 def get_technical_indicators(ticker: str, period: str = "3mo") -> Dict:
     """
     yfinance를 사용하여 특정 종목의 기술적 지표를 계산합니다.
@@ -32,14 +37,16 @@ def get_technical_indicators(ticker: str, period: str = "3mo") -> Dict:
     # 50일 이동평균
     ma50 = close.rolling(window=50).mean()
 
+    # NaN 값을 JSON 호환 가능한 None으로 변환
     return {
-        "price": close.iloc[-1],
-        "rsi": rsi.iloc[-1],
-        "macd": macd.iloc[-1],
-        "moving_average_50": ma50.iloc[-1],
-        "volume": hist['Volume'].iloc[-1]
+        "price": float(close.iloc[-1]) if pd.notna(close.iloc[-1]) else None,
+        "rsi": float(rsi.iloc[-1]) if pd.notna(rsi.iloc[-1]) else None,
+        "macd": float(macd.iloc[-1]) if pd.notna(macd.iloc[-1]) else None,
+        "moving_average_50": float(ma50.iloc[-1]) if pd.notna(ma50.iloc[-1]) else None,
+        "volume": int(hist['Volume'].iloc[-1]) if pd.notna(hist['Volume'].iloc[-1]) else None,
     }
 
+@mcp.tool()
 def get_market_news(ticker: str) -> List[Dict]:
     """
     yfinance를 사용하여 특정 종목에 대한 최신 뉴스를 가져옵니다.
@@ -57,4 +64,8 @@ def get_market_news(ticker: str) -> List[Dict]:
             for item in news[:5] # 최신 5개 뉴스
         ]
     except Exception as e:
-        return [{"title": f"An error occurred while fetching news: {e}", "publisher": "Error", "link": ""}] 
+        return [{"title": f"An error occurred while fetching news: {e}", "publisher": "Error", "link": ""}]
+
+if __name__ == "__main__":
+    # Stdio를 통해 서버 실행
+    mcp.run() 
