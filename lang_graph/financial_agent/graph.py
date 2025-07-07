@@ -3,8 +3,9 @@ from .state import AgentState
 # agents 패키지에서 모든 노드를 한 번에 임포트
 from .agents import (
     market_data_collector_node,
-    news_sentiment_analyzer_node,
-    aggregator_node,
+    news_collector_node,
+    news_analyzer_node,
+    sync_node,
     chief_strategist_node,
     portfolio_manager_node,
     trader_node,
@@ -18,14 +19,15 @@ class FinancialAgentWorkflow:
     def _build_graph(self):
         """
         에이전트 워크플로우를 정의하고 그래프를 빌드합니다.
-        데이터 집계 노드를 추가하여 병렬 실행 동기화를 보장합니다.
+        데이터 동기화 노드를 추가하여 병렬 실행 동기화를 보장합니다.
         """
         workflow = StateGraph(AgentState)
 
         # 1. 노드 추가
         workflow.add_node("market_data_collector", market_data_collector_node)
-        workflow.add_node("news_sentiment_analyzer", news_sentiment_analyzer_node)
-        workflow.add_node("aggregator", aggregator_node)
+        workflow.add_node("news_collector", news_collector_node)
+        workflow.add_node("sync_data", sync_node)
+        workflow.add_node("news_analyzer", news_analyzer_node)
         workflow.add_node("chief_strategist", chief_strategist_node)
         workflow.add_node("portfolio_manager", portfolio_manager_node)
         workflow.add_node("trader", trader_node)
@@ -33,14 +35,15 @@ class FinancialAgentWorkflow:
 
         # 2. 엣지 연결
         workflow.add_edge(START, "market_data_collector")
-        workflow.add_edge(START, "news_sentiment_analyzer")
+        workflow.add_edge(START, "news_collector")
 
-        # 데이터 수집 노드 -> 집계 노드
-        workflow.add_edge("market_data_collector", "aggregator")
-        workflow.add_edge("news_sentiment_analyzer", "aggregator")
+        # 데이터 수집 노드 -> 동기화 노드
+        workflow.add_edge("market_data_collector", "sync_data")
+        workflow.add_edge("news_collector", "sync_data")
         
-        # 집계 노드 -> 전략가 노드
-        workflow.add_edge("aggregator", "chief_strategist")
+        # 동기화 노드 -> 뉴스 분석가 -> 전략가 노드
+        workflow.add_edge("sync_data", "news_analyzer")
+        workflow.add_edge("news_analyzer", "chief_strategist")
         
         workflow.add_edge("chief_strategist", "portfolio_manager")
         workflow.add_edge("portfolio_manager", "trader")
@@ -75,7 +78,8 @@ if __name__ == "__main__":
         "target_tickers": target_tickers, # 동적으로 티커 리스트 전달
         "log": [],
         "technical_analysis": {}, # None 대신 빈 dict로 초기화
-        "sentiment_analysis": {}, # None 대신 빈 dict로 초기화
+        "news_data": {}, # None 대신 빈 dict로 초기화
+        "sentiment_analysis": None,
         "market_outlook": None,
         "investment_plan": None,
         "trade_results": None,

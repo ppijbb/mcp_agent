@@ -16,9 +16,10 @@ class AgentState(TypedDict):
     
     # 데이터 수집 단계 결과 (기본값을 빈 dict로 변경)
     technical_analysis: dict
-    sentiment_analysis: dict
+    news_data: dict
     
     # 분석 및 전략 단계 결과
+    sentiment_analysis: Optional[dict]
     market_outlook: Optional[str]
     investment_plan: Optional[Dict[str, List[str]]]  # e.g., {"buy": ["AAPL", "GOOGL"], "sell": ["TSLA"]}
     

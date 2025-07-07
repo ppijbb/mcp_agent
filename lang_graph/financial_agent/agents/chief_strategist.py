@@ -18,7 +18,8 @@ class NumpyEncoder(json.JSONEncoder):
 
 def chief_strategist_node(state: AgentState) -> Dict:
     """
-    수석 전략가 노드 (LLM 기반): 수집된 데이터를 바탕으로 LLM을 호출하여 시장 전망을 생성합니다.
+    수석 전략가 노드 (LLM 기반): 기술적 분석과 뉴스 감성 분석 결과를 바탕으로
+    LLM을 호출하여 종합 시장 전망을 생성합니다.
     """
     print("--- AGENT: Chief Strategist (LLM-Powered) ---")
     log_message = "LLM을 사용하여 종합 시장 전망 분석을 시작합니다."
@@ -26,14 +27,15 @@ def chief_strategist_node(state: AgentState) -> Dict:
     print(log_message)
 
     tech_analysis = state.get("technical_analysis")
-    news_analysis = state.get("sentiment_analysis")
+    sentiment_analysis = state.get("sentiment_analysis")
 
-    if not tech_analysis and not news_analysis:
+    if not tech_analysis and not sentiment_analysis:
         error_message = "분석에 필요한 데이터가 부족합니다."
-        return {"error_message": error_message}
+        state["log"].append(error_message)
+        raise ValueError(error_message)
 
     prompt = f"""
-    당신은 최고의 금융 분석가입니다. 아래의 기술적 분석 데이터와 최신 뉴스를 바탕으로, 시장 전체에 대한 명확하고 간결한 전망을 제시해주세요.
+    당신은 최고의 금융 분석가입니다. 아래의 기술적 분석 데이터와 뉴스 감성 분석 결과를 바탕으로, 시장 전체에 대한 명확하고 간결한 전망을 제시해주세요.
     긍정적, 부정적, 중립적 요인을 모두 고려하여 종합적인 결론을 내려주세요.
 
     **기술적 분석 데이터:**
@@ -41,9 +43,9 @@ def chief_strategist_node(state: AgentState) -> Dict:
     {json.dumps(tech_analysis, indent=2, cls=NumpyEncoder)}
     ```
 
-    **최신 뉴스 헤드라인:**
+    **뉴스 감성 분석 결과:**
     ```json
-    {json.dumps(news_analysis, indent=2, cls=NumpyEncoder)}
+    {json.dumps(sentiment_analysis, indent=2, ensure_ascii=False)}
     ```
 
     **분석 결과 (시장 전망):**
