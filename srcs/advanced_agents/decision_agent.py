@@ -22,14 +22,15 @@ from dataclasses import dataclass
 from enum import Enum
 import time
 import random
+import uuid
 
 # Real MCP Agent imports
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from srcs.common.utils import setup_agent_app
 
 # Data structures defined within this file
 from enum import Enum
@@ -154,11 +155,7 @@ class DecisionAgentMCP:
     
     def __init__(self, output_dir: str = "decision_agent_reports"):
         self.output_dir = output_dir
-        self.app = MCPApp(
-            name="decision_agent",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        self.app = setup_agent_app("decision_agent")
         self.decision_history: List[Decision] = []
         
         # Mobile interaction monitoring variables (from original decision_agent.py)

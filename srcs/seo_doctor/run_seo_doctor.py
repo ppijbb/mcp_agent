@@ -11,27 +11,21 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from srcs.seo_doctor.seo_doctor_agent import SEODoctorMCPAgent, SEOAnalysisResult
-from srcs.seo_doctor.utils.json_encoder import EnhancedJSONEncoder
+from srcs.seo_doctor.seo_doctor_agent import SEODoctorAgent
+from srcs.core.utils import EnhancedJSONEncoder
 
 # Dataclass를 dict로 변환하기 위한 헬퍼
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
-from enum import Enum
 
-# Helper function to create the HTTP client session
-def get_http_session():
-    return aiohttp.ClientSession()
-
-async def upload_to_drive(mcp_url: str, file_name: str, content: str) -> dict:
+async def upload_to_drive(session: aiohttp.ClientSession, mcp_url: str, file_name: str, content: str) -> dict:
     """Uploads content to Google Drive via MCP."""
     upload_url = f"{mcp_url}/upload"
     payload = {"fileName": file_name, "content": content}
     
-    async with get_http_session() as session:
-        async with session.post(upload_url, json=payload) as response:
-            response.raise_for_status()
-            return await response.json()
+    async with session.post(upload_url, json=payload) as response:
+        response.raise_for_status()
+        return await response.json()
 
 async def main():
     """SEO Doctor 실행 스크립트"""
@@ -60,22 +54,17 @@ async def main():
     
     final_result = {"success": False, "data": None, "error": None}
     agent_result = None
+    agent = SEODoctorAgent()
 
     try:
-        agent = SEODoctorMCPAgent(
-            google_drive_mcp_url=args.google_drive_mcp_url,
-            seo_mcp_url=args.seo_mcp_url
-        )
-        
-        analysis_result: SEOAnalysisResult = await agent.emergency_seo_diagnosis(
+        # The agent's run method now handles the full lifecycle
+        analysis_result = await agent.run(
             url=args.url,
-            include_competitors=args.include_competitors,
-            competitor_urls=args.competitor_urls
+            keywords=args.competitor_urls # Assuming competitor_urls are keywords
         )
         
         print("✅ Agent finished successfully.")
         final_result["success"] = True
-        # Keep the dataclass object for serialization
         agent_result = analysis_result
 
     except Exception as e:
@@ -96,12 +85,13 @@ async def main():
 
         print(f"💾 Uploading final results to Google Drive as {json_file_name}...")
         try:
-            upload_result = await upload_to_drive(args.google_drive_mcp_url, json_file_name, json_content_to_upload)
-            if upload_result.get("success"):
-                file_id = upload_result.get("fileId")
-                print(f"🎉 Results uploaded successfully. File ID: {file_id}")
-            else:
-                raise Exception(f"MCP upload failed: {upload_result.get('message')}")
+            async with aiohttp.ClientSession() as session:
+                upload_result = await upload_to_drive(session, args.google_drive_mcp_url, json_file_name, json_content_to_upload)
+                if upload_result.get("success"):
+                    file_id = upload_result.get("fileId")
+                    print(f"🎉 Results uploaded successfully. File ID: {file_id}")
+                else:
+                    raise Exception(f"MCP upload failed: {upload_result.get('message')}")
         except Exception as e:
             print(f"❌ Failed to upload result JSON to Google Drive: {e}")
             # As a fallback, print to console

@@ -12,14 +12,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
-    EvaluatorOptimizerLLM,
-    QualityRating,
-)
+from srcs.common.utils import setup_agent_app
 import aiohttp
 import json
 
@@ -30,121 +26,25 @@ def get_http_session():
 
 class UnifiedBusinessStrategyMCPAgent:
     """
-    Real MCPAgent that replaces the entire fake business_strategy_agents architecture.
-    Provides comprehensive business intelligence and strategy development capabilities.
+    Real MCPAgent that provides comprehensive business intelligence 
+    and strategy development capabilities.
     """
     
-    def __init__(self,
-                 google_drive_mcp_url: str = "http://localhost:3001",
-                 data_sourcing_mcp_url: str = "http://localhost:3005"):
-        self.google_drive_mcp_url = google_drive_mcp_url
-        self.data_sourcing_mcp_url = data_sourcing_mcp_url
-        self.agent = self._create_agent()
+    def __init__(self):
+        self.app = setup_agent_app("unified_strategy_agent")
 
-    def _create_agent(self) -> Agent:
-        return Agent(
-            name="unified_strategy_agent",
-            instruction="You are a chief strategy officer. Synthesize market, competitor, and technology data to create a unified business strategy.",
-            server_names=["data_sourcing_mcp", "fetch"] # Using the new data sourcing MCP
-        )
-
-    async def develop_strategy(self, industry: str, company_profile: str, competitors: List[str], tech_trends: List[str]) -> Dict[str, Any]:
-        """
-        Develops a unified business strategy by synthesizing data from the Data Sourcing MCP.
-        """
-        llm = OpenAIAugmentedLLM()
-
-        prompt = f"""
-        As a Chief Strategy Officer, create a unified and actionable business strategy.
-        Use the 'data_sourcing_mcp' to gather structured data for your analysis.
-
-        **Inputs:**
-        - **Industry:** {industry}
-        - **Company Profile:** {company_profile}
-        - **Competitors (Tickers):** {', '.join(competitors)}
-        - **Known Technology Trends:** {', '.join(tech_trends)}
-
-        **Analysis & Strategy Formulation Steps:**
-        1.  **Situational Analysis:**
-            - Call `/market-trends` for the "{industry}" industry to understand the macro environment.
-            - Call `/company-financials` for each competitor in [{', '.join(competitors)}] to assess their strengths.
-            - Synthesize this data with the provided company profile and technology trends.
-        
-        2.  **SWOT Analysis:**
-            - Based on the situational analysis, generate a SWOT analysis (Strengths, Weaknesses, Opportunities, Threats).
-
-        3.  **Strategic Objectives and Key Results (OKRs):**
-            - Define 2-3 high-level strategic objectives for the next 12-18 months.
-            - For each objective, define 2-3 measurable key results.
-            
-        4.  **Execution Roadmap:**
-            - Outline a high-level execution roadmap for the next three quarters (Q1, Q2, Q3).
-            - Specify key initiatives for each quarter, tied to the OKRs.
-
-        **Output Format (JSON):**
-        Please provide the final strategy in the following structured JSON format:
-
-        {{
-          "strategic_summary": "A concise paragraph summarizing the overall strategy.",
-          "swot_analysis": {{
-            "strengths": ["..."],
-            "weaknesses": ["..."],
-            "opportunities": ["..."],
-            "threats": ["..."]
-          }},
-          "strategic_okrs": [
-            {{
-              "objective": "...",
-              "key_results": ["...", "..."]
-            }}
-          ],
-          "execution_roadmap": {{
-            "Q1": ["...", "..."],
-            "Q2": ["...", "..."],
-            "Q3": ["...", "..."]
-          }}
-        }}
-        """
-        response_str = await llm.generate_str(
-            message=prompt,
-            agent=self.agent,
-            request_params=RequestParams(
-                model="gemini-2.5-pro-vision-preview-06-07",
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-        )
-        try:
-            return json.loads(response_str)
-        except json.JSONDecodeError:
-            print(f"Error: Could not decode JSON from LLM response:\n{response_str}")
-            return {"error": "Invalid JSON response from unified strategy agent"}
-            
-    async def run_comprehensive_analysis(
-        self, 
-        keywords: List[str],
-        business_context: Dict[str, Any] = None,
-        objectives: List[str] = None,
-        regions: List[str] = None,
-        time_horizon: str = "12_months"
-    ) -> Dict[str, Any]:
-        """
-        Run comprehensive business strategy analysis and upload the result to Google Drive.
-        """
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file_name = f"unified_business_strategy_{timestamp}.md"
-        
-        async with self.app.run() as app:
-            context = app.context
-            logger = app.logger
+    async def run_unified_strategy(self, keywords: List[str], business_context: Dict[str, Any], objectives: List[str]):
+        """Run the end-to-end unified business strategy workflow."""
+        async with self.app.run() as unified_app:
+            context = unified_app.context
+            logger = unified_app.logger
             
             # Configure MCP servers
             await self._configure_mcp_servers(context, logger)
             
             # Define specialized agents
             agents = await self._create_unified_agents(
-                keywords, business_context, objectives, regions, time_horizon
+                keywords, business_context, objectives
             )
             
             # Create orchestrator
@@ -156,7 +56,7 @@ class UnifiedBusinessStrategyMCPAgent:
             
             # Execute unified task
             task = await self._create_unified_task(
-                keywords, business_context, objectives, regions, time_horizon
+                keywords, business_context, objectives
             )
             
             logger.info("Starting unified business strategy analysis...")
@@ -222,9 +122,7 @@ class UnifiedBusinessStrategyMCPAgent:
     async def _create_unified_agents(self, 
                                    keywords: List[str],
                                    business_context: Dict[str, Any],
-                                   objectives: List[str],
-                                   regions: List[str],
-                                   time_horizon: str) -> List[Agent]:
+                                   objectives: List[str]) -> List[Agent]:
         """Create all specialized agents for unified workflow"""
         
         keyword_str = ", ".join(keywords)

@@ -6,14 +6,15 @@ from pathlib import Path
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app, save_report
+
 
 # Configuration
 OUTPUT_DIR = "product_innovation_accelerator_reports"
@@ -46,6 +47,8 @@ async def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    app = setup_agent_app("product_innovation_system")
+
     async with app.run() as innovation_app:
         context = innovation_app.context
         logger = innovation_app.logger

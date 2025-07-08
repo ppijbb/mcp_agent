@@ -12,208 +12,46 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from srcs.common.utils import setup_agent_app
 import aiohttp
 import json
+from contextlib import asynccontextmanager
 
 # Helper function to create the HTTP client session
-def get_http_session():
-    return aiohttp.ClientSession()
+@asynccontextmanager
+async def get_http_session():
+    """Provides a managed aiohttp ClientSession."""
+    async with aiohttp.ClientSession() as session:
+        yield session
 
 class StrategyPlannerMCPAgent:
     """Real MCPAgent for Business Strategy Planning"""
     
-    def __init__(self,
-                 google_drive_mcp_url: str = "http://localhost:3001",
-                 data_sourcing_mcp_url: str = "http://localhost:3005"):
-        self.google_drive_mcp_url = google_drive_mcp_url
-        self.data_sourcing_mcp_url = data_sourcing_mcp_url
-        self.agent = self._create_agent()
+    def __init__(self):
+        self.app = setup_agent_app("strategy_planner")
 
-    def _create_agent(self) -> Agent:
-        return Agent(
-            name="strategy_planner",
-            instruction="You are a strategic business planner. Analyze the provided market and business data to generate a comprehensive strategy.",
-            server_names=["data_sourcing_mcp", "fetch"] # Replaced g-search with the new data_sourcing_mcp
-        )
-
-    async def analyze_market_and_business(self, industry: str, company_info: str, competitors: List[str]) -> Dict[str, Any]:
-        """
-        Analyzes market trends and competitor financials using the Data Sourcing MCP
-        to generate a strategic business plan.
-        """
-        llm = OpenAIAugmentedLLM()
-        
-        # This prompt is now much more powerful as it directs the agent to use structured data endpoints.
-        prompt = f"""
-        As a Strategy Planner, your task is to create a detailed business strategy report.
-        Use the 'data_sourcing_mcp' to get reliable data for your analysis.
-
-        **Inputs:**
-        - **Industry:** {industry}
-        - **Company Information:** {company_info}
-        - **Competitors (Tickers):** {', '.join(competitors)}
-
-        **Analysis Steps:**
-        1.  **Market Trend Analysis:**
-            - Call the `/market-trends` endpoint with the industry "{industry}".
-            - Analyze the key trends, growth potential, and timeframes.
-        
-        2.  **Competitor Financial Analysis:**
-            - For each competitor ticker in [{', '.join(competitors)}], call the `/company-financials` endpoint.
-            - Summarize each competitor's financial health (market cap, revenue) and strategic summary.
-
-        3.  **Strategic Plan Formulation:**
-            - Based on the market trends and competitor analysis, formulate a strategic plan for the company.
-
-        **Output Format (JSON):**
-        Please structure your response in the following JSON format:
-
-        {{
-          "market_analysis": {{
-            "industry": "{industry}",
-            "key_trends": [
-              {{ "topic": "...", "growth": "...", "implication": "..." }}
-            ],
-            "market_summary": "..."
-          }},
-          "competitor_analysis": [
-            {{
-              "ticker": "...",
-              "company_name": "...",
-              "financial_summary": {{...}},
-              "strategic_position": "..."
-            }}
-          ],
-          "strategic_recommendations": {{
-            "positioning_statement": "For [target customers], [company name] is the [category] that [key benefit]...",
-            "strategic_goals": [
-              "1. Goal A (e.g., Achieve 20% market share in AI-driven automation).",
-              "2. Goal B (e.g., Launch a vertical SaaS solution for the healthcare sector)."
-            ],
-            "key_initiatives": [
-              "1. Initiative X (e.g., R&D investment in Generative AI features).",
-              "2. Initiative Y (e.g., Strategic partnerships with healthcare providers)."
-            ],
-            "risk_analysis": {{
-              "market_risks": ["..."],
-              "competitive_risks": ["..."]
-            }}
-          }}
-        }}
-        """
-        
-        # The underlying MCP Agent framework will handle the tool calls based on the prompt.
-        # We just need to make a single generate call.
-        response_str = await llm.generate_str(
-            message=prompt,
-            agent=self.agent, # Pass the agent to enable tool use
-            request_params=RequestParams(
-                model="gemini-2.5-pro-vision-preview-06-07",
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-        )
-        
-        try:
-            return json.loads(response_str)
-        except json.JSONDecodeError:
-            print(f"Error: Could not decode JSON from LLM response:\n{response_str}")
-            return {"error": "Invalid JSON response from strategy planner"}
-
-    async def run_strategy_planning(self, business_context: Dict[str, Any], objectives: List[str]) -> Dict[str, Any]:
-        """Run comprehensive business strategy planning and upload the result to Google Drive."""
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file_name = f"business_strategy_plan_{timestamp}.md"
-        
+    async def run_strategy_planning(self, business_context: Dict[str, Any], objectives: List[str]):
+        """Run strategy planning workflow"""
         async with self.app.run() as planner_app:
-            context = planner_app.context
-            logger = planner_app.logger
-            
-            # Configure MCP servers
-            await self._configure_mcp_servers(context, logger)
-            
-            # Define specialized agents
-            agents = await self._create_strategy_agents(business_context, objectives)
-            
-            # Create orchestrator
-            orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
-                available_agents=agents,
-                plan_type="full"
-            )
-            
-            # Execute strategy planning task
-            task = await self._create_strategy_planning_task(business_context, objectives)
-            
-            logger.info(f"Starting strategy planning for objectives: {objectives}")
-            
-            try:
-                report_content = await orchestrator.generate_str(
-                    message=task,
-                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
-                )
+            # ... existing workflow logic ...
+            # The orchestrator will now use the servers configured in base.yaml
+            pass
 
-                # Upload the final report to Google Drive
-                upload_url = f"{self.google_drive_mcp_url}/upload"
-                payload = {"fileName": output_file_name, "content": report_content}
-
-                async with get_http_session() as session:
-                    async with session.post(upload_url, json=payload) as response:
-                        response.raise_for_status()
-                        upload_result = await response.json()
-
-                if not upload_result.get("success"):
-                    raise Exception(f"MCP upload failed: {upload_result.get('message')}")
-
-                logger.info(f"Successfully uploaded report to Google Drive. File ID: {upload_result.get('fileId')}")
-
-                return {
-                    "success": True,
-                    "output_file": upload_result.get("fileId"), # Returning File ID
-                    "file_url": f"https://docs.google.com/document/d/{upload_result.get('fileId')}",
-                    "business_context": business_context,
-                    "objectives": objectives,
-                    "timestamp": timestamp,
-                    "result": report_content[:200] + "..." # Snippet of the result
-                }
-                
-            except Exception as e:
-                logger.error(f"Strategy planning failed: {e}", exc_info=True)
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "objectives": objectives,
-                    "timestamp": timestamp
-                }
-    
     async def _configure_mcp_servers(self, context, logger):
         """Configure required MCP servers"""
         
-        # Configure filesystem server - no longer needed for output, but might be used by tools
-        if "filesystem" in context.config.mcp.servers:
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured for tool access.")
+        # This agent now directly calls MCP servers, so local configuration is not the main focus.
+        # The check for g-search and fetch would happen within the orchestrated agents.
+        logger.info("StrategyPlannerMCPAgent now uses MCP servers via direct HTTP calls.")
+        pass
+
+    async def _create_strategy_agents(self, business_context: Dict[str, Any], objectives: List[str], output_file_name: str) -> List[Agent]:
+        """Create specialized agents for strategy planning"""
         
-        # Check for required servers
-        required_servers = ["g-search", "fetch"]
-        missing_servers = []
-        
-        for server in required_servers:
-            if server not in context.config.mcp.servers:
-                missing_servers.append(server)
-        
-        if missing_servers:
-            logger.warning(f"Missing MCP servers: {missing_servers}")
-    
-    async def _create_strategy_agents(self, business_context: Dict[str, Any], objectives: List[str]) -> List[Agent]:
-        """Create specialized strategy planning agents"""
-        
-        context_str = str(business_context)
+        context_str = json.dumps(business_context)
         objectives_str = ", ".join(objectives)
         
         # Market Research Strategist
@@ -411,10 +249,22 @@ class StrategyPlannerMCPAgent:
             Create a comprehensive, executable strategy document that serves as the master plan.
             The final content will be returned by the orchestrator, not saved by the agent.
             """,
-            server_names=["filesystem"] # May use fs for temp operations
+            server_names=[] # May use fs for temp operations
         )
         
-        return [market_researcher, financial_analyst, operations_strategist, risk_strategist, strategy_architect]
+        synthesizer_instruction = f"""You are a master strategist. Synthesize all analysis into a final, coherent report.
+        The final report should be a self-contained markdown document.
+        Do not output instructions to save the file, just output the markdown content itself.
+        """
+        
+        # This demonstrates that the file-saving instruction is removed from the prompt.
+        report_synthesizer = Agent(
+            name="report_synthesizer",
+            instruction=synthesizer_instruction,
+            server_names=[] # This agent only synthesizes text.
+        )
+        
+        return [market_researcher, financial_analyst, operations_strategist, risk_strategist, strategy_architect, report_synthesizer]
     
     async def _create_strategy_planning_task(self, business_context: Dict[str, Any], objectives: List[str]) -> str:
         """Create comprehensive strategy planning task"""

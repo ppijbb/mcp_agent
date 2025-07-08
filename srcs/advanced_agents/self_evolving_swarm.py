@@ -3,12 +3,30 @@ import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+import uuid
+
+# Real MCP Agent imports
 from mcp_agent.app import MCPApp
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.swarm.swarm_anthropic import AnthropicSwarm
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from srcs.common.utils import setup_agent_app
+
+
+class SelfEvolvingSwarm:
+    """
+    A swarm of agents that can evolve and adapt over time.
+    """
+    def __init__(self, num_agents: int = 5, output_dir: str = "swarm_reports"):
+        self.output_dir = output_dir
+        self.app = setup_agent_app("self_evolving_swarm")
+        self.population: List[EvolvingAgent] = [
+            EvolvingAgent(agent_id=f"agent_{i}") for i in range(num_agents)
+        ]
+        self.generation = 0
+        self.task_history: List[Task] = []
+        self.performance_logs: List[Dict[str, Any]] = []
 
 
 class SelfEvolvingSwarmOrchestrator:

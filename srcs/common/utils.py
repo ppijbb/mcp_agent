@@ -9,13 +9,22 @@ import json
 from datetime import datetime
 from .config import get_timestamp, SUMMARY_TIMESTAMP_FORMAT, DEFAULT_COMPANY_NAME
 from mcp_agent.app import MCPApp
-from mcp_agent.config import get_settings
+from mcp_agent.config import MCPAppConfig
+from srcs.core.config.loader import settings
 
-def setup_agent_app(app_name, config_path="configs/mcp_agent.config.yaml"):
-    """Setup and configure MCP app with standard settings"""
-    return MCPApp(
+def setup_agent_app(app_name):
+    """Setup and configure MCP app with standard settings from the new config system"""
+    
+    # 새로운 설정 시스템의 mcp_servers를 MCPAppConfig 형식으로 변환
+    mcp_config = {name: server.model_dump() for name, server in settings.mcp_servers.items()}
+
+    app_settings = MCPAppConfig(
         name=app_name,
-        settings=get_settings(config_path),
+        mcp=mcp_config
+    )
+
+    return MCPApp(
+        settings=app_settings,
         human_input_callback=None
     )
 

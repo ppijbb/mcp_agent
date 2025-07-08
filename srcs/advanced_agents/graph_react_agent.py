@@ -6,16 +6,16 @@ from typing import List, Dict, Any, Tuple
 import json
 import inspect
 
-from mcp.types import Tool, RequestParams
-from srcs.utils.graph_database.connector import Neo4jConnector
 from mcp_agent.app import MCPApp
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.utils import setup_agent_app
 import graphviz
 import os
 from logging import Logger
+from srcs.utils.graph_database.connector import Neo4jConnector
 
 async def clear_graph(logger: Logger):
     """Deletes all nodes and relationships from the graph."""
@@ -39,17 +39,17 @@ class GraphReActAgent(Agent):
     It's designed to be controlled by an Orchestrator.
     """
     def __init__(self, **kwargs):
-        # Standard agent initialization without unexpected kwargs
+        # Standard agent initialization
         super().__init__(
             name="GraphReActAgent",
             instruction="You are a powerful AI agent that uses a knowledge graph to reason step-by-step (ReAct pattern) to answer complex queries. You can expand, evaluate, prune, and synthesize thoughts in the graph.",
-            # server_names can be specified here if needed, e.g., server_names=["g-search"]
+            **kwargs
         )
         self.max_iterations = 10
         self.model = "gemini-2.5-flash-lite-preview-06-07"
         self.graph = Neo4jConnector()
-        # The base Agent class will provide self.orchestrator and self.logger
-        # once this agent is added to an orchestrator.
+        # self.orchestrator and self.logger will be set by the MCPApp/Orchestrator
+        # that this agent is part of.
         
     async def execute_react_cycle(self, user_query: str):
         """

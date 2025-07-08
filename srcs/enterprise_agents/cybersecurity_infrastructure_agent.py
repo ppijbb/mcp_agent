@@ -6,7 +6,6 @@ from pathlib import Path
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -14,6 +13,7 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app, save_report
 
 # ✅ P2-1: Cybersecurity Agent 메서드 구현 (2개 함수)
 
@@ -90,11 +90,7 @@ class CybersecurityAgent:
     """Cybersecurity Infrastructure Agent for Streamlit integration"""
     
     def __init__(self):
-        self.app = MCPApp(
-            name="cybersecurity_infrastructure_system",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        self.app = setup_agent_app("cybersecurity_infrastructure_system")
         self.output_dir = OUTPUT_DIR
     
     def run_cybersecurity_workflow(self, company_name=None, assessment_type=None, frameworks=None, save_to_file=False):
@@ -409,11 +405,7 @@ async def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    app = MCPApp(
-        name="cybersecurity_infrastructure_system",
-        settings=get_settings("configs/mcp_agent.config.yaml"),
-        human_input_callback=None
-    )
+    app = setup_agent_app("cybersecurity_infrastructure_system")
     
     async with app.run() as security_app:
         context = security_app.context

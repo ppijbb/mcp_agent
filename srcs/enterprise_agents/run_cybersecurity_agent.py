@@ -12,6 +12,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, str(project_root))
 
 from enterprise_agents.cybersecurity_infrastructure_agent import CybersecurityAgent
+from srcs.core.utils import EnhancedJSONEncoder
 
 def parse_args():
     """Parse command-line arguments."""
@@ -31,16 +32,6 @@ def parse_args():
         "save_to_file": args.save_to_file,
         "result_json_path": args.result_json_path,
     }
-
-class EnhancedJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if is_dataclass(o):
-            return asdict(o)
-        if isinstance(o, datetime):
-            return o.isoformat()
-        if hasattr(o, 'value'):
-            return o.value
-        return super().default(o)
 
 def main():
     """Main function to run the cybersecurity agent workflow."""

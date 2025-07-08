@@ -6,30 +6,31 @@ from pathlib import Path
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app, save_report
+
 
 # Configuration
-OUTPUT_DIR = "supply_chain_optimization_reports"
+OUTPUT_DIR = "supply_chain_reports"
 COMPANY_NAME = "TechCorp Inc."
 SUPPLY_CHAIN_SCOPE = "Global Manufacturing & Distribution"
 
 app = MCPApp(
     name="supply_chain_orchestrator_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
+    settings=None,
     human_input_callback=None
 )
 
 
 async def main():
     """
-    Supply Chain Orchestrator Agent System
+    Supply Chain Orchestration and Logistics Optimization Agent System
     
     Handles comprehensive supply chain optimization and risk management:
     1. Real-time supply chain monitoring and alerts
@@ -46,6 +47,8 @@ async def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    app = setup_agent_app("supply_chain_orchestrator_system")
+
     async with app.run() as supply_chain_app:
         context = supply_chain_app.context
         logger = supply_chain_app.logger

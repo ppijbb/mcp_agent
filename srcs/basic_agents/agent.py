@@ -12,10 +12,11 @@ from datetime import datetime
 import yaml
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from typing import Dict, List, Any
 
 
 from mcp_agent.app import MCPApp
-from mcp_agent.agents.agent import Agent
+from mcp_agent.agents.agent import Agent as MCP_Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -24,6 +25,24 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app
+
+
+class Agent:
+    def __init__(
+        self,
+        instruction="You are a helpful AI assistant.",
+    ):
+        self.app = setup_agent_app("basic_agent")
+        self.agent = MCP_Agent(
+            name="assistant",
+            instruction=instruction,
+            server_names=["g-search", "fetch", "filesystem"],
+            llm_factory=lambda: OpenAIAugmentedLLM(
+                model="gpt-4",
+            ),
+        )
+
 
 # Configuration values
 OUTPUT_DIR = "company_reports"

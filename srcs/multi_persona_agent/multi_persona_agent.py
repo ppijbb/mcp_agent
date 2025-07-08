@@ -2,10 +2,12 @@
 Main entry point for the Multi-Persona Dialogue Agent system.
 """
 import asyncio
+import json
 from typing import List, Dict, Any
 
 from mcp_agent.app import MCPApp
-from mcp_agent.config import get_settings
+from mcp_agent.agents.agent import Agent
+from srcs.common.utils import setup_agent_app
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 from .personas import PERSONA_BUILDERS
@@ -16,12 +18,21 @@ class MultiPersonaDialogueAgent:
     An agent system that uses a dialogue between multiple personas 
     to explore a topic from different angles and produce a comprehensive result.
     """
-    def __init__(self, app: MCPApp = None):
-        self.app = app or MCPApp(
-            name="multi_persona_dialogue_agent",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-        )
-        self.all_personas = [builder() for builder in PERSONA_BUILDERS.values()]
+    def __init__(self, personas_file: str = 'personas.json'):
+        self.app = setup_agent_app("multi_persona_agent")
+        with open(personas_file, 'r') as f:
+            self.personas = json.load(f)
+        self.agents = {}
+
+    async def initialize_agents(self):
+        async with self.app.run() as app_context:
+            for name, instruction in self.personas.items():
+                self.agents[name] = Agent(
+                    name=name,
+                    instruction=instruction,
+                    server_names=["g-search", "fetch"],
+                    llm_factory=app_context.llm_factory,
+                )
 
     async def run_dialogue(self, topic: str, max_rounds: int = 3) -> Dict[str, Any]:
         """

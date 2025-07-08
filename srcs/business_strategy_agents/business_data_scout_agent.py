@@ -17,10 +17,12 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from srcs.common.utils import setup_agent_app, save_report
+from srcs.core.agent.base import BaseAgent
+from mcp_agent.agents.agent import Agent as MCP_Agent
 
 # --- INSTRUCTIONS DEFINED LOCALLY ---
 BUSINESS_DATA_SCOUT_AGENT_INSTRUCTION = """
@@ -40,100 +42,55 @@ Provide a rating (EXCELLENT, GOOD, FAIR, POOR) and justify your assessment.
 # --- END LOCAL INSTRUCTIONS ---
 
 
-class BusinessDataScoutMCPAgent:
-    """Real MCPAgent for Business Data Scouting"""
+class BusinessDataScoutAgent(BaseAgent):
+    """
+    Business Data Scout Agent, refactored to inherit from BaseAgent.
+    Collects and evaluates business-related data from various sources.
+    """
     
-    def __init__(self, output_dir: str = "business_strategy_reports"):
-        self.output_dir = output_dir
-        self.app = MCPApp(
-            name="business_data_scout",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
+    def __init__(self):
+        super().__init__(
+            name="BusinessDataScoutAgent",
+            instruction="Collects, analyzes, and evaluates business data based on given keywords and regions.",
+            server_names=["g-search", "fetch", "filesystem"]
         )
-        
-    async def run_data_collection(self, keywords: List[str], regions: List[str] = None) -> Dict[str, Any]:
-        """Run comprehensive business data collection"""
-        
-        # Create output directory
-        os.makedirs(self.output_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"business_data_scout_report_{timestamp}.md"
-        output_path = os.path.join(self.output_dir, output_file)
-        
-        async with self.app.run() as scout_app:
-            context = scout_app.context
-            logger = scout_app.logger
+        self.output_dir = "business_strategy_reports"
+
+    async def run_workflow(self, keywords: List[str], regions: List[str] | None = None):
+        """
+        The core workflow for scouting and collecting business data.
+        """
+        async with self.app.run() as app_context:
+            self.logger.info(f"Starting data scouting for keywords: {keywords}")
             
-            # Configure MCP servers
-            await self._configure_mcp_servers(context, logger)
+            os.makedirs(self.output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"business_data_scout_report_{timestamp}.md"
+            output_path = os.path.join(self.output_dir, output_file)
+
+            # 1. Define specialized sub-agents
+            agents = self._create_specialized_agents(keywords, regions, output_path, app_context.llm_factory)
             
-            # Define specialized agents
-            agents = await self._create_specialized_agents(keywords, regions, output_path)
+            # 2. Get an orchestrator to manage them
+            orchestrator = self.get_orchestrator(agents)
+
+            # 3. Define the main task
+            task = self._create_data_collection_task(keywords, regions, output_path)
+
+            # 4. Run the orchestrator
+            final_report = await orchestrator.run(task)
             
-            # Create orchestrator
-            orchestrator = Orchestrator(
-                llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
-                available_agents=agents,
-                plan_type="full"
-            )
-            
-            # Execute data collection task
-            task = await self._create_data_collection_task(keywords, regions, output_path)
-            
-            logger.info(f"Starting business data collection for keywords: {keywords}")
-            
-            try:
-                result = await orchestrator.generate_str(
-                    message=task,
-                    request_params=RequestParams(model="gemini-2.0-flash-lite-001")
-                )
-                
-                return {
-                    "success": True,
-                    "output_file": output_path,
-                    "keywords": keywords,
-                    "regions": regions or ["global"],
-                    "timestamp": timestamp,
-                    "result": result
-                }
-                
-            except Exception as e:
-                logger.error(f"Business data collection failed: {e}")
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "keywords": keywords,
-                    "timestamp": timestamp
-                }
-    
-    async def _configure_mcp_servers(self, context, logger):
-        """Configure required MCP servers"""
-        
-        # Configure filesystem server
-        if "filesystem" in context.config.mcp.servers:
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured")
-        
-        # Check for required servers
-        required_servers = ["g-search", "fetch"]
-        missing_servers = []
-        
-        for server in required_servers:
-            if server not in context.config.mcp.servers:
-                missing_servers.append(server)
-        
-        if missing_servers:
-            logger.warning(f"Missing MCP servers: {missing_servers}")
-            logger.info("Install missing servers for full functionality")
-    
-    async def _create_specialized_agents(self, keywords: List[str], regions: List[str], output_path: str) -> List[Agent]:
+            self.logger.info(f"Data scouting complete. Report saved to {output_path}")
+            return {"report_path": output_path, "content": final_report}
+
+    def _create_specialized_agents(self, keywords, regions, output_path, llm_factory):
         """Create specialized agents for data collection"""
         
         keyword_str = ", ".join(keywords)
         region_str = ", ".join(regions) if regions else "global"
         
         # News & Media Data Collector
-        news_collector = Agent(
+        news_collector = MCP_Agent(
             name="news_data_collector",
             instruction=f"""You are an expert news and media data collector.
             
@@ -156,11 +113,11 @@ class BusinessDataScoutMCPAgent:
             Organize findings by relevance and business impact.
             Provide source URLs for verification.""",
             server_names=["g-search", "fetch"],
-            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
+            llm_factory=llm_factory,
         )
         
         # Social Media & Trends Collector
-        social_collector = Agent(
+        social_collector = MCP_Agent(
             name="social_trends_collector", 
             instruction=f"""You are a social media and trends analysis expert.
             
@@ -183,11 +140,11 @@ class BusinessDataScoutMCPAgent:
             
             Focus on business-relevant social signals that indicate market opportunities.""",
             server_names=["g-search", "fetch"],
-            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
+            llm_factory=llm_factory,
         )
         
         # Market Intelligence Collector
-        market_collector = Agent(
+        market_collector = MCP_Agent(
             name="market_intelligence_collector",
             instruction=f"""You are a market intelligence specialist.
             
@@ -210,11 +167,11 @@ class BusinessDataScoutMCPAgent:
             
             Provide actionable market insights with supporting data and sources.""",
             server_names=["g-search", "fetch"],
-            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
+            llm_factory=llm_factory,
         )
         
         # Data Quality Evaluator
-        data_evaluator = Agent(
+        data_evaluator = MCP_Agent(
             name="data_quality_evaluator",
             instruction=f"""You are a data quality assessment expert.
             
@@ -237,11 +194,11 @@ class BusinessDataScoutMCPAgent:
             Flag any inconsistencies or questionable data points.
             Prioritize high-quality, actionable business intelligence.""",
             server_names=["fetch"],
-            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
+            llm_factory=llm_factory,
         )
         
         # Report Synthesizer
-        report_synthesizer = Agent(
+        report_synthesizer = MCP_Agent(
             name="business_data_synthesizer",
             instruction=f"""You are a business intelligence report synthesizer.
             
@@ -269,12 +226,12 @@ class BusinessDataScoutMCPAgent:
             Save the comprehensive report to: {output_path}
             Format as clean markdown with proper sections and citations.""",
             server_names=["filesystem"],
-            llm_factory=lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001"),
+            llm_factory=llm_factory,
         )
         
         return [news_collector, social_collector, market_collector, data_evaluator, report_synthesizer]
     
-    async def _create_data_collection_task(self, keywords: List[str], regions: List[str], output_path: str) -> str:
+    def _create_data_collection_task(self, keywords: List[str], regions: List[str], output_path: str) -> str:
         """Create comprehensive data collection task"""
         
         keyword_str = ", ".join(keywords)
@@ -328,9 +285,9 @@ class BusinessDataScoutMCPAgent:
 
 
 # Factory function for easy instantiation
-async def create_business_data_scout(output_dir: str = "business_strategy_reports") -> BusinessDataScoutMCPAgent:
+async def create_business_data_scout(output_dir: str = "business_strategy_reports") -> BusinessDataScoutAgent:
     """Create and return a BusinessDataScoutMCPAgent instance"""
-    return BusinessDataScoutMCPAgent(output_dir=output_dir)
+    return BusinessDataScoutAgent()
 
 
 # Main execution function
@@ -342,7 +299,7 @@ async def run_business_data_scout(
     """Asynchronously run the Business Data Scout MCPAgent."""
     os.makedirs(output_dir, exist_ok=True)
 
-    llm_factory = lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
+    llm_factory = lambda: OpenAIAugmentedLLM(model="gemini-2.0-flash-lite-001")
 
     async with MCPApp(settings=get_settings("configs/mcp_agent.config.yaml")).run() as app:
         # Create agents

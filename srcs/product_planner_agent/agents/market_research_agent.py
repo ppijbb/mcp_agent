@@ -3,34 +3,24 @@ Market Research Agent
 시장 조사 및 트렌드 분석을 수행하는 전문 Agent
 """
 
-from mcp_agent.agents.agent import Agent
+from srcs.core.agent.base import BaseAgent, AgentContext
+from srcs.core.errors import APIError, WorkflowError
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.logging.logger import get_logger
-
-logger = get_logger("market_research_agent")
 
 
-class MarketResearchAgent:
+class MarketResearchAgent(BaseAgent):
     """시장 조사 전문 Agent"""
 
-    def __init__(self, llm=None):
-        self.llm = llm
-        self.agent_instance = self.create_agent()
+    def __init__(self):
+        super().__init__("market_research_agent")
 
-    async def analyze_market(self, product_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
         """제품 컨텍스트를 기반으로 시장 규모, 성장률, 트렌드를 분석합니다."""
-        if not self.llm:
-            # LLM이 없는 경우 목업 데이터
-            return {
-                "tam": "$5B",
-                "sam": "$1B",
-                "som": "$200M",
-                "growth_rate": "20% YoY",
-                "key_trends": ["AI 개인화", "모바일 우선"],
-                "status": "analysis_mockup"
-            }
+        product_context = context.get("product_context")
+        if not product_context:
+            raise WorkflowError("Product context is required.")
 
         prompt = f"""
         You are a seasoned market analyst. Based on the following product context, perform a comprehensive market analysis.
@@ -47,18 +37,12 @@ class MarketResearchAgent:
         Provide the output in structured JSON format.
         """
         try:
-            result_str = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4, response_format="json"))
+            result_str = await self.app.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4, response_format={"type": "json_object"}))
             data = json.loads(result_str)
             data["status"] = "analysis_successful"
+            context.set("market_analysis", data)
             return data
+        except json.JSONDecodeError as e:
+            raise WorkflowError(f"Failed to decode LLM response: {e}") from e
         except Exception as e:
-            logger.error(f"Market analysis failed: {e}")
-            return {"error": str(e), "status": "analysis_failed"}
-
-    @staticmethod
-    def create_agent() -> Agent:
-        """Agent 인스턴스 생성"""
-        instruction = """
-        You are a market research expert. Gather and synthesize market data, trends, and sizing for product planning.
-        """
-        return Agent(name="market_research", instruction=instruction, server_names=["fetch", "filesystem"]) 
+            raise APIError(f"Market analysis failed: {e}") from e 

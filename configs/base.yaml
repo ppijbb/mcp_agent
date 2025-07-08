@@ -1,0 +1,77 @@
+# ================================================== #
+#          Base Configuration (All Environments)         #
+# ================================================== #
+app_name: "MCP_Agent_System"
+
+logging:
+  level: "INFO"
+  log_file: "logs/mcp_agent.log"
+  rotation: "10 MB"
+  retention: "7 days"
+
+security:
+  # ENCRYPTION_KEY 환경 변수에서 로드
+  encryption_key: "${ENCRYPTION_KEY}"
+  allowed_hosts:
+    - "*"
+
+cache:
+  enabled: true
+  type: "in-memory" # "redis"로 변경 가능
+  ttl: 3600 # 1 hour
+  redis_url: "${REDIS_URL}" # Redis 사용 시
+
+# ================================================== #
+#               MCP Server Definitions               #
+# ================================================== #
+mcp_servers:
+  g-search:
+    command: "npx"
+    args: ["-y", "g-search-mcp"]
+    env:
+      GOOGLE_SEARCH_API_KEY: "${GOOGLE_SEARCH_API_KEY}"
+      GOOGLE_SEARCH_ENGINE_ID: "${GOOGLE_SEARCH_ENGINE_ID}"
+    timeout: 60
+    retry_count: 3
+    enabled: true
+
+  fetch:
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-fetch"]
+    env: {}
+    timeout: 120
+    retry_count: 2
+    enabled: true
+
+  filesystem:
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem"]
+    env:
+      ALLOWED_PATHS: "reports/,data/"
+    timeout: 30
+    retry_count: 3
+    enabled: true
+
+  # --- Optional Servers (기본 비활성화) ---
+  github:
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    enabled: false
+
+  google-sheets:
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-google-sheets"]
+    env:
+      GOOGLE_SHEETS_CLIENT_ID: "${GOOGLE_SHEETS_CLIENT_ID}"
+      GOOGLE_SHEETS_CLIENT_SECRET: "${GOOGLE_SHEETS_CLIENT_SECRET}"
+    enabled: false
+
+  gmail:
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-gmail"]
+    env:
+      GMAIL_CLIENT_ID: "${GMAIL_CLIENT_ID}"
+      GMAIL_CLIENT_SECRET: "${GMAIL_CLIENT_SECRET}"
+    enabled: false 

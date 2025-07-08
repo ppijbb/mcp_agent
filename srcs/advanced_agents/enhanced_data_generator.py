@@ -14,11 +14,11 @@ from datetime import datetime
 from pathlib import Path
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.utils import setup_agent_app
 
 # Configuration
 OUTPUT_DIR = "synthetic_datasets"
@@ -26,11 +26,8 @@ DATA_TYPE = "qa" if len(sys.argv) <= 1 else sys.argv[1]  # qa, cot, summary, cus
 RECORD_COUNT = 100 if len(sys.argv) <= 2 else int(sys.argv[2])
 SOURCE_FILE = None if len(sys.argv) <= 3 else sys.argv[3]  # Optional source document
 
-# Initialize app
-app = MCPApp(
-    name="enhanced_data_generator",
-    settings=get_settings("configs/mcp_agent.config.yaml")
-)
+# Global app instance for direct execution
+app = setup_agent_app("enhanced_data_generator_main")
 
 
 class SyntheticDataKitIntegration:
@@ -147,10 +144,7 @@ class SyntheticDataAgent:
 
     def __init__(self, output_dir="generated_data"):
         self.output_dir = output_dir
-        self.app = MCPApp(
-            name="synthetic_data_orchestrator",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-        )
+        self.app = setup_agent_app("enhanced_data_generator_agent")
         os.makedirs(self.output_dir, exist_ok=True)
 
     async def run(self, data_type: str, record_count: int, max_refine_iters: int = 2) -> str:

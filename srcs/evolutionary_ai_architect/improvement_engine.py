@@ -18,10 +18,10 @@ import uuid
 # Real MCP Agent imports
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from srcs.common.utils import setup_agent_app
 
 # Real PerformanceMetrics - No Mock Classes
 @dataclass
@@ -107,11 +107,7 @@ class SelfImprovementEngineMCP:
     
     def __init__(self, output_dir: str = "improvement_reports"):
         self.output_dir = output_dir
-        self.app = MCPApp(
-            name="improvement_engine",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        self.app = setup_agent_app("improvement_engine")
         
         # Core improvement engine
         self.engine = SelfImprovementEngine()

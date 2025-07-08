@@ -6,16 +6,17 @@ from pathlib import Path
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app, save_report
 
 # Configuration
-OUTPUT_DIR = "recruitment_reports"
+OUTPUT_DIR = "hr_recruitment_reports"
 POSITION_NAME = "Senior Software Engineer"
 COMPANY_NAME = "TechCorp Inc."
 
@@ -24,11 +25,7 @@ class HRRecruitmentAgent:
     """HR Recruitment Agent for Streamlit integration"""
     
     def __init__(self):
-        self.app = MCPApp(
-            name="hr_recruitment_system",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        self.app = setup_agent_app("hr_recruitment_system")
         self.output_dir = OUTPUT_DIR
     
     def run_recruitment_workflow(self, position=None, company=None, workflows=None, save_to_file=False):
@@ -454,11 +451,7 @@ async def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    app = MCPApp(
-        name="hr_recruitment_system",
-        settings=get_settings("configs/mcp_agent.config.yaml"),
-        human_input_callback=None
-    )
+    app = setup_agent_app("hr_recruitment_system")
     
     async with app.run() as hr_app:
         context = hr_app.context

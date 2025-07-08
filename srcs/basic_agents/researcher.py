@@ -11,19 +11,18 @@ from mcp_agent.workflows.llm.augmented_llm_anthropic import AnthropicAugmentedLL
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.logging.logger import LoggingConfig
 from rich import print
-
-app = MCPApp(
-    name="mcp_root_test",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-)
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from srcs.common.utils import setup_agent_app
 
 
-async def example_usage():
-    async with app.run() as agent_app:
+async def main(query):
+    app = setup_agent_app("researcher_app")
+
+    async with app.run() as app_context:
         folder_path = Path("agent_folder")
         folder_path.mkdir(exist_ok=True)
 
-        context = agent_app.context
+        context = app_context.context
 
         # Overwrite the config because full path to agent folder needs to be passed
         context.config.mcp.servers["interpreter"].args = [
@@ -73,7 +72,7 @@ async def example_usage():
 if __name__ == "__main__":
     start = time.time()
     try:
-        asyncio.run(example_usage())
+        asyncio.run(main(""))
     except KeyboardInterrupt:
         print("\nReceived keyboard interrupt, shutting down gracefully...")
     except Exception as e:

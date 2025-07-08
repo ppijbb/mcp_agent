@@ -5,14 +5,12 @@ decorators, and how to run it using the Temporal executor.
 """
 
 import asyncio
-
+from typing import List, Dict, Any
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.executor.temporal import TemporalExecutor
-from mcp_agent.executor.workflow import Workflow, WorkflowResult
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.workflows.parallel.parallel_llm import ParallelLLM
+from srcs.common.utils import setup_agent_app
 
 
 SHORT_STORY = """
@@ -37,15 +35,11 @@ However, not all was as it seemed. The Glimmerstones true power was never confir
 and whispers of a hidden agenda linger among the villagers.
 """
 
-app = MCPApp(
-    name="mcp_parallel_workflow",
-    settings=get_settings("configs/mcp_agent.config.yaml")
-)
+async def run_parallel_agents(tasks: List[Dict[str, Any]]):
+    app = setup_agent_app("parallel_agent_app")
 
-
-async def example_usage():
-    async with app.run() as short_story_grader:
-        logger = short_story_grader.logger
+    async with app.run() as app_context:
+        logger = app_context.logger
 
         proofreader = Agent(
             name="proofreader",

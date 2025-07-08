@@ -12,108 +12,63 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
-    EvaluatorOptimizerLLM,
-    QualityRating,
-)
+from srcs.common.utils import setup_agent_app
+from srcs.core.agent.base import BaseAgent
+from mcp_agent.agents.agent import Agent as MCP_Agent
+import json
 
 
-class TrendAnalyzerMCPAgent:
-    """Real MCPAgent for Business Trend Analysis"""
+class TrendAnalyzerAgent(BaseAgent):
+    """
+    Business Trend Analyzer Agent, refactored to inherit from BaseAgent.
+    Analyzes market and technology trends based on specified focus areas.
+    """
     
-    def __init__(self, output_dir: str = "business_strategy_reports"):
-        self.output_dir = output_dir
-        self.app = MCPApp(
-            name="trend_analyzer",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
+    def __init__(self):
+        super().__init__(
+            name="TrendAnalyzerAgent",
+            instruction="Analyzes market and technology trends to provide strategic insights.",
+            server_names=["g-search", "fetch", "filesystem"]
         )
-        
-    async def run_trend_analysis(self, focus_areas: List[str], time_horizon: str = "6_months") -> Dict[str, Any]:
-        """Run comprehensive trend analysis"""
-        
-        # Create output directory
-        os.makedirs(self.output_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"trend_analysis_report_{timestamp}.md"
-        output_path = os.path.join(self.output_dir, output_file)
-        
-        async with self.app.run() as analyzer_app:
-            context = analyzer_app.context
-            logger = analyzer_app.logger
+        self.output_dir = "business_strategy_reports"
+
+    async def run_workflow(self, focus_areas: List[str], time_horizon: str):
+        """
+        The core workflow for analyzing business trends.
+        """
+        async with self.app.run() as app_context:
+            self.logger.info(f"Starting trend analysis for: {focus_areas}")
             
-            # Configure MCP servers
-            await self._configure_mcp_servers(context, logger)
+            os.makedirs(self.output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"trend_analysis_report_{timestamp}.md"
+            output_path = os.path.join(self.output_dir, output_file)
+
+            # 1. Define specialized sub-agents
+            agents = self._create_trend_agents(focus_areas, time_horizon, output_path, app_context.llm_factory)
             
-            # Define specialized agents
-            agents = await self._create_trend_agents(focus_areas, time_horizon, output_path)
+            # 2. Get a quality-controlled orchestrator
+            orchestrator = self.get_orchestrator(agents)
+
+            # 3. Define the main task
+            task = self._create_analysis_task(focus_areas, time_horizon, output_path)
+
+            # 4. Run the orchestrator
+            final_report = await orchestrator.run(task)
             
-            # Create orchestrator with evaluator-optimizer
-            orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
-                available_agents=agents,
-                plan_type="full"
-            )
-            
-            # Execute trend analysis task
-            task = await self._create_trend_analysis_task(focus_areas, time_horizon, output_path)
-            
-            logger.info(f"Starting trend analysis for areas: {focus_areas}")
-            
-            try:
-                result = await orchestrator.generate_str(
-                    message=task,
-                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
-                )
-                
-                return {
-                    "success": True,
-                    "output_file": output_path,
-                    "focus_areas": focus_areas,
-                    "time_horizon": time_horizon,
-                    "timestamp": timestamp,
-                    "result": result
-                }
-                
-            except Exception as e:
-                logger.error(f"Trend analysis failed: {e}")
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "focus_areas": focus_areas,
-                    "timestamp": timestamp
-                }
-    
-    async def _configure_mcp_servers(self, context, logger):
-        """Configure required MCP servers"""
-        
-        # Configure filesystem server
-        if "filesystem" in context.config.mcp.servers:
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured")
-        
-        # Check for required servers
-        required_servers = ["g-search", "fetch"]
-        missing_servers = []
-        
-        for server in required_servers:
-            if server not in context.config.mcp.servers:
-                missing_servers.append(server)
-        
-        if missing_servers:
-            logger.warning(f"Missing MCP servers: {missing_servers}")
-    
-    async def _create_trend_agents(self, focus_areas: List[str], time_horizon: str, output_path: str) -> List[Agent]:
+            self.logger.info(f"Trend analysis complete. Report saved to {output_path}")
+            return {"report_path": output_path, "content": final_report}
+
+    def _create_trend_agents(self, focus_areas: List[str], time_horizon: str, output_path: str, llm_factory) -> List[Agent]:
         """Create specialized trend analysis agents"""
         
         areas_str = ", ".join(focus_areas)
         
         # Trend Data Collector - Enhanced with quality control
-        trend_collector = Agent(
+        trend_collector = MCP_Agent(
             name="trend_data_collector",
             instruction=f"""You are an expert trend research analyst.
             
@@ -142,7 +97,7 @@ class TrendAnalyzerMCPAgent:
         )
         
         # Trend Quality Evaluator
-        trend_evaluator = Agent(
+        trend_evaluator = MCP_Agent(
             name="trend_quality_evaluator",
             instruction=f"""You are a trend analysis quality evaluator.
             
@@ -174,12 +129,12 @@ class TrendAnalyzerMCPAgent:
         quality_trend_collector = EvaluatorOptimizerLLM(
             optimizer=trend_collector,
             evaluator=trend_evaluator,
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=llm_factory,
             min_rating=QualityRating.EXCELLENT,
         )
         
         # Pattern Recognition Analyst
-        pattern_analyst = Agent(
+        pattern_analyst = MCP_Agent(
             name="pattern_recognition_analyst",
             instruction=f"""You are a business pattern recognition specialist.
             
@@ -212,7 +167,7 @@ class TrendAnalyzerMCPAgent:
         )
         
         # Opportunity Detector
-        opportunity_detector = Agent(
+        opportunity_detector = MCP_Agent(
             name="opportunity_detector",
             instruction=f"""You are a business opportunity detection expert.
             
@@ -251,7 +206,7 @@ class TrendAnalyzerMCPAgent:
         )
         
         # Strategic Implications Analyzer
-        strategy_analyzer = Agent(
+        strategy_analyzer = MCP_Agent(
             name="strategic_implications_analyzer",
             instruction=f"""You are a strategic business implications analyst.
             
@@ -291,7 +246,7 @@ class TrendAnalyzerMCPAgent:
         )
         
         # Comprehensive Report Generator
-        report_generator = Agent(
+        report_generator = MCP_Agent(
             name="trend_report_generator",
             instruction=f"""You are a comprehensive trend analysis report writer.
             
@@ -352,7 +307,7 @@ class TrendAnalyzerMCPAgent:
         
         return [quality_trend_collector, pattern_analyst, opportunity_detector, strategy_analyzer, report_generator]
     
-    async def _create_trend_analysis_task(self, focus_areas: List[str], time_horizon: str, output_path: str) -> str:
+    def _create_analysis_task(self, focus_areas: List[str], time_horizon: str, output_path: str) -> str:
         """Create comprehensive trend analysis task"""
         
         areas_str = ", ".join(focus_areas)
@@ -409,46 +364,30 @@ class TrendAnalyzerMCPAgent:
 
 
 # Factory function for easy instantiation
-async def create_trend_analyzer(output_dir: str = "business_strategy_reports") -> TrendAnalyzerMCPAgent:
+async def create_trend_analyzer() -> TrendAnalyzerAgent:
     """Create and return a TrendAnalyzerMCPAgent instance"""
-    return TrendAnalyzerMCPAgent(output_dir=output_dir)
+    return TrendAnalyzerAgent()
 
 
 # Main execution function
-async def run_trend_analysis(focus_areas: List[str], time_horizon: str = "6_months", 
-                           output_dir: str = "business_strategy_reports") -> Dict[str, Any]:
-    """Run trend analysis with specified parameters"""
-    
-    analyzer_agent = await create_trend_analyzer(output_dir)
-    return await analyzer_agent.run_trend_analysis(focus_areas, time_horizon)
+async def run_trend_analysis(focus_areas: List[str], time_horizon: str):
+    """Run the trend analyzer agent"""
+    analyzer = TrendAnalyzerAgent()
+    result = await analyzer.run(
+        focus_areas=focus_areas,
+        time_horizon=time_horizon
+    )
+    print(json.dumps(result, indent=2))
 
+async def main():
+    """Main function to demonstrate the agent."""
+    agent = TrendAnalyzerAgent()
+    result = await agent.run(
+        focus_areas=["AI-driven drug discovery", "decentralized clinical trials"],
+        time_horizon="next 24 months"
+    )
+    print(json.dumps(result, indent=2))
 
 # CLI execution
 if __name__ == "__main__":
-    # Parse command line arguments
-    if len(sys.argv) < 2:
-        print("Usage: python trend_analyzer_agent.py 'area1,area2' [time_horizon]")
-        print("Example: python trend_analyzer_agent.py 'AI,fintech,sustainability' '12_months'")
-        print("Time horizons: 3_months, 6_months, 12_months, 24_months")
-        sys.exit(1)
-    
-    focus_areas = [area.strip() for area in sys.argv[1].split(',')]
-    time_horizon = sys.argv[2] if len(sys.argv) > 2 else "6_months"
-    
-    # Validate time horizon
-    valid_horizons = ["3_months", "6_months", "12_months", "24_months"]
-    if time_horizon not in valid_horizons:
-        print(f"Invalid time horizon: {time_horizon}")
-        print(f"Valid options: {', '.join(valid_horizons)}")
-        sys.exit(1)
-    
-    # Run the trend analysis
-    result = asyncio.run(run_trend_analysis(focus_areas, time_horizon))
-    
-    if result["success"]:
-        print(f"✅ Trend analysis completed successfully!")
-        print(f"📄 Report saved to: {result['output_file']}")
-        print(f"🔍 Focus areas: {', '.join(result['focus_areas'])}")
-        print(f"⏰ Time horizon: {result['time_horizon']}")
-    else:
-        print(f"❌ Trend analysis failed: {result['error']}") 
+    asyncio.run(main()) 

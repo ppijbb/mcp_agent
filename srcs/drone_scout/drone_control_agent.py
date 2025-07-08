@@ -20,17 +20,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import re
+import uuid
 
+# Real MCP Agent imports
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
-    EvaluatorOptimizerLLM,
-    QualityRating,
-)
+from srcs.common.utils import setup_agent_app
 
 # Import our models
 from .models.drone_data import (
@@ -47,95 +45,98 @@ OUTPUT_DIR = "drone_scout_reports"
 DEFAULT_FLEET_SIZE = 5
 MISSION_CONTROL_CENTER = "Seoul Drone Operations Center"
 
-app = MCPApp(
-    name="drone_scout_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
-
-
-async def main(mission: str, result_json_path: str):
+class DroneControlAgent:
     """
-    Drone Scout - Enterprise Drone Control Agent System
-    
-    This function now uses the REAL agent orchestrator to process the user's mission.
+    Drone Control Agent for autonomous drone operations.
     """
-    
-    # Create output directory if it doesn't exist
-    Path(OUTPUT_DIR).mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    async with app.run() as drone_app:
-        context = drone_app.context
-        logger = drone_app.logger
-        print(f"--- Real Drone Scout Agent System Initialized for mission: {mission} ---")
-        
-        # Configure servers
-        if "filesystem" in context.config.mcp.servers:
-            # Note: Ensure the working directory is what you expect.
-            context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured.")
-        
-        # All agent definitions from the original implementation are assumed to be here.
-        # This includes task_parser_agent, fleet_coordinator_agent, etc.
-        # (Code omitted for brevity, but it's the same as the original)
-        # --- AGENT DEFINITIONS ( 그대로 유지 ) ---
-        task_parser_agent = Agent(
-            name="drone_task_parser",
-            instruction=f"""You are an expert drone task interpreter for {MISSION_CONTROL_CENTER}. Convert natural language instructions into structured drone tasks. Prioritize safety and regulatory compliance.""",
-            server_names=["filesystem", "g-search"],
-        )
-        fleet_coordinator_agent = Agent(
-            name="drone_fleet_coordinator",
-            instruction=f"""You are the central fleet coordination system for {MISSION_CONTROL_CENTER}. Manage the status, coordination, and task assignment for a fleet of {DEFAULT_FLEET_SIZE} drones.""",
-            server_names=["filesystem", "weather"],
-        )
-        mission_planner_agent = Agent(
-            name="drone_mission_planner",
-            instruction=f"""You are an expert mission planning specialist. Create detailed, optimized flight plans, considering waypoints, altitude, weather, and safety. The output must include a clear list of waypoints in the format `WAYPOINT: [longitude, latitude, altitude]` for each step of the flight path.""",
-            server_names=["filesystem", "weather", "g-search"],
-        )
-        realtime_monitor_agent = Agent(
-            name="drone_realtime_monitor",
-            instruction=f"""You are the real-time monitoring and telemetry specialist. Provide continuous monitoring, progress tracking, and anomaly detection.""",
-            server_names=["filesystem"],
-        )
-        safety_emergency_agent = Agent(
-            name="drone_safety_emergency_system",
-            instruction=f"""You are the safety officer and emergency response coordinator. Ensure maximum safety and handle all emergency situations.""",
-            server_names=["filesystem", "weather"],
-        )
-        data_analysis_agent = Agent(
-            name="drone_data_analysis_specialist",
-            instruction=f"""You are the data analysis and reporting expert. Process all collected sensor data and transform it into actionable intelligence.""",
-            server_names=["filesystem", "g-search"],
-        )
-        drone_quality_evaluator = Agent(
-            name="drone_operations_quality_evaluator",
-            instruction="""You are the quality assurance specialist. Evaluate drone missions based on execution quality, data quality, technical performance, and safety. Provide EXCELLENT, GOOD, FAIR, or POOR ratings.""",
-        )
-        drone_quality_controller = EvaluatorOptimizerLLM(
-            optimizer=task_parser_agent,
-            evaluator=drone_quality_evaluator,
-            llm_factory=OpenAIAugmentedLLM,
-            min_rating=QualityRating.GOOD,
-        )
+    def __init__(self, output_dir: str = "drone_scout_reports"):
+        self.output_dir = output_dir
+        self.app = setup_agent_app("drone_control_agent")
+        self.flight_plans: Dict[str, FlightPlan] = {}
+        self.mission_history: List[Mission] = []
 
-        orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
-            available_agents=[
-                drone_quality_controller,
-                fleet_coordinator_agent,
-                mission_planner_agent,
-                realtime_monitor_agent,
-                safety_emergency_agent,
-                data_analysis_agent,
-            ],
-            plan_type="full",
-        )
+    async def main(mission: str, result_json_path: str):
+        """
+        Drone Scout - Enterprise Drone Control Agent System
         
-        # The user's mission is now the primary driver for the agent task.
-        task = f"""Primary Mission: "{mission}"
+        This function now uses the REAL agent orchestrator to process the user's mission.
+        """
+        
+        # Create output directory if it doesn't exist
+        Path(OUTPUT_DIR).mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        async with app.run() as drone_app:
+            context = drone_app.context
+            logger = drone_app.logger
+            print(f"--- Real Drone Scout Agent System Initialized for mission: {mission} ---")
+            
+            # Configure servers
+            if "filesystem" in context.config.mcp.servers:
+                # Note: Ensure the working directory is what you expect.
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                logger.info("Filesystem server configured.")
+            
+            # All agent definitions from the original implementation are assumed to be here.
+            # This includes task_parser_agent, fleet_coordinator_agent, etc.
+            # (Code omitted for brevity, but it's the same as the original)
+            # --- AGENT DEFINITIONS ( 그대로 유지 ) ---
+            task_parser_agent = Agent(
+                name="drone_task_parser",
+                instruction=f"""You are an expert drone task interpreter for {MISSION_CONTROL_CENTER}. Convert natural language instructions into structured drone tasks. Prioritize safety and regulatory compliance.""",
+                server_names=["filesystem", "g-search"],
+            )
+            fleet_coordinator_agent = Agent(
+                name="drone_fleet_coordinator",
+                instruction=f"""You are the central fleet coordination system for {MISSION_CONTROL_CENTER}. Manage the status, coordination, and task assignment for a fleet of {DEFAULT_FLEET_SIZE} drones.""",
+                server_names=["filesystem", "weather"],
+            )
+            mission_planner_agent = Agent(
+                name="drone_mission_planner",
+                instruction=f"""You are an expert mission planning specialist. Create detailed, optimized flight plans, considering waypoints, altitude, weather, and safety. The output must include a clear list of waypoints in the format `WAYPOINT: [longitude, latitude, altitude]` for each step of the flight path.""",
+                server_names=["filesystem", "weather", "g-search"],
+            )
+            realtime_monitor_agent = Agent(
+                name="drone_realtime_monitor",
+                instruction=f"""You are the real-time monitoring and telemetry specialist. Provide continuous monitoring, progress tracking, and anomaly detection.""",
+                server_names=["filesystem"],
+            )
+            safety_emergency_agent = Agent(
+                name="drone_safety_emergency_system",
+                instruction=f"""You are the safety officer and emergency response coordinator. Ensure maximum safety and handle all emergency situations.""",
+                server_names=["filesystem", "weather"],
+            )
+            data_analysis_agent = Agent(
+                name="drone_data_analysis_specialist",
+                instruction=f"""You are the data analysis and reporting expert. Process all collected sensor data and transform it into actionable intelligence.""",
+                server_names=["filesystem", "g-search"],
+            )
+            drone_quality_evaluator = Agent(
+                name="drone_operations_quality_evaluator",
+                instruction="""You are the quality assurance specialist. Evaluate drone missions based on execution quality, data quality, technical performance, and safety. Provide EXCELLENT, GOOD, FAIR, or POOR ratings.""",
+            )
+            drone_quality_controller = EvaluatorOptimizerLLM(
+                optimizer=task_parser_agent,
+                evaluator=drone_quality_evaluator,
+                llm_factory=OpenAIAugmentedLLM,
+                min_rating=QualityRating.GOOD,
+            )
+
+            orchestrator = Orchestrator(
+                llm_factory=OpenAIAugmentedLLM,
+                available_agents=[
+                    drone_quality_controller,
+                    fleet_coordinator_agent,
+                    mission_planner_agent,
+                    realtime_monitor_agent,
+                    safety_emergency_agent,
+                    data_analysis_agent,
+                ],
+                plan_type="full",
+            )
+            
+            # The user's mission is now the primary driver for the agent task.
+            task = f"""Primary Mission: "{mission}"
 
 Execute a comprehensive autonomous drone fleet management operation for {MISSION_CONTROL_CENTER} to accomplish the primary mission.
 
@@ -146,58 +147,58 @@ Your main goal is to interpret, plan, and execute the user's mission. Use your s
 4.  **Analyze & Report**: Use `data_analysis_agent` to process any collected data and generate insights.
 5.  **Output**: Save all key deliverables to the `{OUTPUT_DIR}` directory, using the timestamp `{timestamp}` in filenames. Crucially, the `mission_plans_{timestamp}.md` file must contain the flight path waypoints.
 """
-        
-        logger.info(f"Starting real drone agent workflow for mission: {mission}")
-        agent_result_string = ""
-        final_result = {}
-
-        try:
-            agent_result_string = await orchestrator.generate_str(
-                message=task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
-            )
-            logger.info("Drone Scout workflow completed successfully.")
-
-            # --- PARSE AGENT OUTPUT FOR UI ---
-            mission_plan_path_str = os.path.join(OUTPUT_DIR, f"mission_plans_{timestamp}.md")
             
-            trajectory = []
-            if Path(mission_plan_path_str).exists():
-                logger.info(f"Parsing mission plan: {mission_plan_path_str}")
-                with open(mission_plan_path_str, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    # Use regex to find all waypoint lines, robust against formatting variations.
-                    # This looks for "[lon, lat, alt]" formats.
-                    waypoint_matches = re.findall(r'\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]', content)
-                    for match in waypoint_matches:
-                        try:
-                            # Convert matched strings to float: [lon, lat, alt]
-                            coords = [float(match[0]), float(match[1]), float(match[2])]
-                            trajectory.append(coords)
-                        except (ValueError, IndexError):
-                            continue # Skip malformed waypoints
-                logger.info(f"Extracted {len(trajectory)} waypoints.")
-            else:
-                logger.warning(f"Mission plan file not found at: {mission_plan_path_str}")
+            logger.info(f"Starting real drone agent workflow for mission: {mission}")
+            agent_result_string = ""
+            final_result = {}
 
-            final_result = {
-                "success": True,
-                "summary": {
-                    "mission": mission,
-                    "status": "Completed Successfully",
-                    "output_files_location": f"{OUTPUT_DIR}/",
-                    "agent_summary": agent_result_string[:500] + "..." # Truncate for display
-                },
-                "trajectory": trajectory
-            }
-        except Exception as e:
-            logger.error(f"Error during drone workflow or parsing: {str(e)}")
-            final_result = {"success": False, "error": str(e), "raw_output": agent_result_string}
-        
-        # Save the processed, UI-friendly JSON
-        with open(result_json_path, 'w', encoding='utf-8') as f:
-            json.dump(final_result, f, ensure_ascii=False, indent=4)
-        logger.info(f"UI result JSON saved to {result_json_path}")
+            try:
+                agent_result_string = await orchestrator.generate_str(
+                    message=task,
+                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                )
+                logger.info("Drone Scout workflow completed successfully.")
+
+                # --- PARSE AGENT OUTPUT FOR UI ---
+                mission_plan_path_str = os.path.join(OUTPUT_DIR, f"mission_plans_{timestamp}.md")
+                
+                trajectory = []
+                if Path(mission_plan_path_str).exists():
+                    logger.info(f"Parsing mission plan: {mission_plan_path_str}")
+                    with open(mission_plan_path_str, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Use regex to find all waypoint lines, robust against formatting variations.
+                        # This looks for "[lon, lat, alt]" formats.
+                        waypoint_matches = re.findall(r'\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]', content)
+                        for match in waypoint_matches:
+                            try:
+                                # Convert matched strings to float: [lon, lat, alt]
+                                coords = [float(match[0]), float(match[1]), float(match[2])]
+                                trajectory.append(coords)
+                            except (ValueError, IndexError):
+                                continue # Skip malformed waypoints
+                    logger.info(f"Extracted {len(trajectory)} waypoints.")
+                else:
+                    logger.warning(f"Mission plan file not found at: {mission_plan_path_str}")
+
+                final_result = {
+                    "success": True,
+                    "summary": {
+                        "mission": mission,
+                        "status": "Completed Successfully",
+                        "output_files_location": f"{OUTPUT_DIR}/",
+                        "agent_summary": agent_result_string[:500] + "..." # Truncate for display
+                    },
+                    "trajectory": trajectory
+                }
+            except Exception as e:
+                logger.error(f"Error during drone workflow or parsing: {str(e)}")
+                final_result = {"success": False, "error": str(e), "raw_output": agent_result_string}
+            
+            # Save the processed, UI-friendly JSON
+            with open(result_json_path, 'w', encoding='utf-8') as f:
+                json.dump(final_result, f, ensure_ascii=False, indent=4)
+            logger.info(f"UI result JSON saved to {result_json_path}")
 
 
 if __name__ == "__main__":

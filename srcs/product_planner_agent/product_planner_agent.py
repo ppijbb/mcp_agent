@@ -1,146 +1,164 @@
 #!/usr/bin/env python3
 """
-Product Planner Agent - Streamlined Main Runner
+Product Planner Agent
 """
 
 import asyncio
-import os
-import sys
 import re
 from urllib.parse import unquote
-from pathlib import Path
+from srcs.core.agent.base import BaseAgent, AgentContext
+from srcs.product_planner_agent.utils.status_logger import StatusLogger
+from mcp_agent.logging.logger import get_logger
 
-# 프로젝트 루트를 Python 경로에 추가
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root))
+# Import sub-agents
+from .agents.figma_analyzer_agent import FigmaAnalyzerAgent
+from .agents.prd_writer_agent import PRDWriterAgent
+from .agents.business_planner_agent import BusinessPlannerAgent
+from .agents.market_research_agent import MarketResearchAgent
+from .agents.kpi_analyst_agent import KPIAnalystAgent
+from .agents.operations_agent import OperationsAgent
+from .agents.marketing_strategist_agent import MarketingStrategistAgent
+from .agents.project_manager_agent import ProjectManagerAgent
+from .agents.notion_document_agent import NotionDocumentAgent
 
-# 👉 새 계층형 아키텍처: ExecutiveCoordinator 사용
-from srcs.product_planner_agent.coordinators.executive_coordinator import ExecutiveCoordinator
-from srcs.product_planner_agent.utils.status_logger import STATUS_FILE
+logger = get_logger("product_planner_agent")
 
-# Centralized env helper
-from srcs.product_planner_agent.utils import env_settings as env
-
-def parse_figma_url(url: str) -> tuple[str | None, str | None]:
+class ProductPlannerAgent(BaseAgent):
     """
-    Figma URL에서 file_id와 node_id를 추출합니다.
-    예: https://www.figma.com/file/FILE_ID/File-Name?node-id=NODE_ID
+    The main agent for the product planning workflow.
     """
-    # file_id: /file/ 다음에 오는 문자열
-    file_id_match = re.search(r'figma\.com/file/([^/]+)', url)
-    file_id = file_id_match.group(1) if file_id_match else None
-    
-    # node-id: 쿼리 파라미터에서 추출
-    node_id_match = re.search(r'node-id=([^&]+)', url)
-    node_id = unquote(node_id_match.group(1)) if node_id_match else None
-    
-    return file_id, node_id
 
-def get_input_params() -> tuple[str, str]:
-    """
-    커맨드 라인 인자와 환경 변수에서 필요한 파라미터를 가져옵니다.
-    """
-    if len(sys.argv) < 2:
-        print("❌ 사용법: python -m srcs.product_planner_agent.product_planner_agent <figma_url>")
-        print("예시: python -m srcs.product_planner_agent.product_planner_agent \"https://www.figma.com/file/abc/Project?node-id=1-2\"")
-        sys.exit(1)
+    def __init__(self):
+        super().__init__("product_planner_agent")
+
+    def _parse_figma_url(self, url: str) -> tuple[str | None, str | None]:
+        """
+        Extracts file_id and node_id from a Figma URL.
+        """
+        file_id_match = re.search(r'figma\.com/file/([^/]+)', url)
+        file_id = file_id_match.group(1) if file_id_match else None
         
-    figma_url = sys.argv[1]
-    file_id, node_id = parse_figma_url(figma_url)
-    
-    if not file_id or not node_id:
-        print("❌ 유효하지 않은 Figma URL입니다. URL에 file_id와 node-id가 모두 포함되어 있는지 확인하세요.")
-        sys.exit(1)
+        node_id_match = re.search(r'node-id=([^&]+)', url)
+        node_id = unquote(node_id_match.group(1)) if node_id_match else None
         
-    figma_api_key = env.get("FIGMA_API_KEY", required=True)
-    
-    return figma_url, figma_api_key
+        return file_id, node_id
 
-async def run_agent_workflow(figma_url: str, figma_api_key: str) -> bool:
-    """Product Planner Agent 워크플로우 실행"""
-    file_id, node_id = parse_figma_url(figma_url)
-    
-    if not file_id or not node_id:
-        print("❌ 유효하지 않은 Figma URL입니다. URL에 file_id와 node-id가 모두 포함되어 있는지 확인하세요.")
-        return False
-        
-    if not figma_api_key:
-        print("❌ FIGMA_API_KEY가 제공되지 않았습니다.")
-        return False
+    async def run_workflow(self, context: AgentContext):
+        """
+        Runs the product planning workflow.
+        """
+        figma_url = context.get("figma_url")
+        if not figma_url:
+            self.logger.error("Figma URL not provided in the context.")
+            context.set("error", "Figma URL is required.")
+            return
 
-    print("=" * 60)
-    print("🚀 Product Planner Agent v3.0 (Streamlined)")
-    print(f"📊 분석 대상 Figma URL: {figma_url}")
-    print("=" * 60)
+        file_id, node_id = self._parse_figma_url(figma_url)
+        if not file_id or not node_id:
+            self.logger.error(f"Invalid Figma URL: {figma_url}")
+            context.set("error", "Invalid Figma URL.")
+            return
 
-    # 이전 상태 파일 삭제
-    if os.path.exists(STATUS_FILE):
-        os.remove(STATUS_FILE)
-        print(f"🧹 이전 상태 파일({STATUS_FILE})을 삭제했습니다.")
-
-    print("\n" + "="*60)
-    print("📈 실시간 진행 현황 모니터링")
-    print("새 터미널을 열고 아래 명령어를 실행하세요:")
-    print(f" streamlit run pages/product_planner.py")
-    print("="*60 + "\n")
-    
-    success = False
-    try:
-        executive = ExecutiveCoordinator()
-        print("🚀 계층형 워크플로우를 시작합니다... (자세한 진행 상황은 Streamlit 페이지를 확인하세요)")
-
-        # ExecutiveCoordinator는 단일 문자열 initial_prompt를 입력으로 받도록 설계됨
-        initial_prompt = (
-            f"Analyze the Figma design and create a comprehensive product plan.\n"
-            f"Figma URL: {figma_url}\n"
-            f"(file_id={file_id}, node_id={node_id})"
-        )
-
-        result = await executive.run(initial_prompt=initial_prompt)
-        if result:
-            print("\n✅ 워크플로우가 성공적으로 완료되었습니다.")
-            print("📄 최종 보고서가 'planning' 디렉토리에 생성되었습니다.")
-            success = True
-        else:
-            print("\n⚠️ 워크플로우는 완료되었지만, 결과가 없습니다.")
+        figma_api_key = self.settings.get("figma.api_key")
+        if not figma_api_key:
+            self.logger.error("Figma API key not configured.")
+            context.set("error", "Figma API key is not configured.")
+            return
             
-    except Exception as e:
-        print(f"\n❌ 워크플로우 실행 중 오류 발생: {e}")
-        import traceback
-        traceback.print_exc()
-        success = False
-        
-    return success
+        self.logger.info("🚀 Starting Product Planner Workflow...")
 
-async def main():
-    """Product Planner Agent 메인 실행 함수 (CLI용)"""
-    figma_url, figma_api_key = get_input_params()
-    
-    # CLI에서 실행 시에는 Streamlit 안내 메시지를 약간 다르게 표시할 수 있습니다.
-    # 이 부분은 run_agent_workflow 내부와 중복되므로, 필요에 따라 조정이 가능합니다.
-    # 여기서는 run_agent_workflow의 출력에 의존합니다.
-    
-    return await run_agent_workflow(figma_url, figma_api_key)
+        workflow_steps = [
+            "Figma Design Analysis",
+            "Market Research",
+            "Product Requirements Document (PRD)",
+            "Business Planning",
+            "KPI Analysis",
+            "Operations Planning",
+            "Marketing Strategy",
+            "Project Management",
+            "Final Report Generation"
+        ]
+        status_logger = StatusLogger(steps=workflow_steps)
+        context.set("status_logger", status_logger)
 
-if __name__ == "__main__":
-    # mcp-agent 라이브러리 관련 경고 메시지 무시
-    import warnings
-    warnings.filterwarnings("ignore", category=RuntimeWarning)
+        try:
+            # Instantiate sub-agents
+            figma_analyzer = FigmaAnalyzerAgent()
+            market_research = MarketResearchAgent()
+            prd_writer = PRDWriterAgent()
+            business_planner = BusinessPlannerAgent()
+            kpi_analyst = KPIAnalystAgent()
+            operations_planner = OperationsAgent()
+            marketing_strategist = MarketingStrategistAgent()
+            project_manager = ProjectManagerAgent()
+            notion_document_agent = NotionDocumentAgent()
 
-    try:
-        is_successful = asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n⚠️ 사용자에 의해 중단되었습니다.")
-        is_successful = False
-    except Exception as e:
-        print(f"\n❌ 예측하지 못한 오류 발생: {e}")
-        import traceback
-        traceback.print_exc()
-        is_successful = False
+            # 1. Figma Design Analysis
+            status_logger.update_status("Figma Design Analysis", "in_progress")
+            context.set("figma_api_key", figma_api_key)
+            context.set("figma_file_id", file_id)
+            context.set("figma_node_id", node_id)
+            await figma_analyzer.run_workflow(context)
+            status_logger.update_status("Figma Design Analysis", "completed")
+            self.logger.info("✅ Figma Design Analysis Completed")
 
-    if is_successful:
-        print("\n🎉 모든 작업이 성공적으로 완료되었습니다!")
-    else:
-        print("\n💥 워크플로우 실행이 실패했거나 중단되었습니다.")
-    
-    sys.exit(0 if is_successful else 1) 
+            # 2. Market Research
+            status_logger.update_status("Market Research", "in_progress")
+            context.set("product_context", context.get("figma_analysis"))
+            await market_research.run_workflow(context)
+            status_logger.update_status("Market Research", "completed")
+            self.logger.info("✅ Market Research Completed")
+
+            # 3. PRD 작성
+            status_logger.update_status("Product Requirements Document (PRD)", "in_progress")
+            await prd_writer.run_workflow(context)
+            status_logger.update_status("Product Requirements Document (PRD)", "completed")
+            self.logger.info("✅ Product Requirements Document (PRD) Completed")
+
+            # 4. 비즈니스 기획
+            status_logger.update_status("Business Planning", "in_progress")
+            context.set("prd_content", context.get("prd_data"))
+            await business_planner.run_workflow(context)
+            status_logger.update_status("Business Planning", "completed")
+            self.logger.info("✅ Business Planning Completed")
+            
+            # 5, 6, 7. Run KPI, Operations, and Marketing in parallel
+            status_logger.update_status("KPI Analysis", "in_progress")
+            status_logger.update_status("Operations Planning", "in_progress")
+            status_logger.update_status("Marketing Strategy", "in_progress")
+            
+            kpi_task = kpi_analyst.run_workflow(context)
+            operations_task = operations_planner.run_workflow(context)
+            marketing_task = marketing_strategist.run_workflow(context)
+            
+            await asyncio.gather(kpi_task, operations_task, marketing_task)
+            
+            status_logger.update_status("KPI Analysis", "completed")
+            self.logger.info("✅ KPI Analysis Completed")
+            status_logger.update_status("Operations Planning", "completed")
+            self.logger.info("✅ Operations Planning Completed")
+            status_logger.update_status("Marketing Strategy", "completed")
+            self.logger.info("✅ Marketing Strategy Completed")
+
+            # 8. Project Management
+            status_logger.update_status("Project Management", "in_progress")
+            await project_manager.run_workflow(context)
+            status_logger.update_status("Project Management", "completed")
+            self.logger.info("✅ Project Management Completed")
+
+            # 9. Final Report Generation
+            status_logger.update_status("Final Report Generation", "in_progress")
+            await notion_document_agent.run_workflow(context)
+            status_logger.update_status("Final Report Generation", "completed")
+            self.logger.info("✅ Final Report Generation Completed")
+
+            self.logger.info("🎉 Product Planner Workflow Completed Successfully!")
+            context.set("status", "completed")
+
+        except Exception as e:
+            self.logger.error(f"💥 Workflow execution failed: {e}", exc_info=True)
+            current_step = next((step for step, status in status_logger.get_status().items() if status == "in_progress"), None)
+            if current_step:
+                status_logger.update_status(current_step, "failed")
+            context.set("error", str(e))
+            context.set("status", "failed") 

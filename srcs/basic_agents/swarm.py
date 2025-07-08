@@ -7,12 +7,7 @@ from mcp_agent.config import get_settings
 from mcp_agent.workflows.swarm.swarm import DoneAgent, SwarmAgent
 from mcp_agent.workflows.swarm.swarm_anthropic import AnthropicSwarm
 from mcp_agent.human_input.handler import console_input_callback
-
-app = MCPApp(
-    name="airline_customer_service", 
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=console_input_callback
-)
+from srcs.common.utils import setup_agent_app
 
 
 # Tools
@@ -253,20 +248,13 @@ to LAX in Los Angeles. The flight # is 1919. The flight departure date is 3pm ET
     await triage_agent.shutdown()
 
 
+async def main():
+    app = setup_agent_app("swarm_app")
+    async with app.run() as app_context:
+        # The rest of the swarm logic can be implemented here
+        logger = app_context.logger
+        logger.info("Swarm Agent App is running with the new config system.")
+        # ... Swarm implementation ...
+
 if __name__ == "__main__":
-    import time
-
-    async def main():
-        try:
-            await app.initialize()
-
-            start = time.time()
-            await example_usage()
-            end = time.time()
-            t = end - start
-
-            print(f"Total run-time: {t:.2f}s")
-        finally:
-            pass
-
     asyncio.run(main())

@@ -1,0 +1,17 @@
+# ================================================== #
+#           Production Environment Overrides           #
+# ================================================== #
+
+# 운영 환경에서는 경고 이상의 로그만 기록
+logging:
+  level: "WARNING"
+
+# 운영 환경에서는 보안을 위해 허용 호스트를 명시적으로 제한 (예시)
+security:
+  allowed_hosts:
+    - "api.my-domain.com"
+
+# 운영 환경에서는 고성능을 위해 Redis 캐시 사용
+cache:
+  type: "redis"
+  enabled: true 

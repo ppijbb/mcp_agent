@@ -1,0 +1,12 @@
+# ================================================== #
+#          Development Environment Overrides           #
+# ================================================== #
+
+# 개발 중에는 더 상세한 로그를 확인
+logging:
+  level: "DEBUG"
+
+# 개발 시에는 특정 서버만 활성화하여 테스트
+mcp_servers:
+  github:
+    enabled: true 

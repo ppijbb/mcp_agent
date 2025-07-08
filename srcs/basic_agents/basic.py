@@ -4,15 +4,10 @@ import time
 
 from mcp_agent.app import MCPApp
 from mcp_agent.config import (
-    get_settings,
-    Settings,
-    LoggerSettings,
-    MCPSettings,
-    MCPServerSettings,
-    OpenAISettings,
-    AnthropicSettings,
-    GoogleSettings,
+    AgentConfig,
+    MCPAppConfig,
 )
+from srcs.common.utils import setup_agent_app
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.llm_selector import ModelPreferences
@@ -21,15 +16,14 @@ from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 
-app = MCPApp(
-    name="mcp_basic_agent",
-    settings=get_settings("configs/mcp_agent.config.yaml")
-    )
-
-async def example_usage():
-    async with app.run() as agent_app:
-        logger = agent_app.logger
-        context = agent_app.context
+async def main():
+    app = setup_agent_app("basic_app")
+    
+    # Run the app
+    async with app.run() as app_context:
+        # Get the logger from the app context
+        logger = app_context.logger
+        context = app_context.context
 
         logger.info("Current config:", data=context.config.model_dump())
 
@@ -82,7 +76,7 @@ async def example_usage():
 
 if __name__ == "__main__":
     start = time.time()
-    asyncio.run(example_usage())
+    asyncio.run(main())
     end = time.time()
     t = end - start
 

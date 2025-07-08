@@ -4,10 +4,13 @@ Common Configuration Module
 Shared configurations, constants, and settings used across all agents.
 """
 
-from datetime import datetime
+from __future__ import annotations
+from datetime import datetime, timezone
+import os
+from typing import Dict, Any, List
 
 # Default company configuration
-DEFAULT_COMPANY_NAME = "TechCorp Inc."
+# DEFAULT_COMPANY_NAME = "TechCorp Inc." # This line is removed as per the edit hint.
 
 # Common server configurations
 DEFAULT_SERVERS = ["filesystem", "g-search", "fetch"]
@@ -17,23 +20,25 @@ COMPLIANCE_FRAMEWORKS = ["GDPR", "SOX", "HIPAA", "PCI-DSS", "ISO 27001", "NIST"]
 
 # Report generation settings
 REPORT_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
-SUMMARY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+# SUMMARY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S" # This line is removed as per the edit hint.
 
-def get_timestamp():
-    """Get standardized timestamp for file naming"""
-    return datetime.now().strftime(REPORT_TIMESTAMP_FORMAT)
+# These helper functions can remain as they are general utility.
 
-def get_output_dir(agent_type, agent_name):
-    """Generate standardized output directory name"""
-    return f"{agent_name.lower().replace(' ', '_').replace('-', '_')}_reports"
+def get_output_dir(prefix: str, name: str) -> str:
+    """Generates a standardized output directory path."""
+    return f"{prefix}_{name}_reports"
 
-def get_app_config(app_name, config_path="configs/mcp_agent.config.yaml"):
-    """Get standardized app configuration"""
-    return {
-        "name": app_name,
-        "settings": f"get_settings('{config_path}')",
-        "human_input_callback": None
-    }
+def get_timestamp(format_str: str = "%Y%m%d_%H%M%S") -> str:
+    """Returns a formatted timestamp string."""
+    return datetime.now(timezone.utc).strftime(format_str)
+
+# The following functions related to the old config system are now deprecated
+# and will be removed.
+# - get_settings
+# - get_app_config
+# - get_reports_path
+# - SUMMARY_TIMESTAMP_FORMAT
+# - DEFAULT_COMPANY_NAME
 
 # Common agent instruction templates
 AGENT_INSTRUCTION_TEMPLATE = """You are a {role} for {company_name}.
@@ -63,8 +68,7 @@ Output Format:
 """
 
 __all__ = [
-    "DEFAULT_COMPANY_NAME", "DEFAULT_SERVERS", "COMPLIANCE_FRAMEWORKS",
-    "REPORT_TIMESTAMP_FORMAT", "SUMMARY_TIMESTAMP_FORMAT",
-    "get_timestamp", "get_output_dir", "get_app_config",
+    "DEFAULT_SERVERS", "COMPLIANCE_FRAMEWORKS",
+    "REPORT_TIMESTAMP_FORMAT", "get_output_dir", "get_timestamp",
     "AGENT_INSTRUCTION_TEMPLATE", "COMMON_GUIDELINES", "OUTPUT_FORMAT_GUIDELINES"
 ] 
