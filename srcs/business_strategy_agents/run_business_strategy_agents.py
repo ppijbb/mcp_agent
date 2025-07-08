@@ -11,6 +11,7 @@ import sys
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import time
 
 # Import all business strategy MCPAgents
 try:
@@ -26,6 +27,11 @@ except ImportError:
     from trend_analyzer_agent import run_trend_analysis
     from strategy_planner_agent import run_strategy_planning
     from unified_business_strategy_agent import run_unified_business_strategy
+import aiohttp
+
+# Helper function to create the HTTP client session
+def get_http_session():
+    return aiohttp.ClientSession()
 
 
 class BusinessStrategyRunner:
@@ -34,199 +40,68 @@ class BusinessStrategyRunner:
     Provides unified access to comprehensive business intelligence capabilities.
     """
     
-    def __init__(self, output_dir: str = "business_strategy_reports"):
-        self.output_dir = output_dir
-        self.results = {}
+    def __init__(self, 
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 data_sourcing_mcp_url: str = "http://localhost:3005"):
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.data_sourcing_mcp_url = data_sourcing_mcp_url
         
-    async def run_individual_agents(self, 
-                                  keywords: List[str],
-                                  business_context: Dict[str, Any] = None,
-                                  objectives: List[str] = None,
-                                  regions: List[str] = None,
-                                  time_horizon: str = "12_months") -> Dict[str, Any]:
-        """Run each business strategy MCPAgent individually"""
-        
-        print("🚀 Running Individual Business Strategy Agents...")
-        print("=" * 60)
-        
-        # 1. Business Data Scout
-        print("\n📊 1. BUSINESS DATA SCOUT MCPAgent")
-        print("-" * 40)
-        try:
-            scout_result = await run_business_data_scout(
-                keywords=keywords,
-                regions=regions,
-                output_dir=self.output_dir
-            )
-            self.results["data_scout"] = scout_result
-            
-            if scout_result["success"]:
-                print(f"✅ Data Scout completed: {scout_result['output_file']}")
-            else:
-                print(f"❌ Data Scout failed: {scout_result['error']}")
-                
-        except Exception as e:
-            print(f"❌ Data Scout error: {e}")
-            self.results["data_scout"] = {"success": False, "error": str(e)}
-        
-        # 2. Trend Analyzer
-        print("\n📈 2. TREND ANALYZER MCPAgent")
-        print("-" * 40)
-        try:
-            trend_result = await run_trend_analysis(
-                focus_areas=keywords,
-                time_horizon=time_horizon,
-                output_dir=self.output_dir
-            )
-            self.results["trend_analyzer"] = trend_result
-            
-            if trend_result["success"]:
-                print(f"✅ Trend Analyzer completed: {trend_result['output_file']}")
-            else:
-                print(f"❌ Trend Analyzer failed: {trend_result['error']}")
-                
-        except Exception as e:
-            print(f"❌ Trend Analyzer error: {e}")
-            self.results["trend_analyzer"] = {"success": False, "error": str(e)}
-        
-        # 3. Strategy Planner
-        print("\n🎯 3. STRATEGY PLANNER MCPAgent")
-        print("-" * 40)
-        try:
-            strategy_result = await run_strategy_planning(
-                business_context=business_context or {"description": "General business"},
-                objectives=objectives or ["growth", "efficiency"],
-                output_dir=self.output_dir
-            )
-            self.results["strategy_planner"] = strategy_result
-            
-            if strategy_result["success"]:
-                print(f"✅ Strategy Planner completed: {strategy_result['output_file']}")
-            else:
-                print(f"❌ Strategy Planner failed: {strategy_result['error']}")
-                
-        except Exception as e:
-            print(f"❌ Strategy Planner error: {e}")
-            self.results["strategy_planner"] = {"success": False, "error": str(e)}
-        
-        return self.results
-    
-    async def run_unified_agent(self,
-                              keywords: List[str],
-                              business_context: Dict[str, Any] = None,
-                              objectives: List[str] = None,
-                              regions: List[str] = None,
-                              time_horizon: str = "12_months") -> Dict[str, Any]:
-        """Run the unified business strategy MCPAgent"""
-        
-        print("\n🎉 UNIFIED BUSINESS STRATEGY MCPAgent")
-        print("=" * 60)
-        print("Complete integrated business intelligence analysis!")
-        
-        try:
-            unified_result = await run_unified_business_strategy(
-                keywords=keywords,
-                business_context=business_context,
-                objectives=objectives,
-                regions=regions,
-                time_horizon=time_horizon,
-                output_dir=self.output_dir
-            )
-            self.results["unified_strategy"] = unified_result
-            
-            if unified_result["success"]:
-                print(f"✅ Unified Strategy completed: {unified_result['output_file']}")
-                print("🎉 SUCCESS: Business strategy analysis completed successfully!")
-            else:
-                print(f"❌ Unified Strategy failed: {unified_result['error']}")
-                
-        except Exception as e:
-            print(f"❌ Unified Strategy error: {e}")
-            self.results["unified_strategy"] = {"success": False, "error": str(e)}
-        
-        return unified_result
-    
-    async def run_full_suite(self,
-                           keywords: List[str],
-                           business_context: Dict[str, Any] = None,
-                           objectives: List[str] = None,
-                           regions: List[str] = None,
-                           time_horizon: str = "12_months",
-                           mode: str = "unified") -> Dict[str, Any]:
+        # Initialize agents with all required MCP URLs
+        self.planner = StrategyPlannerMCPAgent(
+            google_drive_mcp_url=self.google_drive_mcp_url,
+            data_sourcing_mcp_url=self.data_sourcing_mcp_url
+        )
+        self.unifier = UnifiedBusinessStrategyMCPAgent(
+            google_drive_mcp_url=self.google_drive_mcp_url,
+            data_sourcing_mcp_url=self.data_sourcing_mcp_url
+        )
+
+    async def run_agents(self, 
+                       industry: str,
+                       company_profile: str,
+                       competitors: List[str],
+                       tech_trends: List[str]) -> Dict[str, Any]:
         """
-        Run the complete business strategy MCPAgent suite
-        
-        Args:
-            mode: "individual", "unified", or "both"
+        Runs the sequence of business strategy agents.
         """
+        print("Running Strategy Planner Agent...")
+        planner_result = await self.planner.analyze_market_and_business(
+            industry=industry,
+            company_info=company_profile,
+            competitors=competitors
+        )
         
-        print("🎯 BUSINESS STRATEGY MCPAGENT SUITE")
-        print("=" * 60)
-        print(f"Keywords: {', '.join(keywords)}")
-        print(f"Regions: {', '.join(regions) if regions else 'Global'}")
-        print(f"Time Horizon: {time_horizon}")
-        print(f"Execution Mode: {mode}")
-        print(f"Output Directory: {self.output_dir}")
-        print()
+        # In a real scenario, you might have more complex logic to pass
+        # results from one agent to the next.
         
-        start_time = datetime.now()
+        print("\nRunning Unified Business Strategy Agent...")
+        unifier_result = await self.unifier.develop_strategy(
+            industry=industry,
+            company_profile=company_profile,
+            competitors=competitors,
+            tech_trends=tech_trends
+        )
         
-        if mode in ["individual", "both"]:
-            await self.run_individual_agents(
-                keywords, business_context, objectives, regions, time_horizon
-            )
-        
-        if mode in ["unified", "both"]:
-            await self.run_unified_agent(
-                keywords, business_context, objectives, regions, time_horizon
-            )
-        
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        
-        # Summary
-        print("\n" + "=" * 60)
-        print("📊 EXECUTION SUMMARY")
-        print("=" * 60)
-        
-        successful_agents = sum(1 for result in self.results.values() 
-                              if result.get("success", False))
-        total_agents = len(self.results)
-        
-        print(f"✅ Successful Agents: {successful_agents}/{total_agents}")
-        print(f"⏱️  Total Execution Time: {duration:.2f} seconds")
-        print(f"📁 Output Directory: {self.output_dir}")
-        
-        # List all generated reports
-        print("\n📄 Generated Reports:")
-        for agent_name, result in self.results.items():
-            if result.get("success") and "output_file" in result:
-                print(f"  • {agent_name}: {result['output_file']}")
-        
-        if successful_agents == total_agents:
-            print("\n🎉 ALL BUSINESS STRATEGY AGENTS EXECUTED SUCCESSFULLY!")
-            print("✨ Complete business intelligence analysis finished!")
-        else:
-            print(f"\n⚠️  {total_agents - successful_agents} agent(s) had issues")
-        
-        return {
-            "summary": {
-                "successful_agents": successful_agents,
-                "total_agents": total_agents,
-                "execution_time": duration,
-                "output_directory": self.output_dir
-            },
-            "results": self.results
+        # Save individual reports
+        await self.planner.save_report(planner_result, f"strategy_plan_{industry}.json")
+        await self.unifier.save_report(unifier_result, f"unified_strategy_{industry}.json")
+
+        final_summary = {
+            "planner_output": planner_result,
+            "unifier_output": unifier_result
         }
-    
-    def save_execution_report(self, filename: str = None) -> str:
-        """Save execution results to JSON file"""
+        
+        # Save the final summary report
+        await self.save_summary_report(final_summary, f"final_summary_{industry}.json")
+        
+        return final_summary
+
+    async def save_summary_report(self, summary_data: Dict, file_name: str):
+        """Save execution results to JSON file on Google Drive via MCP"""
         
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.output_dir}/business_strategy_execution_{timestamp}.json"
-        
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+            filename = f"business_strategy_execution_{timestamp}.json"
         
         report_data = {
             "execution_timestamp": datetime.now().isoformat(),
@@ -235,11 +110,28 @@ class BusinessStrategyRunner:
             "results": self.results
         }
         
-        with open(filename, 'w') as f:
-            json.dump(report_data, f, indent=2, default=str)
-        
-        print(f"📄 Execution report saved: {filename}")
-        return filename
+        report_content = json.dumps(report_data, indent=2, default=str)
+        upload_url = f"{self.google_drive_mcp_url}/upload"
+        payload = {"fileName": filename, "content": report_content}
+
+        try:
+            async with get_http_session() as session:
+                async with session.post(upload_url, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+            
+            if result.get("success"):
+                file_id = result.get('fileId')
+                file_url = f"https://docs.google.com/document/d/{file_id}"
+                print(f"📄 Execution report uploaded: {file_url}")
+                return file_url
+            else:
+                raise Exception(f"MCP upload failed: {result.get('message')}")
+
+        except Exception as e:
+            print(f"❌ Failed to upload execution report: {e}")
+            # Fallback or re-raise
+            return f"upload_failed: {e}"
 
 
 # CLI Functions
@@ -257,7 +149,7 @@ Options:
   --regions            Comma-separated regions
   --time-horizon       Time horizon (3_months, 6_months, 12_months, 24_months)
   --mode               Execution mode (individual, unified, both)
-  --output-dir         Output directory for reports
+  --mcp-url            MCP server URL (default: http://localhost:3001)
 
 Examples:
   # Basic usage
@@ -270,7 +162,7 @@ Examples:
     --regions "North America,Europe" \\
     --time-horizon "12_months" \\
     --mode "unified" \\
-    --output-dir "reports"
+    --mcp-url "http://your-mcp-server:3001"
 
 Modes:
   individual    Run each MCPAgent separately
@@ -292,7 +184,7 @@ def parse_args() -> Dict[str, Any]:
         "regions": None,
         "time_horizon": "12_months",
         "mode": "unified",
-        "output_dir": "business_strategy_reports"
+        "mcp_url": "http://localhost:3001"
     }
     
     i = 2
@@ -314,8 +206,8 @@ def parse_args() -> Dict[str, Any]:
         elif arg == "--mode" and i + 1 < len(sys.argv):
             args["mode"] = sys.argv[i + 1]
             i += 2
-        elif arg == "--output-dir" and i + 1 < len(sys.argv):
-            args["output_dir"] = sys.argv[i + 1]
+        elif arg == "--mcp-url" and i + 1 < len(sys.argv):
+            args["mcp_url"] = sys.argv[i + 1]
             i += 2
         else:
             i += 1
@@ -345,7 +237,7 @@ async def main():
         sys.exit(1)
     
     # Create runner and execute
-    runner = BusinessStrategyRunner(output_dir=args["output_dir"])
+    runner = BusinessStrategyRunner(google_drive_mcp_url=args["mcp_url"])
     
     try:
         results = await runner.run_full_suite(
@@ -358,7 +250,7 @@ async def main():
         )
         
         # Save execution report
-        runner.save_execution_report()
+        await runner.save_execution_report()
         
         # Exit with appropriate code
         successful = results["summary"]["successful_agents"]

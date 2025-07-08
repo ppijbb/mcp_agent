@@ -20,17 +20,16 @@ logger = get_logger("executive_coordinator")
 class ExecutiveCoordinator:
     """최상위 Coordinator. run()을 호출하면 전체 제품 기획 워크플로우가 수행됩니다."""
 
-    def __init__(self, orchestrator_factory=None):
-        self.orchestrator_factory = orchestrator_factory  # 추후 LLM·툴 공유 목적
-        if self.orchestrator_factory is None:
-            self.orchestrator_factory = _default_orch_factory()
-        self.reporting = ReportingCoordinator(orchestrator_factory=orchestrator_factory)
-        self.market = MarketResearchCoordinator(orchestrator_factory=orchestrator_factory)
-        self.strategic = StrategicPlannerCoordinator(orchestrator_factory=orchestrator_factory)
-        self.execution = ExecutionPlannerCoordinator(orchestrator_factory=orchestrator_factory)
-
-        import os
-        self.turn_budget = int(os.getenv("AGENT_MAX_TURNS", 20))
+    def __init__(self, 
+                 llm_provider: str = 'openai', 
+                 model_name: str = 'gpt-4-turbo-preview',
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 figma_mcp_url: str = "http://localhost:3003",
+                 notion_mcp_url: str = "http://localhost:3004"):
+        super().__init__(llm_provider, model_name)
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.figma_mcp_url = figma_mcp_url
+        self.notion_mcp_url = notion_mcp_url
 
     # ---------------------------------------------
     # Turn / Step Budget Helpers
@@ -41,58 +40,37 @@ class ExecutiveCoordinator:
         if self.turn_budget < 0:
             raise RuntimeError("Turn budget exhausted: AGENT_MAX_TURNS limit reached.")
 
-    async def run_with_figma_url(self, figma_url: str) -> Dict[str, Any]:
-        """Figma URL을 받아 initial_prompt를 생성하고 전체 워크플로우를 실행합니다."""
+    async def run_product_planning_workflow(self, 
+                                            product_concept: str, 
+                                            user_persona: str,
+                                            figma_file_id: Optional[str] = None,
+                                            notion_page_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Runs the full product planning workflow, from market research to final report.
+        """
+        logger.info("Starting complete product planning workflow...")
         
-        file_id_match = re.search(r'figma\.com/file/([^/]+)', figma_url)
-        file_id = file_id_match.group(1) if file_id_match else None
+        # In this refactored version, we are focusing on the core PRD generation
+        # The market research part can be a separate preliminary step.
         
-        node_id_match = re.search(r'node-id=([^&]+)', figma_url)
-        node_id = unquote(node_id_match.group(1)) if node_id_match else None
-
-        if not file_id or not node_id:
-            raise ValueError("유효하지 않은 Figma URL입니다. file_id와 node-id를 포함해야 합니다.")
-
-        initial_prompt = (
-            f"Analyze the Figma design and create a comprehensive product plan.\n"
-            f"Figma URL: {figma_url}\n"
-            f"(file_id={file_id}, node_id={node_id})"
+        strategic_planner = StrategicPlannerCoordinator(
+            llm_provider=self.llm_provider,
+            model_name=self.model_name,
+            google_drive_mcp_url=self.google_drive_mcp_url,
+            figma_mcp_url=self.figma_mcp_url,
+            notion_mcp_url=self.notion_mcp_url
         )
-        return await self.run(initial_prompt)
-
-    async def run(self, initial_prompt: str) -> Dict[str, Any]:
-        """전체 플로우를 순차적으로 실행하고 결과를 종합해 반환합니다."""
-        results: Dict[str, Any] = {}
-
-        # 1. 사용자 요구사항 수집 및 초기 보고
-        self._consume_turns()
-        logger.info("🗣️ collect_initial_requirements 실행")
-        convo_results = await async_retry(self.reporting.collect_initial_requirements, initial_prompt)
-        results["conversation"] = convo_results
-
-        # 2. 시장 조사
-        self._consume_turns()
-        logger.info("🔹 Phase: Market Research 시작")
-        market_results = await async_retry(self.market.perform_market_research, convo_results)
-        results["market_research"] = market_results
-
-        # 3. 전략 기획(디자인 분석, PRD, 비즈니스 플랜)
-        self._consume_turns()
-        logger.info("🔹 Phase: Strategic Planning 시작")
-        strategic_results = await async_retry(self.strategic.create_strategic_plan, market_results)
-        results.update(strategic_results)
-
-        # 4. 실행 계획(프로젝트·운영)
-        self._consume_turns()
-        logger.info("🔹 Phase: Execution Planning 시작")
-        execution_results = await async_retry(self.execution.create_execution_plan, strategic_results)
-        results.update(execution_results)
-
-        # 5. 최종 보고서 작성
-        self._consume_turns()
-        logger.info("🔹 Phase: Final Reporting 시작")
-        final_report = await async_retry(self.reporting.generate_final_report, results)
-        results["final_report"] = final_report
-
-        logger.info("✅ ExecutiveCoordinator 모든 단계 완료")
-        return results 
+        
+        # Develop the core product plan (which now includes PRD generation)
+        plan_results = await strategic_planner.develop_product_plan(
+            product_concept=product_concept,
+            user_persona=user_persona,
+            figma_file_id=figma_file_id,
+            notion_page_id=notion_page_id
+        )
+        
+        logger.info("Product planning workflow completed.")
+        return {
+            "status": "Workflow Complete",
+            "results": plan_results
+        } 

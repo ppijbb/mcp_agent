@@ -20,6 +20,12 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+import aiohttp
+import json
+
+# Helper function to create the HTTP client session
+def get_http_session():
+    return aiohttp.ClientSession()
 
 
 class UnifiedBusinessStrategyMCPAgent:
@@ -28,14 +34,92 @@ class UnifiedBusinessStrategyMCPAgent:
     Provides comprehensive business intelligence and strategy development capabilities.
     """
     
-    def __init__(self, output_dir: str = "business_strategy_reports"):
-        self.output_dir = output_dir
-        self.app = MCPApp(
-            name="unified_business_strategy",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
+    def __init__(self,
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 data_sourcing_mcp_url: str = "http://localhost:3005"):
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.data_sourcing_mcp_url = data_sourcing_mcp_url
+        self.agent = self._create_agent()
+
+    def _create_agent(self) -> Agent:
+        return Agent(
+            name="unified_strategy_agent",
+            instruction="You are a chief strategy officer. Synthesize market, competitor, and technology data to create a unified business strategy.",
+            server_names=["data_sourcing_mcp", "fetch"] # Using the new data sourcing MCP
         )
+
+    async def develop_strategy(self, industry: str, company_profile: str, competitors: List[str], tech_trends: List[str]) -> Dict[str, Any]:
+        """
+        Develops a unified business strategy by synthesizing data from the Data Sourcing MCP.
+        """
+        llm = OpenAIAugmentedLLM()
+
+        prompt = f"""
+        As a Chief Strategy Officer, create a unified and actionable business strategy.
+        Use the 'data_sourcing_mcp' to gather structured data for your analysis.
+
+        **Inputs:**
+        - **Industry:** {industry}
+        - **Company Profile:** {company_profile}
+        - **Competitors (Tickers):** {', '.join(competitors)}
+        - **Known Technology Trends:** {', '.join(tech_trends)}
+
+        **Analysis & Strategy Formulation Steps:**
+        1.  **Situational Analysis:**
+            - Call `/market-trends` for the "{industry}" industry to understand the macro environment.
+            - Call `/company-financials` for each competitor in [{', '.join(competitors)}] to assess their strengths.
+            - Synthesize this data with the provided company profile and technology trends.
         
+        2.  **SWOT Analysis:**
+            - Based on the situational analysis, generate a SWOT analysis (Strengths, Weaknesses, Opportunities, Threats).
+
+        3.  **Strategic Objectives and Key Results (OKRs):**
+            - Define 2-3 high-level strategic objectives for the next 12-18 months.
+            - For each objective, define 2-3 measurable key results.
+            
+        4.  **Execution Roadmap:**
+            - Outline a high-level execution roadmap for the next three quarters (Q1, Q2, Q3).
+            - Specify key initiatives for each quarter, tied to the OKRs.
+
+        **Output Format (JSON):**
+        Please provide the final strategy in the following structured JSON format:
+
+        {{
+          "strategic_summary": "A concise paragraph summarizing the overall strategy.",
+          "swot_analysis": {{
+            "strengths": ["..."],
+            "weaknesses": ["..."],
+            "opportunities": ["..."],
+            "threats": ["..."]
+          }},
+          "strategic_okrs": [
+            {{
+              "objective": "...",
+              "key_results": ["...", "..."]
+            }}
+          ],
+          "execution_roadmap": {{
+            "Q1": ["...", "..."],
+            "Q2": ["...", "..."],
+            "Q3": ["...", "..."]
+          }}
+        }}
+        """
+        response_str = await llm.generate_str(
+            message=prompt,
+            agent=self.agent,
+            request_params=RequestParams(
+                model="gemini-2.5-pro-vision-preview-06-07",
+                temperature=0.2,
+                response_format={"type": "json_object"}
+            )
+        )
+        try:
+            return json.loads(response_str)
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from LLM response:\n{response_str}")
+            return {"error": "Invalid JSON response from unified strategy agent"}
+            
     async def run_comprehensive_analysis(
         self, 
         keywords: List[str],
@@ -45,29 +129,22 @@ class UnifiedBusinessStrategyMCPAgent:
         time_horizon: str = "12_months"
     ) -> Dict[str, Any]:
         """
-        Run comprehensive business strategy analysis combining:
-        - Data collection and market intelligence
-        - Trend analysis and pattern recognition
-        - Strategic planning and opportunity identification
-        - Risk assessment and implementation roadmap
+        Run comprehensive business strategy analysis and upload the result to Google Drive.
         """
         
-        # Create output directory
-        os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"unified_business_strategy_{timestamp}.md"
-        output_path = os.path.join(self.output_dir, output_file)
+        output_file_name = f"unified_business_strategy_{timestamp}.md"
         
-        async with self.app.run() as strategy_app:
-            context = strategy_app.context
-            logger = strategy_app.logger
+        async with self.app.run() as app:
+            context = app.context
+            logger = app.logger
             
             # Configure MCP servers
             await self._configure_mcp_servers(context, logger)
             
-            # Create all specialized agents
+            # Define specialized agents
             agents = await self._create_unified_agents(
-                keywords, business_context, objectives, regions, time_horizon, output_path
+                keywords, business_context, objectives, regions, time_horizon
             )
             
             # Create orchestrator
@@ -77,33 +154,44 @@ class UnifiedBusinessStrategyMCPAgent:
                 plan_type="full"
             )
             
-            # Execute comprehensive analysis
+            # Execute unified task
             task = await self._create_unified_task(
-                keywords, business_context, objectives, regions, time_horizon, output_path
+                keywords, business_context, objectives, regions, time_horizon
             )
             
-            logger.info(f"Starting unified business strategy analysis for: {keywords}")
+            logger.info("Starting unified business strategy analysis...")
             
             try:
-                result = await orchestrator.generate_str(
+                report_content = await orchestrator.generate_str(
                     message=task,
-                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.2)
                 )
+
+                # Upload the final report to Google Drive
+                upload_url = f"{self.google_drive_mcp_url}/upload"
+                payload = {"fileName": output_file_name, "content": report_content}
+
+                async with get_http_session() as session:
+                    async with session.post(upload_url, json=payload) as response:
+                        response.raise_for_status()
+                        upload_result = await response.json()
+                
+                if not upload_result.get("success"):
+                    raise Exception(f"MCP upload failed: {upload_result.get('message')}")
+
+                logger.info(f"Successfully uploaded unified report to Google Drive. File ID: {upload_result.get('fileId')}")
                 
                 return {
                     "success": True,
-                    "output_file": output_path,
+                    "output_file": upload_result.get("fileId"),
+                    "file_url": f"https://docs.google.com/document/d/{upload_result.get('fileId')}",
                     "keywords": keywords,
-                    "business_context": business_context,
-                    "objectives": objectives,
-                    "regions": regions or ["global"],
-                    "time_horizon": time_horizon,
                     "timestamp": timestamp,
-                    "result": result
+                    "result": report_content[:200] + "..."
                 }
                 
             except Exception as e:
-                logger.error(f"Unified business strategy analysis failed: {e}")
+                logger.error(f"Unified business strategy analysis failed: {e}", exc_info=True)
                 return {
                     "success": False,
                     "error": str(e),
@@ -117,7 +205,7 @@ class UnifiedBusinessStrategyMCPAgent:
         # Configure filesystem server
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
-            logger.info("Filesystem server configured")
+            logger.info("Filesystem server configured for tool access.")
         
         # Check for required servers
         required_servers = ["g-search", "fetch"]
@@ -136,8 +224,7 @@ class UnifiedBusinessStrategyMCPAgent:
                                    business_context: Dict[str, Any],
                                    objectives: List[str],
                                    regions: List[str],
-                                   time_horizon: str,
-                                   output_path: str) -> List[Agent]:
+                                   time_horizon: str) -> List[Agent]:
         """Create all specialized agents for unified workflow"""
         
         keyword_str = ", ".join(keywords)
@@ -464,11 +551,11 @@ class UnifiedBusinessStrategyMCPAgent:
                - Include quantitative projections where possible
                - Professional formatting with executive summary
             
-            Save the comprehensive strategy report to: {output_path}
+            Save the comprehensive strategy report to: {output_file_name}
             
             This report replaces the entire fake BaseAgent architecture with a 
             real MCPAgent-based comprehensive business strategy system.""",
-            server_names=["filesystem"]
+            server_names=["filesystem"] # May use fs for temp operations
         )
         
         return [
@@ -485,90 +572,47 @@ class UnifiedBusinessStrategyMCPAgent:
                                  business_context: Dict[str, Any],
                                  objectives: List[str],
                                  regions: List[str],
-                                 time_horizon: str,
-                                 output_path: str) -> str:
+                                 time_horizon: str) -> str:
         """Create comprehensive unified business strategy task"""
         
         keyword_str = ", ".join(keywords)
         region_str = ", ".join(regions) if regions else "global markets"
         context_str = str(business_context) if business_context else "General business environment"
         objectives_str = ", ".join(objectives) if objectives else "Growth and competitive advantage"
+        time_horizon_str = time_horizon.replace("_", " ")
+
+        task = f"""Execute a comprehensive, unified business strategy analysis.
         
-        task = f"""Execute comprehensive unified business strategy analysis and planning.
+        Primary Keywords: {keyword_str}
+        Business Context: {context_str}
+        Strategic Objectives: {objectives_str}
+        Regions: {region_str}
+        Time Horizon: {time_horizon_str}
         
-        ANALYSIS PARAMETERS:
-        - Keywords/Focus: {keyword_str}
-        - Business Context: {context_str}
-        - Strategic Objectives: {objectives_str}
-        - Geographic Scope: {region_str}
-        - Time Horizon: {time_horizon}
+        Workflow:
         
-        MISSION: Replace the fake BaseAgent architecture with a real MCPAgent-based 
-        comprehensive business strategy system that delivers actionable strategic intelligence.
-        
-        UNIFIED WORKFLOW EXECUTION:
-        
-        PHASE 1: COMPREHENSIVE INTELLIGENCE GATHERING
-        1. MARKET INTELLIGENCE (quality_market_intel):
-           - Collect high-quality market and competitive intelligence
-           - Quality control ensures only EXCELLENT rated data proceeds
-           - Focus on recent, credible, and actionable insights
-           - Comprehensive coverage of market dynamics and competition
-        
-        2. SOCIAL SENTIMENT ANALYSIS (social_sentiment_analyzer):
-           - Analyze social media trends and community sentiment
-           - Identify reputation risks and opportunity signals
-           - Map customer feedback and feature requests
-           - Quantify sentiment scores and engagement patterns
-        
-        PHASE 2: STRATEGIC ANALYSIS & PATTERN RECOGNITION
-        3. TREND PATTERN ANALYSIS (trend_pattern_analyzer):
-           - Identify strategic trends and pattern correlations
-           - Analyze technology adoption curves and market cycles
-           - Detect weak signals and emerging opportunities
-           - Assess trend durability and strategic implications
-        
-        4. OPPORTUNITY DETECTION (opportunity_detector):
-           - Identify and prioritize strategic opportunities
-           - Assess market potential and competitive positioning
-           - Develop opportunity briefs with implementation pathways
-           - Align opportunities with strategic objectives
-        
-        PHASE 3: STRATEGY DEVELOPMENT & PLANNING
-        5. STRATEGIC PLANNING (strategic_planner):
-           - Develop comprehensive strategic framework
-           - Create multi-phase implementation roadmap
-           - Design capability building and resource strategies
-           - Establish governance and performance frameworks
-        
-        PHASE 4: SYNTHESIS & MASTER STRATEGY
-        6. MASTER SYNTHESIS (master_strategy_synthesizer):
-           - Integrate all analyses into unified strategy
-           - Resolve conflicts and optimize strategic trade-offs
-           - Create comprehensive implementation blueprint
-           - Generate executive-ready strategy document
-           - Save complete strategy to: {output_path}
-        
-        SUCCESS CRITERIA:
-        - Comprehensive strategy addressing all key dimensions
-        - High-quality data and analysis throughout
-        - Clear strategic recommendations with implementation plans
-        - Quantitative projections and ROI analysis
-        - Risk assessment and mitigation strategies
-        - Executive-ready deliverable with supporting analysis
-        
-        DELIVERABLE: Complete unified business strategy that replaces the fake 
-        BaseAgent system with a real MCPAgent-based strategic intelligence platform.
-        
-        This represents the complete transformation from fake to real MCPAgent architecture."""
-        
+        1.  Data Collection (quality_market_intel, social_sentiment_analyzer):
+            - Gather high-quality market data, competitor intelligence, and social sentiment.
+            
+        2.  Analysis & Synthesis (trend_pattern_analyzer, opportunity_detector):
+            - Analyze collected data to identify key trends, patterns, and strategic opportunities.
+            
+        3.  Strategy Formulation (strategic_planning_architect):
+            - Develop a detailed strategic plan based on the synthesized insights.
+            
+        4.  Final Report Generation (master_synthesizer):
+            - Integrate all findings into a single, comprehensive, executive-ready report.
+            - Return the complete report as the final output.
+            
+        Ensure all steps are executed in a coordinated manner to produce a coherent and actionable strategic plan.
+        """
         return task
 
 
 # Factory and execution functions
-async def create_unified_business_strategy(output_dir: str = "business_strategy_reports") -> UnifiedBusinessStrategyMCPAgent:
+async def create_unified_business_strategy(google_drive_mcp_url: str = "http://localhost:3001") -> UnifiedBusinessStrategyMCPAgent:
     """Create and return a UnifiedBusinessStrategyMCPAgent instance"""
-    return UnifiedBusinessStrategyMCPAgent(output_dir=output_dir)
+    return UnifiedBusinessStrategyMCPAgent(google_drive_mcp_url=google_drive_mcp_url)
 
 
 async def run_unified_business_strategy(keywords: List[str],
@@ -576,10 +620,10 @@ async def run_unified_business_strategy(keywords: List[str],
                                       objectives: List[str] = None,
                                       regions: List[str] = None,
                                       time_horizon: str = "12_months",
-                                      output_dir: str = "business_strategy_reports") -> Dict[str, Any]:
+                                      google_drive_mcp_url: str = "http://localhost:3001") -> Dict[str, Any]:
     """Run unified business strategy analysis"""
     
-    strategy_agent = await create_unified_business_strategy(output_dir)
+    strategy_agent = await create_unified_business_strategy(google_drive_mcp_url)
     return await strategy_agent.run_comprehensive_analysis(
         keywords, business_context, objectives, regions, time_horizon
     )
@@ -600,17 +644,19 @@ if __name__ == "__main__":
     time_horizon = sys.argv[5] if len(sys.argv) > 5 else "12_months"
     
     # Run the unified business strategy analysis
+    print(f"Unified Business Strategy analysis for: {keywords}")
+    
     result = asyncio.run(run_unified_business_strategy(
-        keywords, business_context, objectives, regions, time_horizon
+        keywords=keywords,
+        business_context={"description": "A tech startup in the AI space."},
+        objectives=["Increase market share by 20%", "Launch one new product line"],
+        regions=["North America", "Europe"],
+        time_horizon="24_months",
+        google_drive_mcp_url="http://localhost:3001"
     ))
     
     if result["success"]:
-        print(f"✅ Unified business strategy analysis completed successfully!")
-        print(f"📄 Strategy report saved to: {result['output_file']}")
-        print(f"🔍 Keywords: {', '.join(result['keywords'])}")
-        print(f"🎯 Objectives: {', '.join(result['objectives']) if result['objectives'] else 'Default growth objectives'}")
-        print(f"🌍 Regions: {', '.join(result['regions'])}")
-        print(f"⏰ Time horizon: {result['time_horizon']}")
-        print("\n🎉 Successfully converted from fake BaseAgent to real MCPAgent architecture!")
+        print(f"\n✅ Unified analysis completed successfully!")
+        print(f"📄 Report uploaded. File URL: {result.get('file_url')}")
     else:
-        print(f"❌ Unified business strategy analysis failed: {result['error']}") 
+        print(f"\n❌ Unified analysis failed: {result['error']}") 

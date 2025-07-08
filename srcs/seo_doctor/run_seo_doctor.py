@@ -3,7 +3,8 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
+import asyncio
+import aiohttp
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).resolve().parent.parent.parent
@@ -11,21 +12,26 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from srcs.seo_doctor.seo_doctor_agent import SEODoctorMCPAgent, SEOAnalysisResult
+from srcs.seo_doctor.utils.json_encoder import EnhancedJSONEncoder
 
 # Dataclass를 dict로 변환하기 위한 헬퍼
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from enum import Enum
 
-class EnhancedJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if is_dataclass(o):
-            return asdict(o)
-        if isinstance(o, datetime):
-            return o.isoformat()
-        if isinstance(o, Enum):
-            return o.value
-        return super().default(o)
+# Helper function to create the HTTP client session
+def get_http_session():
+    return aiohttp.ClientSession()
+
+async def upload_to_drive(mcp_url: str, file_name: str, content: str) -> dict:
+    """Uploads content to Google Drive via MCP."""
+    upload_url = f"{mcp_url}/upload"
+    payload = {"fileName": file_name, "content": content}
+    
+    async with get_http_session() as session:
+        async with session.post(upload_url, json=payload) as response:
+            response.raise_for_status()
+            return await response.json()
 
 async def main():
     """SEO Doctor 실행 스크립트"""
@@ -33,21 +39,33 @@ async def main():
     parser.add_argument("--url", required=True, help="The URL to analyze.")
     parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
     parser.add_argument("--competitor-urls", nargs='*', help="List of competitor URLs.")
-    parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
+    parser.add_argument(
+        "--google-drive-mcp-url",
+        default="http://localhost:3001",
+        help="The URL for the Google Drive MCP server."
+    )
+    parser.add_argument(
+        "--seo-mcp-url",
+        default="http://localhost:3002",
+        help="The URL for the SEO MCP server."
+    )
     
     args = parser.parse_args()
 
     print(f"🔄 Starting SEO Doctor...")
     print(f"   - URL: {args.url}")
+    print(f"   - Google Drive MCP: {args.google_drive_mcp_url}")
+    print(f"   - SEO MCP: {args.seo_mcp_url}")
     print("-" * 30)
-
-    result_json_path = Path(args.result_json_path)
-    result_json_path.parent.mkdir(parents=True, exist_ok=True)
     
     final_result = {"success": False, "data": None, "error": None}
+    agent_result = None
 
     try:
-        agent = SEODoctorMCPAgent()
+        agent = SEODoctorMCPAgent(
+            google_drive_mcp_url=args.google_drive_mcp_url,
+            seo_mcp_url=args.seo_mcp_url
+        )
         
         analysis_result: SEOAnalysisResult = await agent.emergency_seo_diagnosis(
             url=args.url,
@@ -57,7 +75,8 @@ async def main():
         
         print("✅ Agent finished successfully.")
         final_result["success"] = True
-        final_result["data"] = analysis_result
+        # Keep the dataclass object for serialization
+        agent_result = analysis_result
 
     except Exception as e:
         import traceback
@@ -66,18 +85,35 @@ async def main():
         final_result["error"] = str(e)
     
     finally:
-        print(f"💾 Saving final results to {result_json_path}...")
+        # We need to serialize the result to JSON for uploading
+        if agent_result:
+            # The agent returns a dataclass, use the encoder to make it serializable
+            final_result["data"] = json.loads(json.dumps(agent_result, cls=EnhancedJSONEncoder))
+
+        json_content_to_upload = json.dumps(final_result, indent=2, ensure_ascii=False)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        json_file_name = f"seo_doctor_result_{timestamp}.json"
+
+        print(f"💾 Uploading final results to Google Drive as {json_file_name}...")
         try:
-            with open(result_json_path, 'w', encoding='utf-8') as f:
-                json.dump(final_result, f, indent=2, ensure_ascii=False, cls=EnhancedJSONEncoder)
-            print("🎉 Results saved.")
+            upload_result = await upload_to_drive(args.google_drive_mcp_url, json_file_name, json_content_to_upload)
+            if upload_result.get("success"):
+                file_id = upload_result.get("fileId")
+                print(f"🎉 Results uploaded successfully. File ID: {file_id}")
+            else:
+                raise Exception(f"MCP upload failed: {upload_result.get('message')}")
         except Exception as e:
-            print(f"❌ Failed to save result JSON: {e}")
-            final_result["success"] = False
-            final_result["error"] = f"Failed to save result JSON: {e}"
+            print(f"❌ Failed to upload result JSON to Google Drive: {e}")
+            # As a fallback, print to console
+            print("--- FALLBACK: FINAL RESULT JSON ---")
+            print(json_content_to_upload)
+            print("------------------------------------")
+            final_result["success"] = False # Mark as not fully successful
+            final_result["error"] = f"Failed to upload result JSON: {e}"
         
         if not final_result["success"]:
             sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main()) 

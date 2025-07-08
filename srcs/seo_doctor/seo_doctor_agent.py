@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 import re
+import aiohttp
 
 # Real MCP Agent imports
 from mcp_agent.app import MCPApp
@@ -73,13 +74,16 @@ class SEODoctorMCPAgent:
     
     Features:
     - Real Lighthouse performance analysis via Puppeteer MCP Server
-    - Actual competitor research via Google Search MCP Server
-    - File system integration for report generation
+    - Advanced competitor research via the new SEO MCP Server
+    - Google Drive integration for report generation via Google Drive MCP
     - No mock data or simulations
     """
     
-    def __init__(self, output_dir: str = "seo_doctor_reports"):
-        self.output_dir = output_dir
+    def __init__(self, 
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 seo_mcp_url: str = "http://localhost:3002"):
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.seo_mcp_url = seo_mcp_url
         # NOTE: The app initialization is now deferred to the async context manager
         
     async def emergency_seo_diagnosis(
@@ -93,11 +97,10 @@ class SEODoctorMCPAgent:
         
         Uses actual MCP servers for:
         - Lighthouse performance analysis
-        - Google Search for competitor research
+        - SEO MCP for competitor SERP analysis
         - Real website crawling and analysis
         """
         
-        os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Initialize the app within the async context
@@ -126,14 +129,15 @@ class SEODoctorMCPAgent:
             seo_research_agent = Agent(
                 name="seo_researcher",
                 instruction=f"""You are an expert SEO analyst and researcher.
-                Research and analyze: {url}. Use search and fetch tools to gather real data.
+                Research and analyze: {url}. Use the 'seo_mcp' server to gather SERP data for competitive analysis.
                 Provide emergency-level recommendations for critical issues.""",
-                server_names=["g-search", "fetch", "filesystem"]
+                server_names=["seo_mcp", "fetch"] # Use seo_mcp instead of g-search
             )
             
             logger.info(f"Starting emergency SEO diagnosis for: {url}")
             
             try:
+                # The react chain will now use the new SEO MCP
                 react_result = await self._simple_react_chain(
                     agents={
                         "lighthouse": lighthouse_agent,
@@ -147,9 +151,10 @@ class SEODoctorMCPAgent:
                 
                 structured_result = await self._structure_seo_results(react_result, url, timestamp, logger)
                 prescription = await self._generate_seo_prescription(structured_result, url, timestamp)
-                await self._save_seo_analysis(structured_result, prescription, timestamp)
+                final_report_url = await self._save_seo_analysis(structured_result, prescription, timestamp, logger)
                 
                 logger.info(f"Emergency SEO diagnosis completed for: {url}")
+                logger.info(f"Final report available at (mock URL): {final_report_url}")
                 return structured_result
                 
             except Exception as e:
@@ -178,6 +183,7 @@ class SEODoctorMCPAgent:
         llm = OpenAIAugmentedLLM()
         full_analysis = ""
         lighthouse_result_str = ""
+        serp_analysis_str = ""
         
         # Phase 1: Real Lighthouse Analysis via Agent Tool Call
         lighthouse_agent = agents.get("lighthouse")
@@ -197,26 +203,50 @@ class SEODoctorMCPAgent:
         
         full_analysis += lighthouse_result_str
 
-        # Phase 2: SEO Research
+        # Phase 2: SEO Research using the new SEO MCP
         seo_agent = agents.get("seo_research")
         if seo_agent:
-            logger.info("REACT CHAIN: Running seo_researcher...")
-            competitor_query = f"Research top 3 competitors for {url}."
-            if competitor_urls:
-                competitor_query = f"Analyze competitors: {', '.join(competitor_urls)}."
+            logger.info("REACT CHAIN: Running seo_researcher with SEO MCP...")
             
-            # This prompt now explicitly uses the lighthouse result string, which contains the raw JSON
+            # Formulate query for SERP analysis
+            competitor_query = f"top organic competitors for '{url}'"
+            if competitor_urls:
+                # This part needs a more sophisticated approach, 
+                # but for now, we'll just analyze the main URL's keywords.
+                # A better approach would be to extract keywords from the URL first.
+                competitor_query = f"SERP for keywords related to '{url}'"
+
+            # Use the SEO MCP to get SERP data
+            try:
+                serp_url = f"{self.seo_mcp_url}/serp?q={competitor_query}"
+                async with get_http_session() as session:
+                    async with session.get(serp_url) as response:
+                        response.raise_for_status()
+                        serp_data = await response.json()
+                serp_analysis_str = f"---SERP_ANALYSIS_JSON_START---\n{json.dumps(serp_data, indent=2)}\n---SERP_ANALYSIS_JSON_END---\n\n"
+                logger.info("REACT CHAIN: SEO MCP SERP analysis successful.")
+            except Exception as e:
+                logger.error(f"REACT CHAIN: SEO MCP SERP analysis failed: {e}", exc_info=True)
+                serp_analysis_str = f"SERP Analysis Failed: {e}\n\n"
+
+            full_analysis += serp_analysis_str
+            
+            # This prompt now explicitly uses BOTH lighthouse and SERP results
             prompt = f"""As the {seo_agent.name}, perform SEO research for {url}.
-            Context from the Lighthouse audit is provided below (it may be raw JSON or an error message):
+            Context from Lighthouse and SERP analysis is provided below:
+            Lighthouse Data:
             ---
             {lighthouse_result_str if lighthouse_result_str else "Lighthouse audit was not run."}
             ---
+            SERP Analysis Data:
+            ---
+            {serp_analysis_str if serp_analysis_str else "SERP analysis was not run."}
+            ---
             Your tasks:
-            1. Analyze on-page SEO (titles, meta descriptions, headers).
-            2. {'Include competitor analysis. ' + competitor_query if include_competitors else ''}
-            3. Identify technical SEO issues not in Lighthouse (sitemap, robots.txt).
-            4. Evaluate content quality and keyword strategy.
-            Provide a concise summary of findings, focusing on critical issues.
+            1. Analyze the SERP data to identify top 3 competitors and their strategies (titles, snippets).
+            2. Based on both Lighthouse and SERP data, identify the most critical technical and content gaps for {url}.
+            3. Evaluate content quality and keyword strategy based on competitor performance in the SERP.
+            Provide a concise summary of findings, focusing on critical issues and strategic recommendations.
             """
             try:
                 seo_research_result = await llm.generate_str(message=prompt, request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1))
@@ -254,17 +284,12 @@ class SEODoctorMCPAgent:
         return lighthouse_result_str + final_report
 
     async def _configure_seo_mcp_servers(self, context, logger):
-        if "filesystem" in context.config.mcp.servers:
-            # Ensure the output directory is part of the server args
-            if self.output_dir not in context.config.mcp.servers["filesystem"].args:
-                context.config.mcp.servers["filesystem"].args.extend([self.output_dir])
-            logger.info(f"Filesystem server configured for output dir: {self.output_dir}")
-            
-        required_servers = ["g-search", "fetch", "filesystem", "puppeteer"]
+        # Add the new 'seo_mcp' to the list of required servers
+        required_servers = ["fetch", "puppeteer", "seo_mcp"]
         missing_servers = [s for s in required_servers if s not in context.config.mcp.servers]
         if missing_servers:
             logger.warning(f"Missing required MCP servers for SEO analysis: {missing_servers}")
-            logger.info("You can install them by running: npm install -g @modelcontextprotocol/server-puppeteer g-search-mcp @modelcontextprotocol/server-fetch @modelcontextprotocol/server-filesystem")
+            logger.info("You may need to start the seo_mcp server manually or configure it in your YAML.")
     
     async def _structure_seo_results(
         self, 
@@ -353,39 +378,39 @@ class SEODoctorMCPAgent:
         return data
 
     async def _extract_lighthouse_metrics(self, lighthouse_data: Dict[str, Any], logger) -> Dict[str, Any]:
-        """Extracts key metrics directly from the parsed Lighthouse JSON report."""
-        if not lighthouse_data or 'categories' not in lighthouse_data:
-            logger.warning("Lighthouse data is empty or missing 'categories' key.")
-            return {}
-        
+        """Extracts key metrics from the raw Lighthouse JSON report."""
         try:
             categories = lighthouse_data.get('categories', {})
-            # Convert scores from 0-1 to 0-100
-            metrics = {cat: int(categories[cat]['score'] * 100) for cat in categories if cat in categories and isinstance(categories[cat], dict) and categories[cat].get('score') is not None}
-            
             audits = lighthouse_data.get('audits', {})
-            vitals = {}
-            # Map audit keys to Core Web Vital names
-            vital_map = {
-                'largest-contentful-paint': 'LCP',
-                'cumulative-layout-shift': 'CLS',
-                'total-blocking-time': 'TBT', # TBT is often used as a proxy for FID
-                'first-contentful-paint': 'FCP',
-                'speed-index': 'Speed Index'
+
+            def get_score(cat_id):
+                return categories.get(cat_id, {}).get('score', 0) * 100
+
+            performance = get_score('performance')
+            seo = get_score('seo')
+            accessibility = get_score('accessibility')
+            best_practices = get_score('best-practices')
+            
+            overall_score = (performance + seo + accessibility + best_practices) / 4
+
+            core_web_vitals = {
+                'largest-contentful-paint': audits.get('largest-contentful-paint', {}).get('displayValue', 'N/A'),
+                'cumulative-layout-shift': audits.get('cumulative-layout-shift', {}).get('displayValue', 'N/A'),
+                'first-contentful-paint': audits.get('first-contentful-paint', {}).get('displayValue', 'N/A'),
+                'speed-index': audits.get('speed-index', {}).get('displayValue', 'N/A'),
+                'total-blocking-time': audits.get('total-blocking-time', {}).get('displayValue', 'N/A'),
             }
-            for key, name in vital_map.items():
-                if key in audits:
-                    vitals[name] = audits[key].get('displayValue', 'N/A')
-            
-            metrics['core_web_vitals'] = vitals
-            
-            # Calculate overall score as an average of the main category scores
-            scores = [v for k, v in metrics.items() if k in ['performance', 'seo', 'accessibility', 'best-practices']]
-            metrics['overall_score'] = sum(scores) / len(scores) if scores else 0
-            
-            return metrics
+
+            return {
+                "performance": performance,
+                "seo": seo,
+                "accessibility": accessibility,
+                "best-practices": best_practices,
+                "overall_score": overall_score,
+                "core_web_vitals": core_web_vitals,
+            }
         except Exception as e:
-            logger.error(f"Error extracting metrics from Lighthouse JSON: {e}", exc_info=True)
+            logger.error(f"Error extracting lighthouse metrics: {e}", exc_info=True)
             return {}
     
     async def _parse_competitor_analysis(self, analysis_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -439,75 +464,113 @@ class SEODoctorMCPAgent:
             implementation_priority=analysis.critical_issues
         )
 
-    async def _save_seo_analysis(self, analysis: SEOAnalysisResult, prescription: SEOPrescription, timestamp: str):
-        report_path = os.path.join(self.output_dir, f"seo_emergency_diagnosis_{timestamp}.md")
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(f"# 🚨 SEO Emergency Diagnosis Report\n\n")
-            f.write(f"**Patient URL**: {analysis.url}\n")
-            f.write(f"**Diagnosis Date**: {analysis.analysis_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-            f.write(f"**Emergency Level**: {analysis.emergency_level.value}\n")
-            f.write(f"**Overall Health Score**: {analysis.overall_score:.1f}/100\n\n")
+    async def _save_seo_analysis(self, analysis: SEOAnalysisResult, prescription: SEOPrescription, timestamp: str, logger) -> str:
+        """
+        Saves the markdown report to Google Drive via the Google Drive MCP.
+        """
+        report_file_name = f"seo_emergency_diagnosis_{timestamp}.md"
+        
+        # 1. Construct the report content in memory
+        f = []
+        f.append(f"# 🚨 SEO Emergency Diagnosis Report\n\n")
+        f.append(f"**Patient URL**: {analysis.url}\n")
+        f.append(f"**Diagnosis Date**: {analysis.analysis_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        f.append(f"**Emergency Level**: {analysis.emergency_level.value}\n")
+        f.append(f"**Overall Health Score**: {analysis.overall_score:.1f}/100\n\n")
 
-            f.write("## 📊 Vital Signs (from Lighthouse)\n")
-            f.write(f"- **Performance**: {analysis.performance_score}/100\n")
-            f.write(f"- **SEO Health**: {analysis.seo_score}/100\n")
-            f.write(f"- **Accessibility**: {analysis.accessibility_score}/100\n")
-            f.write(f"- **Best Practices**: {analysis.best_practices_score}/100\n\n")
+        f.append("## 📊 Vital Signs (from Lighthouse)\n")
+        f.append(f"- **Performance**: {analysis.performance_score}/100\n")
+        f.append(f"- **SEO Health**: {analysis.seo_score}/100\n")
+        f.append(f"- **Accessibility**: {analysis.accessibility_score}/100\n")
+        f.append(f"- **Best Practices**: {analysis.best_practices_score}/100\n\n")
 
-            f.write("## 🩺 Core Web Vitals (from Lighthouse)\n")
-            if analysis.core_web_vitals:
-                for vital, value in analysis.core_web_vitals.items():
-                    f.write(f"- **{vital.replace('-', ' ').title()}**: {value}\n")
-            else:
-                f.write("- *No Core Web Vitals data available.*\n")
-            f.write("\n")
+        f.append("## 🩺 Core Web Vitals (from Lighthouse)\n")
+        if analysis.core_web_vitals:
+            for vital, value in analysis.core_web_vitals.items():
+                f.append(f"- **{vital.replace('-', ' ').title()}**: {value}\n")
+        else:
+            f.append("- *No Core Web Vitals data available.*\n")
+        f.append("\n")
 
-            f.write("## 🚨 Critical Issues (Synthesized)\n")
-            if analysis.critical_issues:
-                for issue in analysis.critical_issues:
-                    f.write(f"- {issue}\n")
-            else:
-                f.write("- *No critical issues were identified.*\n")
-            f.write("\n")
+        f.append("## 🚨 Critical Issues (Synthesized)\n")
+        if analysis.critical_issues:
+            for issue in analysis.critical_issues:
+                f.append(f"- {issue}\n")
+        else:
+            f.append("- *No critical issues were identified.*\n")
+        f.append("\n")
 
-            f.write("## ⚡ Emergency Treatment (Quick Fixes)\n")
-            if analysis.quick_fixes:
-                for fix in analysis.quick_fixes:
-                    f.write(f"- {fix}\n")
-            else:
-                f.write("- *No quick fixes were recommended.*\n")
-            f.write("\n")
-            
-            f.write(f"## 🗓️ Estimated Recovery\n")
-            f.write(f"- **Estimated Days**: {analysis.estimated_recovery_days}\n\n")
-            
-            f.write(f"## 🏥 Prescription: {prescription.prescription_id}\n\n")
-            f.write("### Priority Implementation\n")
-            for item in prescription.implementation_priority:
-                f.write(f"- {item}\n")
-            f.write("\n### Weekly Medicine\n")
-            for item in prescription.weekly_medicine:
-                f.write(f"- {item}\n")
-            f.write("\n### Monthly Checkup\n")
-            for item in prescription.monthly_checkup:
-                f.write(f"- {item}\n")
-            f.write("\n")
-            
-            f.write(f"## 📈 Expected Recovery\n")
-            f.write(f"- {prescription.expected_results}\n")
-            f.write(f"- **Next Follow-up**: {prescription.follow_up_date.strftime('%Y-%m-%d')}\n")
+        f.append("## ⚡ Emergency Treatment (Quick Fixes)\n")
+        if analysis.quick_fixes:
+            for fix in analysis.quick_fixes:
+                f.append(f"- {fix}\n")
+        else:
+            f.append("- *No quick fixes were recommended.*\n")
+        f.append("\n")
+        
+        f.append(f"## 🗓️ Estimated Recovery\n")
+        f.append(f"- **Estimated Days**: {analysis.estimated_recovery_days}\n\n")
+        
+        f.append(f"## 🏥 Prescription: {prescription.prescription_id}\n\n")
+        f.append("### Priority Implementation\n")
+        for item in prescription.implementation_priority:
+            f.append(f"- {item}\n")
+        f.append("\n### Weekly Medicine\n")
+        for item in prescription.weekly_medicine:
+            f.append(f"- {item}\n")
+        f.append("\n### Monthly Checkup\n")
+        for item in prescription.monthly_checkup:
+            f.append(f"- {item}\n")
+        f.append("\n")
+        
+        f.append(f"## 📈 Expected Recovery\n")
+        f.append(f"- {prescription.expected_results}\n")
+        f.append(f"- **Next Follow-up**: {prescription.follow_up_date.strftime('%Y-%m-%d')}\n")
+        
+        report_content = "".join(f)
+        
+        # 2. Upload to Google Drive via MCP
+        upload_url = f"{self.google_drive_mcp_url}/upload"
+        payload = {
+            "fileName": report_file_name,
+            "content": report_content
+        }
+        
+        try:
+            async with get_http_session() as session:
+                async with session.post(upload_url, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    
+                    if result.get("success"):
+                        file_id = result.get("fileId")
+                        logger.info(f"Successfully uploaded report to Google Drive. File ID: {file_id}")
+                        # In a real scenario, this would be a real shareable link
+                        return f"https://docs.google.com/document/d/{file_id}"
+                    else:
+                        logger.error(f"Failed to upload report to Google Drive MCP: {result.get('message')}")
+                        return "upload_failed"
+                        
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP Error connecting to Google Drive MCP: {e}")
+            return "upload_failed"
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during report upload: {e}")
+            return "upload_failed"
+
 
 # Export main functions
-async def create_seo_doctor_agent(output_dir: str = "seo_doctor_reports") -> SEODoctorMCPAgent:
-    return SEODoctorMCPAgent(output_dir=output_dir)
+async def create_seo_doctor_agent(google_drive_mcp_url: str = "http://localhost:3001", seo_mcp_url: str = "http://localhost:3002") -> SEODoctorMCPAgent:
+    return SEODoctorMCPAgent(google_drive_mcp_url=google_drive_mcp_url, seo_mcp_url=seo_mcp_url)
 
 async def run_emergency_seo_diagnosis(
     url: str,
     include_competitors: bool = True,
     competitor_urls: Optional[List[str]] = None,
-    output_dir: str = "seo_doctor_reports"
+    google_drive_mcp_url: str = "http://localhost:3001",
+    seo_mcp_url: str = "http://localhost:3002"
 ) -> SEOAnalysisResult:
-    agent = await create_seo_doctor_agent(output_dir)
+    agent = await create_seo_doctor_agent(google_drive_mcp_url, seo_mcp_url)
     return await agent.emergency_seo_diagnosis(
         url=url,
         include_competitors=include_competitors,

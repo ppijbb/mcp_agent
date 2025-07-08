@@ -7,307 +7,168 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.logging.logger import get_logger
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import json
 import os
 from datetime import datetime
+import aiohttp
 
 logger = get_logger("prd_writer_agent")
 
+# Helper function to create the HTTP client session
+async def get_http_session() -> aiohttp.ClientSession:
+    return aiohttp.ClientSession()
+
 
 class PRDWriterAgent:
-    """PRD 작성 전문 Agent"""
+    """
+    Agent responsible for drafting the PRD document based on various inputs.
+    Now enhanced with Figma and Notion context.
+    """
+    def __init__(self, 
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 figma_mcp_url: str = "http://localhost:3003",
+                 notion_mcp_url: str = "http://localhost:3004"):
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.figma_mcp_url = figma_mcp_url
+        self.notion_mcp_url = notion_mcp_url
 
-    def __init__(self, output_path: str, orchestrator: Optional[Orchestrator] = None):
-        self.output_path = output_path
-        self.orchestrator = orchestrator
-        self.agent_instance = self._create_agent_instance()
-        if orchestrator:
-            self.llm = orchestrator.llm_factory()
-        else:
-            self.llm = None
-
-    def _create_agent_instance(self) -> Agent:
-        """PRD 작성 Agent의 기본 인스턴스 생성"""
-        return self.create_agent(self.output_path)
-
-    async def write_prd(self, figma_analysis_result: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Figma 분석 결과를 바탕으로 PRD 작성
-        
-        Args:
-            figma_analysis_result: FigmaAnalyzerAgent의 분석 결과
-            
-        Returns:
-            Dict[str, Any]: PRD 작성 결과 및 파일 정보
-        """
-        logger.info("📋 Starting PRD writing based on Figma analysis")
-        
+    async def _get_figma_summary(self, figma_file_id: str) -> Optional[Dict[str, Any]]:
+        if not figma_file_id:
+            return None
         try:
-            # 1. 분석 결과에서 핵심 정보 추출
-            extracted_info = await self._extract_key_information(figma_analysis_result)
-            
-            # 2. PRD 섹션별 내용 생성
-            prd_sections = await self._generate_prd_sections(extracted_info)
-            
-            # 3. 완전한 PRD 문서 조합
-            complete_prd = await self._assemble_complete_prd(prd_sections)
-            
-            # 4. PRD 파일 저장
-            file_info = await self._save_prd_file(complete_prd)
-            
-            result = {
-                "prd_content": complete_prd,
-                "file_info": file_info,
-                "sections": prd_sections,
-                "status": "completed",
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            logger.info("✅ PRD writing completed successfully")
-            return result
-            
+            url = f"{self.figma_mcp_url}/file-summary?fileId={figma_file_id}"
+            async with get_http_session() as session:
+                async with session.get(url) as response:
+                    response.raise_for_status()
+                    return await response.json()
         except Exception as e:
-            logger.error(f"💥 Error in PRD writing: {e}", exc_info=True)
-            # No fallback - raise the actual error for proper handling
-            raise RuntimeError(f"PRD writing failed: {e}") from e
+            print(f"Error getting Figma summary: {e}")
+            return {"error": str(e)}
 
-    async def _extract_key_information(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
-        """분석 결과에서 PRD 작성에 필요한 핵심 정보 추출"""
-        if not self.llm:
-            return {"error": "No LLM available for information extraction"}
-            
+    async def _get_notion_content(self, notion_page_id: str) -> Optional[Dict[str, Any]]:
+        if not notion_page_id:
+            return None
+        try:
+            url = f"{self.notion_mcp_url}/page-content?pageId={notion_page_id}"
+            async with get_http_session() as session:
+                async with session.get(url) as response:
+                    response.raise_for_status()
+                    return await response.json()
+        except Exception as e:
+            print(f"Error getting Notion content: {e}")
+            return {"error": str(e)}
+
+    async def draft_prd(self, 
+                      product_brief: Dict[str, Any], 
+                      feedback: Optional[str] = None,
+                      figma_file_id: Optional[str] = None,
+                      notion_page_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Drafts the PRD using the product brief and feedback.
+        Now includes context from Figma and Notion.
+        """
+        
+        figma_context = await self._get_figma_summary(figma_file_id)
+        notion_context = await self._get_notion_content(notion_page_id)
+        
         prompt = f"""
-        Extract key information from the Figma analysis for PRD writing.
+        As a Senior Product Manager, your task is to write a detailed Product Requirements Document (PRD).
+
+        Use the following inputs to create the PRD:
+
+        1.  **Core Product Brief**:
+            ```json
+            {json.dumps(product_brief, indent=2)}
+            ```
         
-        Analysis Result: {json.dumps(analysis_result, indent=2)}
+        2.  **Figma Design Prototype Summary** (if available):
+            Analyze the following summary of the Figma design. Pay attention to user flows, component names, and screen layouts to define the user experience and functional requirements.
+            ```json
+            {json.dumps(figma_context, indent=2) if figma_context else "No Figma design context provided."}
+            ```
+
+        3.  **Notion Planning Document** (if available):
+            Incorporate the background, goals, and technical notes from the following Notion document into the PRD.
+            ```text
+            {json.dumps(notion_context, indent=2) if notion_context else "No Notion planning context provided."}
+            ```
+
+        4.  **Additional Feedback** (if available):
+            ```
+            {feedback if feedback else "No additional feedback provided."}
+            ```
+
+        **PRD Structure**:
+        Your PRD must follow this structure precisely. Fill in every section with relevant details derived from the provided context.
+
+        - **1. Introduction**:
+          - **1.1. Problem Statement**: What user problem are we solving?
+          - **1.2. Goal**: What is the primary business objective? What are the key success metrics (KPIs)?
+          - **1.3. Target Audience**: Who are the primary users?
+        - **2. Product Requirements**:
+          - **2.1. User Stories**: Write detailed user stories (As a [user type], I want to [action] so that [benefit]). Infer these from the product brief, Figma flows, and Notion doc.
+          - **2.2. Functional Requirements**: List specific features (e.g., 'User authentication', 'Dashboard view'). Use details from the Figma components and Notion specs.
+          - **2.3. Non-Functional Requirements**: (e.g., Performance, Security, Usability).
+        - **3. Design & UX**:
+          - **3.1. Design Mockups**: Reference the Figma file ID ({figma_file_id or 'N/A'}).
+          - **3.2. User Flow**: Describe the high-level user journey, referencing specific frames from the Figma summary.
+        - **4. Assumptions and Constraints**: List any assumptions made or technical constraints identified.
         
-        Extract and structure:
-        1. **Product Overview**: What is this product about?
-        2. **Target Users**: Who will use this product?
-        3. **Core Features**: What are the main functionalities?
-        4. **User Goals**: What do users want to accomplish?
-        5. **Technical Context**: What technical considerations are important?
-        6. **Design Principles**: What design approach is being used?
-        
-        Format as structured JSON for easy processing.
+        Generate the PRD in a structured JSON format.
         """
+        llm = OpenAIAugmentedLLM()
+        prd_json_str = await llm.generate_str(
+            message=prompt,
+            request_params=RequestParams(
+                model="gemini-2.5-flash-lite-preview-06-07",
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+        )
         
         try:
-            result = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.3))
-            return {"extracted_info": result, "status": "extracted"}
-        except Exception as e:
-            logger.warning(f"Information extraction failed: {e}")
-            return {
-                "status": "extraction_limited",
-                "basic_info": {
-                    "product_type": "Digital Product",
-                    "target_users": "End users",
-                    "core_features": ["User interface", "Core functionality"],
-                    "user_goals": ["Task completion", "Information access"],
-                    "technical_approach": "Modern web application"
-                }
-            }
+            prd_data = json.loads(prd_json_str)
+            return prd_data
+        except json.JSONDecodeError:
+            # Fallback if the LLM output is not valid JSON
+            print("Error: PRD output is not valid JSON. Returning raw text.")
+            return {"error": "Invalid JSON output from LLM", "raw_text": prd_json_str}
 
-    async def _generate_prd_sections(self, extracted_info: Dict[str, Any]) -> Dict[str, Any]:
-        """PRD의 각 섹션별 내용 생성"""
-        if not self.llm:
-            return {"error": "No LLM available for section generation"}
-            
-        sections = {}
-        section_prompts = {
-            "overview": f"""
-            Based on the extracted information, write the Overview section of the PRD.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - Product Vision (2-3 sentences)
-            - Goals & Objectives (3-5 key goals)
-            - Target Audience (primary user segments)
-            
-            Write in professional, clear language suitable for stakeholders.
-            """,
-            
-            "user_requirements": f"""
-            Write the User Requirements section based on the analysis.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - User Personas (2-3 key personas)
-            - User Stories (5-8 key user stories in "As a... I want... So that..." format)
-            - Functional Requirements (detailed feature requirements)
-            
-            Focus on user needs and expected behaviors.
-            """,
-            
-            "design_ux_requirements": f"""
-            Write the Design & UX Requirements section.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - Key UI/UX Principles
-            - Wireframes & Mockups reference
-            - Accessibility requirements (WCAG compliance)
-            - Responsive design considerations
-            
-            Reference the Figma analysis findings.
-            """,
-            
-            "technical_specifications": f"""
-            Write the Technical Specifications section.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - System Architecture recommendations
-            - Data Model requirements
-            - Integration needs (APIs, third-party services)
-            - Performance requirements
-            - Security considerations
-            
-            Be specific and actionable for development teams.
-            """,
-            
-            "success_metrics": f"""
-            Write the Success Metrics section.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - Key Performance Indicators (KPIs)
-            - Analytics & Tracking requirements
-            - Success criteria and targets
-            - Measurement methodologies
-            
-            Focus on measurable outcomes.
-            """,
-            
-            "future_considerations": f"""
-            Write the Future Considerations section.
-            
-            Information: {json.dumps(extracted_info, indent=2)}
-            
-            Include:
-            - Product Roadmap (next 6-12 months)
-            - Out of Scope items (what's not included in v1)
-            - Potential enhancements
-            - Scalability considerations
-            
-            Think strategically about product evolution.
-            """
+    async def save_prd(self, prd_data: Dict[str, Any], file_name: str) -> Dict[str, Any]:
+        """PRD 파일을 Google Drive에 저장"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"PRD_{timestamp}.md"
+        
+        upload_url = f"{self.google_drive_mcp_url}/upload"
+        payload = {
+            "fileName": file_name,
+            "content": prd_content
         }
         
-        for section_name, prompt in section_prompts.items():
-            try:
-                section_content = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4))
-                sections[section_name] = section_content
-                logger.info(f"✅ Generated {section_name} section")
-            except Exception as e:
-                logger.warning(f"Failed to generate {section_name} section: {e}")
-                sections[section_name] = f"[{section_name.replace('_', ' ').title()} section - content generation failed]"
-        
-        return sections
-
-    async def _assemble_complete_prd(self, sections: Dict[str, Any]) -> str:
-        """PRD 섹션들을 완전한 문서로 조합"""
-        if not self.llm:
-            return self._create_basic_prd_template(sections)
-            
-        prompt = f"""
-        Assemble the PRD sections into a complete, professional Product Requirements Document.
-        
-        Sections: {json.dumps(sections, indent=2)}
-        
-        Create a well-structured markdown document with:
-        1. Clear headings and subheadings
-        2. Consistent formatting
-        3. Professional tone
-        4. Logical flow between sections
-        5. Executive summary at the beginning
-        
-        The document should be ready for stakeholder review and development team use.
-        """
-        
         try:
-            complete_prd = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.3))
-            return complete_prd
+            async with get_http_session() as session:
+                async with session.post(upload_url, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    
+                    if result.get("success"):
+                        file_id = result.get("fileId")
+                        logger.info(f"Successfully uploaded PRD to Google Drive. File ID: {file_id}")
+                        return {
+                            "drive_file_id": file_id,
+                            "file_url": f"https://docs.google.com/document/d/{file_id}",
+                            "status": "uploaded",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    else:
+                        raise Exception(f"MCP upload failed: {result.get('message')}")
+
         except Exception as e:
-            logger.warning(f"PRD assembly failed: {e}")
-            return self._create_basic_prd_template(sections)
-
-    def _create_basic_prd_template(self, sections: Dict[str, Any]) -> str:
-        """기본 PRD 템플릿 생성 (LLM 실패 시 사용)"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        prd_content = f"""# Product Requirements Document
-
-**Generated:** {timestamp}
-**Status:** Draft
-
-## Executive Summary
-
-This PRD outlines the requirements for a digital product based on design analysis and user research.
-
-## 1. Overview
-
-{sections.get('overview', '[Overview section not available]')}
-
-## 2. User Requirements
-
-{sections.get('user_requirements', '[User Requirements section not available]')}
-
-## 3. Design & UX Requirements
-
-{sections.get('design_ux_requirements', '[Design & UX Requirements section not available]')}
-
-## 4. Technical Specifications
-
-{sections.get('technical_specifications', '[Technical Specifications section not available]')}
-
-## 5. Success Metrics
-
-{sections.get('success_metrics', '[Success Metrics section not available]')}
-
-## 6. Future Considerations
-
-{sections.get('future_considerations', '[Future Considerations section not available]')}
-
----
-
-*This PRD was generated automatically based on Figma design analysis.*
-*Please review and refine as needed for your specific requirements.*
-"""
-        return prd_content
-
-    async def _save_prd_file(self, prd_content: str) -> Dict[str, Any]:
-        """PRD 파일을 지정된 경로에 저장"""
-        try:
-            # 출력 디렉토리 생성
-            output_dir = os.path.dirname(self.output_path)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
-            
-            # 파일 저장
-            with open(self.output_path, 'w', encoding='utf-8') as f:
-                f.write(prd_content)
-            
-            file_size = len(prd_content.encode('utf-8'))
-            
+            logger.error(f"Failed to save PRD file to Google Drive: {e}")
             return {
-                "file_path": self.output_path,
-                "file_size": file_size,
-                "status": "saved",
-                "timestamp": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to save PRD file: {e}")
-            return {
-                "file_path": self.output_path,
-                "status": "save_failed",
+                "file_name": file_name,
+                "status": "upload_failed",
                 "error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
@@ -396,7 +257,7 @@ This PRD outlines the requirements for a digital product based on design analysi
             }
 
     @staticmethod
-    def create_agent(output_path: str) -> Agent:
+    def create_agent() -> Agent:
         """
         PRD 작성 Agent 생성 (기존 호환성 유지)
         
@@ -443,13 +304,13 @@ This PRD outlines the requirements for a digital product based on design analysi
         - **Roadmap**: 
         - **Out of Scope**: 
 
-        **Final Output**: The final PRD should be saved to {output_path}.
+        **Final Output**: The final PRD should be saved to {self.google_drive_mcp_url}.
         """
         
         return Agent(
             name="prd_writer",
             instruction=instruction,
-            server_names=["filesystem"]
+            server_names=["fetch", "filesystem"]  # Filesystem might still be used by underlying tools
         )
 
     @staticmethod

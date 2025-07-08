@@ -6,10 +6,12 @@ Multi-Agent 간 소통, 워크플로우 조율 및 작업 협조를 관리하는
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import json
 import asyncio
 import logging
+import aiohttp
+from datetime import datetime
 
 from .figma_analyzer_agent import FigmaAnalyzerAgent
 from .prd_writer_agent import PRDWriterAgent
@@ -21,75 +23,39 @@ from srcs.product_planner_agent.prompts.coordinator_prompts import (
     GENERATE_FINAL_REPORT_PROMPT,
     REACT_PROMPT
 )
+from mcp_agent.workflows.llm.openai_augmented_llm import OpenAIAugmentedLLM
 
 logger = get_logger("coordinator_agent")
 
-class CoordinatorAgent:
-    """Agent 간 조율 및 워크플로우 관리를 위한 ReAct 기반 실행 Agent"""
+# Helper function to create the HTTP client session
+def get_http_session():
+    return aiohttp.ClientSession()
 
-    def __init__(self, orchestrator: Orchestrator, agents: Dict[str, Any] = None):
+class CoordinatorAgent:
+    """
+    각 전문 Agent들을 조율하고 전체 워크플로우를 관리하는 핵심 Agent
+    """
+
+    def __init__(self, orchestrator: Orchestrator, 
+                 google_drive_mcp_url: str = "http://localhost:3001",
+                 figma_mcp_url: str = "http://localhost:3003",
+                 notion_mcp_url: str = "http://localhost:3004"):
         self.orchestrator = orchestrator
         self.llm = orchestrator.llm_factory()
-        # StatusLogger 초기화 시 기본 단계 목록 제공
-        default_steps = [
-            "Figma Design Analysis",
-            "Product Requirements Document (PRD)",
-            "Business Planning",
-            "Final Report Generation"
-        ]
-        self.status_logger = StatusLogger(steps=default_steps)
-        self.max_iterations = 7  # 최대 반복 횟수 설정
+        self.google_drive_mcp_url = google_drive_mcp_url
+        self.figma_mcp_url = figma_mcp_url
+        self.notion_mcp_url = notion_mcp_url
         
-        # 에이전트들을 실제 인스턴스로 초기화
-        self.agents = self._initialize_agents(agents)
-        self.available_agents = list(self.agents.keys())
+        # 각 전문 Agent들을 초기화할 때 MCP URL을 전달합니다.
+        self.figma_analyzer = FigmaAnalyzerAgent(orchestrator=orchestrator)
+        self.prd_writer = PRDWriterAgent(
+            google_drive_mcp_url=self.google_drive_mcp_url,
+            figma_mcp_url=self.figma_mcp_url,
+            notion_mcp_url=self.notion_mcp_url
+        )
+        self.business_planner = BusinessPlannerAgent(orchestrator=orchestrator)
         
-        logger.info(f"🔍 Initialized CoordinatorAgent with agents: {self.available_agents}")
-        
-        self.agent_instance = self._create_agent_instance()
-        self.result = {}
-
-    def _initialize_agents(self, provided_agents: Dict[str, Any] = None) -> Dict[str, Any]:
-        """실제 에이전트 인스턴스들을 초기화"""
-        agents = {}
-        
-        try:
-            # FigmaAnalyzerAgent 초기화 (orchestrator 파라미터 제거)
-            figma_url = "https://www.figma.com/design/sample"  # 기본 URL
-            agents["figma_analyzer_agent"] = FigmaAnalyzerAgent(
-                figma_url=figma_url
-            )
-            logger.info("✅ FigmaAnalyzerAgent initialized")
-            
-            # PRDWriterAgent 초기화 (orchestrator 파라미터 제거)
-            output_path = "outputs/product_planner/prd_output.md"
-            agents["prd_writer_agent"] = PRDWriterAgent(
-                output_path=output_path
-            )
-            logger.info("✅ PRDWriterAgent initialized")
-            
-            # BusinessPlannerAgent 초기화 (orchestrator는 선택사항)
-            agents["business_planner_agent"] = BusinessPlannerAgent(
-                llm=self.llm,
-                orchestrator=self.orchestrator
-            )
-            logger.info("✅ BusinessPlannerAgent initialized")
-            
-            # 제공된 추가 에이전트들이 있다면 추가
-            if provided_agents:
-                for name, agent in provided_agents.items():
-                    if name not in agents:  # 중복 방지
-                        agents[name] = agent
-                        logger.info(f"✅ Additional agent added: {name}")
-            
-        except Exception as e:
-            logger.error(f"💥 Error initializing agents: {e}", exc_info=True)
-            # fallback 제거 - 오류 발생 시 빈 딕셔너리 반환
-            raise RuntimeError(f"Failed to initialize Product Planner agents: {e}")
-        
-        return agents
-
-
+        self.agent = self._create_agent_instance()
 
     def _create_agent_instance(self) -> Agent:
         """
@@ -360,48 +326,132 @@ class CoordinatorAgent:
         ]
 
     async def generate_final_report(self, results: Dict[str, Any]):
-        logger.info("Generating final report...")
-        
-        final_report_content = "## 📝 Product Plan Final Report\n\n"
-        for key, value in results.items():
-            final_report_content += f"### {key.replace('_', ' ').title()}\n\n"
-            if isinstance(value, (dict, list)):
-                final_report_content += f"```json\n{json.dumps(value, indent=2, ensure_ascii=False)}\n```\n\n"
-            else:
-                final_report_content += f"{str(value)}\n\n"
+        """
+        모든 Agent의 결과물을 종합하여 최종 보고서를 생성하고 Google Drive에 업로드합니다.
+        """
+        logger.info("📄 Generating final comprehensive report...")
         
         prompt = GENERATE_FINAL_REPORT_PROMPT.format(
-            report_data=final_report_content
+            figma_analysis=json.dumps(results.get("figma_analysis", {}), indent=2, ensure_ascii=False),
+            prd=json.dumps(results.get("prd", {}), indent=2, ensure_ascii=False),
+            business_plan=json.dumps(results.get("business_plan", {}), indent=2, ensure_ascii=False)
+        )
+
+        final_report = await self.llm.generate_str(
+            message=prompt,
+            request_params=RequestParams(
+                model="gemini-2.5-pro-vision-preview-06-07",
+                temperature=0.3,
+                max_tokens=4096
+            )
+        )
+        logger.info("Final report content generated.")
+
+        # 파일 저장 로직을 Google Drive MCP 호출로 변경
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"product_plan_report_{timestamp}.md"
+        
+        upload_url = f"{self.google_drive_mcp_url}/upload"
+        payload = {
+            "fileName": file_name,
+            "content": final_report
+        }
+
+        try:
+            async with get_http_session() as session:
+                async with session.post(upload_url, json=payload) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+
+                    if result.get("success"):
+                        file_id = result.get("fileId")
+                        logger.info(f"✅ Final report successfully uploaded to Google Drive. File ID: {file_id}")
+                        return {
+                            "report_content": final_report,
+                            "drive_file_id": file_id,
+                            "file_url": f"https://docs.google.com/document/d/{file_id}",
+                            "status": "uploaded"
+                        }
+                    else:
+                        raise Exception(f"MCP upload failed: {result.get('message')}")
+
+        except Exception as e:
+            logger.error(f"💥 Failed to upload the final report to Google Drive. Error: {e}", exc_info=True)
+            return {"report_content": final_report, "drive_file_id": None, "status": "upload_failed", "error": str(e)}
+
+    async def coordinate_prd_creation(self, 
+                                      product_concept: str, 
+                                      user_persona: str,
+                                      figma_file_id: Optional[str] = None,
+                                      notion_page_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Orchestrates the PRD creation workflow, now including Figma and Notion IDs.
+        """
+        print("Coordinating PRD Creation...")
+        
+        # 1. Generate Product Brief (existing logic)
+        product_brief = await self._generate_product_brief(product_concept, user_persona)
+        
+        # 2. Draft PRD with Figma/Notion context
+        print(f"Drafting PRD with context: Figma ID '{figma_file_id}', Notion ID '{notion_page_id}'")
+        prd_draft = await self.prd_writer.draft_prd(
+            product_brief=product_brief,
+            figma_file_id=figma_file_id,
+            notion_page_id=notion_page_id
         )
         
-        try:
-            final_report = await self.llm.generate_str(prompt, request_params=RequestParams(temperature=0.7))
-        except Exception as e:
-            logger.warning(f"Final report generation failed: {e}")
-            final_report = final_report_content  # 기본 보고서 사용
+        # In a more complex scenario, we would have feedback loops here.
+        # For now, we proceed directly to saving.
+        
+        # 3. Save the final PRD
+        file_name = f"prd_{product_brief.get('product_name', 'untitled').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.json"
+        saved_info = await self.prd_writer.save_prd(prd_draft, file_name)
+        
+        print("PRD Coordination complete.")
+        return {
+            "final_prd": prd_draft,
+            "saved_info": saved_info
+        }
 
-        # 파일 저장 로직 추가
-        try:
-            import os
-            from datetime import datetime
-            
-            output_dir = "outputs/product_planner"
-            os.makedirs(output_dir, exist_ok=True)
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_path = f"{output_dir}/product_plan_report_{timestamp}.md"
-            
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(final_report)
-            
-            logger.info(f"✅ Final report successfully saved to {file_path}")
-            return {"report": final_report, "file_path": file_path}
-            
-        except Exception as e:
-            logger.error(f"💥 Failed to save the final report. Error: {e}", exc_info=True)
-            return {"report": final_report, "file_path": None}
+    async def _generate_product_brief(self, product_concept: str, user_persona: str) -> Dict[str, Any]:
+        """
+        Generates a structured product brief from the initial concept.
+        (This is a simplified version of what a real agent would do)
+        """
+        prompt = f"""
+        Based on the following product concept and user persona, create a structured product brief.
 
-# ... 기존의 analyze_figma, create_prd 등의 메소드는 ReAct 패턴 하에서는 직접 호출되지 않으므로
-# 각 전문 에이전트로 옮겨지거나, 여기서 제거될 수 있습니다. 
-# 이 예제에서는 일단 남겨두지만, 실제 리팩토링 과정에서는 정리하는 것이 좋습니다.
-# ...
+        **Product Concept**: {product_concept}
+        **User Persona**: {user_persona}
+
+        The brief must include:
+        - A catchy, internal-facing 'product_name'.
+        - A clear 'problem_statement'.
+        - A list of 3-5 high-level 'key_features'.
+        - The primary 'target_audience'.
+        - Key 'success_metrics' (KPIs).
+
+        Return the output as a JSON object.
+        """
+        llm = OpenAIAugmentedLLM()
+        brief_str = await llm.generate_str(
+            message=prompt,
+            request_params=RequestParams(
+                model="gemini-2.5-flash-lite-preview-06-07",
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            )
+        )
+        return json.loads(brief_str)
+
+    async def generate_final_report(self, results: List[Dict[str, Any]]) -> str:
+        """
+        모든 Agent의 결과물을 종합하여 최종 보고서를 생성하고 Google Drive에 업로드합니다.
+        """
+        pass
+        
+    async def save_final_report(self, report_content: str, file_name: str) -> Dict[str, Any]:
+        """
+        최종 보고서를 파일로 저장합니다. (현재는 Google Drive MCP를 통해 업로드)
+        """
+        pass
