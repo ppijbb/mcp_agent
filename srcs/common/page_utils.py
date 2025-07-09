@@ -115,28 +115,6 @@ def create_agent_page(
     render_home_button()
     
     st.markdown("---")
-    
-    # 에이전트 모듈 임포트 및 실행 (module_path가 제공된 경우에만)
-    if module_path:
-        success, module, error = safe_import_agent(module_path)
-        
-        if success:
-            try:
-                # 메인 함수 실행
-                main_func = getattr(module, main_function_name)
-                asyncio.run(main_func())
-                
-            except Exception as e:
-                st.error(f"{agent_name} 실행 중 오류가 발생했습니다: {e}")
-                render_import_error(agent_name, str(e))
-                
-                if features:
-                    render_agent_intro(agent_name, features, special_features, use_cases)
-        else:
-            render_import_error(agent_name, error)
-            
-            if features:
-                render_agent_intro(agent_name, features, special_features, use_cases)
 
 def render_demo_content(demo_data):
     """데모 콘텐츠 렌더링"""

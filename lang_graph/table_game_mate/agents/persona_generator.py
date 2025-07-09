@@ -10,8 +10,6 @@ import random
 import re
 from ..core.agent_base import BaseAgent
 from ..models.persona import PersonaArchetype, PersonaProfile
-from ..models.llm import LLMResponse, ParsedLLMResponse
-from ..utils.llm_utils import get_llm_client
 
 
 class PersonaGeneratorAgent(BaseAgent):
@@ -25,8 +23,8 @@ class PersonaGeneratorAgent(BaseAgent):
     - 게임 재미 극대화를 위한 다양성
     """
     
-    def __init__(self, llm_client, mcp_client, agent_id: str = "persona_generator"):
-        super().__init__(llm_client, mcp_client, agent_id)
+    def __init__(self, agent_id: str = "persona_generator"):
+        super().__init__(agent_id=agent_id, instruction="게임 특성에 맞는 AI 플레이어 페르소나를 동적으로 생성합니다.")
         self.base_personas = self._load_base_personas()
         
     def _load_base_personas(self) -> Dict[str, Dict]:
@@ -149,10 +147,14 @@ class PersonaGeneratorAgent(BaseAgent):
 """
         
         try:
-            llm_response = await self.llm_client.complete(persona_prompt)
+            # MCPApp을 통해 LLM 클라이언트 사용
+            llm_response_str = await self.app.llm.complete(prompt=persona_prompt)
             
             # JSON 파싱 시도
             try:
+                # llm_response_str이 모델의 응답 객체일 경우, 실제 텍스트를 추출해야 할 수 있습니다.
+                # 우선 문자열이라고 가정합니다.
+                llm_response = llm_response_str
                 personas_data = json.loads(llm_response)
                 if not isinstance(personas_data, list):
                     raise ValueError("응답이 배열 형태가 아닙니다")

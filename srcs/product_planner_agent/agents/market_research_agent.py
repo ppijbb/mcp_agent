@@ -3,11 +3,14 @@ Market Research Agent
 시장 조사 및 트렌드 분석을 수행하는 전문 Agent
 """
 
-from srcs.core.agent.base import BaseAgent, AgentContext
-from srcs.core.errors import APIError, WorkflowError
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
+from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class MarketResearchAgent(BaseAgent):

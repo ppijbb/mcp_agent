@@ -1,164 +1,91 @@
-#!/usr/bin/env python3
-"""
-Product Planner Agent
-"""
-
-import asyncio
-import re
-from urllib.parse import unquote
-from srcs.core.agent.base import BaseAgent, AgentContext
-from srcs.product_planner_agent.utils.status_logger import StatusLogger
-from mcp_agent.logging.logger import get_logger
-
-# Import sub-agents
-from .agents.figma_analyzer_agent import FigmaAnalyzerAgent
-from .agents.prd_writer_agent import PRDWriterAgent
-from .agents.business_planner_agent import BusinessPlannerAgent
-from .agents.market_research_agent import MarketResearchAgent
-from .agents.kpi_analyst_agent import KPIAnalystAgent
-from .agents.operations_agent import OperationsAgent
-from .agents.marketing_strategist_agent import MarketingStrategistAgent
-from .agents.project_manager_agent import ProjectManagerAgent
-from .agents.notion_document_agent import NotionDocumentAgent
-
-logger = get_logger("product_planner_agent")
+from typing import List, Dict, Tuple
+from srcs.core.agent.base import BaseAgent
+from mcp_agent.agents.agent import Agent as MCP_Agent
 
 class ProductPlannerAgent(BaseAgent):
-    """
-    The main agent for the product planning workflow.
-    """
+    """프로덕트 기획자 Agent - 기업급 기능을 위해 BaseAgent를 상속합니다."""
 
     def __init__(self):
-        super().__init__("product_planner_agent")
-
-    def _parse_figma_url(self, url: str) -> tuple[str | None, str | None]:
         """
-        Extracts file_id and node_id from a Figma URL.
+        ProductPlannerAgent를 초기화합니다.
+        개발 계획에 명시된 서버 이름을 포함합니다.
         """
-        file_id_match = re.search(r'figma\.com/file/([^/]+)', url)
-        file_id = file_id_match.group(1) if file_id_match else None
+        super().__init__(
+            name="product_planner",
+            instruction="Figma 디자인과 Notion 문서를 연동하여 프로덕트 기획 업무를 자동화합니다.",
+            server_names=["figma-dev-mode", "notion-api", "filesystem"]
+        )
+        self.figma_client = None  # To be implemented via figma_integration.py
+        self.notion_client = None # To be implemented via notion_integration.py
         
-        node_id_match = re.search(r'node-id=([^&]+)', url)
-        node_id = unquote(node_id_match.group(1)) if node_id_match else None
-        
-        return file_id, node_id
+        # 에이전트 및 평가자 설정
+        self.sub_agents = self._create_agents()
+        self.evaluator = self._create_evaluator()
+        self.orchestrator = self.get_orchestrator(self.sub_agents)
 
-    async def run_workflow(self, context: AgentContext):
-        """
-        Runs the product planning workflow.
-        """
-        figma_url = context.get("figma_url")
-        if not figma_url:
-            self.logger.error("Figma URL not provided in the context.")
-            context.set("error", "Figma URL is required.")
-            return
 
-        file_id, node_id = self._parse_figma_url(figma_url)
-        if not file_id or not node_id:
-            self.logger.error(f"Invalid Figma URL: {figma_url}")
-            context.set("error", "Invalid Figma URL.")
-            return
-
-        figma_api_key = self.settings.get("figma.api_key")
-        if not figma_api_key:
-            self.logger.error("Figma API key not configured.")
-            context.set("error", "Figma API key is not configured.")
-            return
-            
-        self.logger.info("🚀 Starting Product Planner Workflow...")
-
-        workflow_steps = [
-            "Figma Design Analysis",
-            "Market Research",
-            "Product Requirements Document (PRD)",
-            "Business Planning",
-            "KPI Analysis",
-            "Operations Planning",
-            "Marketing Strategy",
-            "Project Management",
-            "Final Report Generation"
+    def _create_agents(self) -> List[MCP_Agent]:
+        """개발 계획에 따라 전문화된 서브 Agent들을 생성합니다."""
+        agents_config = [
+            {
+                "name": "design_analyzer",
+                "instruction": "Figma 디자인 분석 및 프로덕트 요구사항 추출",
+                "server_names": ["figma-dev-mode", "filesystem"]
+            },
+            {
+                "name": "requirement_synthesizer", 
+                "instruction": "디자인 분석으로부터 PRD 및 기술 스펙 생성",
+                "server_names": ["notion-api", "filesystem"]
+            },
+            {
+                "name": "roadmap_planner",
+                "instruction": "프로덕트 로드맵 및 마일스톤 추적 생성",
+                "server_names": ["notion-api", "filesystem"]
+            },
+            {
+                "name": "design_notion_connector",
+                "instruction": "디자인 변경사항과 Notion 문서 동기화",
+                "server_names": ["figma-dev-mode", "notion-api"]
+            }
         ]
-        status_logger = StatusLogger(steps=workflow_steps)
-        context.set("status_logger", status_logger)
+        
+        return [MCP_Agent(**config) for config in agents_config]
 
-        try:
-            # Instantiate sub-agents
-            figma_analyzer = FigmaAnalyzerAgent()
-            market_research = MarketResearchAgent()
-            prd_writer = PRDWriterAgent()
-            business_planner = BusinessPlannerAgent()
-            kpi_analyst = KPIAnalystAgent()
-            operations_planner = OperationsAgent()
-            marketing_strategist = MarketingStrategistAgent()
-            project_manager = ProjectManagerAgent()
-            notion_document_agent = NotionDocumentAgent()
+    def _create_evaluator(self) -> MCP_Agent:
+        """기업급 품질 평가자를 생성합니다."""
+        evaluation_criteria: List[Tuple[str, int, str]] = [
+            ("Product Feasibility", 30, "제품 실현 가능성 및 기술적 타당성"),
+            ("Market Alignment", 25, "시장 요구사항 및 사용자 니즈 부합도"),
+            ("Design Consistency", 20, "디자인 시스템 일관성 및 UX 품질"),
+            ("Documentation Quality", 15, "문서화 완성도 및 명확성"),
+            ("Timeline Realism", 10, "개발 일정의 현실성 및 리스크 고려")
+        ]
+        
+        # BaseAgent에 평가자 생성 헬퍼가 있다면 사용, 없다면 직접 생성
+        # 현재 BaseAgent에는 create_standard_evaluator가 없으므로 직접 구성
+        instruction = "다음 기준에 따라 프로덕트 기획의 품질을 평가하고 점수를 매기세요:\n"
+        for name, weight, desc in evaluation_criteria:
+            instruction += f"- {name} (가중치: {weight}%): {desc}\n"
+        instruction += "각 항목에 대해 0-100점 척도로 평가하고, 가중치를 적용하여 총점을 계산하세요. 최종 결과는 JSON 형식으로 제공해야 합니다."
 
-            # 1. Figma Design Analysis
-            status_logger.update_status("Figma Design Analysis", "in_progress")
-            context.set("figma_api_key", figma_api_key)
-            context.set("figma_file_id", file_id)
-            context.set("figma_node_id", node_id)
-            await figma_analyzer.run_workflow(context)
-            status_logger.update_status("Figma Design Analysis", "completed")
-            self.logger.info("✅ Figma Design Analysis Completed")
+        return MCP_Agent(
+            name="quality_evaluator",
+            instruction=instruction
+        )
 
-            # 2. Market Research
-            status_logger.update_status("Market Research", "in_progress")
-            context.set("product_context", context.get("figma_analysis"))
-            await market_research.run_workflow(context)
-            status_logger.update_status("Market Research", "completed")
-            self.logger.info("✅ Market Research Completed")
-
-            # 3. PRD 작성
-            status_logger.update_status("Product Requirements Document (PRD)", "in_progress")
-            await prd_writer.run_workflow(context)
-            status_logger.update_status("Product Requirements Document (PRD)", "completed")
-            self.logger.info("✅ Product Requirements Document (PRD) Completed")
-
-            # 4. 비즈니스 기획
-            status_logger.update_status("Business Planning", "in_progress")
-            context.set("prd_content", context.get("prd_data"))
-            await business_planner.run_workflow(context)
-            status_logger.update_status("Business Planning", "completed")
-            self.logger.info("✅ Business Planning Completed")
-            
-            # 5, 6, 7. Run KPI, Operations, and Marketing in parallel
-            status_logger.update_status("KPI Analysis", "in_progress")
-            status_logger.update_status("Operations Planning", "in_progress")
-            status_logger.update_status("Marketing Strategy", "in_progress")
-            
-            kpi_task = kpi_analyst.run_workflow(context)
-            operations_task = operations_planner.run_workflow(context)
-            marketing_task = marketing_strategist.run_workflow(context)
-            
-            await asyncio.gather(kpi_task, operations_task, marketing_task)
-            
-            status_logger.update_status("KPI Analysis", "completed")
-            self.logger.info("✅ KPI Analysis Completed")
-            status_logger.update_status("Operations Planning", "completed")
-            self.logger.info("✅ Operations Planning Completed")
-            status_logger.update_status("Marketing Strategy", "completed")
-            self.logger.info("✅ Marketing Strategy Completed")
-
-            # 8. Project Management
-            status_logger.update_status("Project Management", "in_progress")
-            await project_manager.run_workflow(context)
-            status_logger.update_status("Project Management", "completed")
-            self.logger.info("✅ Project Management Completed")
-
-            # 9. Final Report Generation
-            status_logger.update_status("Final Report Generation", "in_progress")
-            await notion_document_agent.run_workflow(context)
-            status_logger.update_status("Final Report Generation", "completed")
-            self.logger.info("✅ Final Report Generation Completed")
-
-            self.logger.info("🎉 Product Planner Workflow Completed Successfully!")
-            context.set("status", "completed")
-
-        except Exception as e:
-            self.logger.error(f"💥 Workflow execution failed: {e}", exc_info=True)
-            current_step = next((step for step, status in status_logger.get_status().items() if status == "in_progress"), None)
-            if current_step:
-                status_logger.update_status(current_step, "failed")
-            context.set("error", str(e))
-            context.set("status", "failed") 
+    async def run_workflow(self, figma_url: str, notion_page_id: str):
+        """
+        Product Planner Agent의 핵심 워크플로우.
+        Figma 분석 -> Notion 문서 생성을 오케스트레이션합니다.
+        (현재는 플레이스홀더)
+        """
+        self.logger.info(f"Product Planner 워크플로우 시작: Figma URL='{figma_url}', Notion Page ID='{notion_page_id}'")
+        
+        # TODO: 오케스트레이터를 사용하여 서브 에이전트 워크플로우 실행
+        # 예시: plan = await self.orchestrator.plan(...)
+        #       result = await self.orchestrator.execute(plan)
+        
+        await self.logger.log("워크플로우가 아직 구현되지 않았습니다.")
+        
+        # 임시 반환 값
+        return {"status": "pending", "message": "Workflow not implemented yet."}

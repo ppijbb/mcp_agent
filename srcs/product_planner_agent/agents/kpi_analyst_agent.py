@@ -3,11 +3,14 @@ KPI Analyst Agent
 핵심 성과 지표 설정, 분석 프레임워크 및 성능 추적 시스템을 관리하는 Agent
 """
 
-from srcs.core.agent.base import BaseAgent, AgentContext
-from srcs.core.errors import APIError, WorkflowError
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
+from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class KPIAnalystAgent(BaseAgent):

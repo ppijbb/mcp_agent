@@ -7,26 +7,31 @@ Shared utility functions used across all agents for common operations.
 import os
 import json
 from datetime import datetime
-from .config import get_timestamp, SUMMARY_TIMESTAMP_FORMAT, DEFAULT_COMPANY_NAME
 from mcp_agent.app import MCPApp
-from mcp_agent.config import MCPAppConfig
 from srcs.core.config.loader import settings
 
+class EnhancedJSONEncoder(json.JSONEncoder):
+    """JSONEncoder를 확장하여 datetime 객체를 문자열로 변환합니다."""
+    def default(self, o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
+
 def setup_agent_app(app_name):
-    """Setup and configure MCP app with standard settings from the new config system"""
+    """MCPApp을 표준 설정으로 설정하고 구성합니다."""
     
-    # 새로운 설정 시스템의 mcp_servers를 MCPAppConfig 형식으로 변환
-    mcp_config = {name: server.model_dump() for name, server in settings.mcp_servers.items()}
-
-    app_settings = MCPAppConfig(
-        name=app_name,
-        mcp=mcp_config
-    )
-
-    return MCPApp(
-        settings=app_settings,
-        human_input_callback=None
-    )
+    mcp_servers_config = {
+        name: server.model_dump() 
+        for name, server in settings.mcp_servers.items()
+        if server.enabled
+    }
+    
+    app_config = {
+        "name": app_name,
+        "mcp": mcp_servers_config
+    }
+    
+    return MCPApp(settings=app_config, human_input_callback=None)
 
 def ensure_output_directory(output_dir):
     """Create output directory if it doesn't exist"""
@@ -47,9 +52,9 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     """Create standardized executive summary report"""
     
     if not timestamp:
-        timestamp = get_timestamp()
+        timestamp = get_now_formatted()
     if not company_name:
-        company_name = DEFAULT_COMPANY_NAME
+        company_name = settings.reporting.default_company_name
     if not title:
         title = f"{agent_name.title()} Executive Summary"
     
@@ -57,7 +62,7 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     
     with open(dashboard_path, 'w') as f:
         f.write(f"""# {title} - {company_name}
-## Generated: {datetime.now().strftime(SUMMARY_TIMESTAMP_FORMAT)}
+## Generated: {datetime.now().strftime(settings.reporting.timestamp_format)}
 
 ### 🎯 {overview.get('title', 'Transformation Overview')}
 {overview.get('content', 'Comprehensive analysis completed with actionable strategies.')}
@@ -96,7 +101,7 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
     """Create standardized KPI tracking template"""
     
     if not timestamp:
-        timestamp = get_timestamp()
+        timestamp = get_now_formatted()
     
     kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{timestamp}.json")
     
@@ -116,6 +121,39 @@ def save_deliverables(orchestrator_result, output_dir, deliverable_files):
     # Implementation would depend on orchestrator result format
     # This is a placeholder for the actual implementation
     pass
+
+def save_report(report_data, file_path: str | None = None, output_dir: str | None = None) -> str:
+    """Persist *report_data* to disk and return the absolute file path.
+
+    • If *file_path* is provided it is treated as relative to *output_dir* (when
+      given) or the current working directory.
+    • If omitted, an auto‐generated name of the form ``report_YYYYmmdd_HHMMSS.json``
+      is created in *output_dir* (defaults to ``reports/``).
+
+    The function handles both ``dict``/``list`` (saved as JSON) and plain strings
+    (saved verbatim).
+    """
+    if output_dir is None:
+        output_dir = os.getenv("MCP_REPORTS_DIR", "reports")
+    os.makedirs(output_dir, exist_ok=True)
+
+    if file_path is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = f"report_{timestamp}.json"
+
+    if not os.path.isabs(file_path):
+        file_path = os.path.join(output_dir, file_path)
+
+    # Choose encoding/format based on data type
+    if isinstance(report_data, (dict, list)):
+        with open(file_path, "w", encoding="utf-8") as fp:
+            json.dump(report_data, fp, indent=2, cls=EnhancedJSONEncoder, ensure_ascii=False)
+    else:
+        # Fallback: store as plain UTF-8 text
+        with open(file_path, "w", encoding="utf-8") as fp:
+            fp.write(str(report_data))
+
+    return os.path.abspath(file_path)
 
 def _format_metrics(metrics):
     """Format impact metrics for executive summary"""
@@ -187,7 +225,26 @@ def _format_next_steps(next_steps):
         formatted.append(f"{i}. {step}")
     return "\n".join(formatted)
 
+def get_now_formatted() -> str:
+    """현재 시간을 기본 포맷으로 반환합니다."""
+    return datetime.now().strftime(settings.reporting.timestamp_format)
+
+def generate_report_header(company_name: str | None = None) -> str:
+    """
+    보고서 헤더를 생성합니다.
+    """
+    if company_name is None:
+        company_name = settings.reporting.default_company_name
+    
+    formatted_time = datetime.now().strftime(settings.reporting.timestamp_format)
+    
+    return f"""
+## {company_name} - 자동 생성 보고서
+## Generated: {formatted_time}
+"""
+
 __all__ = [
     "setup_agent_app", "ensure_output_directory", "configure_filesystem_server",
-    "create_executive_summary", "create_kpi_template", "save_deliverables"
+    "create_executive_summary", "create_kpi_template", "save_deliverables",
+    "save_report"
 ] 

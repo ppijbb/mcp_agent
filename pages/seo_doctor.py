@@ -14,7 +14,7 @@ import pandas as pd
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
-from configs.settings import get_reports_path
+from srcs.core.config.loader import settings
 
 def display_results(result_data):
     st.markdown("---")
@@ -80,7 +80,7 @@ def main():
         if not url or "http" not in url:
             st.warning("유효한 URL을 입력해주세요. (http:// 또는 https:// 포함)")
         else:
-            reports_path = Path(get_reports_path('seo_doctor'))
+            reports_path = settings.get_reports_path('seo_doctor')
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"seo_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

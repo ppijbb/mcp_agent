@@ -6,7 +6,11 @@ Figma 디자인을 분석하여 구조화된 요구사항을 추출하는 전문
 # ---------------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------------
-from srcs.core.agent.base import BaseAgent, AgentContext
+import base64
+import json
+
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import ConfigError, APIError
 
 from srcs.product_planner_agent.utils import env_settings as env

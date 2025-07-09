@@ -1,6 +1,7 @@
-from srcs.core.agent.base import BaseAgent, AgentContext
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from typing import Optional, List, Dict, Any

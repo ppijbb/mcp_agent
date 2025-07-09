@@ -17,22 +17,13 @@ class DataclassJSONEncoder(json.JSONEncoder):
             return asdict(o)
         return super().default(o)
 
-async def main():
-    """AI Architect Agent 실행 스크립트"""
-    parser = argparse.ArgumentParser(description="Run the Evolutionary AI Architect Agent from the command line.")
-    parser.add_argument("--problem-description", required=True, help="A description of the AI architecture problem to solve.")
-    parser.add_argument("--max-generations", type=int, default=5, help="Maximum number of generations for evolution.")
-    parser.add_argument("--population-size", type=int, default=10, help="Size of the population for evolution.")
-    parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
-
-    args = parser.parse_args()
-
+async def run_evolution(args):
+    """AI Architect Agent의 진화 프로세스를 실행합니다."""
     print(f"🧬 Starting AI Architect Agent for: '{args.problem_description}'")
     print(f"Generations: {args.max_generations}, Population: {args.population_size}")
     print("-" * 30)
 
     result_json_path = Path(args.result_json_path)
-    # 결과 파일의 디렉토리가 없으면 생성
     result_json_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -48,7 +39,6 @@ async def main():
         print("✅ AI Architect Agent finished successfully.")
         print(f"💾 Saving results to {result_json_path}...")
 
-        # Dataclass를 JSON으로 변환하여 저장
         with open(result_json_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False, cls=DataclassJSONEncoder)
         
@@ -65,5 +55,16 @@ async def main():
             json.dump(error_result, f, indent=2, ensure_ascii=False)
         sys.exit(1)
 
+def main():
+    """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
+    parser = argparse.ArgumentParser(description="Run the Evolutionary AI Architect Agent from the command line.")
+    parser.add_argument("--problem-description", required=True, help="A description of the AI architecture problem to solve.")
+    parser.add_argument("--max-generations", type=int, default=5, help="Maximum number of generations for evolution.")
+    parser.add_argument("--population-size", type=int, default=10, help="Size of the population for evolution.")
+    parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
+
+    args = parser.parse_args()
+    asyncio.run(run_evolution(args))
+
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 

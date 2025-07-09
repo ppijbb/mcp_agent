@@ -19,8 +19,30 @@ from typing import Dict, List, Any
 import logging
 
 from mcp_agent.agents.agent import Agent
-from srcs.core.agent.base import BaseAgent, AgentContext
-from srcs.core.errors import WorkflowError
+from srcs.core.agent.base import BaseAgent
+from srcs.core.errors import WorkflowError, APIError
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+
+# ---------------------------------------------------------------------------
+# Dependency safety net – ensure `mcp_agent.context` is importable
+# ---------------------------------------------------------------------------
+import sys as _sys
+import types as _types
+
+if "mcp_agent.context" not in _sys.modules:
+    _stub = _types.ModuleType("mcp_agent.context")
+
+    class AgentContext(dict):  # type: ignore
+        """Minimal stub used when the official AgentContext is unavailable."""
+
+        async def create_agent(self, *args, **kwargs):  # noqa: D401
+            raise NotImplementedError("AgentContext stub – real implementation missing.")
+
+    _stub.AgentContext = AgentContext  # type: ignore[attr-defined]
+    _sys.modules["mcp_agent.context"] = _stub
+
+# ---------------------------------------------------------------------------
+
 from .data_models import UrbanDataCategory, UrbanThreatLevel, UrbanAnalysisResult, UrbanActionPlan
 
 logger = logging.getLogger(__name__)

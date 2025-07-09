@@ -33,7 +33,7 @@ st.set_page_config(
 try:
     from srcs.common.page_utils import setup_page_header
     from srcs.common.styles import apply_custom_styles
-    from configs.settings import get_reports_path
+    from srcs.core.config.loader import settings
     from srcs.travel_scout.travel_scout_agent import (
         load_destination_options, 
         load_origin_options
@@ -105,7 +105,7 @@ if task_to_run:
     else:
         st.session_state.flight_results = None
 
-    reports_path = Path(get_reports_path('travel_scout'))
+    reports_path = settings.get_reports_path('travel_scout')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_output_dir = reports_path / f"run_{timestamp}"
     run_output_dir.mkdir(parents=True, exist_ok=True)

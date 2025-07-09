@@ -27,25 +27,8 @@ async def upload_to_drive(session: aiohttp.ClientSession, mcp_url: str, file_nam
         response.raise_for_status()
         return await response.json()
 
-async def main():
-    """SEO Doctor 실행 스크립트"""
-    parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent.")
-    parser.add_argument("--url", required=True, help="The URL to analyze.")
-    parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
-    parser.add_argument("--competitor-urls", nargs='*', help="List of competitor URLs.")
-    parser.add_argument(
-        "--google-drive-mcp-url",
-        default="http://localhost:3001",
-        help="The URL for the Google Drive MCP server."
-    )
-    parser.add_argument(
-        "--seo-mcp-url",
-        default="http://localhost:3002",
-        help="The URL for the SEO MCP server."
-    )
-    
-    args = parser.parse_args()
-
+async def run_agent(args):
+    """SEO Doctor 에이전트의 핵심 로직을 실행합니다."""
     print(f"🔄 Starting SEO Doctor...")
     print(f"   - URL: {args.url}")
     print(f"   - Google Drive MCP: {args.google_drive_mcp_url}")
@@ -57,10 +40,9 @@ async def main():
     agent = SEODoctorAgent()
 
     try:
-        # The agent's run method now handles the full lifecycle
         analysis_result = await agent.run(
             url=args.url,
-            keywords=args.competitor_urls # Assuming competitor_urls are keywords
+            keywords=args.competitor_urls
         )
         
         print("✅ Agent finished successfully.")
@@ -74,9 +56,7 @@ async def main():
         final_result["error"] = str(e)
     
     finally:
-        # We need to serialize the result to JSON for uploading
         if agent_result:
-            # The agent returns a dataclass, use the encoder to make it serializable
             final_result["data"] = json.loads(json.dumps(agent_result, cls=EnhancedJSONEncoder))
 
         json_content_to_upload = json.dumps(final_result, indent=2, ensure_ascii=False)
@@ -94,16 +74,34 @@ async def main():
                     raise Exception(f"MCP upload failed: {upload_result.get('message')}")
         except Exception as e:
             print(f"❌ Failed to upload result JSON to Google Drive: {e}")
-            # As a fallback, print to console
             print("--- FALLBACK: FINAL RESULT JSON ---")
             print(json_content_to_upload)
             print("------------------------------------")
-            final_result["success"] = False # Mark as not fully successful
+            final_result["success"] = False
             final_result["error"] = f"Failed to upload result JSON: {e}"
         
         if not final_result["success"]:
             sys.exit(1)
 
+def main():
+    """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
+    parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent.")
+    parser.add_argument("--url", required=True, help="The URL to analyze.")
+    parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
+    parser.add_argument("--competitor-urls", nargs='*', help="List of competitor URLs.")
+    parser.add_argument(
+        "--google-drive-mcp-url",
+        default="http://localhost:3001",
+        help="The URL for the Google Drive MCP server."
+    )
+    parser.add_argument(
+        "--seo-mcp-url",
+        default="http://localhost:3002",
+        help="The URL for the SEO MCP server."
+    )
+    
+    args = parser.parse_args()
+    asyncio.run(run_agent(args))
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 

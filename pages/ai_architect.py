@@ -15,7 +15,7 @@ import plotly.express as px
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
-from configs.settings import get_reports_path
+from srcs.core.config.loader import settings
 
 def display_results(result_data):
     st.markdown("---")
@@ -82,7 +82,7 @@ def main():
         if not problem_description.strip():
             st.warning("문제 설명을 입력해주세요.")
         else:
-            reports_path = Path(get_reports_path('ai_architect'))
+            reports_path = settings.get_reports_path('ai_architect')
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"architecture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             

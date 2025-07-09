@@ -5,6 +5,32 @@ A comprehensive data generation tool that creates various types of synthetic dat
 using MCP agents and orchestrator patterns.
 """
 
+# ---------------------------------------------------------------------------
+# Safe-import patch: guarantee that ``mcp_agent.context.AgentContext`` exists.
+# ---------------------------------------------------------------------------
+import sys
+import types
+
+if "mcp_agent.context" not in sys.modules:
+    stub_module = types.ModuleType("mcp_agent.context")
+
+    class AgentContext(dict):
+        """Minimal stub – replaced when the real implementation is available."""
+
+        async def create_agent(self, *args, **kwargs):  # noqa: D401
+            raise NotImplementedError(
+                "Stub AgentContext cannot create sub-agents – please install the "
+                "full `mcp_agent` package or ensure the proper context module "
+                "is available."
+            )
+
+    stub_module.AgentContext = AgentContext  # type: ignore[attr-defined]
+    sys.modules["mcp_agent.context"] = stub_module
+
+# ---------------------------------------------------------------------------
+# Standard library / third-party imports (may rely on the patch above)
+# ---------------------------------------------------------------------------
+
 import os
 import json
 import re
@@ -12,7 +38,8 @@ from datetime import datetime
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
-from srcs.core.agent.base import BaseAgent, AgentContext
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
 
 class DataGeneratorAgent(BaseAgent):
@@ -86,3 +113,5 @@ class DataGeneratorAgent(BaseAgent):
 
         except Exception as e:
             raise APIError(f"Error during smart data generation: {e}") from e 
+
+AIDataGenerationAgent = DataGeneratorAgent 

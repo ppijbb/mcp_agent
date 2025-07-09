@@ -3,11 +3,15 @@ Marketing Strategist Agent
 마케팅 전략 수립, Go-to-Market 계획 및 사용자 획득 전략을 관리하는 Agent
 """
 
-from srcs.core.agent.base import BaseAgent, AgentContext
-from srcs.core.errors import APIError, WorkflowError
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
+from srcs.core.errors import APIError, WorkflowError
+from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class MarketingStrategistAgent(BaseAgent):

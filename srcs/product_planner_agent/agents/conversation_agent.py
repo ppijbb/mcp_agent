@@ -3,11 +3,15 @@ Conversation Agent
 사용자와 대화를 통해 상세한 제품 요구사항을 수집하는 Agent
 """
 
-from srcs.core.agent.base import BaseAgent, AgentContext
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.logging.logger import get_logger
+
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent
+from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 logger = get_logger("conversation_agent")

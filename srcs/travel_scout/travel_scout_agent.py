@@ -8,11 +8,22 @@ integration with the MCP ecosystem.
 import asyncio
 import os
 from typing import Dict, Any
-from srcs.core.agent.base import BaseAgent, AgentContext, async_memoize
 from srcs.core.errors import WorkflowError
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.context import AgentContext
+from srcs.core.agent.base import BaseAgent, async_memoize
 from .mcp_browser_client import MCPBrowserClient
 from .scrapers import BookingComScraper, GoogleFlightsScraper
 from . import utils as travel_utils
+
+# Re-export commonly used helper functions so that UI code can import directly
+from .utils import load_destination_options, load_origin_options  # noqa: F401
+
+__all__ = [
+    "TravelScoutAgent",
+    "load_destination_options",
+    "load_origin_options",
+]
 
 class TravelScoutAgent(BaseAgent):
     """
