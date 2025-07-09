@@ -38,25 +38,25 @@ class BusinessDataScoutMCPAgent:
 ### **1. BusinessDataScoutMCPAgent** ✅
 - **File**: `business_data_scout_agent.py`
 - **Purpose**: Comprehensive market intelligence and data collection
-- **MCP Servers**: g-search, fetch, filesystem
+- **MCP Servers**: g-search, fetch, gdrive
 - **Features**: Multi-source data collection, quality evaluation, comprehensive reporting
 
 ### **2. TrendAnalyzerMCPAgent** ✅
 - **File**: `trend_analyzer_agent.py`
 - **Purpose**: Business trend analysis and pattern recognition
-- **MCP Servers**: g-search, fetch, filesystem
+- **MCP Servers**: g-search, fetch, gdrive
 - **Features**: Pattern analysis, opportunity detection, strategic implications
 
 ### **3. StrategyPlannerMCPAgent** ✅
 - **File**: `strategy_planner_agent.py`
 - **Purpose**: Comprehensive business strategy development
-- **MCP Servers**: g-search, fetch, filesystem
+- **MCP Servers**: g-search, fetch, gdrive
 - **Features**: Strategic planning, financial analysis, implementation roadmap
 
 ### **4. UnifiedBusinessStrategyMCPAgent** ✅
 - **File**: `unified_business_strategy_agent.py`
 - **Purpose**: Complete integrated business strategy workflow
-- **MCP Servers**: g-search, fetch, filesystem
+- **MCP Servers**: g-search, fetch, gdrive
 - **Features**: End-to-end strategy development with quality control
 
 ---
@@ -116,7 +116,7 @@ python run_business_strategy_agents.py "AI,fintech,sustainability" \
 4. **✅ Standard MCP Communication**
    - g-search for web search capabilities
    - fetch for content retrieval
-   - filesystem for report generation
+   - gdrive for report generation
    - Proper MCP server configuration
 
 ### **Core Components**
@@ -159,7 +159,7 @@ mcp:
     fetch:
       command: "npx" 
       args: ["fetch-mcp"]
-    filesystem:
+    gdrive:
       command: "npx"
       args: ["@modelcontextprotocol/server-filesystem"]
 ```

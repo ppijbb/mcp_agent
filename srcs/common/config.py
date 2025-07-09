@@ -8,12 +8,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import os
 from typing import Dict, Any, List
+from dataclasses import dataclass
 
 # Default company configuration
 # DEFAULT_COMPANY_NAME = "TechCorp Inc." # This line is removed as per the edit hint.
 
-# Common server configurations
-DEFAULT_SERVERS = ["filesystem", "g-search", "fetch"]
+# Default server list used by agents. 
+# We are replacing 'filesystem' with 'gdrive' as part of the strategic shift
+# towards cloud-based, collaborative tools over local file operations.
+DEFAULT_SERVERS = ["gdrive", "g-search", "fetch"]
 
 # Common compliance frameworks
 COMPLIANCE_FRAMEWORKS = ["GDPR", "SOX", "HIPAA", "PCI-DSS", "ISO 27001", "NIST"]
