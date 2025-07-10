@@ -1,0 +1,11 @@
+mcp:
+  servers:
+    gdrive:
+      url: "http://localhost:3001"
+      description: "Google Drive MCP"
+    figma:
+      url: "http://localhost:3003"
+      description: "Figma Context MCP"
+    notion:
+      url: "http://localhost:3004"
+      description: "Notion Context MCP" 

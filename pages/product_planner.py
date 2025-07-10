@@ -57,16 +57,26 @@ def main():
         st.stop()
 
     with st.form("product_planner_form"):
-        st.subheader("📝 Figma URL 입력")
+        st.subheader("📝 제품 기획 정보 입력")
+        product_concept = st.text_area(
+            "제품 컨셉",
+            placeholder="예: AI 기반의 개인화된 뉴스 추천 서비스",
+            help="제품의 핵심 아이디어나 목표를 설명해주세요."
+        )
+        user_persona = st.text_area(
+            "사용자 페르소나",
+            placeholder="예: 기술에 정통하고, 바쁜 일상 속에서 자신에게 맞는 뉴스를 빠르게 소비하고 싶어하는 30대 전문가",
+            help="이 제품을 사용할 타겟 사용자에 대해 설명해주세요."
+        )
         figma_url = st.text_input(
-            "분석할 Figma URL",
+            "분석할 Figma URL (선택 사항)",
             placeholder="https://www.figma.com/file/FILE_ID/...?node-id=NODE_ID"
         )
         submitted = st.form_submit_button("🚀 제품 기획 시작", use_container_width=True)
 
     if submitted:
-        if not figma_url or "figma.com" not in figma_url:
-            st.warning("유효한 Figma URL을 입력해주세요.")
+        if not product_concept or not user_persona:
+            st.warning("제품 컨셉과 사용자 페르소나를 반드시 입력해야 합니다.")
         else:
             reports_path = Path(get_reports_path('product_planner'))
             reports_path.mkdir(parents=True, exist_ok=True)
@@ -75,9 +85,12 @@ def main():
             py_executable = sys.executable
             command = [
                 py_executable, "-m", "srcs.product_planner_agent.run_product_planner",
-                "--figma-url", figma_url,
+                "--product-concept", product_concept,
+                "--user-persona", user_persona,
                 "--result-json-path", str(result_json_path)
             ]
+            if figma_url:
+                command.extend(["--figma-url", figma_url])
 
             result = run_agent_process(
                 placeholder=result_placeholder,

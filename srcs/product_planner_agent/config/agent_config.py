@@ -11,6 +11,8 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
+# Correcting the relative import path.
+# It should point to the 'agents' directory within the 'product_planner_agent' package.
 from ..agents import (
     FigmaAnalyzerAgent, PRDWriterAgent, FigmaCreatorAgent,
     ConversationAgent, ProjectManagerAgent, KPIAnalystAgent,
@@ -235,12 +237,14 @@ def get_agent_config(
         },
         {
             "name": "figma_analyzer",
-            "description": "Analyzes Figma designs to extract UI elements and specifications.",
+            "description": "Analyzes Figma designs using the dedicated Figma MCP server.",
             "agent_class": FigmaAnalyzerAgent,
-            "tools": ["figma"],
+            # This agent now relies on the 'figma' MCP server, not direct tools.
+            # The server handles the API key and direct interactions.
+            "server_names": ["figma"],
             "config": {
                 "llm_factory": llm_factory,
-                "api_key": figma_api_key,
+                # "api_key": figma_api_key,  <- This is now encapsulated in the MCP server.
                 "prompt_template": "prompts/figma_analyzer_prompt.md",
             },
         },

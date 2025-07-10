@@ -6,24 +6,24 @@ PRD를 바탕으로 비즈니스 전략과 실행 계획을 수립하는 Agent
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.logging.logger import get_logger
+from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 from typing import Dict, Any, Optional, List
 import json
 from datetime import datetime
 
-from mcp_agent.context import AgentContext
-from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.prompts import PROMPT
 from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
-logger = get_logger("business_planner_agent")
+logger = get_product_planner_logger("agent.business_planner")
 
 class BusinessPlannerAgent(BaseAgent):
     """비즈니스 기획 전문 Agent"""
 
-    def __init__(self):
-        super().__init__("business_planner_agent")
+    def __init__(self, **kwargs):
+        super().__init__("business_planner_agent", **kwargs)
+        logger.info("BusinessPlannerAgent initialized.")
 
-    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
+    async def run_workflow(self, context: Any) -> Dict[str, Any]:
         """
         PRD를 바탕으로 종합적인 비즈니스 계획 수립
         """
@@ -31,7 +31,7 @@ class BusinessPlannerAgent(BaseAgent):
         if not prd_content:
             raise WorkflowError("PRD content not provided in the context.")
 
-        self.logger.info("💼 Starting business plan creation based on PRD")
+        logger.info("💼 Starting business plan creation based on PRD")
         
         try:
             business_context = await self._extract_business_context(prd_content)
@@ -54,7 +54,7 @@ class BusinessPlannerAgent(BaseAgent):
                 "status": "completed"
             }
             
-            self.logger.info("✅ Business plan creation completed successfully")
+            logger.info("✅ Business plan creation completed successfully")
             context.set("business_plan", business_plan)
             return business_plan
         except Exception as e:

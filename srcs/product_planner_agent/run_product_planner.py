@@ -1,119 +1,99 @@
 import argparse
 import asyncio
-import json
 import sys
 from pathlib import Path
-from datetime import datetime
-import aiohttp
+import json
+import re
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from srcs.product_planner_agent.coordinators.executive_coordinator import ExecutiveCoordinator
-from srcs.product_planner_agent.utils.json_encoder import EnhancedJSONEncoder
+from srcs.product_planner_agent.product_planner_agent import ProductPlannerAgent
+from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
-# Helper function to create the HTTP client session
-def get_http_session():
-    return aiohttp.ClientSession()
-
-async def upload_to_drive(mcp_url: str, file_name: str, content: str) -> dict:
-    """Uploads content to Google Drive via MCP."""
-    upload_url = f"{mcp_url}/upload"
-    payload = {"fileName": file_name, "content": content}
-    
-    async with get_http_session() as session:
-        async with session.post(upload_url, json=payload) as response:
-            response.raise_for_status()
-            return await response.json()
+# Setup unified logger for this script
+logger = get_product_planner_logger("run_script")
 
 async def main():
-    """Product Planner 실행 스크립트"""
+    """
+    Product Planner Agent 실행 스크립트.
+    이 스크립트는 에이전트 워크플로우를 시작하는 역할만 합니다.
+    모든 MCP/LLM 설정 및 실행 로직은 BaseAgent 아키텍처에 의해 처리됩니다.
+    """
     parser = argparse.ArgumentParser(description="Run the Product Planner Agent workflow.")
     parser.add_argument("--product-concept", required=True, help="The high-level concept for the product.")
     parser.add_argument("--user-persona", required=True, help="A description of the target user persona.")
-    parser.add_argument("--figma-file-id", help="The file ID of the Figma design.")
-    parser.add_argument("--notion-page-id", help="The page ID of the Notion planning document.")
-    parser.add_argument(
-        "--google-drive-mcp-url",
-        default="http://localhost:3001",
-        help="URL for the Google Drive MCP server."
-    )
-    parser.add_argument(
-        "--figma-mcp-url",
-        default="http://localhost:3003",
-        help="URL for the Figma Context MCP server."
-    )
-    parser.add_argument(
-        "--notion-mcp-url",
-        default="http://localhost:3004",
-        help="URL for the Notion Context MCP server."
-    )
-    
+    parser.add_argument("--figma-file-id", help="The file ID of the Figma design (manual override).")
+    parser.add_argument("--figma-url", help="Full Figma URL. The file ID will be extracted from this.")
+    parser.add_argument("--result-json-path", help="Path to save the final report JSON file.")
+
     args = parser.parse_args()
 
-    print("🚀 Starting Product Planner Workflow...")
-    print(f"   - Product Concept: {args.product_concept[:100]}...")
-    print(f"   - User Persona: {args.user_persona[:100]}...")
-    print(f"   - Figma File ID: {args.figma_file_id}")
-    print(f"   - Notion Page ID: {args.notion_page_id}")
-    print(f"   - Google Drive MCP: {args.google_drive_mcp_url}")
-    print(f"   - Figma MCP: {args.figma_mcp_url}")
-    print(f"   - Notion MCP: {args.notion_mcp_url}")
-    print("-" * 30)
+    # Determine figma_file_id from URL if provided
+    figma_file_id = args.figma_file_id
+    if args.figma_url:
+        match = re.search(r'file/([a-zA-Z0-9_-]+)', args.figma_url)
+        if match:
+            figma_file_id_from_url = match.group(1)
+            if figma_file_id and figma_file_id != figma_file_id_from_url:
+                logger.warning(f"Both --figma-file-id ('{figma_file_id}') and --figma-url (extracted '{figma_file_id_from_url}') were provided. Using the ID from --figma-file-id.")
+            elif not figma_file_id:
+                figma_file_id = figma_file_id_from_url
+                logger.info(f"Extracted Figma File ID '{figma_file_id}' from URL.")
+        else:
+            logger.warning(f"Could not extract Figma File ID from URL: {args.figma_url}")
 
-    final_result = {"success": False, "data": None, "error": None}
+    logger.info("🚀 Initializing Product Planner Agent...")
+    
+    # 에이전트 인스턴스 생성. BaseAgent.__init__이 MCPApp 설정을 처리합니다.
+    product_planner = ProductPlannerAgent()
 
+    logger.info("🚀 Starting Product Planner Workflow...")
+    logger.info(f"   - Product Concept: {args.product_concept[:100]}...")
+    logger.info(f"   - User Persona: {args.user_persona[:100]}...")
+    logger.info(f"   - Figma File ID: {figma_file_id or 'Not provided'}")
+    logger.info("-" * 30)
+    
     try:
-        coordinator = ExecutiveCoordinator(
-            google_drive_mcp_url=args.google_drive_mcp_url,
-            figma_mcp_url=args.figma_mcp_url,
-            notion_mcp_url=args.notion_mcp_url
-        )
+        # 워크플로우를 위한 초기 컨텍스트 딕셔너리 생성
+        initial_context = {
+            "product_concept": args.product_concept,
+            "user_persona": args.user_persona,
+            "figma_file_id": figma_file_id,
+        }
+
+        # 에이전트의 run 메서드를 직접 호출.
+        # BaseAgent.run이 오류 처리, 재시도, 서킷 브레이커를 포함합니다.
+        final_report = await product_planner.run(initial_context)
         
-        workflow_result = await coordinator.run_product_planning_workflow(
-            product_concept=args.product_concept,
-            user_persona=args.user_persona,
-            figma_file_id=args.figma_file_id,
-            notion_page_id=args.notion_page_id
-        )
-        
-        print("✅ Agent finished successfully.")
-        final_result["success"] = True
-        final_result["data"] = workflow_result
+        logger.info("✅ Workflow finished successfully.")
+
+        # Save the result to a file if path is provided
+        if args.result_json_path:
+            logger.info(f"💾 Saving final report to {args.result_json_path}")
+            try:
+                with open(args.result_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(final_report, f, indent=2, ensure_ascii=False)
+                logger.info("✅ Report saved successfully.")
+            except Exception as e:
+                logger.error(f"❌ Failed to save report to {args.result_json_path}: {e}")
+
+        # Print to console for debugging or direct execution
+        logger.info("Final Report Summary (first 500 chars):")
+        # 최종 리포트를 보기 좋게 출력합니다.
+        print(json.dumps(final_report, indent=2, ensure_ascii=False)[:500] + "...")
+
 
     except Exception as e:
-        import traceback
-        error_msg = f"❌ An error occurred during agent execution: {e}\n{traceback.format_exc()}"
-        print(error_msg)
-        final_result["error"] = str(e)
-    
-    finally:
-        json_content_to_upload = json.dumps(final_result, indent=2, ensure_ascii=False, default=str)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        json_file_name = f"product_planner_result_{timestamp}.json"
-        
-        print(f"💾 Uploading final results to Google Drive as {json_file_name}...")
-        try:
-            upload_result = await upload_to_drive(args.google_drive_mcp_url, json_file_name, json_content_to_upload)
-            if upload_result.get("success"):
-                file_id = upload_result.get("fileId")
-                print(f"🎉 Results uploaded successfully. File ID: {file_id}")
-            else:
-                raise Exception(f"MCP upload failed: {upload_result.get('message')}")
-        except Exception as e:
-            print(f"❌ Failed to upload result JSON to Google Drive: {e}")
-            # As a fallback, print to console
-            print("--- FALLBACK: FINAL RESULT JSON ---")
-            print(json_content_to_upload)
-            print("------------------------------------")
-            final_result["success"] = False # Mark as not fully successful
-            final_result["error"] = f"Failed to upload result JSON: {e}"
-        
-        if not final_result["success"]:
-            sys.exit(1)
-
+        logger.critical(f"❌ An error occurred during agent execution: {e}", exc_info=True)
+        # 에러 발생 시에도 결과 파일에 실패 상태 저장
+        if args.result_json_path:
+            error_report = {"success": False, "error": str(e)}
+            with open(args.result_json_path, 'w', encoding='utf-8') as f:
+                json.dump(error_report, f, indent=2, ensure_ascii=False)
+        sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main()) 

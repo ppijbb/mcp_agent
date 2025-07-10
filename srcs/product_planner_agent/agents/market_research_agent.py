@@ -7,9 +7,9 @@ from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
-from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
-from srcs.product_planner_agent.prompt import PROMPT
+from srcs.core.errors import APIError, WorkflowError
+from srcs.product_planner_agent.prompts import PROMPT
 from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
@@ -19,7 +19,7 @@ class MarketResearchAgent(BaseAgent):
     def __init__(self):
         super().__init__("market_research_agent")
 
-    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
+    async def run_workflow(self, context: Any) -> Dict[str, Any]:
         """제품 컨텍스트를 기반으로 시장 규모, 성장률, 트렌드를 분석합니다."""
         product_context = context.get("product_context")
         if not product_context:

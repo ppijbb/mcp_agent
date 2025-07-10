@@ -6,40 +6,33 @@ Conversation Agent
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.logging.logger import get_logger
-
-from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
-from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.prompts import PROMPT
 from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
+from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
-
-logger = get_logger("conversation_agent")
+logger = get_product_planner_logger("agent.conversation")
 
 
 class ConversationAgent(BaseAgent):
     """사용자 대화 및 요구사항 수집 전문 Agent"""
     
-    def __init__(self):
-        super().__init__("conversation_agent")
+    def __init__(self, **kwargs):
+        super().__init__("conversation_agent", **kwargs)
+        logger.info("ConversationAgent initialized.")
 
-    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
+    async def collect_requirements_via_chat(self, initial_prompt: str) -> Dict[str, Any]:
         """
         사용자의 초기 질문을 바탕으로 대화를 통해 제품 요구사항을 수집합니다.
         (실제 채팅 기능은 추후 구현)
         """
-        initial_query = context.get("initial_query")
-        if not initial_query:
-            self.logger.error("Initial query not provided in the context.")
-            context.set("error", "Initial query is required.")
-            return
-
+        logger.info(f"Collecting requirements from initial prompt: '{initial_prompt[:50]}...'")
         prompt = f"""
         You are a product planning conversation specialist. A user has provided the following initial request. 
         Your task is to interpret this request and formulate a structured summary of product requirements.
 
         **User's Initial Request:**
-        "{initial_query}"
+        "{initial_prompt}"
 
         **Instructions:**
         1.  **Identify Core Goal:** What is the main objective the user wants to achieve?
@@ -50,16 +43,18 @@ class ConversationAgent(BaseAgent):
         """
         
         try:
-            result_str = await self.app.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4, response_format={"type": "json_object"}))
-            requirements = json.loads(result_str)
+            # Use the LLM instance from the app context
+            requirements_str = await self.app.llm.generate_str(
+                prompt,
+                request_params=RequestParams(
+                    model="gemini-1.5-flash-latest", # This should be consistent with llm_utils
+                    temperature=0.7,
+                )
+            )
+            requirements = json.loads(requirements_str)
             requirements["status"] = "collected_successfully"
-            context.set("requirements", requirements)
-            return requirements
+            logger.info("Successfully collected and structured requirements.")
+            return {"collected_requirements": requirements}
         except Exception as e:
-            self.logger.error("Error collecting requirements: %s", e, exc_info=True)
-            error_result = {
-                "error": str(e),
-                "status": "collection_failed"
-            }
-            context.set("error", error_result)
-            return error_result 
+            logger.error(f"Error collecting requirements: {e}", exc_info=True)
+            raise 

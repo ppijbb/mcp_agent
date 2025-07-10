@@ -7,10 +7,9 @@ from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
-from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from srcs.product_planner_agent.prompt import PROMPT
+from srcs.product_planner_agent.prompts import PROMPT
 from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
@@ -20,7 +19,7 @@ class ProjectManagerAgent(BaseAgent):
     def __init__(self):
         super().__init__("project_manager_agent")
 
-    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
+    async def run_workflow(self, context: Any) -> Dict[str, Any]:
         """
         PRD와 비즈니스 계획을 바탕으로 개발 로드맵, 스프린트 계획, 리소스 할당안을 포함하는 프로젝트 계획을 수립합니다.
         """

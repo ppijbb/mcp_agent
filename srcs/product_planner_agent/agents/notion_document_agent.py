@@ -7,9 +7,9 @@ from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
-from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
-from srcs.product_planner_agent.prompt import PROMPT
+from srcs.core.errors import APIError, WorkflowError
+from srcs.product_planner_agent.prompts import PROMPT
 from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
@@ -19,7 +19,7 @@ class NotionDocumentAgent(BaseAgent):
     def __init__(self):
         super().__init__("notion_document_agent")
 
-    async def run_workflow(self, context: AgentContext) -> Dict[str, Any]:
+    async def run_workflow(self, context: Any) -> Dict[str, Any]:
         """
         모든 에이전트의 결과물을 종합하여 Notion에 저장할 최종 보고서를 생성합니다.
         (실제 Notion API 연동은 추후 구현)
