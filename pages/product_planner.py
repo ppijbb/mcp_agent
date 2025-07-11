@@ -11,6 +11,7 @@ from configs.settings import get_reports_path
 
 # Product Planner Agent는 자체 환경변수 로더를 사용
 from srcs.product_planner_agent.utils import env_settings as env
+from srcs.product_planner_agent.product_planner_agent import ProductPlannerAgent
 
 def display_results(result_data):
     st.markdown("---")
@@ -38,7 +39,7 @@ def display_results(result_data):
         st.json(result_data)
 
 
-def main():
+async def main():
     create_agent_page(
         agent_name="Product Planner Agent",
         page_icon="🚀",
@@ -47,59 +48,39 @@ def main():
         subtitle="Figma 디자인을 분석하여 시장 조사, 전략, 실행 계획까지 한번에 수립합니다.",
         module_path="srcs.product_planner_agent.run_product_planner"
     )
-    result_placeholder = st.empty()
-
-    # Figma API 키 확인
-    figma_api_key = env.get("FIGMA_API_KEY")
-    if not figma_api_key:
-        st.error("FIGMA_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 확인해주세요.")
-        st.info("Product Planner Agent는 Figma API 키가 있어야 실행할 수 있습니다.")
-        st.stop()
-
-    with st.form("product_planner_form"):
-        st.subheader("📝 제품 기획 정보 입력")
-        product_concept = st.text_area(
-            "제품 컨셉",
-            placeholder="예: AI 기반의 개인화된 뉴스 추천 서비스",
-            help="제품의 핵심 아이디어나 목표를 설명해주세요."
-        )
-        user_persona = st.text_area(
-            "사용자 페르소나",
-            placeholder="예: 기술에 정통하고, 바쁜 일상 속에서 자신에게 맞는 뉴스를 빠르게 소비하고 싶어하는 30대 전문가",
-            help="이 제품을 사용할 타겟 사용자에 대해 설명해주세요."
-        )
-        figma_url = st.text_input(
-            "분석할 Figma URL (선택 사항)",
-            placeholder="https://www.figma.com/file/FILE_ID/...?node-id=NODE_ID"
-        )
-        submitted = st.form_submit_button("🚀 제품 기획 시작", use_container_width=True)
-
-    if submitted:
-        if not product_concept or not user_persona:
-            st.warning("제품 컨셉과 사용자 페르소나를 반드시 입력해야 합니다.")
-        else:
-            reports_path = Path(get_reports_path('product_planner'))
-            reports_path.mkdir(parents=True, exist_ok=True)
-            result_json_path = reports_path / f"planner_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.product_planner_agent.run_product_planner",
-                "--product-concept", product_concept,
-                "--user-persona", user_persona,
-                "--result-json-path", str(result_json_path)
-            ]
-            if figma_url:
-                command.extend(["--figma-url", figma_url])
-
-            result = run_agent_process(
-                placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/product_planner"
-            )
-
-            if result and "data" in result:
-                display_results(result["data"])
+    
+    # Initialize session state
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "agent_state" not in st.session_state:
+        st.session_state.agent_state = None
+    if "agent" not in st.session_state:
+        st.session_state.agent = ProductPlannerAgent()
+        # Load state if exists, but for new sessions, it's fresh
+    
+    # Display chat history
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+    
+    # Chat input
+    if user_input := st.chat_input("제품 기획에 대해 말씀해주세요..."):
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        
+        # Process with agent
+        with st.chat_message("assistant"):
+            with st.spinner("생각 중..."):
+                response = await st.session_state.agent.process_message(user_input)
+                st.markdown(response["message"])
+                if "final_report" in response:
+                    display_results(response["final_report"])
+        st.session_state.chat_history.append({"role": "assistant", "content": response["message"]})
+        
+        # Update agent state in session
+        st.session_state.agent_state = st.session_state.agent.get_state()
 
 if __name__ == "__main__":
-    main() 
+    st.run(main()) 

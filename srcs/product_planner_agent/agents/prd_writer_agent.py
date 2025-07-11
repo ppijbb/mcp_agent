@@ -37,7 +37,7 @@ class PRDWriterAgent(BaseAgent):
         figma_context = context.get("figma_analysis")
         
         logger.info(f"Starting PRD draft for product: '{product_brief.get('product_name', 'UntitledProduct')[:50]}...'")
-
+        
         prompt = f"""
         As a Senior Product Manager, your task is to write a detailed Product Requirements Document (PRD).
         Use the following inputs to create the PRD:
@@ -64,7 +64,7 @@ class PRDWriterAgent(BaseAgent):
         - **2. Product Requirements**: (User Stories, Functional Requirements, Non-Functional Requirements)
         - **3. Design & UX**: (Design Mockups, User Flow)
         - **4. Assumptions and Constraints**:
-
+        
         Generate the PRD in a structured JSON format.
         """
         try:
@@ -124,7 +124,7 @@ class PRDWriterAgent(BaseAgent):
         
         if not all([section_name, current_content, additional_requirements]):
             raise WorkflowError("Missing required data (section_name, current_content, additional_requirements) for refinement.")
-
+            
         prompt = f"""
         Refine the following PRD section based on additional requirements.
         Section: {section_name}
@@ -152,7 +152,7 @@ class PRDWriterAgent(BaseAgent):
         
         if not prd_content:
             raise WorkflowError("Cannot validate PRD: prd_content not found in context.")
-
+            
         prompt = f"""
         As a senior product manager, please validate the following PRD for completeness and quality.
         PRD Content: {json.dumps(prd_content, indent=2)}

@@ -28,7 +28,7 @@ async def main():
     parser.add_argument("--figma-file-id", help="The file ID of the Figma design (manual override).")
     parser.add_argument("--figma-url", help="Full Figma URL. The file ID will be extracted from this.")
     parser.add_argument("--result-json-path", help="Path to save the final report JSON file.")
-
+    
     args = parser.parse_args()
 
     # Determine figma_file_id from URL if provided
@@ -93,7 +93,7 @@ async def main():
             error_report = {"success": False, "error": str(e)}
             with open(args.result_json_path, 'w', encoding='utf-8') as f:
                 json.dump(error_report, f, indent=2, ensure_ascii=False)
-        sys.exit(1)
+            sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main()) 

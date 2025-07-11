@@ -5,7 +5,7 @@ Product Planner Agent
 import asyncio
 import re
 from urllib.parse import unquote
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from datetime import datetime
 import json
 
@@ -14,6 +14,7 @@ from srcs.product_planner_agent.agents.figma_analyzer_agent import FigmaAnalyzer
 from srcs.product_planner_agent.agents.prd_writer_agent import PRDWriterAgent
 from srcs.product_planner_agent.coordinators.reporting_coordinator import ReportingCoordinator
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
+from srcs.common.utils import get_gen_client
 
 logger = get_product_planner_logger("main_agent")
 
@@ -32,6 +33,20 @@ class ProductPlannerAgent(BaseAgent):
         self.prd_writer = PRDWriterAgent()
         self.reporting_coordinator = ReportingCoordinator()
         logger.info("ProductPlannerAgent and its sub-components initialized.")
+        
+        # Add state management for conversational mode
+        self.state = {
+            "step": "init",
+            "data": {
+                "product_concept": None,
+                "user_persona": None,
+                "figma_file_id": None,
+                "figma_analysis": None,
+                "prd_draft": None,
+                "final_report": None
+            },
+            "history": []
+        }
 
     async def _save_final_report(self, report_data: Dict[str, Any], product_concept: str) -> Dict[str, Any]:
         """Saves the final report to Google Drive using the 'gdrive' MCP server."""
@@ -62,60 +77,109 @@ class ProductPlannerAgent(BaseAgent):
             logger.error(f"❌ Failed to save final report to Google Drive: {e}", exc_info=True)
             return {"status": "failed", "error": str(e)}
 
-    async def run_workflow(self, context: Any) -> Dict[str, Any]:
-        """
-        Executes the product planning workflow from concept to final report.
-        """
-        product_concept = context.get("product_concept")
-        user_persona = context.get("user_persona")
-        figma_file_id = context.get("figma_file_id")
-
-        logger.info(f"Starting workflow for product concept: '{product_concept[:50]}...'")
-
+    def _extract_figma_ids(self, figma_url: str) -> tuple[str, str]:
+        """Extracts Figma file ID and node ID from a Figma URL."""
         try:
-            # 1. Analyze Figma file if provided
-            if figma_file_id:
-                logger.info(f"Analyzing Figma file with ID: {figma_file_id}")
-                figma_context = context.copy()
-                figma_context["figma_file_id"] = figma_file_id
-                analysis_result = await self.figma_analyzer.run_workflow(figma_context)
-                context["figma_analysis"] = analysis_result
-                logger.info("Figma analysis completed.")
-            else:
-                logger.info("No Figma file ID provided, skipping analysis.")
-                context["figma_analysis"] = {"status": "skipped", "reason": "No Figma file ID provided"}
+            # Remove query parameters and fragment
+            url_path = unquote(figma_url).split('?', 1)[0].split('#', 1)[0]
+            
+            # Extract file ID and node ID
+            file_id_match = re.search(r'/file/([a-zA-Z0-9_-]+)', url_path)
+            node_id_match = re.search(r'/node/([a-zA-Z0-9_-]+)', url_path)
 
-            # 2. Draft Product Requirements Document (PRD)
-            logger.info("Drafting PRD...")
-            prd_context = context.copy()
-            # Pass all necessary information to the sub-context
-            prd_context["product_concept"] = product_concept
-            prd_context["user_persona"] = user_persona
-            prd_context["figma_analysis"] = context.get("figma_analysis")
-            prd_result = await self.prd_writer.run_workflow(prd_context)
-            context["prd_draft"] = prd_result
-            logger.info("PRD drafting completed.")
+            file_id = file_id_match.group(1) if file_id_match else None
+            node_id = node_id_match.group(1) if node_id_match else None
 
-            # 3. Generate the Final Report using the Reporting Coordinator
-            logger.info("Generating final report...")
-            report_context = context.copy()
-            report_context["product_concept"] = product_concept
-            report_context["user_persona"] = user_persona
-            report_context["prd_draft"] = prd_result
-            final_report = await self.reporting_coordinator.generate_final_report(report_context)
-            context["final_report"] = final_report
-            logger.info("Final report generation completed.")
+            if not file_id:
+                raise ValueError("Could not extract Figma file ID from URL.")
 
-            # 4. Save the final report to Google Drive
-            save_status = await self._save_final_report(final_report, product_concept)
-            final_report["save_status"] = save_status
-
-            logger.info("🎉 Product Planner Workflow Completed Successfully!")
-            return final_report
-
+            return file_id, node_id
         except Exception as e:
-            logger.critical(f"💥 Workflow execution failed: {e}", exc_info=True)
-            context.set("error", str(e))
-            context.set("status", "failed")
-            # Re-raise the exception to be handled by the calling script
+            logger.error(f"Error extracting Figma IDs from URL {figma_url}: {e}", exc_info=True)
             raise
+
+    async def process_message(self, user_message: str) -> Dict[str, Any]:
+        """Process a user message and advance the planning state."""
+        self.state["history"].append({"role": "user", "content": user_message})
+        response = {"message": "", "state": self.state["step"]}
+        
+        try:
+            if self.state["step"] == "init":
+                # Parse initial inputs from message or ask for them
+                # For simplicity, assume message contains JSON with product_concept and user_persona
+                try:
+                    inputs = json.loads(user_message)
+                    self.state["data"]["product_concept"] = inputs.get("product_concept")
+                    self.state["data"]["user_persona"] = inputs.get("user_persona")
+                    self.state["data"]["figma_url"] = inputs.get("figma_url")
+                    if self.state["data"]["figma_url"]:
+                        figma_file_id, node_id = self._extract_figma_ids(self.state["data"]["figma_url"])
+                        self.state["data"]["figma_file_id"] = figma_file_id
+                        self.state["data"]["figma_node_id"] = node_id
+                except json.JSONDecodeError:
+                    response["message"] = "Please provide product concept, user persona, and optional Figma URL in JSON format."
+                    return response
+                
+                if not self.state["data"]["product_concept"] or not self.state["data"]["user_persona"]:
+                    response["message"] = "Product concept and user persona are required."
+                    return response
+                
+                self.state["step"] = "figma_analysis"
+                response["message"] = "Starting product planning. Analyzing Figma if provided..."
+
+            if self.state["step"] == "figma_analysis" and self.state["data"]["figma_file_id"]:
+                logger.info(f"Analyzing Figma file with ID: {self.state['data']['figma_file_id']}")
+                figma_context = {}  # Use self.state["data"] directly in sub-agent if needed
+                analysis_result = await self.figma_analyzer.run_workflow(figma_context)
+                self.state["data"]["figma_analysis"] = analysis_result
+                logger.info("Figma analysis completed.")
+                response["message"] += "\nFigma analysis complete."
+                self.state["step"] = "prd_drafting"
+            
+            if self.state["step"] == "figma_analysis" and not self.state["data"]["figma_file_id"]:
+                self.state["data"]["figma_analysis"] = {"status": "skipped"}
+                self.state["step"] = "prd_drafting"
+            
+            if self.state["step"] == "prd_drafting":
+                logger.info("Drafting PRD...")
+                prd_context = self.state["data"]
+                prd_result = await self.prd_writer.run_workflow(prd_context)
+                self.state["data"]["prd_draft"] = prd_result
+                logger.info("PRD drafting completed.")
+                response["message"] += "\nPRD draft complete. Generating final report..."
+                self.state["step"] = "report_generation"
+            
+            if self.state["step"] == "report_generation":
+                logger.info("Generating final report...")
+                report_context = self.state["data"]
+                final_report = await self.reporting_coordinator.generate_final_report(report_context)
+                self.state["data"]["final_report"] = final_report
+                logger.info("Final report generation completed.")
+                response["message"] += "\nFinal report generated."
+                self.state["step"] = "save_report"
+            
+            if self.state["step"] == "save_report":
+                save_status = await self._save_final_report(self.state["data"]["final_report"], self.state["data"]["product_concept"])
+                self.state["data"]["final_report"]["save_status"] = save_status
+                response["message"] += "\nReport saved to Google Drive."
+                self.state["step"] = "complete"
+            
+            if self.state["step"] == "complete":
+                response["message"] += "\nPlanning complete!"
+                response["final_report"] = self.state["data"]["final_report"]
+            
+            self.state["history"].append({"role": "assistant", "content": response["message"]})
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error in process_message: {str(e)}")
+            response["message"] = f"Error: {str(e)}"
+            return response
+
+    def get_state(self) -> Dict[str, Any]:
+        """Get current state for serialization."""
+        return self.state
+
+    def set_state(self, state: Dict[str, Any]):
+        """Set state from serialized data."""
+        self.state = state
