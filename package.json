@@ -5,11 +5,16 @@
   "dependencies": {
     "@modelcontextprotocol/server-puppeteer": "^2025.5.12",
     "chrome-launcher": "^0.15.2",
+    "figma-js": "^1.16.1-0",
     "lighthouse": "^10.4.0",
     "npm": "^11.4.2",
-    "playwright": "^1.53.0"
+    "playwright": "^1.53.0",
+    "uuid": "^11.1.0"
   },
   "scripts": {
     "install": "npm install lighthouse chrome-launcher"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0"
   }
 }

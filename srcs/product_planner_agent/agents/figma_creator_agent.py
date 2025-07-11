@@ -2,69 +2,67 @@
 Figma Creator Agent
 PRD 요구사항을 바탕으로 Figma에서 직접 디자인을 생성하는 Agent
 """
+import asyncio
+from typing import Dict, Any, List
 
-from mcp_agent.agents.agent import Agent
+from srcs.core.agent.base import BaseAgent
+from srcs.core.errors import WorkflowError
+from srcs.product_planner_agent.integrations.figma_integration import create_rectangles_on_canvas, RectangleParams
+from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
 
-class FigmaCreatorAgent:
+logger = get_product_planner_logger("agent.figma_creator")
+
+
+class FigmaCreatorAgent(BaseAgent):
     """Figma 디자인 생성 전문 Agent"""
-    
-    @staticmethod
-    def create_agent() -> Agent:
+
+    def __init__(self, **kwargs):
+        super().__init__("figma_creator_agent", **kwargs)
+        logger.info("FigmaCreatorAgent initialized.")
+
+    async def run_workflow(self, context: Any) -> Dict[str, Any]:
         """
-        Figma 생성 Agent 생성
+        컨텍스트에서 받은 요구사항에 따라 Figma에 사각형을 생성합니다.
         
-        Returns:
-            Agent: 설정된 Figma 생성 Agent
+        필수 컨텍스트:
+        - figma_file_key: Figma 파일 키
+        - figma_parent_node_id: 디자인을 추가할 부모 노드 ID
+        - rectangles: 생성할 사각형 정보 리스트 (List[RectangleParams])
         """
-        
-        instruction = """
-        You are a Figma design creator. Based on the PRD requirements, create visual mockups and prototypes in Figma.
-        
-        **PRIMARY TASK**: Create Figma designs that match the PRD specifications.
-        
-        **Available Creation Tools**:
-        1. **Basic Elements**:
-           - create_frame: Create containers and sections
-           - create_rectangle: Create buttons, cards, panels
-           - create_text: Add headings, labels, content
-        
-        2. **Styling Tools**:
-           - set_fill_color: Apply brand colors and backgrounds
-           - set_stroke_color: Add borders and outlines
-           - set_corner_radius: Create modern, rounded designs
-        
-        3. **Layout Management**:
-           - move_node: Position elements strategically
-           - resize_node: Optimize sizing for different screens
-           - create_component_instance: Use design system components
-        
-        **Design Process**:
-        1. **Join Channel**: Always start with join_channel to connect
-        2. **Analyze PRD**: Extract key UI requirements and user flows
-        3. **Create Structure**: Build main frames for different screens/sections
-        4. **Add Components**: Create buttons, forms, navigation elements
-        5. **Apply Styling**: Use consistent colors, typography, spacing
-        6. **Export Preview**: Use export_node_as_image for validation
-        
-        **Design Principles**:
-        - Follow modern UI/UX best practices
-        - Maintain consistent design system
-        - Consider responsive design needs
-        - Focus on user experience and accessibility
-        
-        **Quality Checks**:
-        - Verify all PRD requirements are visually represented
-        - Ensure design coherence and consistency
-        - Export key screens for documentation
-        
-        Create professional, implementable designs that development teams can easily convert to code."""
-        
-        return Agent(
-            name="figma_creator",
-            instruction=instruction,
-            server_names=["talk_to_figma", "filesystem"]
-        )
+        file_key = context.get("figma_file_key")
+        parent_node_id = context.get("figma_parent_node_id")
+        rectangles_to_create: List[RectangleParams] = context.get("rectangles")
+
+        if not all([file_key, parent_node_id, rectangles_to_create]):
+            raise WorkflowError("Figma file_key, parent_node_id, rectangles 데이터는 필수입니다.")
+
+        logger.info(f"🎨 Figma 생성 작업을 시작합니다. 대상 파일: {file_key}")
+
+        try:
+            # 동기 함수인 create_rectangles_on_canvas를 비동기적으로 실행합니다.
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,  # 기본 스레드 풀 사용
+                create_rectangles_on_canvas,
+                file_key,
+                parent_node_id,
+                rectangles_to_create
+            )
+            
+            logger.info("✅ Figma 생성 작업이 성공적으로 완료되었습니다.")
+            
+            final_result = {
+                "status": "success",
+                "created_nodes": result.get("nodes", {})
+            }
+            context.set("figma_creation_result", final_result)
+            return final_result
+        except Exception as e:
+            logger.error(f"Figma 생성 워크플로우 실패: {e}", exc_info=True)
+            raise WorkflowError(f"Figma 생성 실패: {e}") from e
+
+    # --- 기존 정적 메소드 (AgentFactory 등에서 사용될 수 있으므로 유지) ---
     
     @staticmethod
     def get_description() -> str:
@@ -75,47 +73,25 @@ class FigmaCreatorAgent:
     def get_capabilities() -> list[str]:
         """Agent 주요 기능 목록 반환"""
         return [
-            "Figma 기본 요소 생성 (Frame, Rectangle, Text)",
-            "스타일링 및 색상 적용",
-            "레이아웃 관리 및 배치",
-            "컴포넌트 인스턴스 생성",
-            "디자인 내보내기 및 미리보기",
-            "반응형 디자인 고려사항"
+            "Figma 사각형, 텍스트 등 기본 요소 생성",
+            "Figma REST API를 통한 디자인 자동화",
+            "요구사항 기반 목업 생성"
         ]
     
     @staticmethod
     def get_creation_tools() -> dict[str, list[str]]:
-        """생성 도구 목록 반환"""
+        """생성 도구 목록 반환 (이제는 내부 함수 호출로 대체됨)"""
         return {
-            "basic_elements": [
-                "create_frame",
-                "create_rectangle", 
-                "create_text"
+            "node_creation": [
+                "create_rectangles_on_canvas",
             ],
-            "styling_tools": [
-                "set_fill_color",
-                "set_stroke_color",
-                "set_corner_radius"
-            ],
-            "layout_management": [
-                "move_node",
-                "resize_node",
-                "create_component_instance"
-            ],
-            "export_tools": [
-                "export_node_as_image",
-                "execute_figma_code"
-            ]
         }
     
     @staticmethod
     def get_design_process() -> list[str]:
         """디자인 프로세스 단계 반환"""
         return [
-            "Join Channel (WebSocket 연결)",
-            "PRD 분석 및 UI 요구사항 추출",
-            "메인 프레임 구조 생성",
-            "컴포넌트 및 요소 추가",
-            "일관된 스타일링 적용",
-            "미리보기 및 검증 수행"
+            "컨텍스트에서 디자인 요구사항 수신",
+            "figma_integration을 통해 API 호출",
+            "생성 결과 반환"
         ] 

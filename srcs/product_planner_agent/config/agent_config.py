@@ -68,7 +68,8 @@ class AgentFactory:
         print(f"✅ {PRDWriterAgent.get_description()}")
         
         # 3. Figma Creator Agent
-        figma_creator = FigmaCreatorAgent.create_agent()
+        # 'create_agent' 정적 메소드를 제거하고 표준 생성자를 사용하도록 수정
+        figma_creator = FigmaCreatorAgent()
         self._agents["figma_creator_agent"] = figma_creator
         print(f"✅ {FigmaCreatorAgent.get_description()}")
         
@@ -292,10 +293,11 @@ def get_agent_config(
             "name": "figma_creator",
             "description": "Creates or modifies Figma designs based on requirements.",
             "agent_class": FigmaCreatorAgent,
-            "tools": ["figma"],
+            # REST API 직접 통신으로 변경되었으므로, 더 이상 특정 tool/server에 의존하지 않음
+            "tools": [],
             "config": {
                 "llm_factory": llm_factory,
-                "api_key": figma_api_key,
+                # api_key는 이제 integration 모듈이 환경변수에서 직접 읽으므로 제거
                 "prompt_template": "prompts/figma_creator_prompt.md",
             },
         },
