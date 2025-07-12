@@ -12,6 +12,7 @@ import json
 from srcs.core.agent.base import BaseAgent
 from srcs.product_planner_agent.agents.figma_analyzer_agent import FigmaAnalyzerAgent
 from srcs.product_planner_agent.agents.prd_writer_agent import PRDWriterAgent
+from srcs.product_planner_agent.agents.figma_creator_agent import FigmaCreatorAgent
 from srcs.product_planner_agent.coordinators.reporting_coordinator import ReportingCoordinator
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 from srcs.common.utils import get_gen_client
@@ -32,6 +33,7 @@ class ProductPlannerAgent(BaseAgent):
         self.figma_analyzer = FigmaAnalyzerAgent()
         self.prd_writer = PRDWriterAgent()
         self.reporting_coordinator = ReportingCoordinator()
+        self.figma_creator = FigmaCreatorAgent()  # FigmaCreatorAgent 추가
         logger.info("ProductPlannerAgent and its sub-components initialized.")
         
         # Add state management for conversational mode
@@ -98,6 +100,30 @@ class ProductPlannerAgent(BaseAgent):
             logger.error(f"Error extracting Figma IDs from URL {figma_url}: {e}", exc_info=True)
             raise
 
+    # --- PRD에서 컴포넌트 정보를 추출하는 예시 함수 ---
+    def _extract_rectangles_from_prd(self, prd_draft: dict) -> list:
+        """
+        PRD에서 버튼/컴포넌트 요구사항을 추출해 FigmaCreatorAgent 입력 포맷으로 변환 (예시)
+        실제로는 LLM 결과 파싱 또는 규칙 기반 추출이 필요함
+        """
+        rectangles = []
+        # 예시: 'Product Requirements' > 'Functional Requirements'에 버튼이 명시되어 있다고 가정
+        try:
+            requirements = prd_draft.get('Product Requirements', {}).get('Functional Requirements', [])
+            for req in requirements:
+                if 'button' in req.lower():
+                    rectangles.append({
+                        "name": "Button",
+                        "x": 100,
+                        "y": 200 + 60 * len(rectangles),
+                        "width": 200,
+                        "height": 48,
+                        "color": {"r": 0.1, "g": 0.4, "b": 0.85},
+                    })
+        except Exception:
+            pass
+        return rectangles
+
     async def process_message(self, user_message: str) -> Dict[str, Any]:
         """Process a user message and advance the planning state."""
         self.state["history"].append({"role": "user", "content": user_message})
@@ -146,7 +172,20 @@ class ProductPlannerAgent(BaseAgent):
                 prd_result = await self.prd_writer.run_workflow(prd_context)
                 self.state["data"]["prd_draft"] = prd_result
                 logger.info("PRD drafting completed.")
-                response["message"] += "\nPRD draft complete. Generating final report..."
+                response["message"] += "\nPRD draft complete. Generating Figma components..."
+                # === Figma 컴포넌트 생성 단계 추가 ===
+                rectangles = self._extract_rectangles_from_prd(prd_result)
+                if rectangles and self.state["data"].get("figma_file_id"):
+                    figma_context = {
+                        "figma_file_key": self.state["data"]["figma_file_id"],
+                        "figma_parent_node_id": self.state["data"].get("figma_node_id") or "0:1",  # 기본값
+                        "rectangles": rectangles,
+                    }
+                    figma_creation_result = await self.figma_creator.run_workflow(figma_context)
+                    self.state["data"]["figma_creation_result"] = figma_creation_result
+                    response["message"] += "\nFigma components created. Generating final report..."
+                else:
+                    response["message"] += "\nNo Figma components to create or missing Figma file info. Generating final report..."
                 self.state["step"] = "report_generation"
             
             if self.state["step"] == "report_generation":
