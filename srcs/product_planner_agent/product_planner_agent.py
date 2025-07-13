@@ -100,29 +100,57 @@ class ProductPlannerAgent(BaseAgent):
             logger.error(f"Error extracting Figma IDs from URL {figma_url}: {e}", exc_info=True)
             raise
 
-    # --- PRD에서 컴포넌트 정보를 추출하는 예시 함수 ---
-    def _extract_rectangles_from_prd(self, prd_draft: dict) -> list:
+    # --- PRD에서 다양한 컴포넌트 정보를 추출하는 고도화 함수 ---
+    def _extract_figma_components_from_prd(self, prd_draft: dict) -> list:
         """
-        PRD에서 버튼/컴포넌트 요구사항을 추출해 FigmaCreatorAgent 입력 포맷으로 변환 (예시)
-        실제로는 LLM 결과 파싱 또는 규칙 기반 추출이 필요함
+        PRD에서 버튼, 입력창, 텍스트 등 다양한 컴포넌트 요구사항을 추출해 FigmaCreatorAgent 입력 포맷으로 변환
+        실제로는 LLM 결과 파싱 또는 규칙 기반 추출이 필요함 (여기서는 키워드 기반 예시)
         """
-        rectangles = []
-        # 예시: 'Product Requirements' > 'Functional Requirements'에 버튼이 명시되어 있다고 가정
+        components = []
+        y_offset = 200
+        spacing = 60
         try:
             requirements = prd_draft.get('Product Requirements', {}).get('Functional Requirements', [])
             for req in requirements:
-                if 'button' in req.lower():
-                    rectangles.append({
+                req_lower = req.lower()
+                if 'button' in req_lower:
+                    components.append({
+                        "type": "rectangle",
                         "name": "Button",
                         "x": 100,
-                        "y": 200 + 60 * len(rectangles),
+                        "y": y_offset,
                         "width": 200,
                         "height": 48,
                         "color": {"r": 0.1, "g": 0.4, "b": 0.85},
+                        "text": "Button"
                     })
+                    y_offset += spacing
+                elif 'input' in req_lower or 'field' in req_lower:
+                    components.append({
+                        "type": "rectangle",
+                        "name": "InputField",
+                        "x": 100,
+                        "y": y_offset,
+                        "width": 300,
+                        "height": 40,
+                        "color": {"r": 0.95, "g": 0.95, "b": 0.95},
+                        "text": ""
+                    })
+                    y_offset += spacing
+                elif 'text' in req_lower or 'label' in req_lower:
+                    components.append({
+                        "type": "text",
+                        "name": "Label",
+                        "x": 100,
+                        "y": y_offset,
+                        "font_size": 18,
+                        "color": {"r": 0.2, "g": 0.2, "b": 0.2},
+                        "text": req
+                    })
+                    y_offset += spacing
         except Exception:
             pass
-        return rectangles
+        return components
 
     async def process_message(self, user_message: str) -> Dict[str, Any]:
         """Process a user message and advance the planning state."""
@@ -173,8 +201,10 @@ class ProductPlannerAgent(BaseAgent):
                 self.state["data"]["prd_draft"] = prd_result
                 logger.info("PRD drafting completed.")
                 response["message"] += "\nPRD draft complete. Generating Figma components..."
-                # === Figma 컴포넌트 생성 단계 추가 ===
-                rectangles = self._extract_rectangles_from_prd(prd_result)
+                # === Figma 컴포넌트 생성 단계 고도화 ===
+                components = self._extract_figma_components_from_prd(prd_result)
+                rectangles = [c for c in components if c["type"] == "rectangle"]
+                # (추후 text 등도 지원하려면 FigmaCreatorAgent 및 integration 확장 필요)
                 if rectangles and self.state["data"].get("figma_file_id"):
                     figma_context = {
                         "figma_file_key": self.state["data"]["figma_file_id"],
