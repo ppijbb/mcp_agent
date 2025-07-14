@@ -76,6 +76,39 @@ class ToolExample(BaseModel):
         }
 
 
+class ToolConfig(BaseModel):
+    """Configuration for creating tools"""
+    tool_id: str
+    name: str
+    description: str
+    tool_type: str = "SYNTHETIC"  # Using string instead of enum for flexibility
+    mcp_server: Optional[str] = None
+    synthetic_behavior: Optional[Dict[str, Any]] = None
+    parameters: Dict[str, str] = {}  # Simplified parameter definition
+    usage_examples: List[str] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "tool_id": "code_editor",
+                "name": "Code Editor",
+                "description": "Multi-language code editor with syntax highlighting",
+                "tool_type": "MCP",
+                "mcp_server": "code_editor_server",
+                "parameters": {
+                    "language": "string",
+                    "theme": "string",
+                    "auto_save": "boolean"
+                },
+                "usage_examples": [
+                    "Open file: main.js",
+                    "Edit line 42: console.log('Hello World')",
+                    "Save file"
+                ]
+            }
+        }
+
+
 class Tool(BaseModel):
     """Tool definition for the synthesis system"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

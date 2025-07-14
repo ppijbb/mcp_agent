@@ -154,6 +154,28 @@ class TrainingData(BaseModel):
         return summary
 
 
+class DataExportConfig(BaseModel):
+    """Configuration for data export"""
+    formats: List[str] = ["json", "jsonl", "csv"]
+    include_metadata: bool = True
+    include_evaluations: bool = True
+    split_ratios: Dict[str, float] = {"train": 0.8, "validation": 0.1, "test": 0.1}
+    compression: bool = False
+    metadata_fields: List[str] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "formats": ["json", "jsonl", "csv"],
+                "include_metadata": True,
+                "include_evaluations": True,
+                "split_ratios": {"train": 0.8, "validation": 0.1, "test": 0.1},
+                "compression": True,
+                "metadata_fields": ["simulation_id", "domain", "agents", "tools_used"]
+            }
+        }
+
+
 class DataBatch(BaseModel):
     """Batch of training data"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

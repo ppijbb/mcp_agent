@@ -91,6 +91,49 @@ class QualityScore(BaseModel):
         }
 
 
+class EvaluationRubric(BaseModel):
+    """Rubric for evaluation configuration"""
+    dimensions: List[Dict[str, Any]] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "dimensions": [
+                    {
+                        "name": "tool_usage_effectiveness",
+                        "description": "How effectively tools are used to solve the problem",
+                        "weight": 0.3,
+                        "criteria": ["Appropriate tool selection", "Correct tool usage", "Efficient workflow"]
+                    }
+                ]
+            }
+        }
+
+
+class EvaluationConfig(BaseModel):
+    """Configuration for evaluation"""
+    evaluation_id: str
+    name: str
+    description: str
+    rubric: EvaluationRubric
+    llm_model: str = "gemini-2.5-flash-lite-preview-06-07"
+    temperature: float = 0.1
+    max_tokens: int = 1000
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "evaluation_id": "comprehensive_evaluation",
+                "name": "Comprehensive Tool Usage Evaluation",
+                "description": "Multi-dimensional evaluation of tool usage and collaboration",
+                "rubric": {},
+                "llm_model": "gemini-2.5-flash-lite-preview-06-07",
+                "temperature": 0.1,
+                "max_tokens": 1000
+            }
+        }
+
+
 class EvaluationResult(BaseModel):
     """Complete evaluation result"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

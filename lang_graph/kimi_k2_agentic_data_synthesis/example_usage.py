@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import List
 
 from .system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
-from .models.domain import DomainConfig, DomainType
+from .models.domain import DomainConfig, DomainCategory, ComplexityLevel
 from .models.tool import ToolConfig, ToolType
-from .models.agent import AgentConfig, AgentType, BehaviorPattern
+from .models.agent import AgentConfig, AgentType # BehaviorPattern will be string in config
 from .models.simulation import SimulationConfig, EnvironmentConfig
 from .models.evaluation import EvaluationConfig, EvaluationRubric
 from .models.data import DataExportConfig
@@ -28,28 +28,28 @@ async def create_example_configs():
             domain_id="web_development",
             name="Web Development",
             description="Web development and programming tasks",
-            domain_type=DomainType.TECHNICAL,
+            domain_type=DomainCategory.TECHNOLOGY, # Use DomainCategory
             scenarios=[
                 "Create a React component",
                 "Debug JavaScript code",
                 "Set up a Node.js server",
                 "Optimize website performance"
             ],
-            complexity_levels=["beginner", "intermediate", "advanced"],
+            complexity_levels=[ComplexityLevel.BEGINNER, ComplexityLevel.INTERMEDIATE, ComplexityLevel.ADVANCED], # Use ComplexityLevel
             required_tools=["code_editor", "terminal", "browser"]
         ),
         DomainConfig(
             domain_id="data_analysis",
             name="Data Analysis",
             description="Data analysis and visualization tasks",
-            domain_type=DomainType.ANALYTICAL,
+            domain_type=DomainCategory.SCIENTIFIC, # Use DomainCategory
             scenarios=[
                 "Analyze CSV data",
                 "Create data visualizations",
                 "Perform statistical analysis",
                 "Generate reports"
             ],
-            complexity_levels=["beginner", "intermediate", "advanced"],
+            complexity_levels=[ComplexityLevel.BEGINNER, ComplexityLevel.INTERMEDIATE, ComplexityLevel.ADVANCED],
             required_tools=["python", "pandas", "matplotlib", "jupyter"]
         )
     ]
@@ -60,7 +60,7 @@ async def create_example_configs():
             tool_id="code_editor",
             name="Code Editor",
             description="Multi-language code editor with syntax highlighting",
-            tool_type=ToolType.MCP,
+            tool_type=ToolType.MCP.value, # Use .value for string representation
             mcp_server="code_editor_server",
             parameters={
                 "language": "string",
@@ -77,7 +77,7 @@ async def create_example_configs():
             tool_id="terminal",
             name="Terminal",
             description="Command line interface for system operations",
-            tool_type=ToolType.MCP,
+            tool_type=ToolType.MCP.value,
             mcp_server="terminal_server",
             parameters={
                 "command": "string",
@@ -93,7 +93,7 @@ async def create_example_configs():
             tool_id="python",
             name="Python Interpreter",
             description="Python programming language interpreter",
-            tool_type=ToolType.SYNTHETIC,
+            tool_type=ToolType.SYNTHETIC.value,
             synthetic_behavior={
                 "execution_time": "0.1-2.0s",
                 "error_rate": "0.05",
@@ -117,8 +117,8 @@ async def create_example_configs():
             agent_id="senior_developer",
             name="Senior Developer",
             description="Experienced software developer with expertise in multiple languages",
-            agent_type=AgentType.EXPERT,
-            behavior_pattern=BehaviorPattern.COLLABORATIVE,
+            agent_type=AgentType.EXPERT.value, # Use .value
+            behavior_pattern="COLLABORATIVE", # Use string for behavior_pattern
             expertise_domains=["web_development", "software_engineering"],
             tool_preferences=["code_editor", "terminal", "git"],
             communication_style="professional",
@@ -129,8 +129,8 @@ async def create_example_configs():
             agent_id="data_scientist",
             name="Data Scientist",
             description="Expert in data analysis, statistics, and machine learning",
-            agent_type=AgentType.EXPERT,
-            behavior_pattern=BehaviorPattern.ANALYTICAL,
+            agent_type=AgentType.EXPERT.value,
+            behavior_pattern="ANALYTICAL",
             expertise_domains=["data_analysis", "machine_learning"],
             tool_preferences=["python", "pandas", "matplotlib", "jupyter"],
             communication_style="analytical",
@@ -141,8 +141,8 @@ async def create_example_configs():
             agent_id="junior_developer",
             name="Junior Developer",
             description="Entry-level developer learning best practices",
-            agent_type=AgentType.LEARNER,
-            behavior_pattern=BehaviorPattern.LEARNING,
+            agent_type=AgentType.LEARNER.value,
+            behavior_pattern="LEARNING",
             expertise_domains=["web_development"],
             tool_preferences=["code_editor"],
             communication_style="curious",
@@ -179,8 +179,8 @@ async def create_simulation_configs():
             name="Web Development Collaboration",
             description="Senior and junior developers collaborating on a React project",
             agent_configs=[
-                AgentConfig(agent_id="senior_developer"),
-                AgentConfig(agent_id="junior_developer")
+                AgentConfig(agent_id="senior_developer", name="Senior Developer", description="desc", agent_type="EXPERT", behavior_pattern="COLLABORATIVE", expertise_domains=["web_development"], tool_preferences=["code_editor"], communication_style="professional", problem_solving_approach="systematic", collaboration_style="mentoring"), # Full AgentConfig required
+                AgentConfig(agent_id="junior_developer", name="Junior Developer", description="desc", agent_type="LEARNER", behavior_pattern="LEARNING", expertise_domains=["web_development"], tool_preferences=["code_editor"], communication_style="curious", problem_solving_approach="trial_and_error", collaboration_style="asking_questions")
             ],
             environment_config=env_config,
             max_turns=20,
@@ -192,7 +192,7 @@ async def create_simulation_configs():
             name="Data Analysis Task",
             description="Data scientist performing analysis with Python tools",
             agent_configs=[
-                AgentConfig(agent_id="data_scientist")
+                AgentConfig(agent_id="data_scientist", name="Data Scientist", description="desc", agent_type="EXPERT", behavior_pattern="ANALYTICAL", expertise_domains=["data_analysis"], tool_preferences=["python"], communication_style="analytical", problem_solving_approach="data_driven", collaboration_style="consultative")
             ],
             environment_config=env_config,
             max_turns=15,
@@ -257,7 +257,7 @@ async def create_evaluation_config():
         name="Comprehensive Tool Usage Evaluation",
         description="Multi-dimensional evaluation of tool usage and collaboration",
         rubric=rubric,
-        llm_model="gpt-4",
+        llm_model="gemini-2.5-flash-lite-preview-06-07", # Updated model name
         temperature=0.1,
         max_tokens=1000
     )
@@ -285,13 +285,17 @@ async def create_export_config():
 async def run_example_pipeline():
     """Run the complete Kimi-K2 pipeline with example configurations."""
     
-    print("🚀 Starting Kimi-K2 Agentic Data Synthesis System Example")
+    print("🚀 Starting Kimi-K2 Agentic Data Synthesis System Example (LangGraph Integrated)") # Updated message
     print("=" * 60)
     
-    # Initialize the system
+    # LLM Configuration (using a dummy config for demonstration)
+    llm_config = {"model": "gemini-2.5-flash-lite-preview-06-07", "api_key": "YOUR_API_KEY"} # Placeholder
+
+    # Initialize the system with llm_config
     system = AgenticDataSynthesisSystem(
         output_dir="example_output",
-        log_level="INFO"
+        log_level="INFO",
+        llm_config=llm_config
     )
     
     try:
@@ -306,16 +310,17 @@ async def run_example_pipeline():
         print("⚙️  Setting up system components...")
         system.setup_domains(domains)
         system.setup_tools(tools)
-        system.setup_agents(agents)
+        system.setup_agents(agents) # Now creates KimiK2ConversableAgent instances
         
         # Run the full pipeline
         print("🔄 Running full pipeline...")
+        # run_full_pipeline now returns results based on LangGraph state dicts
         results = await system.run_full_pipeline(
             simulation_configs=simulations,
             evaluation_config=evaluation_config,
             export_config=export_config,
             quality_threshold=0.7,
-            max_concurrent_simulations=2
+            max_concurrent_simulations=1 # Reduced for easier debugging
         )
         
         # Display results
@@ -341,7 +346,9 @@ async def run_example_pipeline():
         
     except Exception as e:
         print(f"❌ Error running example: {e}")
-        raise
+        import traceback
+        traceback.print_exc() # Print full traceback for debugging
+        # raise # Re-raise if you want the program to exit on error
     
     finally:
         # Cleanup

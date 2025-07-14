@@ -5,483 +5,459 @@ Executes large-scale simulations with multiple agents and scenarios.
 """
 
 from typing import List, Dict, Any, Optional, Callable
-from ..models.simulation import SimulationSession, SimulationStep, EnvironmentState, SimulationStatus, StepStatus, StepType
+from ..models.simulation import SimulationState, SimulationSession, SimulationStep, EnvironmentState, SimulationStatus, StepStatus, StepType, SimulationConfig
 from ..models.domain import Domain, Scenario
-from ..models.agent import Agent
+from ..models.agent import Agent, AgentConfig # Agent is now KimiK2ConversableAgent
 from ..models.tool import Tool
+from ..agents.kimi_k2_agent import KimiK2ConversableAgent
+
+from langgraph.graph import StateGraph, END, START
+from langgraph.checkpoint.memory import MemorySaver # For in-memory checkpointing
+from langchain_core.messages import AIMessage, HumanMessage
+
 import asyncio
 import logging
 from datetime import datetime
 import time
 import random
+import uuid
+import re
 
 logger = logging.getLogger(__name__)
 
 
 class SimulationEngine:
     """
-    Engine for executing large-scale agentic simulations.
+    Engine for executing large-scale agentic simulations using LangGraph.
     
     Responsibilities:
-    - Multi-turn scenario execution
-    - Agent interaction simulation
-    - Environment state management
-    - Simulation logging and monitoring
+    - Building and managing the LangGraph StateGraph for simulations
+    - Executing multi-turn scenarios
+    - Coordinating agent interactions and tool usage
+    - Managing environment state changes within the graph
+    - Logging and monitoring simulation progress
     """
     
-    def __init__(self, domain_manager=None, tool_registry=None, agent_factory=None):
+    def __init__(self, domain_manager: Any = None, tool_registry: Any = None, agent_factory: Any = None, llm_config: Optional[Dict[str, Any]] = None):
         self.domain_manager = domain_manager
         self.tool_registry = tool_registry
         self.agent_factory = agent_factory
-        self.active_sessions: Dict[str, SimulationSession] = {}
-        self.completed_sessions: Dict[str, SimulationSession] = {}
-        self.simulation_callbacks: Dict[str, Callable] = {}
-        self.max_concurrent_sessions = 10
-        self.session_timeout = 300  # 5 minutes
+        self.llm_config = llm_config
         
-    def create_simulation_session(self, domain_id: str, scenario_id: str,
-                                agent_ids: List[str], user_agent_id: Optional[str] = None,
-                                metadata: Dict[str, Any] = None) -> Optional[SimulationSession]:
-        """Create a new simulation session"""
-        # Validate domain and scenario
-        if self.domain_manager:
-            domain = self.domain_manager.get_domain(domain_id)
-            if not domain:
-                logger.error(f"Domain not found: {domain_id}")
-                return None
-            
-            scenario = None
-            for s in domain.scenarios:
-                if s.id == scenario_id:
-                    scenario = s
-                    break
-            
-            if not scenario:
-                logger.error(f"Scenario not found: {scenario_id}")
-                return None
+        # LangGraph workflow setup
+        self.workflow = StateGraph(SimulationState)
         
-        # Validate agents
-        if self.agent_factory:
-            for agent_id in agent_ids:
-                agent = self.agent_factory.get_agent(agent_id)
-                if not agent:
-                    logger.error(f"Agent not found: {agent_id}")
-                    return None
+        # Define nodes
+        self.workflow.add_node("initialize_simulation", self._initialize_simulation_node)
+        self.workflow.add_node("execute_agent_turn", self._execute_agent_turn_node)
+        self.workflow.add_node("simulate_tool_usage", self._simulate_tool_usage_node)
+        self.workflow.add_node("evaluate_step", self._evaluate_step_node)
+        self.workflow.add_node("finalize_simulation", self._finalize_simulation_node)
         
-        # Create simulation session
-        session = SimulationSession(
-            domain_id=domain_id,
-            scenario_id=scenario_id,
-            agent_ids=agent_ids,
-            user_agent_id=user_agent_id,
-            metadata=metadata or {}
+        # Define edges
+        self.workflow.add_edge(START, "initialize_simulation")
+        self.workflow.add_edge("initialize_simulation", "execute_agent_turn")
+        
+        # Conditional transitions from execute_agent_turn
+        self.workflow.add_conditional_edges(
+            "execute_agent_turn",
+            self._decide_next_step_from_agent_turn,
+            {
+                "tool_call": "simulate_tool_usage",
+                "continue_turn": "execute_agent_turn", # Agent decides to continue its turn without tool
+                "end_turn": "evaluate_step",
+            },
         )
-        
-        # Initialize environment state
-        initial_state = EnvironmentState(
-            session_id=session.id,
-            current_step=0,
-            available_tools=self._get_available_tools(agent_ids),
-            active_agents=agent_ids,
-            user_context={},
-            system_state={"status": "initialized"}
+
+        # Conditional transitions from simulate_tool_usage
+        self.workflow.add_conditional_edges(
+            "simulate_tool_usage",
+            self._decide_next_step_from_tool_usage,
+            {
+                "agent_turn": "execute_agent_turn", # Tool result returns to agent for next action
+                "evaluate": "evaluate_step", # Tool usage completes a sub-task, go to evaluation
+            },
         )
+
+        self.workflow.add_edge("evaluate_step", "execute_agent_turn") # For multi-turn scenarios, go back to agent
+        self.workflow.add_edge("finalize_simulation", END)
+
+        # Compile the workflow
+        self.app = self.workflow.compile(checkpointer=MemorySaver())
         
-        session.add_environment_state(initial_state)
-        
-        logger.info(f"Created simulation session: {session.id}")
-        return session
-    
-    def _get_available_tools(self, agent_ids: List[str]) -> List[str]:
-        """Get available tools for the given agents"""
-        if not self.agent_factory:
-            return []
-        
-        available_tools = set()
-        for agent_id in agent_ids:
-            agent = self.agent_factory.get_agent(agent_id)
-            if agent:
-                available_tools.update(agent.tool_set)
-        
-        return list(available_tools)
-    
-    def start_simulation(self, session_id: str) -> bool:
-        """Start a simulation session"""
-        session = self.active_sessions.get(session_id)
-        if not session:
-            logger.error(f"Simulation session not found: {session_id}")
-            return False
-        
-        if session.status != SimulationStatus.PENDING:
-            logger.error(f"Simulation session {session_id} is not in pending status")
-            return False
-        
-        session.start()
-        logger.info(f"Started simulation session: {session_id}")
-        return True
-    
-    async def execute_simulation(self, session_id: str) -> Dict[str, Any]:
-        """Execute a complete simulation session"""
-        session = self.active_sessions.get(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        
+        logger.info("SimulationEngine initialized with LangGraph workflow.")
+
+
+    async def run_simulation(
+        self,
+        simulation_id: str,
+        agents: List[KimiK2ConversableAgent], # Now expects ConversableAgents
+        environment: Dict[str, Any],
+        user_agent: Optional[Any] = None,
+        max_turns: int = 20,
+        timeout: int = 600, # seconds
+        scenario_id: Optional[str] = None,
+        domain_id: Optional[str] = None,
+        user_query: str = ""
+    ) -> Dict[str, Any]: # Returns SimulationState dict
+        """
+        Run a single simulation using the LangGraph workflow.
+        """
+        logger.info(f"Starting LangGraph simulation {simulation_id} for scenario {scenario_id}")
+
+        # Initialize the state for the LangGraph workflow
+        initial_state: SimulationState = {
+            "simulation_id": simulation_id,
+            "user_query": user_query,
+            "messages": [], # Start with empty messages for the graph
+            "current_agents": [agent.name for agent in agents], # Use agent.name (autogen's name)
+            "environment_state": environment, # Initial environment state
+            "tool_results": [],
+            "final_outcome": None,
+            "status": SimulationStatus.RUNNING.value,
+            "error_message": None,
+            "max_turns": max_turns, # Pass max turns and timeout to state
+            "timeout": timeout,
+            "scenario_id": scenario_id,
+            "domain_id": domain_id,
+            "sim_steps": [] # List to store SimulationStep objects generated during the run
+        }
+
+        config = {"configurable": {"thread_id": simulation_id}}
+
         try:
-            # Get domain and scenario
-            domain = None
-            scenario = None
-            if self.domain_manager:
-                domain = self.domain_manager.get_domain(session.domain_id)
-                if domain:
-                    for s in domain.scenarios:
-                        if s.id == session.scenario_id:
-                            scenario = s
-                            break
-            
-            if not scenario:
-                session.fail("Scenario not found")
-                return {"success": False, "error": "Scenario not found"}
-            
-            # Execute scenario steps
-            for step in scenario.steps:
-                step_result = await self._execute_step(session, step)
-                if not step_result["success"]:
-                    session.fail(f"Step {step.step_number} failed: {step_result['error']}")
-                    return step_result
-            
-            # Complete simulation
-            session.complete()
-            self.completed_sessions[session_id] = session
-            del self.active_sessions[session_id]
-            
-            logger.info(f"Completed simulation session: {session_id}")
-            return {"success": True, "session_id": session_id}
-            
+            # Invoke the LangGraph application
+            final_state = await self.app.ainvoke(initial_state, config=config, recursion_limit=max_turns)
+            logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get("status")}")
+            return final_state
         except Exception as e:
-            session.fail(f"Simulation execution failed: {str(e)}")
-            logger.error(f"Simulation execution failed for session {session_id}: {e}")
-            return {"success": False, "error": str(e)}
-    
-    async def _execute_step(self, session: SimulationSession, scenario_step) -> Dict[str, Any]:
-        """Execute a single scenario step"""
-        # Create simulation step
+            logger.error(f"LangGraph simulation {simulation_id} failed: {e}")
+            initial_state["status"] = SimulationStatus.FAILED.value
+            initial_state["error_message"] = str(e)
+            return initial_state
+
+    def _initialize_simulation_node(self, state: SimulationState) -> SimulationState:
+        """
+        LangGraph node to initialize the simulation state.
+        This will prepare the initial environment and set up the first turn.
+        """
+        logger.info(f"Node: initialize_simulation for {state["simulation_id"]}")
+        # Add initial user query as a message
+        messages = state.get("messages", [])
+        messages.append(HumanMessage(content=state["user_query"]))
+
+        # Log the start of the simulation
         sim_step = SimulationStep(
-            step_number=scenario_step.step_number,
-            step_type=StepType.AGENT_ACTION,
-            description=scenario_step.description,
-            input_data={
-                "expected_action": scenario_step.expected_action,
-                "required_tools": scenario_step.required_tools,
-                "expected_outcome": scenario_step.expected_outcome
-            }
+            description="Simulation initialized with user query",
+            step_type=StepType.USER_INPUT,
+            input_data={"user_query": state["user_query"]}
         )
-        
-        session.add_step(sim_step)
+        sim_steps = state.get("sim_steps", [])
+        sim_steps.append(sim_step.model_dump())
         sim_step.start()
-        
-        try:
-            # Find suitable agent for this step
-            agent = await self._select_agent_for_step(session, scenario_step)
-            if not agent:
-                sim_step.fail("No suitable agent found")
-                return {"success": False, "error": "No suitable agent found"}
-            
-            sim_step.agent_id = agent.id
-            
-            # Execute the step
-            step_result = await self._execute_agent_action(session, agent, scenario_step)
-            
-            if step_result["success"]:
-                sim_step.complete(step_result["output"])
-                # Update environment state
-                self._update_environment_state(session, step_result)
-            else:
-                sim_step.fail(step_result["error"])
-            
-            return step_result
-            
-        except Exception as e:
-            sim_step.fail(f"Step execution failed: {str(e)}")
-            return {"success": False, "error": str(e)}
-    
-    async def _select_agent_for_step(self, session: SimulationSession, scenario_step) -> Optional[Agent]:
-        """Select the most suitable agent for a step"""
-        if not self.agent_factory:
-            return None
-        
-        suitable_agents = []
-        
-        for agent_id in session.agent_ids:
-            agent = self.agent_factory.get_agent(agent_id)
-            if not agent or not agent.is_active:
-                continue
-            
-            # Check if agent has required tools
-            has_required_tools = all(agent.has_tool(tool) for tool in scenario_step.required_tools)
-            if not has_required_tools:
-                continue
-            
-            # Calculate suitability score
-            suitability_score = self._calculate_agent_suitability(agent, scenario_step)
-            suitable_agents.append((agent, suitability_score))
-        
-        if not suitable_agents:
-            return None
-        
-        # Select agent with highest suitability score
-        suitable_agents.sort(key=lambda x: x[1], reverse=True)
-        return suitable_agents[0][0]
-    
-    def _calculate_agent_suitability(self, agent: Agent, scenario_step) -> float:
-        """Calculate how suitable an agent is for a step"""
-        score = 0.0
-        
-        # Tool availability (40% weight)
-        tool_score = len([t for t in scenario_step.required_tools if agent.has_tool(t)]) / len(scenario_step.required_tools)
-        score += tool_score * 0.4
-        
-        # Expertise match (30% weight)
-        expertise_score = 0.0
-        for area in agent.profile.expertise_areas:
-            if area.lower() in scenario_step.description.lower():
-                expertise_score += 0.5
-        score += min(expertise_score, 1.0) * 0.3
-        
-        # Performance history (20% weight)
-        performance_score = agent.performance_metrics.success_rate
-        score += performance_score * 0.2
-        
-        # Availability (10% weight)
-        availability_score = 1.0 if agent.is_active else 0.0
-        score += availability_score * 0.1
-        
-        return score
-    
-    async def _execute_agent_action(self, session: SimulationSession, agent: Agent, scenario_step) -> Dict[str, Any]:
-        """Execute an agent action for a step"""
-        try:
-            # Simulate agent decision making
-            decision = await self._simulate_agent_decision(agent, scenario_step, session)
-            
-            # Execute tool usage if required
-            tool_results = []
-            if scenario_step.required_tools:
-                for tool_name in scenario_step.required_tools:
-                    if agent.has_tool(tool_name):
-                        tool_result = await self._simulate_tool_usage(tool_name, scenario_step)
-                        tool_results.append(tool_result)
-            
-            # Generate response
-            response = await self._generate_agent_response(agent, scenario_step, decision, tool_results)
-            
-            return {
-                "success": True,
-                "output": {
-                    "decision": decision,
-                    "tool_results": tool_results,
-                    "response": response,
-                    "agent_id": agent.id
-                }
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _simulate_agent_decision(self, agent: Agent, scenario_step, session: SimulationSession) -> Dict[str, Any]:
-        """Simulate agent decision making process"""
-        # Apply behavior pattern rules
-        decisions = []
-        for rule in agent.get_rules_by_priority():
-            if self._evaluate_rule_condition(rule, scenario_step, session):
-                decisions.append({
-                    "rule": rule.name,
-                    "action": rule.action,
-                    "priority": rule.priority
-                })
-        
-        # Generate decision based on personality
-        personality_decision = self._generate_personality_decision(agent.behavior_pattern.personality_type, scenario_step)
-        
+        sim_step.complete(output={"status": "initialized"})
+        sim_steps[-1].update(sim_step.model_dump())
+
         return {
-            "applied_rules": decisions,
-            "personality_decision": personality_decision,
-            "final_decision": self._combine_decisions(decisions, personality_decision)
+            "messages": messages,
+            "status": SimulationStatus.RUNNING.value,
+            "sim_steps": sim_steps
         }
-    
-    def _evaluate_rule_condition(self, rule, scenario_step, session: SimulationSession) -> bool:
-        """Evaluate if a rule condition is met"""
-        condition = rule.condition.lower()
+
+    def _execute_agent_turn_node(self, state: SimulationState) -> SimulationState:
+        """
+        LangGraph node to execute a turn for the current active agent.
+        The agent will generate a response or tool call.
+        """
+        sim_id = state["simulation_id"]
+        messages = state["messages"]
+        current_agents = state["current_agents"]
+        environment_state = state["environment_state"]
+        max_turns = state["max_turns"]
+
+        logger.info(f"Node: execute_agent_turn for {sim_id}, Turn: {len(messages) // 2 + 1}")
+
+        # Determine current agent based on turn or round-robin for simplicity
+        # In a real system, a more sophisticated agent selection logic might be here.
+        # For now, let's pick the first agent for simplicity or a round-robin.
+        if not current_agents:
+            logger.error(f"No agents available for simulation {sim_id}.")
+            return {"status": SimulationStatus.FAILED.value, "error_message": "No agents available"}
+
+        # Get the actual ConversableAgent instance
+        # This requires agent_factory to be available in the node context or passed explicitly
+        # For now, we'll assume a global access or passed as part of the engine's state.
+        # In LangGraph, nodes should be pure functions or methods of a class with dependencies injected.
         
-        if "factual information" in condition and "information" in scenario_step.description.lower():
-            return True
-        elif "complex problems" in condition and len(scenario_step.required_tools) > 2:
-            return True
-        elif "solving problems" in condition:
-            return True
-        
-        return False
-    
-    def _generate_personality_decision(self, personality_type, scenario_step) -> str:
-        """Generate decision based on personality type"""
-        if personality_type.value == "analytical":
-            return "analyze_systematically"
-        elif personality_type.value == "creative":
-            return "explore_creative_solutions"
-        elif personality_type.value == "systematic":
-            return "follow_established_process"
-        elif personality_type.value == "adaptive":
-            return "adapt_to_context"
+        # Placeholder for agent selection - in reality, agent_factory will provide instances
+        # For this example, let's just pick the first one from the list in state (which is agent ID/name)
+        acting_agent_id = current_agents[0] # Simplistic: always the first agent
+        acting_agent: Optional[KimiK2ConversableAgent] = self.agent_factory.get_agent(acting_agent_id) # Need agent factory here
+
+        if not acting_agent:
+            logger.error(f"Acting agent '{acting_agent_id}' not found in factory.")
+            return {"status": SimulationStatus.FAILED.value, "error_message": f"Agent {acting_agent_id} not found"}
+
+        # Simulate agent's thinking and response generation
+        # This is where the LLM call and AutoGen logic would go.
+        # For now, a simplified simulated response.
+        try:
+            # In a real AutoGen setup, you would use agent.initiate_chat or agent.generate_reply
+            # to get the agent's response, which might include tool calls.
+            # For this example, we simulate a response.
+            ai_response = f"Agent {acting_agent.name} is working on the task. Current environment: {environment_state}."
+            # This is where the actual LLM call for the agent would happen. For demonstration:
+            # response = await acting_agent.a_run_task(state["user_query"]) # Or messages[-1].content
+            # ai_response = response["content"]
+
+            # Simulate a tool call sometimes
+            if random.random() < 0.5: # 50% chance to simulate a tool call
+                tool_name = random.choice(acting_agent.agent_config.tool_preferences or ["generic_tool"])
+                tool_params = {"input": "simulated_input"}
+                ai_response += f"\n<tool_code>\n{tool_name}({tool_params})\n</tool_code>"
+                logger.info(f"Agent {acting_agent.name} simulated tool call: {tool_name}")
+
+            messages.append(AIMessage(content=ai_response))
+
+            sim_step = SimulationStep(
+                description=f"Agent {acting_agent.name} executes turn",
+                step_type=StepType.AGENT_ACTION,
+                agent_id=acting_agent.name,
+                input_data=state["messages"][-2] if len(state["messages"]) > 1 else {}, # Previous HumanMessage
+                output_data={"response": ai_response}
+            )
+            sim_steps = state.get("sim_steps", [])
+            sim_steps.append(sim_step.model_dump())
+            sim_step.start()
+            sim_step.complete(output={"response": ai_response})
+            sim_steps[-1].update(sim_step.model_dump())
+
+            return {"messages": messages, "sim_steps": sim_steps}
+
+        except Exception as e:
+            logger.error(f"Agent turn failed for {acting_agent_id}: {e}")
+            sim_step = SimulationStep(
+                description=f"Agent {acting_agent.name} turn failed",
+                step_type=StepType.AGENT_ACTION,
+                agent_id=acting_agent.name,
+                status=StepStatus.FAILED,
+                error_message=str(e)
+            )
+            sim_steps = state.get("sim_steps", [])
+            sim_steps.append(sim_step.model_dump())
+            sim_step.start()
+            sim_step.fail(str(e))
+            sim_steps[-1].update(sim_step.model_dump())
+            return {"messages": messages, "tool_results": state.get("tool_results", []), "status": SimulationStatus.FAILED.value, "error_message": str(e), "sim_steps": sim_steps} # Ensure tool_results is passed
+
+    def _decide_next_step_from_agent_turn(self, state: SimulationState) -> str:
+        """
+        Decides the next step after an agent turn.
+        Checks if the agent's message contains a tool call or if the simulation should end.
+        """
+        last_message_content = state["messages"][-1].content
+        sim_id = state["simulation_id"]
+        current_turn = len(state["messages"]) // 2 # Number of full turns (user + agent)
+
+        if "<tool_code>" in last_message_content and "</tool_code>" in last_message_content:
+            logger.info(f"Simulation {sim_id}: Agent turn contains tool call. Transition to simulate_tool_usage.")
+            return "tool_call"
+        elif current_turn >= state["max_turns"] or SimulationStatus.FAILED.value == state.get("status"): # Check for max turns or failure
+            logger.info(f"Simulation {sim_id}: Max turns reached or simulation failed. Transition to evaluate_step.")
+            return "end_turn"
         else:
-            return "standard_approach"
-    
-    def _combine_decisions(self, rule_decisions: List[Dict], personality_decision: str) -> str:
-        """Combine rule decisions with personality decision"""
-        if rule_decisions:
-            # Use highest priority rule action
-            highest_priority = max(rule_decisions, key=lambda x: x["priority"])
-            return highest_priority["action"]
+            logger.info(f"Simulation {sim_id}: Agent turn continues. Transition to execute_agent_turn.")
+            return "continue_turn"
+
+    def _simulate_tool_usage_node(self, state: SimulationState) -> SimulationState:
+        """
+        LangGraph node to simulate tool usage based on agent's tool call.
+        """
+        sim_id = state["simulation_id"]
+        messages = state["messages"]
+        tool_results = state.get("tool_results", [])
+
+        last_message_content = messages[-1].content
+        tool_code_block = ""
+        try:
+            start_idx = last_message_content.find("<tool_code>") + len("<tool_code>")
+            end_idx = last_message_content.find("</tool_code>")
+            tool_code_block = last_message_content[start_idx:end_idx].strip()
+            tool_name_match = re.match(r"^(\w+)\(.*\)", tool_code_block)
+            tool_name = tool_name_match.group(1) if tool_name_match else "unknown_tool"
+            
+            # Simulate tool execution (replace with actual tool_registry.execute_tool in real impl)
+            simulated_output = f"Simulated output of {tool_name}: Operation successful."
+            result = {"tool_name": tool_name, "output": simulated_output, "status": "success"}
+            tool_results.append(result)
+            logger.info(f"Node: simulate_tool_usage for {sim_id}. Tool '{tool_name}' executed.")
+
+            # Add tool output back to messages for the agent to see
+            messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}"))
+            
+            sim_step = SimulationStep(
+                description=f"Tool {tool_name} executed",
+                step_type=StepType.TOOL_USAGE,
+                input_data={"tool_call": tool_code_block},
+                output_data=result
+            )
+            sim_steps = state.get("sim_steps", [])
+            sim_steps.append(sim_step.model_dump())
+            sim_step.start()
+            sim_step.complete(output=result)
+            sim_steps[-1].update(sim_step.model_dump())
+
+            return {"messages": messages, "tool_results": tool_results, "sim_steps": sim_steps}
+
+        except Exception as e:
+            logger.error(f"Tool usage simulation failed for {sim_id}: {e}")
+            error_result = {"tool_name": "parse_error", "output": str(e), "status": "failed"}
+            tool_results.append(error_result)
+            messages.append(HumanMessage(content=f"Tool execution error: {e}"))
+            
+            sim_step = SimulationStep(
+                description=f"Tool usage failed: {tool_code_block}",
+                step_type=StepType.TOOL_USAGE,
+                status=StepStatus.FAILED,
+                error_message=str(e),
+                input_data={"tool_call": tool_code_block},
+                output_data=error_result
+            )
+            sim_steps = state.get("sim_steps", [])
+            sim_steps.append(sim_step.model_dump())
+            sim_step.start()
+            sim_step.fail(str(e))
+            sim_steps[-1].update(sim_step.model_dump())
+
+            return {"messages": messages, "tool_results": tool_results, "status": SimulationStatus.FAILED.value, "error_message": str(e), "sim_steps": sim_steps}
+
+    def _decide_next_step_from_tool_usage(self, state: SimulationState) -> str:
+        """
+        Decides the next step after tool usage.
+        If tool usage was successful, return to agent turn. Otherwise, evaluate (failure).
+        """
+        sim_id = state["simulation_id"]
+        if state.get("status") == SimulationStatus.FAILED.value:
+            logger.info(f"Simulation {sim_id}: Tool usage failed. Transition to evaluate_step.")
+            return "evaluate"
         else:
-            return personality_decision
-    
-    async def _simulate_tool_usage(self, tool_name: str, scenario_step) -> Dict[str, Any]:
-        """Simulate tool usage"""
-        # Simulate tool execution time
-        await asyncio.sleep(random.uniform(0.1, 0.5))
+            # Assuming successful tool usage leads back to agent to process output
+            logger.info(f"Simulation {sim_id}: Tool usage successful. Transition to execute_agent_turn.")
+            return "agent_turn"
+
+    def _evaluate_step_node(self, state: SimulationState) -> SimulationState:
+        """
+        LangGraph node to evaluate the current step or overall simulation.
+        """
+        sim_id = state["simulation_id"]
+        logger.info(f"Node: evaluate_step for {sim_id}")
+
+        # This is where the LLMJudgeSystem and QualityFilter would be used.
+        # For now, simulate a simple evaluation.
+        is_successful_turn = random.random() > 0.1 # 90% chance of success
         
-        # Generate synthetic tool result
-        result = {
-            "tool": tool_name,
-            "success": random.random() > 0.1,  # 90% success rate
-            "result": f"Simulated result for {tool_name}",
-            "execution_time": random.uniform(0.1, 2.0)
+        current_step_status = StepStatus.COMPLETED.value if is_successful_turn else StepStatus.FAILED.value
+        feedback_message = "Turn successful." if is_successful_turn else "Turn failed due to simulated issue."
+        overall_score = 0.9 if is_successful_turn else 0.2
+
+        messages = state["messages"]
+        messages.append(AIMessage(content=f"Evaluation: {feedback_message} Score: {overall_score:.2f}"))
+
+        sim_step = SimulationStep(
+            description=f"Evaluated turn with score {overall_score:.2f}",
+            step_type=StepType.EVALUATION,
+            input_data=state.get("messages")[-2:] if len(state.get("messages",[]))>=2 else {},
+            output_data={"score": overall_score, "feedback": feedback_message}
+        )
+        sim_steps = state.get("sim_steps", [])
+        sim_steps.append(sim_step.model_dump())
+        sim_step.start()
+        sim_step.complete(output={"score": overall_score})
+        sim_steps[-1].update(sim_step.model_dump())
+        
+        new_status = state["status"]
+        if not is_successful_turn: # If current turn simulation failed, mark overall sim as failed
+            new_status = SimulationStatus.FAILED.value
+            state["error_message"] = feedback_message
+
+        return {
+            "messages": messages,
+            "status": new_status,
+            "final_outcome": {"score": overall_score, "feedback": feedback_message},
+            "sim_steps": sim_steps
         }
-        
-        # Record tool usage if registry is available
-        if self.tool_registry:
-            self.tool_registry.record_tool_usage(tool_name, result["success"], result["execution_time"])
-        
-        return result
-    
-    async def _generate_agent_response(self, agent: Agent, scenario_step, decision: Dict, tool_results: List[Dict]) -> str:
-        """Generate agent response based on decision and tool results"""
-        # Simulate response generation time
-        await asyncio.sleep(random.uniform(0.2, 1.0))
-        
-        # Generate response based on communication style
-        communication_style = agent.behavior_pattern.communication_style.value
-        
-        if communication_style == "technical":
-            response = f"Technical analysis complete. {scenario_step.expected_outcome}"
-        elif communication_style == "friendly":
-            response = f"Great! I've completed the task. {scenario_step.expected_outcome}"
-        elif communication_style == "formal":
-            response = f"Task execution completed successfully. {scenario_step.expected_outcome}"
-        elif communication_style == "detailed":
-            response = f"Detailed analysis performed. Results: {scenario_step.expected_outcome}"
-        else:
-            response = f"Task completed. {scenario_step.expected_outcome}"
-        
-        return response
-    
-    def _update_environment_state(self, session: SimulationSession, step_result: Dict[str, Any]):
-        """Update environment state after step execution"""
-        current_state = session.get_current_state()
-        if not current_state:
-            return
-        
-        # Update current step
-        current_state.current_step += 1
-        
-        # Update system state
-        current_state.system_state.update({
-            "last_action": step_result["output"]["final_decision"],
-            "last_agent": step_result["output"]["agent_id"],
-            "step_completed": True
-        })
-        
-        # Add new environment state
-        new_state = EnvironmentState(
-            session_id=session.id,
-            current_step=current_state.current_step,
-            environment_variables=current_state.environment_variables.copy(),
-            available_tools=current_state.available_tools.copy(),
-            active_agents=current_state.active_agents.copy(),
-            user_context=current_state.user_context.copy(),
-            system_state=current_state.system_state.copy()
+
+    def _finalize_simulation_node(self, state: SimulationState) -> SimulationState:
+        """
+        LangGraph node to finalize the simulation, gather results, and mark as completed.
+        This is where DataGenerator would be used to export data.
+        """
+        sim_id = state["simulation_id"]
+        logger.info(f"Node: finalize_simulation for {sim_id}. Status: {state["status"]}")
+
+        # Convert raw simulation steps (dicts) back to SimulationStep objects if needed for processing
+        # sim_steps_objects = [SimulationStep(**s) for s in state.get("sim_steps", [])]
+
+        # Create a final SimulationSession object for comprehensive storage/export
+        # This step maps the LangGraph state back to our original Pydantic model
+        final_session = SimulationSession(
+            id=sim_id,
+            domain_id=state.get("domain_id", "unknown"),
+            scenario_id=state.get("scenario_id", "unknown"),
+            agent_ids=state["current_agents"],
+            user_agent_id=None, # UserAgentManager would handle this
+            status=SimulationStatus.COMPLETED if state["status"] != SimulationStatus.FAILED.value else SimulationStatus.FAILED,
+            steps=[SimulationStep(**s) for s in state.get("sim_steps", [])], # Convert back to Pydantic models
+            environment_states=[], # Not directly stored in graph state currently, would need to be passed
+            start_time=datetime.utcnow(), # Placeholder, ideally captured at start
+            end_time=datetime.utcnow(),
+            quality_score=state["final_outcome"].get("score") if state["final_outcome"] else 0.0,
+            metadata={"user_query": state["user_query"], "error_message": state.get("error_message")}
         )
         
-        session.add_environment_state(new_state)
-    
-    def get_session(self, session_id: str) -> Optional[SimulationSession]:
-        """Get a simulation session by ID"""
-        return self.active_sessions.get(session_id) or self.completed_sessions.get(session_id)
-    
-    def list_active_sessions(self) -> List[SimulationSession]:
-        """List all active simulation sessions"""
-        return list(self.active_sessions.values())
-    
-    def list_completed_sessions(self) -> List[SimulationSession]:
-        """List all completed simulation sessions"""
-        return list(self.completed_sessions.values())
-    
-    def cancel_session(self, session_id: str) -> bool:
-        """Cancel an active simulation session"""
-        session = self.active_sessions.get(session_id)
-        if not session:
-            return False
-        
-        session.status = SimulationStatus.CANCELLED
-        session.end_time = datetime.utcnow()
-        
-        # Move to completed sessions
-        self.completed_sessions[session_id] = session
-        del self.active_sessions[session_id]
-        
-        logger.info(f"Cancelled simulation session: {session_id}")
-        return True
-    
-    def get_simulation_statistics(self) -> Dict[str, Any]:
-        """Get statistics about simulations"""
-        stats = {
-            "active_sessions": len(self.active_sessions),
-            "completed_sessions": len(self.completed_sessions),
-            "total_sessions": len(self.active_sessions) + len(self.completed_sessions),
-            "success_rate": 0.0,
-            "average_duration": 0.0,
-            "sessions_by_status": {}
+        # DataGenerator integration would go here
+        # self.data_generator.generate_data(final_session, ...)
+
+        state["status"] = final_session.status.value
+        logger.info(f"Simulation {sim_id} finalized.")
+        return state
+
+    def convert_to_training_data(self, simulation_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Converts a LangGraph simulation result (dict) into a TrainingData format.
+        This function should be called by the DataGenerator or by the main system.
+        """
+        # This is a simplified conversion. In reality, you'd parse messages, tool_results, etc.
+        # to construct the conversation_history and tool_usage_log more accurately.
+        training_data_id = str(uuid.uuid4())
+        metadata = {
+            "simulation_id": simulation_result["simulation_id"],
+            "domain_id": simulation_result.get("domain_id", "unknown"),
+            "scenario_id": simulation_result.get("scenario_id", "unknown"),
+            "agent_ids": simulation_result["current_agents"],
+            "quality_score": simulation_result["final_outcome"].get("score") if simulation_result["final_outcome"] else 0.0,
+            "data_format": "json",
+            "version": "1.0.0",
+            "tags": ["simulated", simulation_result.get("status").lower()],
+            "description": f"Training data from simulation {simulation_result["simulation_id"]}"
         }
+
+        conversation_history = []
+        for msg in simulation_result["messages"]:
+            conversation_history.append({"role": msg.type, "content": msg.content})
         
-        # Calculate success rate and average duration
-        successful_sessions = 0
-        total_duration = 0.0
-        
-        for session in self.completed_sessions.values():
-            if session.status == SimulationStatus.COMPLETED:
-                successful_sessions += 1
-            
-            if session.duration:
-                total_duration += session.duration
-        
-        if len(self.completed_sessions) > 0:
-            stats["success_rate"] = successful_sessions / len(self.completed_sessions)
-            stats["average_duration"] = total_duration / len(self.completed_sessions)
-        
-        # Sessions by status
-        for session in list(self.active_sessions.values()) + list(self.completed_sessions.values()):
-            status = session.status.value
-            stats["sessions_by_status"][status] = stats["sessions_by_status"].get(status, 0) + 1
-        
-        return stats
-    
-    def add_simulation_callback(self, event_type: str, callback: Callable) -> None:
-        """Add a callback for simulation events"""
-        self.simulation_callbacks[event_type] = callback
-    
-    def _trigger_callback(self, event_type: str, data: Dict[str, Any]) -> None:
-        """Trigger a simulation callback"""
-        callback = self.simulation_callbacks.get(event_type)
-        if callback:
-            try:
-                callback(data)
-            except Exception as e:
-                logger.error(f"Callback execution failed: {e}") 
+        tool_usage_log = simulation_result.get("tool_results", [])
+
+        final_outcome = simulation_result.get("final_outcome", {})
+
+        # Create a dummy TrainingData model (as Pydantic models require full data, this is simplified)
+        # In a real scenario, you'd create the Pydantic TrainingData object
+        return {
+            "id": training_data_id,
+            "metadata": metadata,
+            "conversation_history": conversation_history,
+            "tool_usage_log": tool_usage_log,
+            "final_outcome": final_outcome,
+            "quality_metrics": final_outcome, # Simplified
+            "is_valid": True # Assuming valid for now
+        } 

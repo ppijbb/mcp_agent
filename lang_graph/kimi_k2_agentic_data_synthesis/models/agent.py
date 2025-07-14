@@ -153,6 +153,36 @@ class AgentProfile(BaseModel):
         }
 
 
+class AgentConfig(BaseModel):
+    """Configuration for creating agents"""
+    agent_id: str
+    name: str
+    description: str
+    agent_type: str = "EXPERT"  # Using string instead of enum for flexibility
+    behavior_pattern: str = "COLLABORATIVE"
+    expertise_domains: List[str] = []
+    tool_preferences: List[str] = []
+    communication_style: str = "professional"
+    problem_solving_approach: str = "systematic"
+    collaboration_style: str = "mentoring"
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agent_id": "senior_developer",
+                "name": "Senior Developer",
+                "description": "Experienced software developer with expertise in multiple languages",
+                "agent_type": "EXPERT",
+                "behavior_pattern": "COLLABORATIVE",
+                "expertise_domains": ["web_development", "software_engineering"],
+                "tool_preferences": ["code_editor", "terminal", "git"],
+                "communication_style": "professional",
+                "problem_solving_approach": "systematic",
+                "collaboration_style": "mentoring"
+            }
+        }
+
+
 class Agent(BaseModel):
     """Agent definition for the synthesis system"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

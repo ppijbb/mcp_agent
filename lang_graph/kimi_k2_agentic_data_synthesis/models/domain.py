@@ -109,6 +109,30 @@ class Scenario(BaseModel):
         }
 
 
+class DomainConfig(BaseModel):
+    """Configuration for creating domains"""
+    domain_id: str
+    name: str
+    description: str
+    domain_type: str = "TECHNICAL"  # Using string instead of enum for flexibility
+    scenarios: List[str] = []
+    complexity_levels: List[str] = []
+    required_tools: List[str] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "domain_id": "web_development",
+                "name": "Web Development",
+                "description": "Web development and programming tasks",
+                "domain_type": "TECHNICAL",
+                "scenarios": ["Create a React component", "Debug JavaScript code"],
+                "complexity_levels": ["beginner", "intermediate", "advanced"],
+                "required_tools": ["code_editor", "terminal", "browser"]
+            }
+        }
+
+
 class Domain(BaseModel):
     """Domain definition for the synthesis system"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

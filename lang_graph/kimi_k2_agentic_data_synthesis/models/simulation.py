@@ -2,7 +2,7 @@
 Simulation models for the Kimi-K2 Agentic Data Synthesis System
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypedDict, Annotated
 from pydantic import BaseModel, Field
 from enum import Enum
 import uuid
@@ -35,6 +35,24 @@ class StepType(str, Enum):
     TOOL_USAGE = "tool_usage"
     ENVIRONMENT_CHANGE = "environment_change"
     EVALUATION = "evaluation"
+
+
+class SimulationState(TypedDict):
+    """
+    Represents the state of a Kimi-K2 simulation within LangGraph.
+    This state will be passed between nodes in the graph.
+    """
+    simulation_id: Annotated[str, "Unique identifier for the simulation session"]
+    user_query: Annotated[str, "The initial query or problem statement from the user"]
+    messages: Annotated[List[Dict[str, Any]], "History of messages exchanged between agents and environment"]
+    current_agents: Annotated[List[str], "IDs of agents currently active in the simulation"]
+    environment_state: Annotated[Dict[str, Any], "Current state of the virtual environment"]
+    tool_results: Annotated[List[Dict[str, Any]], "Results of tool usages in the current step/turn"]
+    final_outcome: Annotated[Optional[Dict[str, Any]], "The final outcome or solution of the simulation"]
+    status: Annotated[str, "Current status of the simulation (e.g., running, completed, failed)"]
+    error_message: Annotated[Optional[str], "Any error message if the simulation fails"]
+    # You might also want to add fields for evaluation results, generated data, etc.
+    # if they need to be passed as part of the *intermediate* graph state.
 
 
 class SimulationStep(BaseModel):
@@ -144,6 +162,51 @@ class EnvironmentState(BaseModel):
         if agent_id in self.active_agents:
             self.active_agents.remove(agent_id)
             self.timestamp = datetime.utcnow()
+
+
+class EnvironmentConfig(BaseModel):
+    """Configuration for simulation environment"""
+    environment_type: str = "default"
+    resources: Dict[str, str] = {}
+    tools_available: List[str] = []
+    constraints: Dict[str, Any] = {}
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "environment_type": "development_workspace",
+                "resources": {"memory": "8GB", "cpu": "4 cores"},
+                "tools_available": ["code_editor", "terminal", "git"],
+                "constraints": {"max_execution_time": 300}
+            }
+        }
+
+
+class SimulationConfig(BaseModel):
+    """Configuration for creating simulations"""
+    simulation_id: str
+    name: str
+    description: str
+    agent_configs: List[Any] = []  # List of AgentConfig
+    environment_config: EnvironmentConfig
+    user_agent_config: Optional[Any] = None  # Optional UserAgentConfig
+    max_turns: int = 20
+    timeout: int = 600  # seconds
+    scenario: str = ""
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "simulation_id": "web_dev_collaboration",
+                "name": "Web Development Collaboration",
+                "description": "Senior and junior developers collaborating on a React project",
+                "agent_configs": [],
+                "environment_config": {},
+                "max_turns": 20,
+                "timeout": 600,
+                "scenario": "Create a responsive React component with proper error handling"
+            }
+        }
 
 
 class SimulationSession(BaseModel):

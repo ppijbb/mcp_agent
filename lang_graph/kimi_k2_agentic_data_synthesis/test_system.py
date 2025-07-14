@@ -9,13 +9,17 @@ import asyncio
 import pytest
 from typing import List
 
-from .system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
-from .models.domain import DomainConfig, DomainType
-from .models.tool import ToolConfig, ToolType
-from .models.agent import AgentConfig, AgentType, BehaviorPattern
-from .models.simulation import SimulationConfig, EnvironmentConfig
-from .models.evaluation import EvaluationConfig, EvaluationRubric
-from .models.data import DataExportConfig
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from kimi_k2_agentic_data_synthesis.system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
+from kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainType
+from kimi_k2_agentic_data_synthesis.models.tool import ToolConfig, ToolType
+from kimi_k2_agentic_data_synthesis.models.agent import AgentConfig, AgentType, BehaviorPattern
+from kimi_k2_agentic_data_synthesis.models.simulation import SimulationConfig, EnvironmentConfig
+from kimi_k2_agentic_data_synthesis.models.evaluation import EvaluationConfig, EvaluationRubric
+from kimi_k2_agentic_data_synthesis.models.data import DataExportConfig
 
 
 def test_system_initialization():
@@ -296,14 +300,14 @@ async def test_evaluation_config_creation():
         name="Test Evaluation",
         description="A test evaluation",
         rubric=rubric,
-        llm_model="gpt-4",
+        llm_model="gemini-2.5-flash-lite-preview-06-07",
         temperature=0.1,
         max_tokens=500
     )
     
     # Verify evaluation config is valid
     assert evaluation_config.evaluation_id == "test_evaluation"
-    assert evaluation_config.llm_model == "gpt-4"
+    assert evaluation_config.llm_model == "gemini-2.5-flash-lite-preview-06-07"
     assert len(evaluation_config.rubric.dimensions) == 1
 
 
