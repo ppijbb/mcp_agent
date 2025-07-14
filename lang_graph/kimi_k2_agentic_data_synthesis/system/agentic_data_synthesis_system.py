@@ -1,0 +1,447 @@
+"""
+Main system orchestration for Kimi-K2 Agentic Data Synthesis System.
+
+This module provides the main system class that coordinates all components
+for large-scale agentic data synthesis.
+"""
+
+import asyncio
+import logging
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+import json
+import time
+from datetime import datetime
+
+from ..core.domain_manager import DomainManager
+from ..core.tool_registry import ToolRegistry
+from ..core.agent_factory import AgentFactory
+from ..core.simulation_engine import SimulationEngine
+from ..core.environment_manager import EnvironmentManager
+from ..core.user_agent_manager import UserAgentManager
+from ..evaluation.llm_judge import LLMJudgeSystem
+from ..evaluation.quality_filter import QualityFilter
+from ..data.data_generator import DataGenerator
+from ..models.domain import Domain, DomainConfig
+from ..models.tool import Tool, ToolConfig
+from ..models.agent import Agent, AgentConfig
+from ..models.simulation import SimulationConfig, SimulationResult
+from ..models.evaluation import EvaluationConfig, EvaluationResult
+from ..models.data import TrainingData, DataExportConfig
+
+
+class AgenticDataSynthesisSystem:
+    """
+    Main orchestration system for Kimi-K2 Agentic Data Synthesis.
+    
+    This class coordinates all components to generate high-quality training data
+    for tool usage learning through large-scale multi-agent simulations.
+    """
+    
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        output_dir: str = "generated_data",
+        log_level: str = "INFO"
+    ):
+        """
+        Initialize the Kimi-K2 system.
+        
+        Args:
+            config_path: Path to system configuration file
+            output_dir: Directory for generated data output
+            log_level: Logging level
+        """
+        # Setup logging
+        logging.basicConfig(
+            level=getattr(logging, log_level.upper()),
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
+        
+        # Setup output directory
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(exist_ok=True)
+        
+        # Initialize components
+        self.domain_manager = DomainManager()
+        self.tool_registry = ToolRegistry()
+        self.agent_factory = AgentFactory()
+        self.environment_manager = EnvironmentManager()
+        self.user_agent_manager = UserAgentManager()
+        self.simulation_engine = SimulationEngine()
+        self.llm_judge = LLMJudgeSystem()
+        self.quality_filter = QualityFilter()
+        self.data_generator = DataGenerator()
+        
+        # System state
+        self.active_simulations: Dict[str, SimulationResult] = {}
+        self.generated_data: List[TrainingData] = []
+        self.evaluation_results: List[EvaluationResult] = []
+        
+        # Load configuration if provided
+        if config_path:
+            self.load_config(config_path)
+    
+    def load_config(self, config_path: str) -> None:
+        """
+        Load system configuration from file.
+        
+        Args:
+            config_path: Path to configuration file
+        """
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Load domains
+            if 'domains' in config:
+                for domain_config in config['domains']:
+                    self.domain_manager.add_domain(DomainConfig(**domain_config))
+            
+            # Load tools
+            if 'tools' in config:
+                for tool_config in config['tools']:
+                    self.tool_registry.register_tool(ToolConfig(**tool_config))
+            
+            # Load agents
+            if 'agents' in config:
+                for agent_config in config['agents']:
+                    self.agent_factory.create_agent(AgentConfig(**agent_config))
+            
+            self.logger.info(f"Configuration loaded from {config_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load configuration: {e}")
+            raise
+    
+    def setup_domains(self, domains: List[DomainConfig]) -> None:
+        """
+        Setup domains for the system.
+        
+        Args:
+            domains: List of domain configurations
+        """
+        for domain_config in domains:
+            self.domain_manager.add_domain(domain_config)
+        self.logger.info(f"Setup {len(domains)} domains")
+    
+    def setup_tools(self, tools: List[ToolConfig]) -> None:
+        """
+        Setup tools for the system.
+        
+        Args:
+            tools: List of tool configurations
+        """
+        for tool_config in tools:
+            self.tool_registry.register_tool(tool_config)
+        self.logger.info(f"Setup {len(tools)} tools")
+    
+    def setup_agents(self, agents: List[AgentConfig]) -> None:
+        """
+        Setup agents for the system.
+        
+        Args:
+            agents: List of agent configurations
+        """
+        for agent_config in agents:
+            self.agent_factory.create_agent(agent_config)
+        self.logger.info(f"Setup {len(agents)} agents")
+    
+    async def run_simulation_batch(
+        self,
+        simulation_configs: List[SimulationConfig],
+        max_concurrent: int = 5
+    ) -> List[SimulationResult]:
+        """
+        Run a batch of simulations concurrently.
+        
+        Args:
+            simulation_configs: List of simulation configurations
+            max_concurrent: Maximum number of concurrent simulations
+            
+        Returns:
+            List of simulation results
+        """
+        self.logger.info(f"Starting batch of {len(simulation_configs)} simulations")
+        
+        # Create semaphore to limit concurrent simulations
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def run_single_simulation(config: SimulationConfig) -> SimulationResult:
+            async with semaphore:
+                return await self.run_single_simulation(config)
+        
+        # Run simulations concurrently
+        tasks = [run_single_simulation(config) for config in simulation_configs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out exceptions and log them
+        valid_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                self.logger.error(f"Simulation {i} failed: {result}")
+            else:
+                valid_results.append(result)
+        
+        self.logger.info(f"Completed {len(valid_results)} simulations successfully")
+        return valid_results
+    
+    async def run_single_simulation(self, config: SimulationConfig) -> SimulationResult:
+        """
+        Run a single simulation.
+        
+        Args:
+            config: Simulation configuration
+            
+        Returns:
+            Simulation result
+        """
+        simulation_id = f"sim_{int(time.time() * 1000)}"
+        self.logger.info(f"Starting simulation {simulation_id}")
+        
+        try:
+            # Create environment
+            env = await self.environment_manager.create_environment(
+                config.environment_config
+            )
+            
+            # Create agents
+            agents = []
+            for agent_config in config.agent_configs:
+                agent = self.agent_factory.create_agent(agent_config)
+                agents.append(agent)
+            
+            # Create user agent if specified
+            user_agent = None
+            if config.user_agent_config:
+                user_agent = self.user_agent_manager.create_user_agent(
+                    config.user_agent_config
+                )
+            
+            # Run simulation
+            result = await self.simulation_engine.run_simulation(
+                simulation_id=simulation_id,
+                agents=agents,
+                environment=env,
+                user_agent=user_agent,
+                max_turns=config.max_turns,
+                timeout=config.timeout
+            )
+            
+            # Store result
+            self.active_simulations[simulation_id] = result
+            
+            self.logger.info(f"Simulation {simulation_id} completed successfully")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Simulation {simulation_id} failed: {e}")
+            raise
+    
+    async def evaluate_simulations(
+        self,
+        simulation_results: List[SimulationResult],
+        evaluation_config: EvaluationConfig
+    ) -> List[EvaluationResult]:
+        """
+        Evaluate simulation results using LLM judges.
+        
+        Args:
+            simulation_results: List of simulation results to evaluate
+            evaluation_config: Evaluation configuration
+            
+        Returns:
+            List of evaluation results
+        """
+        self.logger.info(f"Evaluating {len(simulation_results)} simulations")
+        
+        evaluation_results = []
+        
+        for simulation_result in simulation_results:
+            try:
+                # Evaluate simulation
+                evaluation_result = await self.llm_judge.evaluate_simulation(
+                    simulation_result=simulation_result,
+                    config=evaluation_config
+                )
+                
+                evaluation_results.append(evaluation_result)
+                
+            except Exception as e:
+                self.logger.error(f"Evaluation failed for simulation {simulation_result.simulation_id}: {e}")
+        
+        self.evaluation_results.extend(evaluation_results)
+        self.logger.info(f"Completed evaluation of {len(evaluation_results)} simulations")
+        
+        return evaluation_results
+    
+    def filter_quality_data(
+        self,
+        simulation_results: List[SimulationResult],
+        evaluation_results: List[EvaluationResult],
+        quality_threshold: float = 0.7
+    ) -> List[TrainingData]:
+        """
+        Filter and select high-quality training data.
+        
+        Args:
+            simulation_results: List of simulation results
+            evaluation_results: List of evaluation results
+            quality_threshold: Minimum quality score threshold
+            
+        Returns:
+            List of high-quality training data
+        """
+        self.logger.info("Filtering high-quality training data")
+        
+        # Create mapping of simulation_id to evaluation_result
+        eval_map = {eval_result.simulation_id: eval_result for eval_result in evaluation_results}
+        
+        high_quality_data = []
+        
+        for simulation_result in simulation_results:
+            evaluation_result = eval_map.get(simulation_result.simulation_id)
+            
+            if evaluation_result and evaluation_result.overall_score >= quality_threshold:
+                # Convert simulation result to training data
+                training_data = self.simulation_engine.convert_to_training_data(
+                    simulation_result
+                )
+                high_quality_data.append(training_data)
+        
+        self.logger.info(f"Selected {len(high_quality_data)} high-quality training samples")
+        return high_quality_data
+    
+    async def generate_training_data(
+        self,
+        training_data: List[TrainingData],
+        export_config: DataExportConfig
+    ) -> Dict[str, str]:
+        """
+        Generate and export training data.
+        
+        Args:
+            training_data: List of training data to export
+            export_config: Export configuration
+            
+        Returns:
+            Dictionary mapping format to file path
+        """
+        self.logger.info(f"Generating training data for {len(training_data)} samples")
+        
+        # Generate data
+        export_paths = await self.data_generator.generate_data(
+            training_data=training_data,
+            config=export_config,
+            output_dir=self.output_dir
+        )
+        
+        self.generated_data.extend(training_data)
+        
+        self.logger.info(f"Training data exported to: {export_paths}")
+        return export_paths
+    
+    async def run_full_pipeline(
+        self,
+        simulation_configs: List[SimulationConfig],
+        evaluation_config: EvaluationConfig,
+        export_config: DataExportConfig,
+        quality_threshold: float = 0.7,
+        max_concurrent_simulations: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Run the complete Kimi-K2 pipeline.
+        
+        Args:
+            simulation_configs: List of simulation configurations
+            evaluation_config: Evaluation configuration
+            export_config: Export configuration
+            quality_threshold: Minimum quality score threshold
+            max_concurrent_simulations: Maximum concurrent simulations
+            
+        Returns:
+            Pipeline results summary
+        """
+        self.logger.info("Starting Kimi-K2 full pipeline")
+        start_time = time.time()
+        
+        try:
+            # Step 1: Run simulations
+            simulation_results = await self.run_simulation_batch(
+                simulation_configs,
+                max_concurrent=max_concurrent_simulations
+            )
+            
+            # Step 2: Evaluate simulations
+            evaluation_results = await self.evaluate_simulations(
+                simulation_results,
+                evaluation_config
+            )
+            
+            # Step 3: Filter quality data
+            high_quality_data = self.filter_quality_data(
+                simulation_results,
+                evaluation_results,
+                quality_threshold
+            )
+            
+            # Step 4: Generate training data
+            export_paths = await self.generate_training_data(
+                high_quality_data,
+                export_config
+            )
+            
+            # Calculate statistics
+            total_time = time.time() - start_time
+            success_rate = len(simulation_results) / len(simulation_configs) if simulation_configs else 0
+            quality_rate = len(high_quality_data) / len(simulation_results) if simulation_results else 0
+            
+            results = {
+                "total_simulations": len(simulation_configs),
+                "successful_simulations": len(simulation_results),
+                "success_rate": success_rate,
+                "evaluated_simulations": len(evaluation_results),
+                "high_quality_samples": len(high_quality_data),
+                "quality_rate": quality_rate,
+                "total_time_seconds": total_time,
+                "export_paths": export_paths,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.logger.info(f"Pipeline completed successfully: {results}")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Pipeline failed: {e}")
+            raise
+    
+    def get_system_stats(self) -> Dict[str, Any]:
+        """
+        Get system statistics.
+        
+        Returns:
+            System statistics dictionary
+        """
+        return {
+            "domains": len(self.domain_manager.get_all_domains()),
+            "tools": len(self.tool_registry.get_all_tools()),
+            "agents": len(self.agent_factory.get_all_agents()),
+            "active_simulations": len(self.active_simulations),
+            "generated_data": len(self.generated_data),
+            "evaluation_results": len(self.evaluation_results)
+        }
+    
+    def cleanup(self) -> None:
+        """
+        Cleanup system resources.
+        """
+        self.logger.info("Cleaning up system resources")
+        
+        # Cleanup environments
+        self.environment_manager.cleanup_all()
+        
+        # Clear active simulations
+        self.active_simulations.clear()
+        
+        self.logger.info("System cleanup completed") 

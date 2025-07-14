@@ -1,0 +1,226 @@
+{
+  "domains": [
+    {
+      "domain_id": "web_development",
+      "name": "Web Development",
+      "description": "Web development and programming tasks",
+      "domain_type": "TECHNICAL",
+      "scenarios": [
+        "Create a React component",
+        "Debug JavaScript code",
+        "Set up a Node.js server",
+        "Optimize website performance",
+        "Implement user authentication",
+        "Create responsive layouts"
+      ],
+      "complexity_levels": ["beginner", "intermediate", "advanced"],
+      "required_tools": ["code_editor", "terminal", "browser", "git"]
+    },
+    {
+      "domain_id": "data_analysis",
+      "name": "Data Analysis",
+      "description": "Data analysis and visualization tasks",
+      "domain_type": "ANALYTICAL",
+      "scenarios": [
+        "Analyze CSV data",
+        "Create data visualizations",
+        "Perform statistical analysis",
+        "Generate reports",
+        "Clean and preprocess data",
+        "Build machine learning models"
+      ],
+      "complexity_levels": ["beginner", "intermediate", "advanced"],
+      "required_tools": ["python", "pandas", "matplotlib", "jupyter", "numpy"]
+    },
+    {
+      "domain_id": "research",
+      "name": "Research",
+      "description": "Academic and scientific research tasks",
+      "domain_type": "RESEARCH",
+      "scenarios": [
+        "Literature review",
+        "Data collection",
+        "Statistical analysis",
+        "Report writing",
+        "Citation management",
+        "Research methodology design"
+      ],
+      "complexity_levels": ["undergraduate", "graduate", "professional"],
+      "required_tools": ["search_engine", "citation_manager", "statistical_software", "word_processor"]
+    }
+  ],
+  "tools": [
+    {
+      "tool_id": "code_editor",
+      "name": "Code Editor",
+      "description": "Multi-language code editor with syntax highlighting",
+      "tool_type": "MCP",
+      "mcp_server": "code_editor_server",
+      "parameters": {
+        "language": "string",
+        "theme": "string",
+        "auto_save": "boolean",
+        "line_numbers": "boolean"
+      },
+      "usage_examples": [
+        "Open file: main.js",
+        "Edit line 42: console.log('Hello World')",
+        "Save file",
+        "Toggle line numbers"
+      ]
+    },
+    {
+      "tool_id": "terminal",
+      "name": "Terminal",
+      "description": "Command line interface for system operations",
+      "tool_type": "MCP",
+      "mcp_server": "terminal_server",
+      "parameters": {
+        "command": "string",
+        "working_dir": "string",
+        "timeout": "number"
+      },
+      "usage_examples": [
+        "Run: npm install",
+        "Navigate: cd /project",
+        "Execute: python script.py",
+        "List files: ls -la"
+      ]
+    },
+    {
+      "tool_id": "python",
+      "name": "Python Interpreter",
+      "description": "Python programming language interpreter",
+      "tool_type": "SYNTHETIC",
+      "synthetic_behavior": {
+        "execution_time": "0.1-2.0s",
+        "error_rate": "0.05",
+        "output_format": "text",
+        "memory_usage": "10-100MB"
+      },
+      "parameters": {
+        "code": "string",
+        "timeout": "number",
+        "packages": "array"
+      },
+      "usage_examples": [
+        "Execute: print('Hello World')",
+        "Import: import pandas as pd",
+        "Calculate: 2 + 2",
+        "Install: pip install numpy"
+      ]
+    },
+    {
+      "tool_id": "git",
+      "name": "Git Version Control",
+      "description": "Distributed version control system",
+      "tool_type": "MCP",
+      "mcp_server": "git_server",
+      "parameters": {
+        "command": "string",
+        "repository": "string",
+        "branch": "string"
+      },
+      "usage_examples": [
+        "Initialize: git init",
+        "Add files: git add .",
+        "Commit: git commit -m 'Initial commit'",
+        "Push: git push origin main"
+      ]
+    },
+    {
+      "tool_id": "search_engine",
+      "name": "Search Engine",
+      "description": "Web search for information retrieval",
+      "tool_type": "SYNTHETIC",
+      "synthetic_behavior": {
+        "execution_time": "0.5-3.0s",
+        "error_rate": "0.02",
+        "output_format": "html",
+        "result_count": "10-50"
+      },
+      "parameters": {
+        "query": "string",
+        "max_results": "number",
+        "search_type": "string"
+      },
+      "usage_examples": [
+        "Search: 'Python best practices'",
+        "Find: 'machine learning tutorials'",
+        "Research: 'latest web development trends'"
+      ]
+    }
+  ],
+  "agents": [
+    {
+      "agent_id": "senior_developer",
+      "name": "Senior Developer",
+      "description": "Experienced software developer with expertise in multiple languages",
+      "agent_type": "EXPERT",
+      "behavior_pattern": "COLLABORATIVE",
+      "expertise_domains": ["web_development", "software_engineering"],
+      "tool_preferences": ["code_editor", "terminal", "git"],
+      "communication_style": "professional",
+      "problem_solving_approach": "systematic",
+      "collaboration_style": "mentoring",
+      "experience_level": "senior",
+      "specializations": ["full-stack", "architecture", "code_review"]
+    },
+    {
+      "agent_id": "data_scientist",
+      "name": "Data Scientist",
+      "description": "Expert in data analysis, statistics, and machine learning",
+      "agent_type": "EXPERT",
+      "behavior_pattern": "ANALYTICAL",
+      "expertise_domains": ["data_analysis", "machine_learning"],
+      "tool_preferences": ["python", "pandas", "matplotlib", "jupyter"],
+      "communication_style": "analytical",
+      "problem_solving_approach": "data_driven",
+      "collaboration_style": "consultative",
+      "experience_level": "senior",
+      "specializations": ["statistics", "ml_models", "data_visualization"]
+    },
+    {
+      "agent_id": "junior_developer",
+      "name": "Junior Developer",
+      "description": "Entry-level developer learning best practices",
+      "agent_type": "LEARNER",
+      "behavior_pattern": "LEARNING",
+      "expertise_domains": ["web_development"],
+      "tool_preferences": ["code_editor"],
+      "communication_style": "curious",
+      "problem_solving_approach": "trial_and_error",
+      "collaboration_style": "asking_questions",
+      "experience_level": "junior",
+      "specializations": ["frontend", "javascript", "html_css"]
+    },
+    {
+      "agent_id": "research_assistant",
+      "name": "Research Assistant",
+      "description": "Academic research assistant with strong analytical skills",
+      "agent_type": "EXPERT",
+      "behavior_pattern": "RESEARCH_ORIENTED",
+      "expertise_domains": ["research", "data_analysis"],
+      "tool_preferences": ["search_engine", "citation_manager", "statistical_software"],
+      "communication_style": "academic",
+      "problem_solving_approach": "evidence_based",
+      "collaboration_style": "supportive",
+      "experience_level": "graduate",
+      "specializations": ["literature_review", "methodology", "academic_writing"]
+    },
+    {
+      "agent_id": "project_manager",
+      "name": "Project Manager",
+      "description": "Experienced project manager coordinating team efforts",
+      "agent_type": "EXPERT",
+      "behavior_pattern": "COORDINATIVE",
+      "expertise_domains": ["project_management", "team_coordination"],
+      "tool_preferences": ["project_tools", "communication_platforms"],
+      "communication_style": "clear_and_direct",
+      "problem_solving_approach": "structured",
+      "collaboration_style": "facilitative",
+      "experience_level": "senior",
+      "specializations": ["agile_methodologies", "risk_management", "stakeholder_communication"]
+    }
+  ]
+} 
