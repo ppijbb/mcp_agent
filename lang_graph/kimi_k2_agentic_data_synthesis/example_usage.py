@@ -13,7 +13,7 @@ from typing import List
 from .system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
 from .models.domain import DomainConfig, DomainCategory, ComplexityLevel
 from .models.tool import ToolConfig, ToolType
-from .models.agent import AgentConfig, AgentType # BehaviorPattern will be string in config
+from .models.agent import AgentConfig # BehaviorPattern will be string in config
 from .models.simulation import SimulationConfig, EnvironmentConfig
 from .models.evaluation import EvaluationConfig, EvaluationRubric
 from .models.data import DataExportConfig
@@ -101,7 +101,7 @@ async def create_example_configs():
             },
             parameters={
                 "code": "string",
-                "timeout": "number"
+                "timeout": "integer"
             },
             usage_examples=[
                 "Execute: print('Hello World')",
@@ -117,7 +117,7 @@ async def create_example_configs():
             agent_id="senior_developer",
             name="Senior Developer",
             description="Experienced software developer with expertise in multiple languages",
-            agent_type=AgentType.EXPERT.value, # Use .value
+            agent_type="EXPERT", # Use .value
             behavior_pattern="COLLABORATIVE", # Use string for behavior_pattern
             expertise_domains=["web_development", "software_engineering"],
             tool_preferences=["code_editor", "terminal", "git"],
@@ -129,7 +129,7 @@ async def create_example_configs():
             agent_id="data_scientist",
             name="Data Scientist",
             description="Expert in data analysis, statistics, and machine learning",
-            agent_type=AgentType.EXPERT.value,
+            agent_type="EXPERT",
             behavior_pattern="ANALYTICAL",
             expertise_domains=["data_analysis", "machine_learning"],
             tool_preferences=["python", "pandas", "matplotlib", "jupyter"],
@@ -141,7 +141,7 @@ async def create_example_configs():
             agent_id="junior_developer",
             name="Junior Developer",
             description="Entry-level developer learning best practices",
-            agent_type=AgentType.LEARNER.value,
+            agent_type="LEARNER",
             behavior_pattern="LEARNING",
             expertise_domains=["web_development"],
             tool_preferences=["code_editor"],

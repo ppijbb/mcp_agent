@@ -23,11 +23,12 @@ from ..evaluation.llm_judge import LLMJudgeSystem
 from ..evaluation.quality_filter import QualityFilter
 from ..data.data_generator import DataGenerator
 from ..models.domain import Domain, DomainConfig
-from ..models.tool import Tool, ToolConfig
+from ..models.tool import ToolType, ToolParameter, ParameterType, ToolConfig
 from ..models.agent import Agent, AgentConfig
 from ..models.simulation import SimulationConfig, SimulationSession as SimulationResult # SimulationResult is now LangGraph state dict
 from ..models.evaluation import EvaluationConfig, EvaluationResult
 from ..models.data import TrainingData, DataExportConfig
+from ..models.domain import ComplexityLevel
 
 
 class AgenticDataSynthesisSystem:
@@ -113,8 +114,19 @@ class AgenticDataSynthesisSystem:
             
             # Load tools
             if 'tools' in config:
-                for tool_config in config['tools']:
-                    self.tool_registry.register_tool(ToolConfig(**tool_config))
+                for tool_config_dict in config['tools']:
+                    tool_config = ToolConfig(**tool_config_dict)
+                    # Convert parameters dict to list of ToolParameter objects
+                    tool_parameters = [
+                        ToolParameter(name=key, type=ParameterType(value), description=f"Parameter {key}")
+                        for key, value in tool_config.parameters.items()
+                    ]
+                    self.tool_registry.register_tool(
+                        name=tool_config.name,
+                        type=ToolType(tool_config.tool_type), # Convert string to ToolType enum
+                        description=tool_config.description,
+                        parameters=tool_parameters
+                    )
             
             # Load agents
             if 'agents' in config:
@@ -138,7 +150,14 @@ class AgenticDataSynthesisSystem:
             domains: List of domain configurations
         """
         for domain_config in domains:
-            self.domain_manager.add_domain(domain_config)
+            self.domain_manager.create_domain(
+                name=domain_config.name,
+                description=domain_config.description,
+                category=domain_config.domain_type, # This is already DomainCategory enum
+                complexity_level=domain_config.complexity_levels[0] if domain_config.complexity_levels else ComplexityLevel.INTERMEDIATE,
+                required_tools=domain_config.required_tools
+                # metadata is not in DomainConfig in example_usage.py for now
+            )
         self.logger.info(f"Setup {len(domains)} domains")
     
     def setup_tools(self, tools: List[ToolConfig]) -> None:
@@ -149,7 +168,19 @@ class AgenticDataSynthesisSystem:
             tools: List of tool configurations
         """
         for tool_config in tools:
-            self.tool_registry.register_tool(tool_config)
+            # Convert parameters dict to list of ToolParameter objects
+            tool_parameters = [
+                ToolParameter(name=key, type=ParameterType(value), description=f"Parameter {key}")
+                for key, value in tool_config.parameters.items()
+            ]
+            self.tool_registry.register_tool(
+                name=tool_config.name,
+                type=ToolType(tool_config.tool_type), # Convert string to ToolType enum
+                description=tool_config.description,
+                parameters=tool_parameters, # Pass the converted parameters
+                # return_type and domain_compatibility are not in ToolConfig in example_usage.py
+                # but can be added if needed, or default values will be used.
+            )
         self.logger.info(f"Setup {len(tools)} tools")
     
     def setup_agents(self, agents: List[AgentConfig]) -> None:
@@ -488,7 +519,10 @@ class AgenticDataSynthesisSystem:
         self.logger.info("Cleaning up system resources")
         
         # Cleanup environments
-        self.environment_manager.cleanup_all()
+        if self.environment_manager:
+            active_envs = self.environment_manager.list_environments(status="active")
+            for env in active_envs:
+                self.environment_manager.destroy_environment(env["id"])
         
         # Clear active simulations
         self.active_simulations.clear()
