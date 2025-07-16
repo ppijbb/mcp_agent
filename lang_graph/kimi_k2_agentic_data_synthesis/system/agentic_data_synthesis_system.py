@@ -25,10 +25,11 @@ from ..data.data_generator import DataGenerator
 from ..models.domain import Domain, DomainConfig
 from ..models.tool import ToolType, ToolParameter, ParameterType, ToolConfig
 from ..models.agent import Agent, AgentConfig
-from ..models.simulation import SimulationConfig, SimulationSession as SimulationResult # SimulationResult is now LangGraph state dict
+from ..models.simulation import SimulationConfig, SimulationState, SimulationStatus, SimulationSession as SimulationResult # SimulationResult is now LangGraph state dict
 from ..models.evaluation import EvaluationConfig, EvaluationResult
-from ..models.data import TrainingData, DataExportConfig
+from ..models.data import TrainingData, DataExportConfig, DataFormat
 from ..models.domain import ComplexityLevel
+from ..agents.kimi_k2_agent import KimiK2ConversableAgent # Added missing import
 
 
 class AgenticDataSynthesisSystem:
@@ -109,8 +110,15 @@ class AgenticDataSynthesisSystem:
             
             # Load domains
             if 'domains' in config:
-                for domain_config in config['domains']:
-                    self.domain_manager.add_domain(DomainConfig(**domain_config))
+                for domain_config_dict in config['domains']:
+                    domain_config = DomainConfig(**domain_config_dict)
+                    self.domain_manager.create_domain(
+                        name=domain_config.name,
+                        description=domain_config.description,
+                        category=domain_config.domain_type,
+                        complexity_level=domain_config.complexity_levels[0] if domain_config.complexity_levels else ComplexityLevel.INTERMEDIATE,
+                        required_tools=domain_config.required_tools
+                    )
             
             # Load tools
             if 'tools' in config:
@@ -236,74 +244,62 @@ class AgenticDataSynthesisSystem:
     
     async def run_single_simulation(self, config: SimulationConfig) -> Dict[str, Any]: # Changed return type to Dict for LangGraph state
         """
-        Run a single simulation using the LangGraph engine.
-        
-        Args:
-            config: Simulation configuration
-            
-        Returns:
-            Simulation result (LangGraph state dict)
+        Run a single simulation using the LangGraph workflow.
         """
         simulation_id = config.simulation_id or f"sim_{int(time.time() * 1000)}"
-        self.logger.info(f"Starting simulation {simulation_id}")
-        
-        try:
-            # Get agents (KimiK2ConversableAgent instances) from the factory
-            agents_for_sim = []
-            for agent_cfg in config.agent_configs:
-                agent_instance = self.agent_factory.get_agent(agent_cfg.agent_id)
-                if agent_instance:
-                    agents_for_sim.append(agent_instance)
+        self.logger.info(f"Starting LangGraph simulation {simulation_id} for scenario {config.scenario}")
+
+        # Get agent instances for this simulation
+        agents_for_this_sim: List[KimiK2ConversableAgent] = []
+        for agent_cfg in config.agent_configs:
+            agent_instance = self.agent_factory.get_agent(agent_cfg.agent_id)
+            if agent_instance:
+                agents_for_this_sim.append(agent_instance)
+            else:
+                self.logger.warning(f"Agent {agent_cfg.agent_id} not found in factory. It should have been setup.")
+                # Fallback: try to create if not found (e.g., if config was not loaded from file)
+                created_agent = self.agent_factory.create_agent(agent_cfg) # This also adds to factory
+                if created_agent:
+                    agents_for_this_sim.append(created_agent)
                 else:
-                    self.logger.warning(f"Agent {agent_cfg.agent_id} not found. Creating from config...")
-                    # Attempt to create if not found (e.g., if config was not loaded from file)
-                    agent_instance = self.agent_factory.create_agent(agent_cfg)
-                    if agent_instance:
-                        agents_for_sim.append(agent_instance)
-                    else:
-                        raise ValueError(f"Could not create agent {agent_cfg.agent_id} for simulation {simulation_id}")
+                    raise ValueError(f"Could not find or create agent {agent_cfg.agent_id} for simulation {simulation_id}")
 
-            if not agents_for_sim:
-                raise ValueError(f"No agents available for simulation {simulation_id}")
+        if not agents_for_this_sim:
+            raise ValueError(f"No agents available for simulation {simulation_id}")
 
-            # Create environment (if EnvironmentManager is still used for virtual envs)
-            # For now, let's pass environment_config directly as part of the state input
-            # or create a mock environment object if EnvironmentManager is too complex for LangGraph state.
-            environment_data = config.environment_config.model_dump() # Pass as dict
-            
-            # Run simulation using the LangGraph-based simulation engine
-            result = await self.simulation_engine.run_simulation(
-                simulation_id=simulation_id,
-                agents=agents_for_sim, # Pass KimiK2ConversableAgent instances
-                environment=environment_data, # Pass environment data as dict
-                user_agent=None, # UserAgentManager integration might need LangGraph node
-                max_turns=config.max_turns,
-                timeout=config.timeout,
-                scenario_id=config.scenario_id, # Pass scenario_id and domain_id for context
-                domain_id=config.domain_id,
-                user_query=config.scenario # Using scenario as user_query for LangGraph initial input
-            )
-            
-            # Store result (LangGraph state dict)
-            self.active_simulations[simulation_id] = result
-            
-            self.logger.info(f"Simulation {simulation_id} completed successfully (LangGraph output)")
-            return result
-            
+        # Initialize the state for the LangGraph workflow
+        initial_state: SimulationState = {
+            "simulation_id": simulation_id,
+            "user_query": config.scenario, # Pass scenario as user_query
+            "messages": [], # Start with empty messages for the graph
+            "current_agents": [agent.name for agent in agents_for_this_sim], # Use agent.name (autogen's name)
+            "environment_state": config.environment_config.model_dump(), # Initial environment state from config
+            "tool_results": [],
+            "final_outcome": None,
+            "status": SimulationStatus.RUNNING.value,
+            "error_message": None,
+            "max_turns": config.max_turns, # Pass max turns and timeout to state
+            "timeout": config.timeout,
+            "scenario": config.scenario, # Pass scenario
+            "domain_id": None, # Cannot derive directly from SimulationConfig. Leaving as None for now.
+            "sim_steps": [] # List to store SimulationStep objects generated during the run
+        }
+
+        config_langgraph = {"configurable": {"thread_id": simulation_id}}
+
+        try:
+            print(f"DEBUG: In run_single_simulation, config.max_turns is {config.max_turns} (type: {type(config.max_turns)})")
+            self.logger.debug(f"Invoking LangGraph app with initial_state: {initial_state.keys()}")
+            self.logger.debug(f"Passing recursion_limit: {config.max_turns}")
+            # Invoke the LangGraph application
+            final_state = await self.simulation_engine.app.ainvoke(initial_state, config=config_langgraph, recursion_limit=config.max_turns)
+            self.logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get("status")}")
+            return final_state
         except Exception as e:
-            self.logger.error(f"Simulation {simulation_id} failed: {e}")
-            # Return a failed state dictionary
-            return {
-                "simulation_id": simulation_id,
-                "status": "failed",
-                "error_message": str(e),
-                "messages": [],
-                "current_agents": [],
-                "environment_state": {},
-                "tool_results": [],
-                "final_outcome": None,
-                "sim_steps": []
-            }
+            self.logger.error(f"LangGraph simulation {simulation_id} failed: {e}")
+            initial_state["status"] = SimulationStatus.FAILED.value
+            initial_state["error_message"] = str(e)
+            return initial_state
     
     async def evaluate_simulations(
         self,
@@ -396,22 +392,31 @@ class AgenticDataSynthesisSystem:
     ) -> Dict[str, str]:
         """
         Generate and export training data.
-        
-        Args:
-            training_data: List of training data to export
-            export_config: Export configuration
-            
-        Returns:
-            Dictionary mapping format to file path
         """
         self.logger.info(f"Generating training data for {len(training_data)} samples")
         
-        # Generate data
-        export_paths = await self.data_generator.generate_data(
-            training_data=training_data,
-            config=export_config,
-            output_dir=self.output_dir
+        export_paths = {}
+        
+        if not training_data:
+            self.logger.warning("No training data to generate. Skipping export.")
+            return export_paths
+
+        # Create a single batch for all training data
+        batch = self.data_generator.create_training_batch(
+            name="generated_simulation_data",
+            description="Training data from Kimi-K2 simulations",
+            training_data=training_data
         )
+
+        # Export data in specified formats
+        for fmt in export_config.formats:
+            # Convert string format to DataFormat enum
+            data_format_enum = DataFormat(fmt) 
+            output_path = self.data_generator.export_batch(batch.id, format=data_format_enum)
+            if output_path:
+                export_paths[fmt] = str(output_path)
+            else:
+                self.logger.error(f"Failed to export data in {fmt} format.")
         
         self.generated_data.extend(training_data)
         
@@ -504,10 +509,10 @@ class AgenticDataSynthesisSystem:
             System statistics dictionary
         """
         return {
-            "domains": len(self.domain_manager.get_all_domains()),
-            "tools": len(self.tool_registry.get_all_tools()),
-            "agents": len(self.agent_factory.get_all_agents()),
-            "active_simulations": len(self.active_simulations), # This now stores LangGraph states (dicts)
+            "domains": len(self.domain_manager.list_domains()),
+            "tools": len(self.tool_registry.list_tools()),
+            "agents": len(self.agent_factory.agents), # Use len of agents dictionary
+            "active_simulations": len(self.active_simulations),
             "generated_data": len(self.generated_data),
             "evaluation_results": len(self.evaluation_results)
         }

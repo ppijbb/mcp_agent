@@ -51,6 +51,8 @@ class SimulationState(TypedDict):
     final_outcome: Annotated[Optional[Dict[str, Any]], "The final outcome or solution of the simulation"]
     status: Annotated[str, "Current status of the simulation (e.g., running, completed, failed)"]
     error_message: Annotated[Optional[str], "Any error message if the simulation fails"]
+    max_turns: Annotated[int, "Maximum number of turns for the simulation"]
+    timeout: Annotated[int, "Timeout in seconds for the simulation"]
     # You might also want to add fields for evaluation results, generated data, etc.
     # if they need to be passed as part of the *intermediate* graph state.
 

@@ -108,6 +108,82 @@ async def create_example_configs():
                 "Import: import pandas as pd",
                 "Calculate: 2 + 2"
             ]
+        ),
+        ToolConfig(
+            tool_id="git",
+            name="Git Version Control",
+            description="Distributed version control system commands",
+            tool_type=ToolType.MCP.value,
+            mcp_server="git_server",
+            parameters={
+                "command": "string",
+                "repo_path": "string"
+            },
+            usage_examples=[
+                "Clone repository: git clone <repo_url>",
+                "Commit changes: git commit -m 'message'",
+                "Push to remote: git push"
+            ]
+        ),
+        ToolConfig(
+            tool_id="pandas",
+            name="Pandas Data Analysis Library",
+            description="Data manipulation and analysis library for Python",
+            tool_type=ToolType.SYNTHETIC.value,
+            synthetic_behavior={
+                "execution_time": "0.5-5.0s",
+                "error_rate": "0.02",
+                "output_format": "dataframe_summary"
+            },
+            parameters={
+                "data": "object",
+                "operation": "string"
+            },
+            usage_examples=[
+                "Read CSV: pd.read_csv('data.csv')",
+                "Filter data: df[df['column'] > 10]",
+                "Group by: df.groupby('column').mean()"
+            ]
+        ),
+        ToolConfig(
+            tool_id="matplotlib",
+            name="Matplotlib Plotting Library",
+            description="2D plotting library for Python",
+            tool_type=ToolType.SYNTHETIC.value,
+            synthetic_behavior={
+                "execution_time": "0.3-3.0s",
+                "error_rate": "0.01",
+                "output_format": "plot_image_path"
+            },
+            parameters={
+                "data": "object",
+                "plot_type": "string"
+            },
+            usage_examples=[
+                "Create line plot: plt.plot(x, y)",
+                "Show plot: plt.show()",
+                "Save figure: plt.savefig('plot.png')"
+            ]
+        ),
+        ToolConfig(
+            tool_id="jupyter",
+            name="Jupyter Notebook",
+            description="Interactive computing environment for Python",
+            tool_type=ToolType.SYNTHETIC.value,
+            synthetic_behavior={
+                "execution_time": "1.0-10.0s",
+                "error_rate": "0.03",
+                "output_format": "notebook_output"
+            },
+            parameters={
+                "code_cell": "string",
+                "notebook_path": "string"
+            },
+            usage_examples=[
+                "Run cell: jupyter.run_cell('import numpy as np')",
+                "Open notebook: jupyter.open_notebook('analysis.ipynb')",
+                "Export notebook: jupyter.export_notebook('analysis.ipynb', 'html')"
+            ]
         )
     ]
     
@@ -177,26 +253,26 @@ async def create_simulation_configs():
         SimulationConfig(
             simulation_id="web_dev_collaboration",
             name="Web Development Collaboration",
-            description="Senior and junior developers collaborating on a React project",
+            description="Senior and junior developers collaborating on a React project.",
             agent_configs=[
-                AgentConfig(agent_id="senior_developer", name="Senior Developer", description="desc", agent_type="EXPERT", behavior_pattern="COLLABORATIVE", expertise_domains=["web_development"], tool_preferences=["code_editor"], communication_style="professional", problem_solving_approach="systematic", collaboration_style="mentoring"), # Full AgentConfig required
-                AgentConfig(agent_id="junior_developer", name="Junior Developer", description="desc", agent_type="LEARNER", behavior_pattern="LEARNING", expertise_domains=["web_development"], tool_preferences=["code_editor"], communication_style="curious", problem_solving_approach="trial_and_error", collaboration_style="asking_questions")
+                AgentConfig(agent_id="senior_developer", name="Senior Developer", description="An experienced software developer.", agent_type="EXPERT", preferred_tools=["code_editor", "terminal", "git"]),
+                AgentConfig(agent_id="junior_developer", name="Junior Developer", description="A less experienced developer learning from the senior.", agent_type="LEARNER", preferred_tools=["code_editor"])
             ],
-            environment_config=env_config,
-            max_turns=20,
-            timeout=600,
+            environment_config=EnvironmentConfig(environment_type="development_workspace", resources={"cpu": "4 cores", "memory": "16GB", "disk_space": "100GB"}, tools_available=["code_editor", "terminal", "git"]),
+            max_turns=50, # Increased max_turns
+            timeout=900, # Increased timeout for longer simulations
             scenario="Create a responsive React component with proper error handling"
         ),
         SimulationConfig(
             simulation_id="data_analysis_task",
             name="Data Analysis Task",
-            description="Data scientist performing analysis with Python tools",
+            description="Data scientist analyzing a dataset and creating visualizations.",
             agent_configs=[
-                AgentConfig(agent_id="data_scientist", name="Data Scientist", description="desc", agent_type="EXPERT", behavior_pattern="ANALYTICAL", expertise_domains=["data_analysis"], tool_preferences=["python"], communication_style="analytical", problem_solving_approach="data_driven", collaboration_style="consultative")
+                AgentConfig(agent_id="data_scientist", name="Data Scientist", description="An expert in data analysis and visualization.", agent_type="EXPERT", preferred_tools=["python", "pandas", "matplotlib", "jupyter"])
             ],
-            environment_config=env_config,
-            max_turns=15,
-            timeout=450,
+            environment_config=EnvironmentConfig(environment_type="data_science_workbench", resources={"cpu": "8 cores", "memory": "32GB", "file_size": "10MB"}, tools_available=["python", "pandas", "matplotlib", "jupyter"]),
+            max_turns=50, # Increased max_turns
+            timeout=900, # Increased timeout for longer simulations
             scenario="Analyze a dataset and create visualizations"
         )
     ]
@@ -320,7 +396,9 @@ async def run_example_pipeline():
             evaluation_config=evaluation_config,
             export_config=export_config,
             quality_threshold=0.7,
-            max_concurrent_simulations=1 # Reduced for easier debugging
+            max_concurrent_simulations=1, # Reduced for easier debugging
+            # Pass scenario directly if needed by run_full_pipeline or run_single_simulation
+            # For now, it's passed via SimulationConfig.scenario
         )
         
         # Display results

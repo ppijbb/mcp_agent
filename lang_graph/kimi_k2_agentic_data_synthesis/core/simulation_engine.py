@@ -79,7 +79,18 @@ class SimulationEngine:
             },
         )
 
-        self.workflow.add_edge("evaluate_step", "execute_agent_turn") # For multi-turn scenarios, go back to agent
+        # Conditional transitions from evaluate_step
+        self.workflow.add_conditional_edges(
+            "evaluate_step",
+            self._decide_next_step_from_evaluation,
+            {
+                "continue_simulation": "execute_agent_turn", # Continue with more agent turns
+                "end_simulation": "finalize_simulation", # End the simulation
+            },
+        )
+
+        # Removed the direct edge from evaluate_step as it's now handled by conditional edges
+        # self.workflow.add_edge("evaluate_step", "execute_agent_turn") 
         self.workflow.add_edge("finalize_simulation", END)
 
         # Compile the workflow
@@ -96,14 +107,14 @@ class SimulationEngine:
         user_agent: Optional[Any] = None,
         max_turns: int = 20,
         timeout: int = 600, # seconds
-        scenario_id: Optional[str] = None,
+        scenario: Optional[str] = None, # Changed from scenario_id
         domain_id: Optional[str] = None,
         user_query: str = ""
     ) -> Dict[str, Any]: # Returns SimulationState dict
         """
         Run a single simulation using the LangGraph workflow.
         """
-        logger.info(f"Starting LangGraph simulation {simulation_id} for scenario {scenario_id}")
+        logger.info(f"Starting LangGraph simulation {simulation_id} for scenario {scenario}")
 
         # Initialize the state for the LangGraph workflow
         initial_state: SimulationState = {
@@ -118,7 +129,7 @@ class SimulationEngine:
             "error_message": None,
             "max_turns": max_turns, # Pass max turns and timeout to state
             "timeout": timeout,
-            "scenario_id": scenario_id,
+            "scenario": scenario, # Changed from scenario_id
             "domain_id": domain_id,
             "sim_steps": [] # List to store SimulationStep objects generated during the run
         }
@@ -144,24 +155,27 @@ class SimulationEngine:
         logger.info(f"Node: initialize_simulation for {state["simulation_id"]}")
         # Add initial user query as a message
         messages = state.get("messages", [])
-        messages.append(HumanMessage(content=state["user_query"]))
+        messages.append(HumanMessage(content=state["user_query"]).model_dump())
 
         # Log the start of the simulation
         sim_step = SimulationStep(
+            step_number=1, # Add missing step_number
             description="Simulation initialized with user query",
             step_type=StepType.USER_INPUT,
             input_data={"user_query": state["user_query"]}
         )
-        sim_steps = state.get("sim_steps", [])
-        sim_steps.append(sim_step.model_dump())
         sim_step.start()
         sim_step.complete(output={"status": "initialized"})
-        sim_steps[-1].update(sim_step.model_dump())
+        
+        sim_steps = state.get("sim_steps", [])
+        sim_steps.append(sim_step.model_dump())
 
         return {
             "messages": messages,
             "status": SimulationStatus.RUNNING.value,
-            "sim_steps": sim_steps
+            "sim_steps": sim_steps,
+            "max_turns": state["max_turns"], # Pass max_turns through the state
+            "timeout": state["timeout"] # Pass timeout through the state
         }
 
     def _execute_agent_turn_node(self, state: SimulationState) -> SimulationState:
@@ -217,13 +231,18 @@ class SimulationEngine:
                 ai_response += f"\n<tool_code>\n{tool_name}({tool_params})\n</tool_code>"
                 logger.info(f"Agent {acting_agent.name} simulated tool call: {tool_name}")
 
-            messages.append(AIMessage(content=ai_response))
+            messages.append(AIMessage(content=ai_response).model_dump())
+
+            # Calculate current step number. Each full turn (user+agent) counts as 2 messages.
+            # The current step number should correspond to the message being processed.
+            current_step_number = len(state.get("sim_steps", [])) + 1 # Increment for the new step
 
             sim_step = SimulationStep(
+                step_number=current_step_number, # Provide the step number
                 description=f"Agent {acting_agent.name} executes turn",
                 step_type=StepType.AGENT_ACTION,
                 agent_id=acting_agent.name,
-                input_data=state["messages"][-2] if len(state["messages"]) > 1 else {}, # Previous HumanMessage
+                input_data=state["messages"][-2] if len(state["messages"]) > 1 else {}, # Extract content as dict
                 output_data={"response": ai_response}
             )
             sim_steps = state.get("sim_steps", [])
@@ -236,12 +255,18 @@ class SimulationEngine:
 
         except Exception as e:
             logger.error(f"Agent turn failed for {acting_agent_id}: {e}")
+            
+            current_step_number = len(state.get("sim_steps", [])) + 1 # Calculate step number for failed step
+            input_data_for_failure = state["messages"][-2] if len(state["messages"]) > 1 else {}
+
             sim_step = SimulationStep(
+                step_number=current_step_number, # Add step_number to failed step
                 description=f"Agent {acting_agent.name} turn failed",
                 step_type=StepType.AGENT_ACTION,
                 agent_id=acting_agent.name,
                 status=StepStatus.FAILED,
-                error_message=str(e)
+                error_message=str(e),
+                input_data=input_data_for_failure # Provide valid dictionary for input_data
             )
             sim_steps = state.get("sim_steps", [])
             sim_steps.append(sim_step.model_dump())
@@ -255,14 +280,16 @@ class SimulationEngine:
         Decides the next step after an agent turn.
         Checks if the agent's message contains a tool call or if the simulation should end.
         """
-        last_message_content = state["messages"][-1].content
+        last_message_content = state["messages"][-1]["content"]
         sim_id = state["simulation_id"]
         current_turn = len(state["messages"]) // 2 # Number of full turns (user + agent)
 
         if "<tool_code>" in last_message_content and "</tool_code>" in last_message_content:
             logger.info(f"Simulation {sim_id}: Agent turn contains tool call. Transition to simulate_tool_usage.")
             return "tool_call"
-        elif current_turn >= state["max_turns"] or SimulationStatus.FAILED.value == state.get("status"): # Check for max turns or failure
+        # Safely get max_turns, defaulting to 20 if not found in state
+        max_turns_threshold = state.get("max_turns", 20) 
+        if current_turn >= max_turns_threshold or SimulationStatus.FAILED.value == state.get("status"): # Check for max turns or failure
             logger.info(f"Simulation {sim_id}: Max turns reached or simulation failed. Transition to evaluate_step.")
             return "end_turn"
         else:
@@ -277,7 +304,7 @@ class SimulationEngine:
         messages = state["messages"]
         tool_results = state.get("tool_results", [])
 
-        last_message_content = messages[-1].content
+        last_message_content = messages[-1]["content"]
         tool_code_block = ""
         try:
             start_idx = last_message_content.find("<tool_code>") + len("<tool_code>")
@@ -293,9 +320,12 @@ class SimulationEngine:
             logger.info(f"Node: simulate_tool_usage for {sim_id}. Tool '{tool_name}' executed.")
 
             # Add tool output back to messages for the agent to see
-            messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}"))
+            messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}").model_dump())
             
+            current_step_number = len(state.get("sim_steps", [])) + 1
+
             sim_step = SimulationStep(
+                step_number=current_step_number,
                 description=f"Tool {tool_name} executed",
                 step_type=StepType.TOOL_USAGE,
                 input_data={"tool_call": tool_code_block},
@@ -313,9 +343,12 @@ class SimulationEngine:
             logger.error(f"Tool usage simulation failed for {sim_id}: {e}")
             error_result = {"tool_name": "parse_error", "output": str(e), "status": "failed"}
             tool_results.append(error_result)
-            messages.append(HumanMessage(content=f"Tool execution error: {e}"))
+            messages.append(HumanMessage(content=f"Tool execution error: {e}").model_dump())
             
+            current_step_number = len(state.get("sim_steps", [])) + 1
+
             sim_step = SimulationStep(
+                step_number=current_step_number,
                 description=f"Tool usage failed: {tool_code_block}",
                 step_type=StepType.TOOL_USAGE,
                 status=StepStatus.FAILED,
@@ -361,12 +394,17 @@ class SimulationEngine:
         overall_score = 0.9 if is_successful_turn else 0.2
 
         messages = state["messages"]
-        messages.append(AIMessage(content=f"Evaluation: {feedback_message} Score: {overall_score:.2f}"))
+        messages.append(AIMessage(content=f"Evaluation: {feedback_message} Score: {overall_score:.2f}").model_dump())
 
+        current_step_number = len(state.get("sim_steps", [])) + 1
         sim_step = SimulationStep(
+            step_number=current_step_number,
             description=f"Evaluated turn with score {overall_score:.2f}",
             step_type=StepType.EVALUATION,
-            input_data=state.get("messages")[-2:] if len(state.get("messages",[]))>=2 else {},
+            input_data={
+                "last_human_message": state["messages"][-2] if len(state["messages"]) >= 2 else {},
+                "last_ai_message": state["messages"][-1] if len(state["messages"]) >= 1 else {}
+            },
             output_data={"score": overall_score, "feedback": feedback_message}
         )
         sim_steps = state.get("sim_steps", [])
@@ -387,6 +425,25 @@ class SimulationEngine:
             "sim_steps": sim_steps
         }
 
+    def _decide_next_step_from_evaluation(self, state: SimulationState) -> str:
+        """
+        Decides the next step after an evaluation.
+        If the simulation is complete or failed, transition to finalize. Otherwise, continue agent turns.
+        """
+        sim_id = state["simulation_id"]
+        current_turn = len(state["messages"]) // 2 # Number of full turns (user + agent)
+        max_turns = state.get("max_turns", 20)
+
+        if state.get("status") == SimulationStatus.FAILED.value:
+            logger.info(f"Simulation {sim_id}: Evaluation indicates failure. Transition to finalize_simulation.")
+            return "end_simulation"
+        elif current_turn >= max_turns:
+            logger.info(f"Simulation {sim_id}: Max turns ({max_turns}) reached. Transition to finalize_simulation.")
+            return "end_simulation"
+        else:
+            logger.info(f"Simulation {sim_id}: Evaluation complete, continuing agent turns. Transition to execute_agent_turn.")
+            return "continue_simulation"
+
     def _finalize_simulation_node(self, state: SimulationState) -> SimulationState:
         """
         LangGraph node to finalize the simulation, gather results, and mark as completed.
@@ -400,25 +457,32 @@ class SimulationEngine:
 
         # Create a final SimulationSession object for comprehensive storage/export
         # This step maps the LangGraph state back to our original Pydantic model
-        final_session = SimulationSession(
+        final_status = SimulationStatus.COMPLETED.value if state["status"] != SimulationStatus.FAILED.value else SimulationStatus.FAILED.value
+        simulation_session = SimulationSession(
             id=sim_id,
             domain_id=state.get("domain_id", "unknown"),
-            scenario_id=state.get("scenario_id", "unknown"),
+            scenario_id=state.get("scenario", "unknown"), # Use scenario from state
             agent_ids=state["current_agents"],
             user_agent_id=None, # UserAgentManager would handle this
-            status=SimulationStatus.COMPLETED if state["status"] != SimulationStatus.FAILED.value else SimulationStatus.FAILED,
-            steps=[SimulationStep(**s) for s in state.get("sim_steps", [])], # Convert back to Pydantic models
-            environment_states=[], # Not directly stored in graph state currently, would need to be passed
-            start_time=datetime.utcnow(), # Placeholder, ideally captured at start
+            status=SimulationStatus(final_status),
+            steps=state["sim_steps"],
+            environment_states=[], # Collect from sim_steps if needed
+            start_time=None, # Need to track start time in state
             end_time=datetime.utcnow(),
-            quality_score=state["final_outcome"].get("score") if state["final_outcome"] else 0.0,
-            metadata={"user_query": state["user_query"], "error_message": state.get("error_message")}
+            duration=state["timeout"] - state.get("time_remaining", state["timeout"]), # Placeholder for duration
+            total_steps=len(state["sim_steps"]),
+            completed_steps=sum(1 for step in state["sim_steps"] if step.get("status") == StepStatus.COMPLETED.value),
+            failed_steps=sum(1 for step in state["sim_steps"] if step.get("status") == StepStatus.FAILED.value),
+            quality_score=state.get("final_outcome", {}).get("score"),
+            metadata={},
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
         )
         
         # DataGenerator integration would go here
-        # self.data_generator.generate_data(final_session, ...)
+        # self.data_generator.generate_data(simulation_session, ...)
 
-        state["status"] = final_session.status.value
+        state["status"] = simulation_session.status.value
         logger.info(f"Simulation {sim_id} finalized.")
         return state
 
@@ -433,7 +497,7 @@ class SimulationEngine:
         metadata = {
             "simulation_id": simulation_result["simulation_id"],
             "domain_id": simulation_result.get("domain_id", "unknown"),
-            "scenario_id": simulation_result.get("scenario_id", "unknown"),
+            "scenario_id": simulation_result.get("scenario", "unknown"), # Use scenario from state
             "agent_ids": simulation_result["current_agents"],
             "quality_score": simulation_result["final_outcome"].get("score") if simulation_result["final_outcome"] else 0.0,
             "data_format": "json",
@@ -444,7 +508,7 @@ class SimulationEngine:
 
         conversation_history = []
         for msg in simulation_result["messages"]:
-            conversation_history.append({"role": msg.type, "content": msg.content})
+            conversation_history.append({"role": msg["type"], "content": msg["content"]})
         
         tool_usage_log = simulation_result.get("tool_results", [])
 
