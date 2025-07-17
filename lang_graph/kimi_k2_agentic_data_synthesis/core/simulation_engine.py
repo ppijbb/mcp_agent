@@ -134,11 +134,14 @@ class SimulationEngine:
             "sim_steps": [] # List to store SimulationStep objects generated during the run
         }
 
-        config = {"configurable": {"thread_id": simulation_id}}
+        config = {
+            "configurable": {"thread_id": simulation_id},
+            "recursion_limit": max_turns
+        }
 
         try:
             # Invoke the LangGraph application
-            final_state = await self.app.ainvoke(initial_state, config=config, recursion_limit=max_turns)
+            final_state = await self.app.ainvoke(initial_state, config=config)
             logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get("status")}")
             return final_state
         except Exception as e:
@@ -232,6 +235,12 @@ class SimulationEngine:
                 logger.info(f"Agent {acting_agent.name} simulated tool call: {tool_name}")
 
             messages.append(AIMessage(content=ai_response).model_dump())
+            
+            # Log the turn result
+            logger.info(f"=== TURN {len(messages) // 2} RESULT ===")
+            logger.info(f"Agent: {acting_agent.name}")
+            logger.info(f"Response: {ai_response}")
+            logger.info(f"================================")
 
             # Calculate current step number. Each full turn (user+agent) counts as 2 messages.
             # The current step number should correspond to the message being processed.
@@ -321,6 +330,13 @@ class SimulationEngine:
 
             # Add tool output back to messages for the agent to see
             messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}").model_dump())
+            
+            # Log the tool usage result
+            logger.info(f"=== TOOL USAGE RESULT ===")
+            logger.info(f"Tool: {tool_name}")
+            logger.info(f"Input: {tool_code_block}")
+            logger.info(f"Output: {simulated_output}")
+            logger.info(f"==========================")
             
             current_step_number = len(state.get("sim_steps", [])) + 1
 

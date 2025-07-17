@@ -285,14 +285,16 @@ class AgenticDataSynthesisSystem:
             "sim_steps": [] # List to store SimulationStep objects generated during the run
         }
 
-        config_langgraph = {"configurable": {"thread_id": simulation_id}}
+        config_langgraph = {
+            "configurable": {"thread_id": simulation_id},
+            "recursion_limit": config.max_turns
+        }
 
         try:
             print(f"DEBUG: In run_single_simulation, config.max_turns is {config.max_turns} (type: {type(config.max_turns)})")
             self.logger.debug(f"Invoking LangGraph app with initial_state: {initial_state.keys()}")
-            self.logger.debug(f"Passing recursion_limit: {config.max_turns}")
             # Invoke the LangGraph application
-            final_state = await self.simulation_engine.app.ainvoke(initial_state, config=config_langgraph, recursion_limit=config.max_turns)
+            final_state = await self.simulation_engine.app.ainvoke(initial_state, config=config_langgraph)
             self.logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get("status")}")
             return final_state
         except Exception as e:

@@ -14,7 +14,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from kimi_k2_agentic_data_synthesis.system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
-from kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainType
+from kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainCategory
 from kimi_k2_agentic_data_synthesis.models.tool import ToolConfig, ToolType
 from kimi_k2_agentic_data_synthesis.models.agent import AgentConfig, AgentType, BehaviorPattern
 from kimi_k2_agentic_data_synthesis.models.simulation import SimulationConfig, EnvironmentConfig
@@ -57,7 +57,7 @@ def test_domain_setup():
         domain_id="test_domain",
         name="Test Domain",
         description="A test domain for testing",
-        domain_type=DomainType.TECHNICAL,
+        domain_type=DomainCategory.TECHNOLOGY,
         scenarios=["Test scenario 1", "Test scenario 2"],
         complexity_levels=["easy", "medium"],
         required_tools=["test_tool"]
