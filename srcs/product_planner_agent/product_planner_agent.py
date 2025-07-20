@@ -5,7 +5,7 @@ Product Planner Agent
 import asyncio
 import re
 from urllib.parse import unquote
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from datetime import datetime
 import json
 
@@ -33,7 +33,7 @@ class ProductPlannerAgent(BaseAgent):
         self.figma_analyzer = FigmaAnalyzerAgent()
         self.prd_writer = PRDWriterAgent()
         self.reporting_coordinator = ReportingCoordinator()
-        self.figma_creator = FigmaCreatorAgent()  # FigmaCreatorAgent 추가
+        self.figma_creator_agent = FigmaCreatorAgent()  # FigmaCreatorAgent 추가
         logger.info("ProductPlannerAgent and its sub-components initialized.")
         
         # Add state management for conversational mode
@@ -101,56 +101,309 @@ class ProductPlannerAgent(BaseAgent):
             raise
 
     # --- PRD에서 다양한 컴포넌트 정보를 추출하는 고도화 함수 ---
-    def _extract_figma_components_from_prd(self, prd_draft: dict) -> list:
-        """
-        PRD에서 버튼, 입력창, 텍스트 등 다양한 컴포넌트 요구사항을 추출해 FigmaCreatorAgent 입력 포맷으로 변환
-        실제로는 LLM 결과 파싱 또는 규칙 기반 추출이 필요함 (여기서는 키워드 기반 예시)
-        """
+    def _extract_figma_components_from_prd(self, prd_content: str) -> List[Dict[str, Any]]:
+        """PRD 내용에서 Figma 컴포넌트 정보 추출 (고도화)"""
         components = []
-        y_offset = 200
-        spacing = 60
+        
+        # LLM을 사용한 구조화된 컴포넌트 추출
         try:
-            requirements = prd_draft.get('Product Requirements', {}).get('Functional Requirements', [])
-            for req in requirements:
-                req_lower = req.lower()
-                if 'button' in req_lower:
+            # 더 정교한 패턴 매칭과 LLM 기반 추출
+            import re
+            import json
+            
+            # 1. 기본 UI 컴포넌트 패턴 매칭
+            button_patterns = [
+                r'버튼[:\s]*([^\n]+)',
+                r'button[:\s]*([^\n]+)',
+                r'클릭[:\s]*([^\n]+)',
+                r'submit[:\s]*([^\n]+)',
+                r'확인[:\s]*([^\n]+)',
+                r'취소[:\s]*([^\n]+)',
+                r'로그인[:\s]*([^\n]+)',
+                r'회원가입[:\s]*([^\n]+)',
+                r'검색[:\s]*([^\n]+)',
+                r'저장[:\s]*([^\n]+)',
+                r'삭제[:\s]*([^\n]+)',
+                r'편집[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in button_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    button_text = match.strip()
                     components.append({
-                        "type": "rectangle",
-                        "name": "Button",
-                        "x": 100,
-                        "y": y_offset,
-                        "width": 200,
-                        "height": 48,
-                        "color": {"r": 0.1, "g": 0.4, "b": 0.85},
-                        "text": "Button"
-                    })
-                    y_offset += spacing
-                elif 'input' in req_lower or 'field' in req_lower:
-                    components.append({
-                        "type": "rectangle",
-                        "name": "InputField",
-                        "x": 100,
-                        "y": y_offset,
-                        "width": 300,
+                        "type": "button",
+                        "content": button_text,
+                        "x": len(components) * 150,  # 동적 위치 계산
+                        "y": 50,
+                        "width": max(120, len(button_text) * 10),
                         "height": 40,
-                        "color": {"r": 0.95, "g": 0.95, "b": 0.95},
-                        "text": ""
+                        "style": {
+                            "bg_color": "#007AFF",
+                            "text_color": "#FFFFFF",
+                            "corner_radius": 8
+                        },
+                        "properties": {
+                            "interactive": True,
+                            "action": button_text.lower()
+                        }
                     })
-                    y_offset += spacing
-                elif 'text' in req_lower or 'label' in req_lower:
+            
+            # 2. 입력 필드 패턴
+            input_patterns = [
+                r'입력[:\s]*([^\n]+)',
+                r'input[:\s]*([^\n]+)',
+                r'텍스트[:\s]*([^\n]+)',
+                r'검색[:\s]*([^\n]+)',
+                r'이름[:\s]*([^\n]+)',
+                r'이메일[:\s]*([^\n]+)',
+                r'비밀번호[:\s]*([^\n]+)',
+                r'전화번호[:\s]*([^\n]+)',
+                r'주소[:\s]*([^\n]+)',
+                r'설명[:\s]*([^\n]+)',
+                r'코멘트[:\s]*([^\n]+)',
+                r'메시지[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in input_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    placeholder = match.strip()
+                    components.append({
+                        "type": "input",
+                        "content": placeholder,
+                        "x": len(components) * 220,  # 동적 위치 계산
+                        "y": 120,
+                        "width": 200,
+                        "height": 40,
+                        "style": {
+                            "border_color": "#CCCCCC",
+                            "bg_color": "#FFFFFF",
+                            "placeholder_color": "#999999"
+                        },
+                        "properties": {
+                            "placeholder": placeholder,
+                            "required": "필수" in placeholder or "required" in placeholder.lower()
+                        }
+                    })
+            
+            # 3. 텍스트/라벨 패턴
+            text_patterns = [
+                r'제목[:\s]*([^\n]+)',
+                r'title[:\s]*([^\n]+)',
+                r'설명[:\s]*([^\n]+)',
+                r'description[:\s]*([^\n]+)',
+                r'라벨[:\s]*([^\n]+)',
+                r'label[:\s]*([^\n]+)',
+                r'헤더[:\s]*([^\n]+)',
+                r'header[:\s]*([^\n]+)',
+                r'부제목[:\s]*([^\n]+)',
+                r'subtitle[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in text_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    text_content = match.strip()
                     components.append({
                         "type": "text",
-                        "name": "Label",
-                        "x": 100,
-                        "y": y_offset,
-                        "font_size": 18,
-                        "color": {"r": 0.2, "g": 0.2, "b": 0.2},
-                        "text": req
+                        "content": text_content,
+                        "x": len(components) * 250,  # 동적 위치 계산
+                        "y": 200,
+                        "width": len(text_content) * 12,
+                        "height": 20,
+                        "style": {
+                            "font_size": 16,
+                            "color": "#000000",
+                            "font_family": "Inter",
+                            "font_weight": 400
+                        },
+                        "properties": {
+                            "text_type": "label" if "라벨" in pattern or "label" in pattern else "title"
+                        }
                     })
-                    y_offset += spacing
-        except Exception:
-            pass
-        return components
+            
+            # 4. 카드/컨테이너 패턴
+            card_patterns = [
+                r'카드[:\s]*([^\n]+)',
+                r'card[:\s]*([^\n]+)',
+                r'아이템[:\s]*([^\n]+)',
+                r'item[:\s]*([^\n]+)',
+                r'컨테이너[:\s]*([^\n]+)',
+                r'container[:\s]*([^\n]+)',
+                r'섹션[:\s]*([^\n]+)',
+                r'section[:\s]*([^\n]+)',
+                r'패널[:\s]*([^\n]+)',
+                r'panel[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in card_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    card_content = match.strip()
+                    components.append({
+                        "type": "card",
+                        "content": card_content,
+                        "x": len(components) * 320,  # 동적 위치 계산
+                        "y": 250,
+                        "width": 300,
+                        "height": 200,
+                        "style": {
+                            "bg_color": "#FFFFFF",
+                            "shadow": True,
+                            "corner_radius": 8,
+                            "border_color": "#E1E5E9"
+                        },
+                        "properties": {
+                            "card_type": "content",
+                            "interactive": True
+                        }
+                    })
+            
+            # 5. 이미지/아이콘 패턴
+            image_patterns = [
+                r'이미지[:\s]*([^\n]+)',
+                r'image[:\s]*([^\n]+)',
+                r'사진[:\s]*([^\n]+)',
+                r'photo[:\s]*([^\n]+)',
+                r'아이콘[:\s]*([^\n]+)',
+                r'icon[:\s]*([^\n]+)',
+                r'로고[:\s]*([^\n]+)',
+                r'logo[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in image_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    image_content = match.strip()
+                    components.append({
+                        "type": "rectangle",  # 이미지는 사각형으로 표현
+                        "content": image_content,
+                        "x": len(components) * 350,  # 동적 위치 계산
+                        "y": 480,
+                        "width": 100,
+                        "height": 100,
+                        "style": {
+                            "fill_color": "#F0F0F0",
+                            "corner_radius": 8,
+                            "border_color": "#CCCCCC"
+                        },
+                        "properties": {
+                            "image_type": "placeholder",
+                            "alt_text": image_content
+                        }
+                    })
+            
+            # 6. 네비게이션 패턴
+            nav_patterns = [
+                r'메뉴[:\s]*([^\n]+)',
+                r'menu[:\s]*([^\n]+)',
+                r'탭[:\s]*([^\n]+)',
+                r'tab[:\s]*([^\n]+)',
+                r'네비게이션[:\s]*([^\n]+)',
+                r'navigation[:\s]*([^\n]+)',
+                r'사이드바[:\s]*([^\n]+)',
+                r'sidebar[:\s]*([^\n]+)'
+            ]
+            
+            for pattern in nav_patterns:
+                matches = re.findall(pattern, prd_content, re.IGNORECASE)
+                for match in matches:
+                    nav_content = match.strip()
+                    components.append({
+                        "type": "button",
+                        "content": nav_content,
+                        "x": len(components) * 120,  # 동적 위치 계산
+                        "y": 600,
+                        "width": 100,
+                        "height": 35,
+                        "style": {
+                            "bg_color": "#6C757D",
+                            "text_color": "#FFFFFF",
+                            "corner_radius": 6
+                        },
+                        "properties": {
+                            "nav_type": "menu",
+                            "interactive": True
+                        }
+                    })
+            
+            # 7. 기본 컨테이너 (컴포넌트가 없을 경우)
+            if not components:
+                components.append({
+                    "type": "rectangle",
+                    "content": "기본 컨테이너",
+                    "x": 50,
+                    "y": 50,
+                    "width": 400,
+                    "height": 300,
+                    "style": {
+                        "fill_color": "#F5F5F5",
+                        "corner_radius": 8,
+                        "border_color": "#E1E5E9"
+                    },
+                    "properties": {
+                        "container_type": "main",
+                        "layout": "flex"
+                    }
+                })
+            
+            # 8. 레이아웃 최적화 - 겹치지 않도록 위치 조정
+            self._optimize_component_layout(components)
+            
+            self.logger.info(f"PRD에서 {len(components)}개 컴포넌트 추출 완료")
+            return components
+            
+        except Exception as e:
+            self.logger.error(f"컴포넌트 추출 중 오류: {str(e)}")
+            # 오류 시 기본 컴포넌트 반환
+            return [{
+                "type": "rectangle",
+                "content": "기본 컨테이너",
+                "x": 50,
+                "y": 50,
+                "width": 400,
+                "height": 300,
+                "style": {"fill_color": "#F5F5F5"},
+                "properties": {"fallback": True}
+            }]
+    
+    def _optimize_component_layout(self, components: List[Dict[str, Any]]) -> None:
+        """컴포넌트 레이아웃 최적화 - 겹치지 않도록 위치 조정"""
+        if not components:
+            return
+        
+        # 컴포넌트 타입별로 그룹화
+        buttons = [c for c in components if c["type"] == "button"]
+        inputs = [c for c in components if c["type"] == "input"]
+        texts = [c for c in components if c["type"] == "text"]
+        cards = [c for c in components if c["type"] == "card"]
+        rectangles = [c for c in components if c["type"] == "rectangle"]
+        
+        # 버튼들을 상단에 배치
+        for i, button in enumerate(buttons):
+            button["x"] = 50 + (i * 150)
+            button["y"] = 50
+        
+        # 입력 필드들을 버튼 아래에 배치
+        for i, input_field in enumerate(inputs):
+            input_field["x"] = 50 + (i * 220)
+            input_field["y"] = 120
+        
+        # 텍스트들을 입력 필드 아래에 배치
+        for i, text in enumerate(texts):
+            text["x"] = 50 + (i * 250)
+            text["y"] = 200
+        
+        # 카드들을 텍스트 아래에 배치
+        for i, card in enumerate(cards):
+            card["x"] = 50 + (i * 320)
+            card["y"] = 250
+        
+        # 사각형들을 카드 아래에 배치
+        for i, rect in enumerate(rectangles):
+            rect["x"] = 50 + (i * 350)
+            rect["y"] = 480
 
     async def process_message(self, user_message: str) -> Dict[str, Any]:
         """Process a user message and advance the planning state."""
@@ -202,20 +455,38 @@ class ProductPlannerAgent(BaseAgent):
                 logger.info("PRD drafting completed.")
                 response["message"] += "\nPRD draft complete. Generating Figma components..."
                 # === Figma 컴포넌트 생성 단계 고도화 ===
-                components = self._extract_figma_components_from_prd(prd_result)
-                rectangles = [c for c in components if c["type"] == "rectangle"]
-                # (추후 text 등도 지원하려면 FigmaCreatorAgent 및 integration 확장 필요)
-                if rectangles and self.state["data"].get("figma_file_id"):
-                    figma_context = {
-                        "figma_file_key": self.state["data"]["figma_file_id"],
-                        "figma_parent_node_id": self.state["data"].get("figma_node_id") or "0:1",  # 기본값
-                        "rectangles": rectangles,
-                    }
-                    figma_creation_result = await self.figma_creator.run_workflow(figma_context)
-                    self.state["data"]["figma_creation_result"] = figma_creation_result
-                    response["message"] += "\nFigma components created. Generating final report..."
-                else:
-                    response["message"] += "\nNo Figma components to create or missing Figma file info. Generating final report..."
+                prd_content = str(prd_result)
+                components = self._extract_figma_components_from_prd(prd_content)
+                
+                # 고도화된 FigmaCreatorAgent 호출
+                try:
+                    figma_result = await self.figma_creator_agent.run_workflow({
+                        "prd_content": prd_content,
+                        "components": components
+                    })
+                    
+                    # 추가로 특정 레이아웃 타입에 따른 생성도 시도
+                    if "모바일" in prd_content or "앱" in prd_content:
+                        mobile_result = await self.figma_creator_agent.create_mobile_app_layout(
+                            app_name="제품 앱",
+                            features=["로그인", "회원가입", "메인 기능", "설정", "프로필"]
+                        )
+                        figma_result["mobile_layout"] = mobile_result
+                    
+                    elif "대시보드" in prd_content or "관리" in prd_content:
+                        dashboard_result = await self.figma_creator_agent.create_web_dashboard_layout(
+                            dashboard_title="관리 대시보드",
+                            widgets=["사용자 통계", "매출 현황", "시스템 상태", "최근 활동", "알림", "설정"]
+                        )
+                        figma_result["dashboard_layout"] = dashboard_result
+                    
+                    self.state["data"]["figma_creation_result"] = figma_result
+                    response["message"] += f"\n🎨 Figma 컴포넌트 생성 완료! {figma_result.get('components_created', 0)}개 컴포넌트가 생성되었습니다. 레이아웃 최적화도 적용되었습니다."
+                    
+                except Exception as e:
+                    self.logger.error(f"Figma 생성 단계 오류: {str(e)}")
+                    response["message"] += f"\n⚠️ Figma 컴포넌트 생성 중 오류가 발생했습니다: {str(e)}"
+                    # 오류가 있어도 계속 진행
                 self.state["step"] = "report_generation"
             
             if self.state["step"] == "report_generation":

@@ -3,95 +3,372 @@ Figma Creator Agent
 PRD 요구사항을 바탕으로 Figma에서 직접 디자인을 생성하는 Agent
 """
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
 
-from srcs.core.agent.base import BaseAgent
-from srcs.core.errors import WorkflowError
-from srcs.product_planner_agent.integrations.figma_integration import create_rectangles_on_canvas, RectangleParams
+from srcs.product_planner_agent.integrations.figma_integration import FigmaIntegration, FigmaComponent
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
+from srcs.core.agents.base_agent import BaseAgent
 
+logger = get_product_planner_logger("agents.figma_creator")
 
-logger = get_product_planner_logger("agent.figma_creator")
-
+@dataclass
+class UIComponentSpec:
+    """UI 컴포넌트 명세"""
+    type: str
+    content: Optional[str] = None
+    width: float = 100
+    height: float = 100
+    style: Optional[Dict[str, Any]] = None
+    properties: Optional[Dict[str, Any]] = None
 
 class FigmaCreatorAgent(BaseAgent):
-    """Figma 디자인 생성 전문 Agent"""
-
-    def __init__(self, **kwargs):
-        super().__init__("figma_creator_agent", **kwargs)
-        logger.info("FigmaCreatorAgent initialized.")
-
-    async def run_workflow(self, context: Any) -> Dict[str, Any]:
+    """Figma 컴포넌트 생성 에이전트"""
+    
+    def __init__(self):
+        super().__init__()
+        self.figma_integration = FigmaIntegration()
+        self.logger = logger
+    
+    async def run_workflow(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        컨텍스트에서 받은 요구사항에 따라 Figma에 사각형을 생성합니다.
+        Figma 컴포넌트 생성 워크플로우 실행
         
-        필수 컨텍스트:
-        - figma_file_key: Figma 파일 키
-        - figma_parent_node_id: 디자인을 추가할 부모 노드 ID
-        - rectangles: 생성할 사각형 정보 리스트 (List[RectangleParams])
+        Args:
+            input_data: 입력 데이터 (PRD 내용, 컴포넌트 명세 등)
+            
+        Returns:
+            생성된 컴포넌트 정보
         """
-        file_key = context.get("figma_file_key")
-        parent_node_id = context.get("figma_parent_node_id")
-        rectangles_to_create: List[RectangleParams] = context.get("rectangles")
-
-        if not all([file_key, parent_node_id, rectangles_to_create]):
-            raise WorkflowError("Figma file_key, parent_node_id, rectangles 데이터는 필수입니다.")
-
-        logger.info(f"🎨 Figma 생성 작업을 시작합니다. 대상 파일: {file_key}")
-
         try:
-            # 동기 함수인 create_rectangles_on_canvas를 비동기적으로 실행합니다.
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,  # 기본 스레드 풀 사용
-                create_rectangles_on_canvas,
-                file_key,
-                parent_node_id,
-                rectangles_to_create
+            self.logger.info("Figma 컴포넌트 생성 워크플로우 시작")
+            
+            # PRD에서 UI 컴포넌트 추출
+            prd_content = input_data.get("prd_content", "")
+            components = await self._extract_components_from_prd(prd_content)
+            
+            # 컴포넌트 레이아웃 생성
+            layout_result = await self._create_component_layout(components)
+            
+            # 결과 반환
+            result = {
+                "status": "success",
+                "components_created": len(components),
+                "layout": layout_result,
+                "components": components
+            }
+            
+            self.logger.info(f"Figma 컴포넌트 생성 완료: {len(components)}개 컴포넌트")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Figma 컴포넌트 생성 실패: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "components_created": 0
+            }
+    
+    async def _extract_components_from_prd(self, prd_content: str) -> List[UIComponentSpec]:
+        """PRD 내용에서 UI 컴포넌트 추출"""
+        components = []
+        
+        # 기본 UI 컴포넌트 패턴 매칭
+        import re
+        
+        # 버튼 패턴
+        button_patterns = [
+            r'버튼[:\s]*([^\n]+)',
+            r'button[:\s]*([^\n]+)',
+            r'클릭[:\s]*([^\n]+)',
+            r'submit[:\s]*([^\n]+)',
+            r'확인[:\s]*([^\n]+)',
+            r'취소[:\s]*([^\n]+)'
+        ]
+        
+        for pattern in button_patterns:
+            matches = re.findall(pattern, prd_content, re.IGNORECASE)
+            for match in matches:
+                components.append(UIComponentSpec(
+                    type="button",
+                    content=match.strip(),
+                    width=120,
+                    height=40,
+                    style={
+                        "bg_color": "#007AFF",
+                        "text_color": "#FFFFFF",
+                        "corner_radius": 8
+                    }
+                ))
+        
+        # 입력 필드 패턴
+        input_patterns = [
+            r'입력[:\s]*([^\n]+)',
+            r'input[:\s]*([^\n]+)',
+            r'텍스트[:\s]*([^\n]+)',
+            r'검색[:\s]*([^\n]+)',
+            r'이름[:\s]*([^\n]+)',
+            r'이메일[:\s]*([^\n]+)',
+            r'비밀번호[:\s]*([^\n]+)'
+        ]
+        
+        for pattern in input_patterns:
+            matches = re.findall(pattern, prd_content, re.IGNORECASE)
+            for match in matches:
+                components.append(UIComponentSpec(
+                    type="input",
+                    content=match.strip(),
+                    width=200,
+                    height=40,
+                    style={
+                        "border_color": "#CCCCCC",
+                        "bg_color": "#FFFFFF"
+                    }
+                ))
+        
+        # 텍스트 패턴
+        text_patterns = [
+            r'제목[:\s]*([^\n]+)',
+            r'title[:\s]*([^\n]+)',
+            r'설명[:\s]*([^\n]+)',
+            r'description[:\s]*([^\n]+)',
+            r'라벨[:\s]*([^\n]+)',
+            r'label[:\s]*([^\n]+)'
+        ]
+        
+        for pattern in text_patterns:
+            matches = re.findall(pattern, prd_content, re.IGNORECASE)
+            for match in matches:
+                components.append(UIComponentSpec(
+                    type="text",
+                    content=match.strip(),
+                    width=len(match.strip()) * 12,
+                    height=20,
+                    style={
+                        "font_size": 16,
+                        "color": "#000000",
+                        "font_family": "Inter"
+                    }
+                ))
+        
+        # 카드 패턴
+        card_patterns = [
+            r'카드[:\s]*([^\n]+)',
+            r'card[:\s]*([^\n]+)',
+            r'아이템[:\s]*([^\n]+)',
+            r'item[:\s]*([^\n]+)'
+        ]
+        
+        for pattern in card_patterns:
+            matches = re.findall(pattern, prd_content, re.IGNORECASE)
+            for match in matches:
+                components.append(UIComponentSpec(
+                    type="card",
+                    content=match.strip(),
+                    width=300,
+                    height=200,
+                    style={
+                        "bg_color": "#FFFFFF",
+                        "shadow": True
+                    }
+                ))
+        
+        # 기본 사각형 (컴포넌트가 없을 경우)
+        if not components:
+            components.append(UIComponentSpec(
+                type="rectangle",
+                content="기본 컨테이너",
+                width=400,
+                height=300,
+                style={
+                    "fill_color": "#F5F5F5",
+                    "corner_radius": 8
+                }
+            ))
+        
+        self.logger.info(f"PRD에서 {len(components)}개 컴포넌트 추출")
+        return components
+    
+    async def _create_component_layout(self, components: List[UIComponentSpec]) -> Dict[str, Any]:
+        """컴포넌트들을 레이아웃으로 배치하여 생성"""
+        try:
+            # UIComponentSpec을 FigmaComponent로 변환
+            figma_components = []
+            
+            for i, comp in enumerate(components):
+                figma_comp = FigmaComponent(
+                    type=comp.type,
+                    x=0,  # 레이아웃에서 자동 계산
+                    y=0,
+                    width=comp.width,
+                    height=comp.height,
+                    content=comp.content,
+                    style=comp.style,
+                    properties=comp.properties
+                )
+                figma_components.append(figma_comp)
+            
+            # 레이아웃 생성
+            layout_result = await self.figma_integration.create_layout(
+                components=figma_components,
+                start_x=50,
+                start_y=50,
+                spacing=20
             )
             
-            logger.info("✅ Figma 생성 작업이 성공적으로 완료되었습니다.")
+            return layout_result
             
-            final_result = {
-                "status": "success",
-                "created_nodes": result.get("nodes", {})
-            }
-            context.set("figma_creation_result", final_result)
-            return final_result
         except Exception as e:
-            logger.error(f"Figma 생성 워크플로우 실패: {e}", exc_info=True)
-            raise WorkflowError(f"Figma 생성 실패: {e}") from e
-
-    # --- 기존 정적 메소드 (AgentFactory 등에서 사용될 수 있으므로 유지) ---
+            self.logger.error(f"컴포넌트 레이아웃 생성 실패: {str(e)}")
+            raise
     
-    @staticmethod
-    def get_description() -> str:
-        """Agent 설명 반환"""
-        return "🖌️ PRD 요구사항을 바탕으로 Figma에서 직접 디자인을 생성하는 Agent"
+    async def create_specific_components(self, component_specs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """특정 컴포넌트 명세에 따라 컴포넌트 생성"""
+        try:
+            components = []
+            
+            for spec in component_specs:
+                component = UIComponentSpec(
+                    type=spec.get("type", "rectangle"),
+                    content=spec.get("content"),
+                    width=spec.get("width", 100),
+                    height=spec.get("height", 100),
+                    style=spec.get("style", {}),
+                    properties=spec.get("properties", {})
+                )
+                components.append(component)
+            
+            layout_result = await self._create_component_layout(components)
+            
+            return {
+                "status": "success",
+                "components_created": len(components),
+                "layout": layout_result
+            }
+            
+        except Exception as e:
+            self.logger.error(f"특정 컴포넌트 생성 실패: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
     
-    @staticmethod
-    def get_capabilities() -> list[str]:
-        """Agent 주요 기능 목록 반환"""
-        return [
-            "Figma 사각형, 텍스트 등 기본 요소 생성",
-            "Figma REST API를 통한 디자인 자동화",
-            "요구사항 기반 목업 생성"
-        ]
+    async def create_mobile_app_layout(self, app_name: str, features: List[str]) -> Dict[str, Any]:
+        """모바일 앱 레이아웃 생성"""
+        try:
+            components = []
+            
+            # 앱 제목
+            components.append(UIComponentSpec(
+                type="text",
+                content=app_name,
+                width=300,
+                height=40,
+                style={
+                    "font_size": 24,
+                    "color": "#000000",
+                    "font_family": "Inter"
+                }
+            ))
+            
+            # 기능 버튼들
+            for i, feature in enumerate(features[:5]):  # 최대 5개 기능
+                components.append(UIComponentSpec(
+                    type="button",
+                    content=feature,
+                    width=200,
+                    height=50,
+                    style={
+                        "bg_color": "#007AFF",
+                        "text_color": "#FFFFFF",
+                        "corner_radius": 25
+                    }
+                ))
+            
+            # 검색 입력
+            components.append(UIComponentSpec(
+                type="input",
+                content="검색어를 입력하세요",
+                width=250,
+                height=40,
+                style={
+                    "border_color": "#CCCCCC",
+                    "bg_color": "#FFFFFF"
+                }
+            ))
+            
+            layout_result = await self._create_component_layout(components)
+            
+            return {
+                "status": "success",
+                "app_name": app_name,
+                "components_created": len(components),
+                "layout": layout_result
+            }
+            
+        except Exception as e:
+            self.logger.error(f"모바일 앱 레이아웃 생성 실패: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
     
-    @staticmethod
-    def get_creation_tools() -> dict[str, list[str]]:
-        """생성 도구 목록 반환 (이제는 내부 함수 호출로 대체됨)"""
-        return {
-            "node_creation": [
-                "create_rectangles_on_canvas",
-            ],
-        }
-    
-    @staticmethod
-    def get_design_process() -> list[str]:
-        """디자인 프로세스 단계 반환"""
-        return [
-            "컨텍스트에서 디자인 요구사항 수신",
-            "figma_integration을 통해 API 호출",
-            "생성 결과 반환"
-        ] 
+    async def create_web_dashboard_layout(self, dashboard_title: str, widgets: List[str]) -> Dict[str, Any]:
+        """웹 대시보드 레이아웃 생성"""
+        try:
+            components = []
+            
+            # 대시보드 제목
+            components.append(UIComponentSpec(
+                type="text",
+                content=dashboard_title,
+                width=400,
+                height=50,
+                style={
+                    "font_size": 28,
+                    "color": "#000000",
+                    "font_family": "Inter"
+                }
+            ))
+            
+            # 위젯 카드들
+            for i, widget in enumerate(widgets[:6]):  # 최대 6개 위젯
+                components.append(UIComponentSpec(
+                    type="card",
+                    content=widget,
+                    width=250,
+                    height=150,
+                    style={
+                        "bg_color": "#FFFFFF",
+                        "shadow": True
+                    }
+                ))
+            
+            # 네비게이션 버튼
+            components.append(UIComponentSpec(
+                type="button",
+                content="새로고침",
+                width=100,
+                height=35,
+                style={
+                    "bg_color": "#28A745",
+                    "text_color": "#FFFFFF",
+                    "corner_radius": 6
+                }
+            ))
+            
+            layout_result = await self._create_component_layout(components)
+            
+            return {
+                "status": "success",
+                "dashboard_title": dashboard_title,
+                "components_created": len(components),
+                "layout": layout_result
+            }
+            
+        except Exception as e:
+            self.logger.error(f"웹 대시보드 레이아웃 생성 실패: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            } 
