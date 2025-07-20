@@ -7,6 +7,10 @@ from datetime import datetime
 import os
 import time
 
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from srcs.common.page_utils import create_agent_page
 # from srcs.common.ui_utils import run_agent_process  # streamlit_process_manager 의존성 제거
 from configs.settings import get_reports_path
@@ -126,28 +130,7 @@ async def run_full_workflow(user_input, progress_bar, status_text, step_containe
         st.error(f"워크플로우 실행 중 오류가 발생했습니다: {str(e)}")
         return {"state": "error", "message": f"오류: {str(e)}"}
 
-def create_settings_sidebar():
-    """설정 사이드바"""
-    st.sidebar.markdown("## ⚙️ 설정")
-    
-    # 자동 실행 옵션
-    auto_run = st.sidebar.checkbox("자동 실행", value=True, help="입력 후 자동으로 전체 워크플로우 실행")
-    
-    # 진행률 표시 옵션
-    show_progress = st.sidebar.checkbox("진행률 표시", value=True, help="단계별 진행률 표시")
-    
-    # 상세 로그 옵션
-    show_detailed_logs = st.sidebar.checkbox("상세 로그", value=True, help="단계별 상세 로그 표시")
-    
-    # 재시도 설정
-    max_retries = st.sidebar.slider("최대 재시도 횟수", 1, 5, 3, help="오류 발생 시 재시도 횟수")
-    
-    return {
-        "auto_run": auto_run,
-        "show_progress": show_progress,
-        "show_detailed_logs": show_detailed_logs,
-        "max_retries": max_retries
-    }
+
 
 def create_quick_actions():
     """빠른 액션 버튼들"""
@@ -179,8 +162,7 @@ async def main():
         module_path="srcs.product_planner_agent.run_product_planner"
     )
     
-    # 설정 사이드바
-    settings = create_settings_sidebar()
+
     
     # 세션별 agent/state 관리
     if "agent" not in st.session_state:
@@ -224,14 +206,9 @@ async def main():
                 return
                 
             # 진행률 표시 초기화
-            if settings["show_progress"]:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                step_container = st.container()
-            else:
-                progress_bar = None
-                status_text = None
-                step_container = None
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            step_container = st.container()
             
             with st.chat_message("user"):
                 st.markdown(user_input)
@@ -270,7 +247,7 @@ async def main():
                     st.info("저장된 결과가 없습니다.")
 
     # 상태 정보 표시
-    if settings["show_detailed_logs"] and "agent_state" in st.session_state:
+    if "agent_state" in st.session_state:
         with st.expander("🔍 현재 에이전트 상태"):
             st.json(st.session_state.agent_state)
 

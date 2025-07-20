@@ -519,3 +519,74 @@ class ProductPlannerAgent(BaseAgent):
     def set_state(self, state: Dict[str, Any]):
         """Set state from serialized data."""
         self.state = state
+    
+    async def run_workflow(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ProductPlannerAgent의 전체 워크플로우를 실행합니다.
+        BaseAgentSimple의 추상 메서드 구현
+        """
+        logger.info("🚀 ProductPlannerAgent 전체 워크플로우 시작")
+        
+        try:
+            # 입력 데이터에서 정보 추출
+            product_concept = input_data.get("product_concept", "제품")
+            user_persona = input_data.get("user_persona", "사용자")
+            figma_url = input_data.get("figma_url")
+            
+            # 상태 초기화
+            self.state["data"]["product_concept"] = product_concept
+            self.state["data"]["user_persona"] = user_persona
+            
+            if figma_url:
+                figma_file_id, figma_node_id = self._extract_figma_ids(figma_url)
+                self.state["data"]["figma_file_id"] = figma_file_id
+                self.state["data"]["figma_node_id"] = figma_node_id
+            
+            # 1. Figma 분석
+            if self.state["data"]["figma_file_id"]:
+                logger.info("🎨 Figma 분석 시작")
+                figma_result = await self.figma_analyzer.run_workflow(self.state["data"])
+                self.state["data"]["figma_analysis"] = figma_result
+            
+            # 2. PRD 작성
+            logger.info("📝 PRD 작성 시작")
+            prd_result = await self.prd_writer.run_workflow(self.state["data"])
+            self.state["data"]["prd_draft"] = prd_result
+            
+            # 3. Figma 컴포넌트 생성
+            logger.info("🔧 Figma 컴포넌트 생성 시작")
+            prd_content = str(prd_result)
+            components = self._extract_figma_components_from_prd(prd_content)
+            
+            figma_result = await self.figma_creator_agent.run_workflow({
+                "prd_content": prd_content,
+                "components": components
+            })
+            self.state["data"]["figma_creation_result"] = figma_result
+            
+            # 4. 최종 보고서 생성
+            logger.info("📊 최종 보고서 생성 시작")
+            final_report = await self.reporting_coordinator.generate_final_report(self.state["data"])
+            self.state["data"]["final_report"] = final_report
+            
+            # 5. 보고서 저장
+            logger.info("💾 보고서 저장 시작")
+            save_result = await self._save_final_report(final_report, product_concept)
+            final_report["save_status"] = save_result
+            
+            self.state["step"] = "complete"
+            
+            logger.info("✅ ProductPlannerAgent 워크플로우 완료")
+            return {
+                "status": "success",
+                "final_report": final_report,
+                "figma_creation_result": figma_result,
+                "prd_draft": prd_result
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ ProductPlannerAgent 워크플로우 실패: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }

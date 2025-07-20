@@ -8,11 +8,13 @@ import streamlit as st
 import asyncio
 import sys
 import os
+from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
 
-# 상위 디렉토리 경로 추가
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from lang_graph.table_game_mate.utils.mcp_client import MCPClient, MCPClientError
 
@@ -51,9 +53,7 @@ class RealLangGraphUI:
             if key not in st.session_state:
                 st.session_state[key] = default
 
-    def render_sidebar(self):
-        """사이드바는 사용하지 않음."""
-        pass
+
 
     async def handle_game_search(self, game_description: str):
         st.session_state.analysis_in_progress = True
@@ -298,5 +298,4 @@ class RealLangGraphUI:
 
 # Streamlit 앱 실행 (표준 방식)
 app = RealLangGraphUI()
-app.render_sidebar()
 app.render_main_content()

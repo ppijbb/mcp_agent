@@ -11,6 +11,10 @@ import json
 from datetime import datetime
 import os
 
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
 from configs.settings import get_reports_path
@@ -28,12 +32,9 @@ def main():
 
     # Qdrant 서버 상태 확인
     q_status = get_qdrant_status()
-    if q_status.get("status") == "connected":
-        st.sidebar.success(f"Qdrant 연결됨 ({q_status.get('collections_count')}개 컬렉션)")
-    else:
-        st.sidebar.error("Qdrant 연결 실패")
-        with st.sidebar.expander("에러 상세"):
-            st.error(q_status.get('error'))
+    if q_status.get("status") != "connected":
+        st.error("Qdrant 연결 실패")
+        st.error(q_status.get('error'))
         st.stop()
     
     # 세션 상태에 대화 기록 초기화

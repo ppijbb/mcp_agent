@@ -29,10 +29,11 @@ class FigmaIntegration:
         self.file_key = os.getenv('FIGMA_FILE_KEY')
         self.base_url = "https://api.figma.com/v1"
         
+        # 환경변수가 없어도 시뮬레이션 모드로 동작
         if not self.access_token:
-            raise ValueError("FIGMA_ACCESS_TOKEN 환경변수가 설정되지 않았습니다.")
+            print("⚠️ FIGMA_ACCESS_TOKEN 환경변수가 설정되지 않았습니다. 시뮬레이션 모드로 동작합니다.")
         if not self.file_key:
-            raise ValueError("FIGMA_FILE_KEY 환경변수가 설정되지 않았습니다.")
+            print("⚠️ FIGMA_FILE_KEY 환경변수가 설정되지 않았습니다. 시뮬레이션 모드로 동작합니다.")
     
     async def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
         """Figma API 요청 공통 메서드"""

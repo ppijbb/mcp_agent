@@ -6,6 +6,9 @@ import os
 from datetime import datetime
 import streamlit_process_manager as spm
 
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from configs.settings import get_reports_path
 from srcs.advanced_agents.decision_agent import (

@@ -5,6 +5,10 @@ import json
 from datetime import datetime
 import os
 
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
 from srcs.core.config.loader import settings
