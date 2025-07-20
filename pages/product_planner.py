@@ -8,7 +8,7 @@ import os
 import time
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+# from srcs.common.ui_utils import run_agent_process  # streamlit_process_manager 의존성 제거
 from configs.settings import get_reports_path
 
 # Product Planner Agent는 자체 환경변수 로더를 사용

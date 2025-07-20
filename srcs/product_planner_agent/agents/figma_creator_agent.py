@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from srcs.product_planner_agent.integrations.figma_integration import FigmaIntegration, FigmaComponent
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
-from srcs.core.agents.base_agent import BaseAgent
+from srcs.product_planner_agent.agents.base_agent_simple import BaseAgentSimple as BaseAgent
 
 logger = get_product_planner_logger("agents.figma_creator")
 

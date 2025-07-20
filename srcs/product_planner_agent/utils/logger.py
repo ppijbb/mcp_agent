@@ -1,5 +1,4 @@
 import logging
-from mcp_agent.logging.logger import get_logger as get_base_logger
 
 def get_product_planner_logger(sub_name: str) -> logging.Logger:
     """
@@ -26,4 +25,17 @@ def get_product_planner_logger(sub_name: str) -> logging.Logger:
             except (ValueError, IndexError):
                 pass # Fallback to using the full name if parsing fails
 
-    return get_base_logger(f"product_planner.{sub_name}") 
+    logger_name = f"product_planner.{sub_name}"
+    logger = logging.getLogger(logger_name)
+    
+    # 로거가 이미 설정되어 있지 않으면 기본 설정
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    
+    return logger 

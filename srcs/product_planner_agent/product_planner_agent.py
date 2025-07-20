@@ -9,13 +9,13 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime
 import json
 
-from srcs.core.agent.base import BaseAgent
+from srcs.product_planner_agent.agents.base_agent_simple import BaseAgentSimple as BaseAgent
 from srcs.product_planner_agent.agents.figma_analyzer_agent import FigmaAnalyzerAgent
 from srcs.product_planner_agent.agents.prd_writer_agent import PRDWriterAgent
 from srcs.product_planner_agent.agents.figma_creator_agent import FigmaCreatorAgent
 from srcs.product_planner_agent.coordinators.reporting_coordinator import ReportingCoordinator
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
-from srcs.common.utils import get_gen_client
+# from srcs.common.utils import get_gen_client  # mcp_agent 의존성 제거
 
 logger = get_product_planner_logger("main_agent")
 
@@ -51,8 +51,8 @@ class ProductPlannerAgent(BaseAgent):
         }
 
     async def _save_final_report(self, report_data: Dict[str, Any], product_concept: str) -> Dict[str, Any]:
-        """Saves the final report to Google Drive using the 'gdrive' MCP server."""
-        logger.info("💾 Saving final report to Google Drive via MCP...")
+        """Saves the final report to local file system."""
+        logger.info("💾 Saving final report to local file system...")
         
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -60,23 +60,19 @@ class ProductPlannerAgent(BaseAgent):
             safe_concept_name = re.sub(r'[\\/*?:"<>|]', "", product_concept)[:50]
             file_name = f"Final_Report_{safe_concept_name}_{timestamp}.json"
             
-            report_content = json.dumps(report_data, indent=2, ensure_ascii=False)
-
-            # Use the tool provided by BaseAgent's MCPApp instance
-            response = await self.app.tools.gdrive.upload_file(
-                file_name=file_name,
-                content=report_content,
-                mime_type="application/json"
-            )
+            # 로컬 파일로 저장
+            import os
+            reports_dir = "reports"
+            os.makedirs(reports_dir, exist_ok=True)
+            file_path = os.path.join(reports_dir, file_name)
             
-            if not response or not response.get("success"):
-                raise Exception(f"MCP upload failed. Response: {response}")
-
-            file_id = response.get("fileId")
-            logger.info(f"✅ Final report saved successfully. File ID: {file_id}")
-            return {"status": "success", "drive_file_id": file_id}
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"✅ Final report saved successfully. File path: {file_path}")
+            return {"status": "success", "file_path": file_path}
         except Exception as e:
-            logger.error(f"❌ Failed to save final report to Google Drive: {e}", exc_info=True)
+            logger.error(f"❌ Failed to save final report: {e}", exc_info=True)
             return {"status": "failed", "error": str(e)}
 
     def _extract_figma_ids(self, figma_url: str) -> tuple[str, str]:
