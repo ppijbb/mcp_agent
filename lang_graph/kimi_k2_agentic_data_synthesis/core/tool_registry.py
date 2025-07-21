@@ -5,7 +5,7 @@ Manages MCP tools, synthetic tools, and their metadata for the synthesis system.
 """
 
 from typing import List, Dict, Any, Optional, Set
-from ..models.tool import Tool, ToolType, ToolParameter, ToolExample, ParameterType
+from models.tool import Tool, ToolType, ToolParameter, ToolExample, ParameterType
 import json
 import logging
 from datetime import datetime
@@ -37,6 +37,7 @@ class ToolRegistry:
         """Initialize the system with default tools"""
         default_tools = [
             {
+                "tool_id": "web_search",
                 "name": "web_search",
                 "type": ToolType.MCP,
                 "description": "Search the web for information",
@@ -61,6 +62,7 @@ class ToolRegistry:
                 "domain_compatibility": ["general", "research", "information"]
             },
             {
+                "tool_id": "file_search",
                 "name": "file_search",
                 "type": ToolType.MCP,
                 "description": "Search for files in the system",
@@ -82,60 +84,90 @@ class ToolRegistry:
                 "domain_compatibility": ["development", "system_admin", "file_management"]
             },
             {
-                "name": "code_analysis",
+                "tool_id": "code_editor",
+                "name": "code_editor",
+                "type": ToolType.MCP,
+                "description": "Multi-language code editor with syntax highlighting",
+                "parameters": [
+                    ToolParameter(
+                        name="action",
+                        type=ParameterType.STRING,
+                        description="Action to perform (open, edit, save, close)",
+                        required=True
+                    ),
+                    ToolParameter(
+                        name="file_path",
+                        type=ParameterType.STRING,
+                        description="File path to work with",
+                        required=False
+                    ),
+                    ToolParameter(
+                        name="content",
+                        type=ParameterType.STRING,
+                        description="Content to write or edit",
+                        required=False
+                    )
+                ],
+                "return_type": "operation_result",
+                "domain_compatibility": ["development", "programming", "coding"]
+            },
+            {
+                "tool_id": "terminal",
+                "name": "terminal",
+                "type": ToolType.MCP,
+                "description": "Command line interface for system operations",
+                "parameters": [
+                    ToolParameter(
+                        name="command",
+                        type=ParameterType.STRING,
+                        description="Command to execute",
+                        required=True
+                    ),
+                    ToolParameter(
+                        name="working_dir",
+                        type=ParameterType.STRING,
+                        description="Working directory for command execution",
+                        required=False
+                    )
+                ],
+                "return_type": "command_output",
+                "domain_compatibility": ["development", "system_admin", "automation"]
+            },
+            {
+                "tool_id": "python",
+                "name": "python",
                 "type": ToolType.SYNTHETIC,
-                "description": "Analyze code for issues and improvements",
+                "description": "Python programming language interpreter",
                 "parameters": [
                     ToolParameter(
                         name="code",
                         type=ParameterType.STRING,
-                        description="Code to analyze",
+                        description="Python code to execute",
                         required=True
                     ),
                     ToolParameter(
-                        name="language",
-                        type=ParameterType.STRING,
-                        description="Programming language",
-                        required=True,
-                        allowed_values=["python", "javascript", "java", "cpp"]
+                        name="timeout",
+                        type=ParameterType.INTEGER,
+                        description="Execution timeout in seconds",
+                        required=False,
+                        default_value=30
                     )
                 ],
-                "return_type": "analysis_report",
-                "domain_compatibility": ["development", "code_review", "quality_assurance"]
-            },
-            {
-                "name": "data_analysis",
-                "type": ToolType.SYNTHETIC,
-                "description": "Perform data analysis and generate insights",
-                "parameters": [
-                    ToolParameter(
-                        name="data",
-                        type=ParameterType.OBJECT,
-                        description="Data to analyze",
-                        required=True
-                    ),
-                    ToolParameter(
-                        name="analysis_type",
-                        type=ParameterType.STRING,
-                        description="Type of analysis to perform",
-                        required=True,
-                        allowed_values=["descriptive", "predictive", "diagnostic"]
-                    )
-                ],
-                "return_type": "analysis_results",
-                "domain_compatibility": ["data_science", "business_intelligence", "research"]
+                "return_type": "execution_result",
+                "domain_compatibility": ["data_analysis", "programming", "automation"]
             }
         ]
         
         for tool_config in default_tools:
             self.register_tool(**tool_config)
     
-    def register_tool(self, name: str, type: ToolType, description: str,
+    def register_tool(self, tool_id: str, name: str, type: ToolType, description: str,
                      parameters: List[ToolParameter] = None, return_type: str = "any",
                      domain_compatibility: List[str] = None, version: str = "1.0.0",
                      author: str = "", documentation_url: str = None) -> Tool:
-        """Register a new tool"""
+        """Register a new tool with explicit tool_id"""
         tool = Tool(
+            id=tool_id,  # Use the provided tool_id
             name=name,
             type=type,
             description=description,
@@ -147,16 +179,16 @@ class ToolRegistry:
             documentation_url=documentation_url
         )
         
-        self.tools[tool.id] = tool
+        self.tools[tool_id] = tool
         
         # Update category mapping
         for domain in tool.domain_compatibility:
             if domain not in self.domain_tool_mapping:
                 self.domain_tool_mapping[domain] = set()
-            self.domain_tool_mapping[domain].add(tool.id)
+            self.domain_tool_mapping[domain].add(tool_id)
         
         # Initialize usage stats
-        self.tool_usage_stats[tool.id] = {
+        self.tool_usage_stats[tool_id] = {
             "total_usage": 0,
             "successful_usage": 0,
             "failed_usage": 0,
@@ -164,12 +196,21 @@ class ToolRegistry:
             "last_used": None
         }
         
-        logger.info(f"Registered tool: {name} (ID: {tool.id})")
+        logger.info(f"Registered tool: {name} (ID: {tool_id})")
         return tool
     
     def get_tool(self, tool_id: str) -> Optional[Tool]:
-        """Get a tool by ID"""
-        return self.tools.get(tool_id)
+        """Get a tool by ID or name"""
+        # First try by ID
+        if tool_id in self.tools:
+            return self.tools[tool_id]
+        
+        # If not found by ID, try by name
+        for tool in self.tools.values():
+            if tool.name.lower() == tool_id.lower():
+                return tool
+        
+        return None
     
     def get_tool_by_name(self, name: str) -> Optional[Tool]:
         """Get a tool by name"""
@@ -440,3 +481,123 @@ class ToolRegistry:
             "parameter_count": len(tool.parameters),
             "example_count": len(tool.usage_examples)
         } 
+
+    def execute_tool(self, tool_id: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a tool with given parameters"""
+        tool = self.get_tool(tool_id)
+        if not tool:
+            return {"error": f"Tool {tool_id} not found"}
+        
+        if not tool.is_active:
+            return {"error": f"Tool {tool_id} is not active"}
+        
+        # Validate parameters
+        validation_result = self.validate_tool_usage(tool_id, parameters)
+        if not validation_result["valid"]:
+            return {"error": validation_result["error"]}
+        
+        try:
+            # Record usage start
+            start_time = datetime.utcnow()
+            
+            # Execute based on tool type
+            if tool.type == ToolType.MCP:
+                result = self._execute_mcp_tool(tool, parameters)
+            elif tool.type == ToolType.SYNTHETIC:
+                result = self._execute_synthetic_tool(tool, parameters)
+            else:
+                result = {"error": f"Unsupported tool type: {tool.type}"}
+            
+            # Record usage end
+            end_time = datetime.utcnow()
+            response_time = (end_time - start_time).total_seconds()
+            
+            # Update usage statistics
+            self._update_tool_usage_stats(tool_id, True, response_time)
+            
+            return result
+            
+        except Exception as e:
+            # Record failed usage
+            self._update_tool_usage_stats(tool_id, False, 0.0)
+            return {"error": f"Tool execution failed: {str(e)}"}
+    
+    def _execute_mcp_tool(self, tool: Tool, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute MCP tool (placeholder implementation)"""
+        # In a real implementation, this would connect to actual MCP servers
+        return {
+            "status": "success",
+            "tool": tool.name,
+            "result": f"Simulated MCP tool execution for {tool.name}",
+            "parameters": parameters
+        }
+    
+    def _execute_synthetic_tool(self, tool: Tool, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute synthetic tool (simulated implementation)"""
+        import time
+        import random
+        
+        # Simulate execution time
+        execution_time = random.uniform(0.1, 2.0)
+        time.sleep(execution_time)
+        
+        # Simulate different tool behaviors
+        if tool.name == "python":
+            code = parameters.get("code", "")
+            return {
+                "status": "success",
+                "tool": "python",
+                "result": f"Executed Python code: {code[:100]}...",
+                "execution_time": execution_time
+            }
+        elif tool.name == "code_editor":
+            action = parameters.get("action", "")
+            file_path = parameters.get("file_path", "")
+            return {
+                "status": "success",
+                "tool": "code_editor",
+                "result": f"Performed {action} on {file_path}",
+                "execution_time": execution_time
+            }
+        elif tool.name == "terminal":
+            command = parameters.get("command", "")
+            return {
+                "status": "success",
+                "tool": "terminal",
+                "result": f"Executed command: {command}",
+                "execution_time": execution_time
+            }
+        else:
+            return {
+                "status": "success",
+                "tool": tool.name,
+                "result": f"Simulated execution of {tool.name}",
+                "execution_time": execution_time
+            }
+    
+    def _update_tool_usage_stats(self, tool_id: str, success: bool, response_time: float) -> None:
+        """Update tool usage statistics"""
+        if tool_id not in self.tool_usage_stats:
+            return
+        
+        stats = self.tool_usage_stats[tool_id]
+        stats["total_usage"] += 1
+        
+        if success:
+            stats["successful_usage"] += 1
+        else:
+            stats["failed_usage"] += 1
+        
+        # Update average response time
+        if stats["total_usage"] > 0:
+            current_avg = stats["average_response_time"]
+            stats["average_response_time"] = (
+                (current_avg * (stats["total_usage"] - 1) + response_time) / stats["total_usage"]
+            )
+        
+        stats["last_used"] = datetime.utcnow()
+        
+        # Update tool's own stats
+        tool = self.get_tool(tool_id)
+        if tool:
+            tool.update_usage_stats(success, response_time) 

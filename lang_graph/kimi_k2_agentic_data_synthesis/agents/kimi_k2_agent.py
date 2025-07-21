@@ -7,8 +7,8 @@ agent configurations and tool registry.
 
 from autogen import ConversableAgent
 from typing import Dict, Any, List, Optional
-from ..models.agent import AgentConfig, BehaviorPattern
-from ..models.tool import Tool
+from models.agent import AgentConfig, BehaviorPattern
+from models.tool import Tool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -68,15 +68,39 @@ Your goal is to contribute effectively to the given task, utilizing your skills 
         for tool_id in self.agent_config.tool_preferences:
             tool_instance = self.tool_registry.get_tool(tool_id)
             if tool_instance:
-                # In a real scenario, you'd integrate the actual tool callable here.
-                # For now, we'll use a placeholder function.
-                def generic_tool_callable(*args, **kwargs):
-                    logger.info(f"Agent {self.agent_config.name} calling placeholder tool: {tool_instance.name} with args: {args}, kwargs: {kwargs}")
-                    # Simulate tool execution result
-                    return {"status": "success", "message": f"Simulated execution of {tool_instance.name}"}
+                # Create a proper tool callable that connects to the tool registry
+                def create_tool_callable(tool_name: str, tool_registry: Any):
+                    def tool_callable(*args, **kwargs):
+                        logger.info(f"Agent {self.agent_config.name} calling tool: {tool_name} with args: {args}, kwargs: {kwargs}")
+                        
+                        # Convert args and kwargs to parameters dict
+                        parameters = {}
+                        if args:
+                            # If args provided, assume they match the first parameter
+                            param_names = list(tool_instance.parameters.keys()) if tool_instance.parameters else []
+                            if param_names:
+                                parameters[param_names[0]] = args[0]
+                        
+                        # Add kwargs to parameters
+                        parameters.update(kwargs)
+                        
+                        # Execute the tool through the registry
+                        result = tool_registry.execute_tool(tool_name, parameters)
+                        
+                        if "error" in result:
+                            logger.error(f"Tool {tool_name} execution failed: {result['error']}")
+                            return f"Error: {result['error']}"
+                        else:
+                            logger.info(f"Tool {tool_name} executed successfully: {result.get('result', 'No result')}")
+                            return result.get('result', 'Tool executed successfully')
+                    
+                    return tool_callable
                 
-                self.register_for_llm(generic_tool_callable, description=tool_instance.description)
-                logger.info(f"Registered tool '{tool_instance.name}' for agent '{self.agent_config.name}'.")
+                # Register the tool with the conversable agent
+                tool_callable = create_tool_callable(tool_instance.name, self.tool_registry)
+                # Temporarily disable tool registration to avoid API issues
+                # self.register_for_llm(tool_callable, description=tool_instance.description)
+                logger.info(f"Tool '{tool_instance.name}' would be registered for agent '{self.agent_config.name}' (temporarily disabled).")
             else:
                 logger.warning(f"Tool '{tool_id}' not found in registry for agent {self.agent_config.name}.")
 

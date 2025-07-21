@@ -165,6 +165,9 @@ class AgentConfig(BaseModel):
     communication_style: str = "professional"
     problem_solving_approach: str = "systematic"
     collaboration_style: str = "mentoring"
+    is_active: bool = True  # Add is_active attribute
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
         json_schema_extra = {

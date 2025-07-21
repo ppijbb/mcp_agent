@@ -169,27 +169,39 @@ class AgenticDataSynthesisSystem:
         self.logger.info(f"Setup {len(domains)} domains")
     
     def setup_tools(self, tools: List[ToolConfig]) -> None:
-        """
-        Setup tools for the system.
+        """Setup tools in the system"""
+        self.logger.info(f"Setting up {len(tools)} tools")
         
-        Args:
-            tools: List of tool configurations
-        """
         for tool_config in tools:
-            # Convert parameters dict to list of ToolParameter objects
-            tool_parameters = [
-                ToolParameter(name=key, type=ParameterType(value), description=f"Parameter {key}")
-                for key, value in tool_config.parameters.items()
-            ]
-            self.tool_registry.register_tool(
-                name=tool_config.name,
-                type=ToolType(tool_config.tool_type), # Convert string to ToolType enum
-                description=tool_config.description,
-                parameters=tool_parameters, # Pass the converted parameters
-                # return_type and domain_compatibility are not in ToolConfig in example_usage.py
-                # but can be added if needed, or default values will be used.
-            )
-        self.logger.info(f"Setup {len(tools)} tools")
+            try:
+                # Convert parameters dict to list of ToolParameter objects
+                tool_parameters = []
+                for param_name, param_type_str in tool_config.parameters.items():
+                    param_type = ParameterType(param_type_str)
+                    tool_parameters.append(
+                        ToolParameter(
+                            name=param_name,
+                            type=param_type,
+                            description=f"Parameter {param_name}",
+                            required=True
+                        )
+                    )
+                
+                # Register tool with explicit tool_id
+                self.tool_registry.register_tool(
+                    tool_id=tool_config.tool_id,
+                    name=tool_config.name,
+                    type=ToolType(tool_config.tool_type),
+                    description=tool_config.description,
+                    parameters=tool_parameters,
+                    domain_compatibility=["general"]  # Default compatibility
+                )
+                
+                self.logger.info(f"Registered tool: {tool_config.name} (ID: {tool_config.tool_id})")
+                
+            except Exception as e:
+                self.logger.error(f"Failed to register tool {tool_config.name}: {e}")
+                raise
     
     def setup_agents(self, agents: List[AgentConfig]) -> None:
         """

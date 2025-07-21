@@ -5,9 +5,9 @@ Creates and manages diverse agents with different tool sets and behavior pattern
 """
 
 from typing import List, Dict, Any, Optional
-from ..models.agent import Agent, AgentConfig, AgentProfile, BehaviorPattern, Rule, AgentRole, PersonalityType, CommunicationStyle
-from ..models.tool import Tool
-from ..agents.kimi_k2_agent import KimiK2ConversableAgent # Import the new conversable agent
+from models.agent import Agent, AgentConfig, AgentProfile, BehaviorPattern, Rule, AgentRole, PersonalityType, CommunicationStyle
+from models.tool import Tool
+from agents.kimi_k2_agent import KimiK2ConversableAgent # Import the new conversable agent
 import random
 import logging
 from datetime import datetime

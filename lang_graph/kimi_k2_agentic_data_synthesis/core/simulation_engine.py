@@ -1,27 +1,19 @@
 """
 Simulation Engine for the Kimi-K2 Agentic Data Synthesis System
 
-Executes large-scale simulations with multiple agents and scenarios.
+Manages multi-agent simulations using LangGraph for complex scenarios.
 """
 
-from typing import List, Dict, Any, Optional, Callable
-from ..models.simulation import SimulationState, SimulationSession, SimulationStep, EnvironmentState, SimulationStatus, StepStatus, StepType, SimulationConfig
-from ..models.domain import Domain, Scenario
-from ..models.agent import Agent, AgentConfig # Agent is now KimiK2ConversableAgent
-from ..models.tool import Tool
-from ..agents.kimi_k2_agent import KimiK2ConversableAgent
-
-from langgraph.graph import StateGraph, END, START
-from langgraph.checkpoint.memory import MemorySaver # For in-memory checkpointing
-from langchain_core.messages import AIMessage, HumanMessage
-
-import asyncio
+from typing import Dict, Any, List, Optional, Annotated
+from models.simulation import SimulationState, SimulationStep, StepType, StepStatus, SimulationStatus, EnvironmentState
+from models.agent import Agent
+from agents.kimi_k2_agent import KimiK2ConversableAgent
+from langchain_core.messages import HumanMessage, AIMessage
 import logging
-from datetime import datetime
-import time
 import random
-import uuid
 import re
+import time
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -322,11 +314,53 @@ class SimulationEngine:
             tool_name_match = re.match(r"^(\w+)\(.*\)", tool_code_block)
             tool_name = tool_name_match.group(1) if tool_name_match else "unknown_tool"
             
-            # Simulate tool execution (replace with actual tool_registry.execute_tool in real impl)
-            simulated_output = f"Simulated output of {tool_name}: Operation successful."
-            result = {"tool_name": tool_name, "output": simulated_output, "status": "success"}
+            # Parse tool parameters from the code block
+            import ast
+            try:
+                # Extract the function call part
+                func_call_match = re.match(r"(\w+)\((.*)\)", tool_code_block)
+                if func_call_match:
+                    tool_name = func_call_match.group(1)
+                    args_str = func_call_match.group(2)
+                    
+                    # Parse arguments (simple parsing for demonstration)
+                    parameters = {}
+                    if args_str.strip():
+                        # Handle keyword arguments
+                        if "=" in args_str:
+                            for arg in args_str.split(","):
+                                if "=" in arg:
+                                    key, value = arg.split("=", 1)
+                                    parameters[key.strip()] = value.strip().strip('"\'')
+                        else:
+                            # Handle positional arguments
+                            args = [arg.strip().strip('"\'') for arg in args_str.split(",")]
+                            if args:
+                                parameters["input"] = args[0]  # Assume first arg is input
+                    
+                    # Execute the tool through the registry
+                    if self.tool_registry:
+                        result = self.tool_registry.execute_tool(tool_name, parameters)
+                        if "error" in result:
+                            simulated_output = f"Tool execution failed: {result['error']}"
+                            result_status = "failed"
+                        else:
+                            simulated_output = result.get("result", f"Tool {tool_name} executed successfully")
+                            result_status = "success"
+                    else:
+                        simulated_output = f"Simulated output of {tool_name}: Operation successful."
+                        result_status = "success"
+                else:
+                    simulated_output = f"Could not parse tool call: {tool_code_block}"
+                    result_status = "failed"
+                    
+            except Exception as parse_error:
+                simulated_output = f"Error parsing tool call: {parse_error}"
+                result_status = "failed"
+            
+            result = {"tool_name": tool_name, "output": simulated_output, "status": result_status}
             tool_results.append(result)
-            logger.info(f"Node: simulate_tool_usage for {sim_id}. Tool '{tool_name}' executed.")
+            logger.info(f"Node: simulate_tool_usage for {sim_id}. Tool '{tool_name}' executed with status: {result_status}.")
 
             # Add tool output back to messages for the agent to see
             messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}").model_dump())
@@ -336,49 +370,31 @@ class SimulationEngine:
             logger.info(f"Tool: {tool_name}")
             logger.info(f"Input: {tool_code_block}")
             logger.info(f"Output: {simulated_output}")
+            logger.info(f"Status: {result_status}")
             logger.info(f"==========================")
             
-            current_step_number = len(state.get("sim_steps", [])) + 1
-
-            sim_step = SimulationStep(
-                step_number=current_step_number,
-                description=f"Tool {tool_name} executed",
-                step_type=StepType.TOOL_USAGE,
-                input_data={"tool_call": tool_code_block},
-                output_data=result
-            )
-            sim_steps = state.get("sim_steps", [])
-            sim_steps.append(sim_step.model_dump())
-            sim_step.start()
-            sim_step.complete(output=result)
-            sim_steps[-1].update(sim_step.model_dump())
-
-            return {"messages": messages, "tool_results": tool_results, "sim_steps": sim_steps}
-
         except Exception as e:
-            logger.error(f"Tool usage simulation failed for {sim_id}: {e}")
-            error_result = {"tool_name": "parse_error", "output": str(e), "status": "failed"}
-            tool_results.append(error_result)
-            messages.append(HumanMessage(content=f"Tool execution error: {e}").model_dump())
-            
-            current_step_number = len(state.get("sim_steps", [])) + 1
+            logger.error(f"Error in tool usage simulation: {e}")
+            result = {"tool_name": "unknown", "output": f"Error: {str(e)}", "status": "failed"}
+            tool_results.append(result)
+            messages.append(HumanMessage(content=f"Tool execution error: {str(e)}").model_dump())
+        
+        current_step_number = len(state.get("sim_steps", [])) + 1
 
-            sim_step = SimulationStep(
-                step_number=current_step_number,
-                description=f"Tool usage failed: {tool_code_block}",
-                step_type=StepType.TOOL_USAGE,
-                status=StepStatus.FAILED,
-                error_message=str(e),
-                input_data={"tool_call": tool_code_block},
-                output_data=error_result
-            )
-            sim_steps = state.get("sim_steps", [])
-            sim_steps.append(sim_step.model_dump())
-            sim_step.start()
-            sim_step.fail(str(e))
-            sim_steps[-1].update(sim_step.model_dump())
+        sim_step = SimulationStep(
+            step_number=current_step_number,
+            description=f"Tool {tool_name} executed",
+            step_type=StepType.TOOL_USAGE,
+            input_data={"tool_call": tool_code_block},
+            output_data=result
+        )
+        sim_steps = state.get("sim_steps", [])
+        sim_steps.append(sim_step.model_dump())
+        sim_step.start()
+        sim_step.complete(output=result)
+        sim_steps[-1].update(sim_step.model_dump())
 
-            return {"messages": messages, "tool_results": tool_results, "status": SimulationStatus.FAILED.value, "error_message": str(e), "sim_steps": sim_steps}
+        return {"messages": messages, "tool_results": tool_results, "sim_steps": sim_steps}
 
     def _decide_next_step_from_tool_usage(self, state: SimulationState) -> str:
         """
