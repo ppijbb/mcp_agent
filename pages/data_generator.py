@@ -44,7 +44,7 @@ except ImportError as e:
 
 # Result Reader 임포트
 try:
-    from pages.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader, result_display
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -92,14 +92,22 @@ def execute_chat_data_agent_process(data_type: str, record_count: int) -> str:
     try:
         with st.spinner("AI가 지능적으로 데이터를 생성 중입니다..."):
             
+            # config 생성
+            config = {
+                'type': data_type,
+                'count': record_count,
+                'purpose': f"{data_type} 데이터 생성",
+                'quality': '고품질'
+            }
+            
             # 실제 에이전트 호출
             result = agent.generate_smart_data(config)
             
             if not result:
                 raise Exception("에이전트가 유효한 결과를 반환하지 않았습니다.")
             
-            # 실제 에이전트 출력 포맷팅
-            agent_output = format_data_generation_result(result, config)
+            # 결과 포맷팅 (간단한 형태)
+            agent_output = f"생성된 {data_type} 데이터 {record_count}개:\n{str(result)}"
             
             st.session_state['ai_generated_data'] = {
                 'agent_output': agent_output,
@@ -107,7 +115,8 @@ def execute_chat_data_agent_process(data_type: str, record_count: int) -> str:
                 'raw_result': result
             }
             
-            # 파일 저장 처리
+            # 파일 저장 처리 (선택적)
+            save_to_file = st.checkbox("결과를 파일로 저장", value=False)
             if save_to_file:
                 file_saved, output_path = save_data_generator_results(agent_output, config)
                 if file_saved:

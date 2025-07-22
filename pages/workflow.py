@@ -15,6 +15,13 @@ from datetime import datetime
 import streamlit_process_manager as spm
 from srcs.common.ui_utils import run_agent_process
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -322,4 +329,52 @@ def render_info_panels():
         """)
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# 최신 Workflow Orchestrator 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Workflow Orchestrator 결과")
+
+latest_workflow_result = result_reader.get_latest_result("workflow_orchestrator", "workflow_execution")
+
+if latest_workflow_result:
+    with st.expander("🔄 최신 워크플로우 실행 결과", expanded=False):
+        st.subheader("🤖 최근 워크플로우 실행 결과")
+        
+        if isinstance(latest_workflow_result, dict):
+            # 워크플로우 정보 표시
+            task = latest_workflow_result.get('task', 'N/A')
+            plan_type = latest_workflow_result.get('plan_type', 'N/A')
+            model_name = latest_workflow_result.get('model_name', 'N/A')
+            
+            st.success(f"**작업: {task}**")
+            st.info(f"**플랜 타입: {plan_type}** | **모델: {model_name}**")
+            
+            # 실행 결과 요약
+            col1, col2, col3 = st.columns(3)
+            col1.metric("실행 상태", "완료" if latest_workflow_result.get('success', False) else "실패")
+            col2.metric("실행 시간", f"{latest_workflow_result.get('execution_time', 0):.1f}초")
+            col3.metric("단계 수", len(latest_workflow_result.get('steps', [])))
+            
+            # 실행 결과 표시
+            result = latest_workflow_result.get('result', '')
+            if result:
+                st.subheader("📄 실행 결과")
+                with st.expander("상세 결과", expanded=False):
+                    st.text_area("결과 내용", result, height=200, disabled=True)
+            
+            # 실행 단계 표시
+            steps = latest_workflow_result.get('steps', [])
+            if steps:
+                st.subheader("📋 실행 단계")
+                with st.expander("단계별 실행 내역", expanded=False):
+                    for i, step in enumerate(steps, 1):
+                        st.write(f"{i}. {step}")
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_workflow_result:
+                st.caption(f"⏰ 실행 시간: {latest_workflow_result['timestamp']}")
+        else:
+            st.json(latest_workflow_result)
+else:
+    st.info("💡 아직 Workflow Orchestrator의 결과가 없습니다. 위에서 워크플로우를 실행해보세요.") 

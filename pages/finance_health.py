@@ -19,6 +19,13 @@ import os
 import streamlit_process_manager as spm
 from srcs.common.ui_utils import run_agent_process
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -492,7 +499,19 @@ def render_real_finance_agent(save_to_file=False):
                 
                 if result:
                     if result.get('status') == 'success':
-                        display_analysis_results(result, save_to_file)
+                        # 분석 결과 표시
+                        st.success("✅ 재무 건강 분석이 완료되었습니다!")
+                        
+                        # 결과 데이터 표시
+                        if 'data' in result:
+                            st.subheader("📊 분석 결과")
+                            st.json(result['data'])
+                            
+                            # 파일 저장 옵션
+                            if save_to_file:
+                                save_analysis_to_file(result.get('input_data', {}), result['data'])
+                        else:
+                            st.info("분석이 완료되었지만 결과 데이터가 없습니다.")
                     else:
                         st.error("❌ 실행 중 오류 발생")
                         st.error(f"**오류**: {result.get('error', 'Unknown error')}")
@@ -913,4 +932,63 @@ def save_analysis_to_file(financial_data, analysis_result):
         st.error(f"파일 저장 중 오류: {e}")
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# 최신 Finance Health Agent 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Finance Health Agent 결과")
+
+latest_finance_result = result_reader.get_latest_result("finance_health_agent", "financial_analysis")
+
+if latest_finance_result:
+    with st.expander("💰 최신 재무 건강 분석 결과", expanded=False):
+        st.subheader("🤖 최근 재무 건강 분석 결과")
+        
+        if isinstance(latest_finance_result, dict):
+            # 재무 정보 표시
+            user_id = latest_finance_result.get('user_id', 'N/A')
+            analysis_type = latest_finance_result.get('analysis_type', 'N/A')
+            
+            st.success(f"**사용자: {user_id}**")
+            st.info(f"**분석 유형: {analysis_type}**")
+            
+            # 재무 상태 요약
+            col1, col2, col3 = st.columns(3)
+            col1.metric("재무 건강도", f"{latest_finance_result.get('health_score', 0):.0f}%")
+            col2.metric("위험 수준", latest_finance_result.get('risk_level', 'N/A'))
+            col3.metric("분석 상태", "완료" if latest_finance_result.get('success', False) else "실패")
+            
+            # 주요 지표 표시
+            summary = latest_finance_result.get('summary', '')
+            if summary:
+                st.subheader("📊 분석 요약")
+                st.write(summary)
+            
+            # 성과 표시
+            achievements = latest_finance_result.get('achievements', [])
+            if achievements:
+                st.subheader("✅ 주요 성과")
+                for achievement in achievements:
+                    st.write(f"• {achievement}")
+            
+            # 개선 사항 표시
+            improvements = latest_finance_result.get('improvements', [])
+            if improvements:
+                st.subheader("🔧 개선 사항")
+                for improvement in improvements:
+                    st.write(f"• {improvement}")
+            
+            # 액션 아이템 표시
+            action_items = latest_finance_result.get('action_items', [])
+            if action_items:
+                st.subheader("📋 실행 계획")
+                for i, item in enumerate(action_items, 1):
+                    st.write(f"{i}. {item}")
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_finance_result:
+                st.caption(f"⏰ 분석 시간: {latest_finance_result['timestamp']}")
+        else:
+            st.json(latest_finance_result)
+else:
+    st.info("💡 아직 Finance Health Agent의 결과가 없습니다. 위에서 재무 건강 분석을 실행해보세요.") 

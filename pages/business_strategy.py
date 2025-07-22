@@ -31,6 +31,13 @@ from srcs.common.page_utils import setup_page, render_home_button, create_agent_
 from srcs.common.ui_utils import run_agent_process
 from srcs.business_strategy_agents.run_business_strategy_agents import BusinessStrategyRunner
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # 페이지 설정
 setup_page("🎯 Business Strategy Agent", "🎯")
 
@@ -136,6 +143,55 @@ def main():
 
             if result and "data" in result:
                 display_results(result["data"])
+
+    # 최신 Business Strategy Agent 결과 확인
+    st.markdown("---")
+    st.markdown("## 📊 최신 Business Strategy Agent 결과")
+    
+    latest_strategy_result = result_reader.get_latest_result("business_strategy_agent", "strategy_analysis")
+    
+    if latest_strategy_result:
+        with st.expander("🎯 최신 비즈니스 전략 분석 결과", expanded=False):
+            st.subheader("🤖 최근 비즈니스 전략 분석 결과")
+            
+            if isinstance(latest_strategy_result, dict):
+                # 전략 정보 표시
+                keywords = latest_strategy_result.get('keywords', [])
+                time_horizon = latest_strategy_result.get('time_horizon', 'N/A')
+                
+                st.success(f"**핵심 키워드: {', '.join(keywords)}**")
+                st.info(f"**분석 기간: {time_horizon}**")
+                
+                # 분석 결과 요약
+                col1, col2, col3 = st.columns(3)
+                col1.metric("실행 시간", f"{latest_strategy_result.get('execution_time', 0):.2f}초")
+                col2.metric("생성된 보고서", len(latest_strategy_result.get('results', {})))
+                col3.metric("분석 상태", "완료" if latest_strategy_result.get('success', False) else "실패")
+                
+                # 생성된 보고서 표시
+                results = latest_strategy_result.get('results', {})
+                if results:
+                    st.subheader("📄 생성된 보고서")
+                    for agent_name, result in results.items():
+                        if result.get('success'):
+                            agent_title = agent_name.replace('_', ' ').title()
+                            st.write(f"✅ **{agent_title}**: 성공")
+                            
+                            # 보고서 내용 표시
+                            if 'output_file' in result:
+                                file_path = result['output_file']
+                                st.info(f"파일 위치: {file_path}")
+                        else:
+                            agent_title = agent_name.replace('_', ' ').title()
+                            st.write(f"❌ **{agent_title}**: 실패 - {result.get('error', '알 수 없는 오류')}")
+                
+                # 메타데이터 표시
+                if 'timestamp' in latest_strategy_result:
+                    st.caption(f"⏰ 분석 시간: {latest_strategy_result['timestamp']}")
+            else:
+                st.json(latest_strategy_result)
+    else:
+        st.info("💡 아직 Business Strategy Agent의 결과가 없습니다. 위에서 비즈니스 전략 분석을 실행해보세요.")
 
 if __name__ == "__main__":
     main() 

@@ -21,6 +21,13 @@ from lang_graph.table_game_mate.utils.mcp_client import MCPClient, MCPClientErro
 # 실제 LangGraph 에이전트 import
 from lang_graph.table_game_mate.agents.game_ui_analyzer import get_game_ui_analyzer
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # 페이지 설정
 st.set_page_config(page_title="🤖 Agent-driven UI", page_icon="🤖", layout="wide")
 
@@ -299,3 +306,45 @@ class RealLangGraphUI:
 # Streamlit 앱 실행 (표준 방식)
 app = RealLangGraphUI()
 app.render_main_content()
+
+# 최신 Boardgame UI Generator 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Boardgame UI Generator 결과")
+
+latest_boardgame_result = result_reader.get_latest_result("game_ui_analyzer", "ui_analysis")
+
+if latest_boardgame_result:
+    with st.expander("🎲 최신 게임 UI 분석 결과", expanded=False):
+        st.subheader("🤖 최근 게임 UI 분석 결과")
+        
+        if isinstance(latest_boardgame_result, dict):
+            # 게임 정보 표시
+            game_name = latest_boardgame_result.get('game_name', 'N/A')
+            st.success(f"**게임: {game_name}**")
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("AI 신뢰도", f"{latest_boardgame_result.get('confidence_score', 0.0):.1%}")
+            col2.metric("보드 타입", latest_boardgame_result.get('board_type', 'N/A'))
+            col3.metric("분석 상태", "완료" if latest_boardgame_result.get('success', False) else "실패")
+            
+            # UI 명세서 표시
+            ui_spec = latest_boardgame_result.get('ui_spec', {})
+            if ui_spec:
+                st.subheader("📋 UI 명세서")
+                with st.expander("상세 UI 명세서", expanded=False):
+                    st.json(ui_spec)
+            
+            # 분석 결과 표시
+            analysis_result = latest_boardgame_result.get('analysis_result', {})
+            if analysis_result:
+                st.subheader("🔬 분석 결과")
+                with st.expander("상세 분석 결과", expanded=False):
+                    st.json(analysis_result)
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_boardgame_result:
+                st.caption(f"⏰ 분석 시간: {latest_boardgame_result['timestamp']}")
+        else:
+            st.json(latest_boardgame_result)
+else:
+    st.info("💡 아직 Boardgame UI Generator Agent의 결과가 없습니다. 위에서 게임 UI 분석을 실행해보세요.")

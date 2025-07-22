@@ -15,6 +15,13 @@ from srcs.common.page_utils import setup_page, render_home_button
 from srcs.common.styles import get_common_styles, get_page_header
 from configs.settings import get_reports_path
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 def format_urban_hive_output(result: dict) -> str:
     """Formats the result dictionary from the agent into a Markdown string."""
     if not result.get('critical_issues') or "분석 실패" in result['critical_issues'][0]:
@@ -158,3 +165,63 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# 최신 Urban Hive Agent 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Urban Hive Agent 결과")
+
+latest_urban_result = result_reader.get_latest_result("urban_hive_agent", "urban_analysis")
+
+if latest_urban_result:
+    with st.expander("🏙️ 최신 도시 데이터 분석 결과", expanded=False):
+        st.subheader("🤖 최근 도시 데이터 분석 결과")
+        
+        if isinstance(latest_urban_result, dict):
+            # 도시 정보 표시
+            affected_areas = latest_urban_result.get('affected_areas', ['N/A'])
+            data_category = latest_urban_result.get('data_category', 'N/A')
+            
+            st.success(f"**분석 지역: {', '.join(affected_areas)}**")
+            st.info(f"**분석 카테고리: {data_category}**")
+            
+            # 분석 결과 요약
+            col1, col2, col3 = st.columns(3)
+            col1.metric("도시 건강 점수", f"{latest_urban_result.get('overall_score', 0)}/100")
+            col2.metric("위협 수준", latest_urban_result.get('threat_level', 'N/A'))
+            col3.metric("분석 상태", "완료" if latest_urban_result.get('success', False) else "실패")
+            
+            # 주요 지표 표시
+            key_metrics = latest_urban_result.get('key_metrics', {})
+            if key_metrics:
+                st.subheader("📊 주요 지표")
+                for key, value in key_metrics.items():
+                    st.write(f"• **{key.replace('_', ' ').title()}**: {value if value is not None else '데이터 없음'}")
+            
+            # 주요 문제점 표시
+            critical_issues = latest_urban_result.get('critical_issues', [])
+            if critical_issues:
+                st.subheader("⚠️ 주요 문제점")
+                for issue in critical_issues:
+                    st.write(f"• {issue}")
+            
+            # 추천 사항 표시
+            recommendations = latest_urban_result.get('recommendations', [])
+            if recommendations:
+                st.subheader("💡 추천 사항")
+                for rec in recommendations:
+                    st.write(f"• {rec}")
+            
+            # 예측 동향 표시
+            predicted_trends = latest_urban_result.get('predicted_trends', [])
+            if predicted_trends:
+                st.subheader("📈 예측 동향")
+                for trend in predicted_trends:
+                    st.write(f"• {trend}")
+            
+            # 메타데이터 표시
+            if 'analysis_timestamp' in latest_urban_result:
+                st.caption(f"⏰ 분석 시간: {latest_urban_result['analysis_timestamp']}")
+        else:
+            st.json(latest_urban_result)
+else:
+    st.info("💡 아직 Urban Hive Agent의 결과가 없습니다. 위에서 도시 데이터 분석을 실행해보세요.")

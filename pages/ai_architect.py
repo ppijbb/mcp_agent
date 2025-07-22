@@ -21,6 +21,13 @@ from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
 from srcs.core.config.loader import settings
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 def display_results(result_data):
     st.markdown("---")
     st.subheader("🧬 AI 아키텍처 진화 결과")
@@ -107,6 +114,50 @@ def main():
 
             if result:
                 display_results(result)
+
+    # 최신 AI Architect 결과 확인
+    st.markdown("---")
+    st.markdown("## 📊 최신 AI Architect 결과")
+    
+    latest_architect_result = result_reader.get_latest_result("evolutionary_ai_architect", "architecture_design")
+    
+    if latest_architect_result:
+        with st.expander("🏗️ 최신 아키텍처 설계 결과", expanded=False):
+            st.subheader("🧬 최근 아키텍처 진화 결과")
+            
+            if isinstance(latest_architect_result, dict):
+                best_architecture = latest_architect_result.get('best_architecture', {})
+                if best_architecture:
+                    st.success(f"**최적 아키텍처: {best_architecture.get('name', 'N/A')}**")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("최종 점수", f"{best_architecture.get('fitness_score', 0):.4f}")
+                    col2.metric("총 세대 수", latest_architect_result.get('generations_completed', 'N/A'))
+                    col3.metric("평가된 아키텍처", latest_architect_result.get('total_architectures_evaluated', 'N/A'))
+                    
+                    # 문제 설명 표시
+                    if 'problem_description' in latest_architect_result:
+                        st.write("**문제 설명:**")
+                        st.write(latest_architect_result['problem_description'])
+                    
+                    # 세대별 성능 그래프
+                    fitness_history = latest_architect_result.get('fitness_history', [])
+                    if fitness_history:
+                        st.subheader("📈 세대별 성능 향상")
+                        df = pd.DataFrame(fitness_history)
+                        fig = px.line(df, x='generation', y='max_fitness', title='세대별 최고 적합도', markers=True)
+                        fig.update_layout(xaxis_title="세대", yaxis_title="최고 적합도")
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 메타데이터 표시
+                    if 'timestamp' in latest_architect_result:
+                        st.caption(f"⏰ 설계 시간: {latest_architect_result['timestamp']}")
+                else:
+                    st.json(latest_architect_result)
+            else:
+                st.json(latest_architect_result)
+    else:
+        st.info("💡 아직 AI Architect Agent의 결과가 없습니다. 위에서 아키텍처 설계를 실행해보세요.")
 
 if __name__ == "__main__":
     main()

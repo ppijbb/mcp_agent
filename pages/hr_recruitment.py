@@ -16,6 +16,13 @@ import streamlit_process_manager as spm
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
+
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
 from configs.settings import get_reports_path
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -120,6 +127,61 @@ def main():
 
             if result and "data" in result:
                 display_results(result["data"])
+
+    # 최신 HR Recruitment Agent 결과 확인
+    st.markdown("---")
+    st.markdown("## 📊 최신 HR Recruitment Agent 결과")
+    
+    latest_recruitment_result = result_reader.get_latest_result("hr_recruitment_agent", "recruitment_analysis")
+    
+    if latest_recruitment_result:
+        with st.expander("👥 최신 채용 분석 결과", expanded=False):
+            st.subheader("🤖 최근 채용 분석 결과")
+            
+            if isinstance(latest_recruitment_result, dict):
+                # 채용 정보 표시
+                position = latest_recruitment_result.get('position', 'N/A')
+                company = latest_recruitment_result.get('company', 'N/A')
+                
+                st.success(f"**포지션: {position}**")
+                st.info(f"**회사: {company}**")
+                
+                # 채용 분석 결과 요약
+                col1, col2, col3 = st.columns(3)
+                col1.metric("실행된 워크플로우", len(latest_recruitment_result.get('workflows', [])))
+                col2.metric("분석 상태", "완료" if latest_recruitment_result.get('success', False) else "실패")
+                col3.metric("보고서 길이", f"{len(latest_recruitment_result.get('content', ''))} 문자")
+                
+                # 실행된 워크플로우 표시
+                workflows = latest_recruitment_result.get('workflows', [])
+                if workflows:
+                    st.subheader("🔄 실행된 워크플로우")
+                    for workflow in workflows:
+                        st.write(f"• {workflow.replace('_', ' ').title()}")
+                
+                # 보고서 내용 표시
+                content = latest_recruitment_result.get('content', '')
+                if content:
+                    st.subheader("📄 채용 분석 보고서")
+                    with st.expander("보고서 내용", expanded=False):
+                        st.markdown(content)
+                    
+                    # 다운로드 버튼
+                    st.download_button(
+                        label="📥 채용 보고서 다운로드 (.md)",
+                        data=content,
+                        file_name=f"recruitment_report_{position.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                        mime="text/markdown",
+                        use_container_width=True
+                    )
+                
+                # 메타데이터 표시
+                if 'timestamp' in latest_recruitment_result:
+                    st.caption(f"⏰ 분석 시간: {latest_recruitment_result['timestamp']}")
+            else:
+                st.json(latest_recruitment_result)
+    else:
+        st.info("💡 아직 HR Recruitment Agent의 결과가 없습니다. 위에서 채용 분석을 실행해보세요.")
 
 if __name__ == "__main__":
     main() 

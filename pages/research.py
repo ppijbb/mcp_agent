@@ -24,6 +24,13 @@ from configs.settings import get_reports_path
 # 공통 유틸리티 임포트
 from srcs.common.page_utils import create_agent_page
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # Research Agent 임포트 시도
 try:
     from srcs.advanced_agents.researcher_v2 import (
@@ -206,4 +213,52 @@ def display_research_info():
     """)
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# 최신 Research Agent 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Research Agent 결과")
+
+latest_research_result = result_reader.get_latest_result("research_agent", "research_analysis")
+
+if latest_research_result:
+    with st.expander("🔍 최신 연구 분석 결과", expanded=False):
+        st.subheader("🤖 최근 연구 분석 결과")
+        
+        if isinstance(latest_research_result, dict):
+            # 연구 정보 표시
+            topic = latest_research_result.get('topic', 'N/A')
+            focus = latest_research_result.get('focus', 'N/A')
+            
+            st.success(f"**연구 주제: {topic}**")
+            st.info(f"**연구 초점: {focus}**")
+            
+            # 연구 결과 요약
+            col1, col2, col3 = st.columns(3)
+            col1.metric("연구 상태", "완료" if latest_research_result.get('success', False) else "실패")
+            col2.metric("보고서 길이", f"{len(latest_research_result.get('content', ''))} 문자")
+            col3.metric("출력 디렉토리", "저장됨" if latest_research_result.get('output_dir') else "미저장")
+            
+            # 연구 내용 표시
+            content = latest_research_result.get('content', '')
+            if content:
+                st.subheader("📄 연구 보고서")
+                with st.expander("보고서 내용", expanded=False):
+                    st.markdown(content)
+                
+                # 다운로드 버튼
+                st.download_button(
+                    label="📥 연구 보고서 다운로드 (.md)",
+                    data=content,
+                    file_name=f"research_report_{topic.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_research_result:
+                st.caption(f"⏰ 연구 시간: {latest_research_result['timestamp']}")
+        else:
+            st.json(latest_research_result)
+else:
+    st.info("💡 아직 Research Agent의 결과가 없습니다. 위에서 연구 분석을 실행해보세요.") 

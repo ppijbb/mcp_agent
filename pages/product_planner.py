@@ -19,6 +19,13 @@ from configs.settings import get_reports_path
 from srcs.product_planner_agent.utils import env_settings as env
 from srcs.product_planner_agent.product_planner_agent import ProductPlannerAgent
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 제품 기획 분석 결과")
@@ -255,4 +262,47 @@ async def main():
 try:
     st.run(main)
 except AttributeError:
-    asyncio.run(main()) 
+    asyncio.run(main())
+
+# 최신 Product Planner 결과 확인
+st.markdown("---")
+st.markdown("## 📊 최신 Product Planner 결과")
+
+latest_product_result = result_reader.get_latest_result("product_planner_agent", "product_planning")
+
+if latest_product_result:
+    with st.expander("📋 최신 제품 기획 결과", expanded=False):
+        st.subheader("🤖 최근 제품 기획 분석 결과")
+        
+        if isinstance(latest_product_result, dict):
+            # 제품 정보 표시
+            product_name = latest_product_result.get('product_name', 'N/A')
+            planning_status = latest_product_result.get('planning_status', 'N/A')
+            
+            st.success(f"**제품: {product_name}**")
+            st.info(f"**기획 상태: {planning_status}**")
+            
+            # 기획 결과 요약
+            col1, col2, col3 = st.columns(3)
+            col1.metric("시장 분석", "완료" if latest_product_result.get('market_analysis', False) else "미완료")
+            col2.metric("PRD 작성", "완료" if latest_product_result.get('prd_drafting', False) else "미완료")
+            col3.metric("Figma 생성", "완료" if latest_product_result.get('figma_creation', False) else "미완료")
+            
+            # 최종 보고서 표시
+            final_report = latest_product_result.get('final_report', {})
+            if final_report:
+                st.subheader("📄 최종 보고서")
+                with st.expander("보고서 내용", expanded=False):
+                    st.markdown(final_report.get('content', '내용 없음'))
+                
+                # 파일 경로 표시
+                if 'file_path' in final_report:
+                    st.info(f"**보고서 파일**: {final_report['file_path']}")
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_product_result:
+                st.caption(f"⏰ 기획 시간: {latest_product_result['timestamp']}")
+        else:
+            st.json(latest_product_result)
+else:
+    st.info("💡 아직 Product Planner Agent의 결과가 없습니다. 위에서 제품 기획을 실행해보세요.") 

@@ -19,6 +19,13 @@ from srcs.advanced_agents.decision_agent import (
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
 
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # 경로 설정
 REPORTS_PATH = get_reports_path('decision')
 os.makedirs(REPORTS_PATH, exist_ok=True)
@@ -118,6 +125,59 @@ def main():
 
             if result and "data" in result:
                 display_results(result["data"])
+
+    # 최신 Decision Agent 결과 확인
+    st.markdown("---")
+    st.markdown("## 📊 최신 Decision Agent 결과")
+    
+    latest_decision_result = result_reader.get_latest_result("decision_agent", "decision_analysis")
+    
+    if latest_decision_result:
+        with st.expander("🧠 최신 의사결정 분석 결과", expanded=False):
+            st.subheader("🤖 최근 의사결정 분석 결과")
+            
+            if isinstance(latest_decision_result, dict):
+                # 의사결정 정보 표시
+                decision = latest_decision_result.get('decision', {})
+                user_id = latest_decision_result.get('user_id', 'N/A')
+                
+                st.success(f"**사용자: {user_id}**")
+                st.info(f"**상호작용 유형: {latest_decision_result.get('interaction_type', 'N/A')}**")
+                
+                # 의사결정 결과 요약
+                col1, col2, col3 = st.columns(3)
+                col1.metric("신뢰도", f"{decision.get('confidence_score', 0):.1%}")
+                col2.metric("위험 수준", decision.get('risk_level', 'N/A'))
+                col3.metric("분석 상태", "완료" if latest_decision_result.get('success', False) else "실패")
+                
+                # 추천 사항 표시
+                recommendation = decision.get('recommendation', 'N/A')
+                if recommendation:
+                    st.subheader("💡 추천 사항")
+                    st.write(recommendation)
+                
+                # 근거 표시
+                reasoning = decision.get('reasoning', '')
+                if reasoning:
+                    st.subheader("🔍 분석 근거")
+                    with st.expander("상세 근거", expanded=False):
+                        st.write(reasoning)
+                
+                # 대안 표시
+                alternatives = decision.get('alternatives', [])
+                if alternatives:
+                    st.subheader("🔄 고려된 대안")
+                    with st.expander("대안 목록", expanded=False):
+                        for i, alt in enumerate(alternatives, 1):
+                            st.write(f"{i}. {alt}")
+                
+                # 메타데이터 표시
+                if 'timestamp' in latest_decision_result:
+                    st.caption(f"⏰ 분석 시간: {latest_decision_result['timestamp']}")
+            else:
+                st.json(latest_decision_result)
+    else:
+        st.info("💡 아직 Decision Agent의 결과가 없습니다. 위에서 의사결정 분석을 실행해보세요.")
 
 if __name__ == "__main__":
     main() 

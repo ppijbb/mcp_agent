@@ -12,6 +12,13 @@ sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.ui_utils import run_agent_process
+
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
 from configs.settings import get_reports_path
 
 def display_results(result_data):
@@ -140,6 +147,60 @@ def main():
                 display_results(result["data"])
             elif result and "error" in result:
                 st.error(result["error"])
+
+    # 최신 Drone Scout 결과 확인
+    st.markdown("---")
+    st.markdown("## 📊 최신 Drone Scout 결과")
+    
+    latest_drone_result = result_reader.get_latest_result("drone_scout_agent", "mission_execution")
+    
+    if latest_drone_result:
+        with st.expander("🛸 최신 드론 미션 결과", expanded=False):
+            st.subheader("🤖 최근 드론 미션 실행 결과")
+            
+            if isinstance(latest_drone_result, dict):
+                # 미션 정보 표시
+                mission_text = latest_drone_result.get('mission_text', 'N/A')
+                mission_status = latest_drone_result.get('mission_status', 'N/A')
+                
+                st.success(f"**미션 상태: {mission_status}**")
+                st.info(f"**미션 내용: {mission_text}**")
+                
+                # 미션 결과 요약
+                col1, col2, col3 = st.columns(3)
+                col1.metric("비행 시간", f"{latest_drone_result.get('flight_duration', 0)}분")
+                col2.metric("총 거리", f"{latest_drone_result.get('total_distance', 0):.1f}km")
+                col3.metric("최고 고도", f"{latest_drone_result.get('max_altitude', 0)}m")
+                
+                # 궤적 데이터 표시
+                trajectory = latest_drone_result.get('trajectory', [])
+                if trajectory:
+                    st.subheader("🗺️ 비행 궤적")
+                    try:
+                        df = pd.DataFrame(trajectory)
+                        st.dataframe(df, use_container_width=True)
+                        
+                        # 지도 시각화 (간단한 버전)
+                        if 'lat' in df.columns and 'lon' in df.columns:
+                            st.map(df[['lat', 'lon']])
+                    except Exception as e:
+                        st.warning(f"궤적 데이터 시각화 실패: {e}")
+                
+                # 미션 로그 표시
+                mission_log = latest_drone_result.get('mission_log', [])
+                if mission_log:
+                    st.subheader("📋 미션 로그")
+                    with st.expander("상세 미션 로그", expanded=False):
+                        for log_entry in mission_log:
+                            st.write(f"• {log_entry}")
+                
+                # 메타데이터 표시
+                if 'timestamp' in latest_drone_result:
+                    st.caption(f"⏰ 미션 시간: {latest_drone_result['timestamp']}")
+            else:
+                st.json(latest_drone_result)
+    else:
+        st.info("💡 아직 Drone Scout Agent의 결과가 없습니다. 위에서 드론 미션을 실행해보세요.")
 
 if __name__ == "__main__":
     main() 
