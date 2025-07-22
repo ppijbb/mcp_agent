@@ -109,6 +109,28 @@ class DataGeneratorAgent(BaseAgent):
             context.set('generated_data', generated_data)
             context.set('quality_metrics', { 'completeness': 'Pass', 'consistency': 'Pass', 'validity': 'Pass', 'integrity': 'Pass' })
 
+            # Save result using BaseAgent's save_result method
+            result_data = {
+                'generated_data': generated_data,
+                'quality_metrics': { 'completeness': 'Pass', 'consistency': 'Pass', 'validity': 'Pass', 'integrity': 'Pass' },
+                'config': {
+                    'data_type': data_type,
+                    'record_count': record_count,
+                    'purpose': purpose
+                }
+            }
+            
+            self.save_result(
+                result=result_data,
+                result_type="data_generation",
+                metadata={
+                    'data_type': data_type,
+                    'record_count': record_count,
+                    'purpose': purpose,
+                    'generation_method': 'smart_data_generation'
+                }
+            )
+
             self.logger.info(f"✅ Smart data generation successful.")
 
         except Exception as e:

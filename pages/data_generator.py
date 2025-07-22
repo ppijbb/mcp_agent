@@ -12,6 +12,8 @@ from datetime import datetime
 import asyncio
 import re
 import json
+import pandas as pd
+import plotly.express as px
 from srcs.common.streamlit_log_handler import setup_streamlit_logging
 from srcs.advanced_agents.enhanced_data_generator import SyntheticDataAgent
 import streamlit_process_manager as spm
@@ -38,6 +40,13 @@ except ImportError as e:
     st.error(f"❌ AI 에이전트를 불러올 수 없습니다: {e}")
     st.error("시스템 요구사항: `AIDataGenerationAgent`와 `SyntheticDataAgent`가 필수입니다.")
     st.info("에이전트 모듈을 설치하고 다시 시도해주세요: `srcs/basic_agents/`")
+    st.stop()
+
+# Result Reader 임포트
+try:
+    from pages.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
 
 # 페이지 설정
@@ -433,11 +442,93 @@ def save_data_generator_results(data_text, config):
         st.error(f"파일 저장 중 오류: {e}")
         return False, None
 
+def render_results_viewer():
+    """결과 확인 탭 렌더링"""
+    st.header("📊 생성된 데이터 결과")
+    st.caption("Data Generator Agent가 생성한 데이터를 확인하세요")
+    
+    # Data Generator Agent의 최신 결과 확인
+    latest_result = result_reader.get_latest_result("data_generator_agent", "data_generation")
+    
+    if latest_result:
+        st.success("✅ 최신 생성된 데이터를 찾았습니다!")
+        
+        # 결과 표시
+        if isinstance(latest_result, dict) and 'generated_data' in latest_result:
+            st.subheader("📋 생성된 데이터")
+            
+            # 데이터 표시
+            if isinstance(latest_result['generated_data'], list):
+                df = pd.DataFrame(latest_result['generated_data'])
+                st.dataframe(df, use_container_width=True)
+                
+                # 다운로드 버튼
+                csv = df.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 CSV 다운로드",
+                    data=csv,
+                    file_name=f"generated_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+                
+                # 데이터 시각화
+                if not df.empty:
+                    st.subheader("📈 데이터 시각화")
+                    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                    
+                    if len(numeric_cols) >= 2:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            x_col = st.selectbox("X축 선택", numeric_cols, key="viz_x")
+                            y_col = st.selectbox("Y축 선택", [col for col in numeric_cols if col != x_col], key="viz_y")
+                            if x_col and y_col:
+                                fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col}")
+                                st.plotly_chart(fig, use_container_width=True)
+                        
+                        with col2:
+                            hist_col = st.selectbox("히스토그램 컬럼", numeric_cols, key="viz_hist")
+                            if hist_col:
+                                fig = px.histogram(df, x=hist_col, title=f"{hist_col} 분포")
+                                st.plotly_chart(fig, use_container_width=True)
+            
+            # 품질 메트릭 표시
+            if 'quality_metrics' in latest_result:
+                st.subheader("📊 품질 메트릭")
+                metrics = latest_result['quality_metrics']
+                cols = st.columns(len(metrics))
+                for i, (key, value) in enumerate(metrics.items()):
+                    with cols[i]:
+                        st.metric(key, value)
+            
+            # 설정 정보 표시
+            if 'config' in latest_result:
+                with st.expander("⚙️ 생성 설정", expanded=False):
+                    st.json(latest_result['config'])
+        
+        else:
+            st.json(latest_result)
+    
+    else:
+        st.warning("📭 아직 생성된 데이터가 없습니다.")
+        st.info("💡 '채팅으로 생성' 또는 '상세 설정으로 생성' 탭에서 데이터를 생성해보세요.")
+        
+        # 기존 결과 목록 표시 (있다면)
+        agent_results = result_reader.get_agent_results("data_generator_agent")
+        if agent_results["results"]:
+            st.subheader("📋 이전 생성 결과")
+            selected_result = result_display.display_result_selector("data_generator_agent")
+            if selected_result:
+                result_data = result_reader.load_result(selected_result["file_path"])
+                result_display.display_result(result_data, selected_result.get("metadata"))
+
 # --- Main App Structure ---
-tab1, tab2 = st.tabs(["💬 채팅으로 생성 (Enhanced SDK)", "⚙️ 상세 설정으로 생성 (Orchestrator)"])
+tab1, tab2, tab3 = st.tabs(["💬 채팅으로 생성 (Enhanced SDK)", "⚙️ 상세 설정으로 생성 (Orchestrator)", "📊 결과 확인"])
 
 with tab1:
     render_chat_generator()
 
 with tab2:
-    render_detailed_generator() 
+    render_detailed_generator()
+
+with tab3:
+    render_results_viewer() 

@@ -7,6 +7,7 @@ integration with the MCP ecosystem.
 """
 import asyncio
 import os
+from datetime import datetime
 from typing import Dict, Any
 from srcs.core.errors import WorkflowError
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -97,6 +98,34 @@ class TravelScoutAgent(BaseAgent):
             )
 
             self.logger.info(f"✅ Travel search completed. Report saved to {report_path}")
+
+            # Save result using BaseAgent's save_result method
+            result_data = {
+                'results': results,
+                'report_path': report_path,
+                'search_params': search_params,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Determine search type for result_type
+            search_type = "travel_search"
+            if 'hotels' in results and results['hotels']:
+                search_type = "hotel_search"
+            elif 'flights' in results and results['flights']:
+                search_type = "flight_search"
+            
+            self.save_result(
+                result=result_data,
+                result_type=search_type,
+                metadata={
+                    'destination': destination,
+                    'origin': origin,
+                    'search_type': search_type,
+                    'report_path': report_path,
+                    'has_hotels': bool(results.get('hotels')),
+                    'has_flights': bool(results.get('flights'))
+                }
+            )
 
             context.set("results", results)
             context.set("report_path", report_path)

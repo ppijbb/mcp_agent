@@ -1,7 +1,7 @@
 import asyncio
 import functools
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent as MCP_Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
@@ -11,6 +11,13 @@ from cachetools import LRUCache
 from cachetools.keys import hashkey
 from pybreaker import CircuitBreaker, CircuitBreakerError
 import aiohttp
+
+# Import result manager
+try:
+    from srcs.common.result_manager import result_manager
+except ImportError:
+    # Fallback if result_manager is not available
+    result_manager = None
 
 def async_memoize(func):
     cache = LRUCache(maxsize=128)
@@ -120,6 +127,25 @@ class BaseAgent(ABC):
                     result = await self.circuit_breaker.call_async(self.run_workflow, *args, **kwargs)
 
                     self.logger.info(f"'{self.name}' 에이전트 워크플로우를 성공적으로 완료했습니다.")
+                    
+                    # Save result using result manager if available
+                    if result_manager and result is not None:
+                        try:
+                            result_paths = result_manager.save_result(
+                                agent_name=self.name,
+                                result=result,
+                                result_type="workflow_output",
+                                metadata={
+                                    "args": str(args),
+                                    "kwargs": str(kwargs),
+                                    "attempt": attempt + 1,
+                                    "success": True
+                                }
+                            )
+                            self.logger.info(f"Result saved to: {result_paths.get('latest_path', 'N/A')}")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to save result: {e}")
+                    
                     return result
                 except CircuitBreakerError as e:
                     self.logger.error(f"서킷 브레이커가 열렸습니다. '{self.name}' 워크플로우를 중단합니다.")
@@ -138,4 +164,55 @@ class BaseAgent(ABC):
                     raise WorkflowError(f"Unexpected error in workflow '{self.name}': {e}") from e
         finally:
             await self.close_session()
-            self.logger.info(f"'{self.name}' 에이전트 세션을 정리했습니다.") 
+            self.logger.info(f"'{self.name}' 에이전트 세션을 정리했습니다.")
+    
+    def save_result(self, result: Any, result_type: str = "general", metadata: Optional[Dict] = None) -> Optional[Dict[str, str]]:
+        """
+        Save agent result using the result manager.
+        
+        Args:
+            result: The result to save
+            result_type: Type of result (e.g., 'data', 'analysis', 'report')
+            metadata: Additional metadata about the result
+            
+        Returns:
+            Dict containing file paths or None if result_manager is not available
+        """
+        if result_manager is None:
+            self.logger.warning("Result manager not available. Result not saved.")
+            return None
+        
+        try:
+            return result_manager.save_result(
+                agent_name=self.name,
+                result=result,
+                result_type=result_type,
+                metadata=metadata
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to save result: {e}")
+            return None
+    
+    def get_latest_result(self, result_type: str = "general") -> Optional[Any]:
+        """
+        Get the latest result for this agent.
+        
+        Args:
+            result_type: Type of result to retrieve
+            
+        Returns:
+            The latest result or None if not found
+        """
+        if result_manager is None:
+            self.logger.warning("Result manager not available. Cannot retrieve result.")
+            return None
+        
+        try:
+            return result_manager.load_result(
+                agent_name=self.name,
+                result_type=result_type,
+                use_latest=True
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to load latest result: {e}")
+            return None 

@@ -45,6 +45,13 @@ except ImportError as e:
     mcp_available = False
     st.stop()
 
+# Result Reader 임포트
+try:
+    from pages.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 # --- 4. 페이지 헤더 및 스타일 적용 ---
 setup_page_header("Travel Scout", "Integrated Agent View")
 apply_custom_styles()
@@ -195,3 +202,61 @@ if st.session_state.screenshots:
                 st.image(screenshot_path, caption=f"Screenshot {i+1}", use_column_width=True)
             except Exception as e:
                 st.warning(f"Screenshot display error: {e}")
+
+# --- 📊 최신 Travel Scout 결과 확인 ---
+st.markdown("---")
+st.markdown("## 📊 최신 Travel Scout 결과")
+
+# Travel Scout Agent의 최신 결과 확인
+latest_travel_result = result_reader.get_latest_result("travel_scout_agent", "travel_search")
+
+if latest_travel_result:
+    with st.expander("🤖 최신 여행 검색 결과", expanded=False):
+        st.subheader("✈️ 최근 여행 검색 결과")
+        
+        if isinstance(latest_travel_result, dict):
+            # 검색 타입에 따른 결과 표시
+            search_type = latest_travel_result.get('search_type', 'unknown')
+            
+            if search_type == 'hotels':
+                st.write("🏨 **호텔 검색 결과**")
+                if 'results' in latest_travel_result:
+                    st.text_area("호텔 검색 결과", latest_travel_result['results'], height=200)
+                
+                # 검색 파라미터 표시
+                if 'search_params' in latest_travel_result:
+                    params = latest_travel_result['search_params']
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("목적지", params.get('destination', 'N/A'))
+                    with col2:
+                        st.metric("체크인", params.get('check_in', 'N/A'))
+                    with col3:
+                        st.metric("게스트 수", params.get('guests', 'N/A'))
+            
+            elif search_type == 'flights':
+                st.write("✈️ **항공편 검색 결과**")
+                if 'results' in latest_travel_result:
+                    st.text_area("항공편 검색 결과", latest_travel_result['results'], height=200)
+                
+                # 검색 파라미터 표시
+                if 'search_params' in latest_travel_result:
+                    params = latest_travel_result['search_params']
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("출발지", params.get('origin', 'N/A'))
+                    with col2:
+                        st.metric("목적지", params.get('destination', 'N/A'))
+                    with col3:
+                        st.metric("출발일", params.get('departure_date', 'N/A'))
+            
+            # 메타데이터 표시
+            if 'timestamp' in latest_travel_result:
+                st.caption(f"⏰ 검색 시간: {latest_travel_result['timestamp']}")
+            
+            if 'screenshots' in latest_travel_result:
+                st.info(f"📸 스크린샷 {len(latest_travel_result['screenshots'])}개 생성됨")
+        else:
+            st.json(latest_travel_result)
+else:
+    st.info("💡 아직 Travel Scout Agent의 결과가 없습니다. 위에서 여행 검색을 실행해보세요.")

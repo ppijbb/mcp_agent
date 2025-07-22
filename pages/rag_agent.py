@@ -20,6 +20,13 @@ from srcs.common.ui_utils import run_agent_process
 from configs.settings import get_reports_path
 from srcs.basic_agents.rag_agent import get_qdrant_status
 
+# Result Reader 임포트
+try:
+    from pages.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
+
 def main():
     create_agent_page(
         agent_name="RAG Agent",
@@ -92,6 +99,36 @@ def main():
             # 최종 응답을 placeholder에 표시
             result_placeholder.markdown(response_text)
             st.session_state.rag_messages.append({"role": "assistant", "content": response_text})
+
+    # 결과 확인 섹션 추가
+    st.divider()
+    
+    # 최신 RAG 결과 확인
+    latest_rag_result = result_reader.get_latest_result("rag_agent", "rag_query")
+    
+    if latest_rag_result:
+        with st.expander("📊 최신 RAG 결과 확인", expanded=False):
+            st.subheader("🤖 최근 질의응답 결과")
+            
+            if isinstance(latest_rag_result, dict):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**질문:**")
+                    st.write(latest_rag_result.get('query', 'N/A'))
+                
+                with col2:
+                    st.write("**답변:**")
+                    st.write(latest_rag_result.get('response', 'N/A'))
+                
+                # 메타데이터 표시
+                if 'collection_name' in latest_rag_result:
+                    st.info(f"📚 사용된 컬렉션: {latest_rag_result['collection_name']}")
+                
+                if 'timestamp' in latest_rag_result:
+                    st.caption(f"⏰ 생성 시간: {latest_rag_result['timestamp']}")
+            else:
+                st.json(latest_rag_result)
 
 if __name__ == "__main__":
     main() 

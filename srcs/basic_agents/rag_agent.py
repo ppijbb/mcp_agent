@@ -64,6 +64,25 @@ class RAGAgent(BaseAgent):
             )
             self.logger.info(f"Agent response: {response}")
             context.set("response", response)
+            
+            # Save result using BaseAgent's save_result method
+            result_data = {
+                'query': query,
+                'response': response,
+                'collection_name': self.collection_name,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            self.save_result(
+                result=result_data,
+                result_type="rag_query",
+                metadata={
+                    'query': query,
+                    'collection_name': self.collection_name,
+                    'response_length': len(response),
+                    'query_type': 'mcp_information'
+                }
+            )
         except Exception as e:
             raise WorkflowError(f"RAG agent workflow failed: {e}") from e
 
