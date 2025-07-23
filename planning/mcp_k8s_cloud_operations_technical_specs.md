@@ -1,161 +1,305 @@
-# MCP Kubernetes & Cloud Operations Agent 기술 명세서
+# MCP Kubernetes & Cloud Operations Agent 기술 명세서 (Python mcp_agent 기반)
 
 ## 1. 시스템 아키텍처 상세 명세
 
-### 1.1 MCP 프로토콜 구현
+### 1.1 Python mcp_agent 라이브러리 기반 구현
 
-#### 1.1.1 MCP 서버 인터페이스
-```typescript
-interface MCPServer {
-  // 리소스 관리
-  listResources(namespace?: string): Promise<Resource[]>;
-  getResource(name: string, namespace?: string): Promise<Resource>;
-  createResource(resource: Resource): Promise<Resource>;
-  updateResource(name: string, resource: Resource): Promise<Resource>;
-  deleteResource(name: string, namespace?: string): Promise<void>;
-  
-  // 실행 및 모니터링
-  executeCommand(pod: string, command: string[]): Promise<CommandResult>;
-  getLogs(pod: string, container?: string): Promise<LogStream>;
-  getMetrics(resource: string): Promise<Metrics>;
-  
-  // 이벤트 관리
-  listEvents(namespace?: string): Promise<Event[]>;
-  watchEvents(callback: (event: Event) => void): Promise<void>;
-}
+#### 1.1.1 MCP Agent 기본 구조
+```python
+from mcp_agent.app import MCPApp
+from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+
+class KubernetesOperationsAgent:
+    """Kubernetes 운영 관리를 위한 mcp_agent 기반 Agent"""
+    
+    def __init__(self, output_dir: str = "k8s_operations_reports"):
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # mcp_agent App 초기화 (설정 파일 없이 동적 생성)
+        self.app = MCPApp(
+            name="k8s_operations_agent",
+            human_input_callback=None
+        )
+        
+        # Agent 설정
+        self.agent = Agent(
+            name="k8s_operations",
+            instruction="Kubernetes 클러스터 운영 및 관리를 담당하는 전문 Agent입니다.",
+            server_names=["k8s-mcp", "monitoring-mcp", "security-mcp"],
+            llm_factory=lambda: OpenAIAugmentedLLM(
+                model="gpt-4",
+            ),
+        )
+        
+        # 동적 설정 생성기
+        self.config_generator = DynamicConfigGenerator()
 ```
 
-#### 1.1.2 리소스 타입 정의
-```typescript
-interface Resource {
-  apiVersion: string;
-  kind: string;
-  metadata: {
-    name: string;
-    namespace?: string;
-    labels?: Record<string, string>;
-    annotations?: Record<string, string>;
-  };
-  spec?: any;
-  status?: any;
-}
+#### 1.1.2 Python 데이터 모델 정의
+```python
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+from enum import Enum
 
-interface Pod extends Resource {
-  spec: {
-    containers: Container[];
-    volumes?: Volume[];
-    nodeSelector?: Record<string, string>;
-  };
-  status: {
-    phase: 'Pending' | 'Running' | 'Succeeded' | 'Failed';
-    conditions: Condition[];
-    podIP?: string;
-  };
-}
+class PodPhase(Enum):
+    PENDING = "Pending"
+    RUNNING = "Running"
+    SUCCEEDED = "Succeeded"
+    FAILED = "Failed"
 
-interface Deployment extends Resource {
-  spec: {
-    replicas: number;
-    selector: LabelSelector;
-    template: PodTemplateSpec;
-    strategy: DeploymentStrategy;
-  };
-  status: {
-    replicas: number;
-    updatedReplicas: number;
-    availableReplicas: number;
-    conditions: Condition[];
-  };
-}
+@dataclass
+class Resource:
+    api_version: str
+    kind: str
+    metadata: Dict[str, Any]
+    spec: Optional[Dict[str, Any]] = None
+    status: Optional[Dict[str, Any]] = None
+
+@dataclass
+class Pod(Resource):
+    spec: Dict[str, Any]
+    status: Dict[str, Any]
+    
+    @property
+    def phase(self) -> PodPhase:
+        return PodPhase(self.status.get("phase", "Pending"))
+    
+    @property
+    def pod_ip(self) -> Optional[str]:
+        return self.status.get("podIP")
+
+@dataclass
+class Deployment(Resource):
+    spec: Dict[str, Any]
+    status: Dict[str, Any]
+    
+    @property
+    def replicas(self) -> int:
+        return self.spec.get("replicas", 1)
+    
+    @property
+    def available_replicas(self) -> int:
+        return self.status.get("availableReplicas", 0)
 ```
 
-### 1.2 Kubernetes MCP 서버 구현
+### 1.2 Python 기반 Kubernetes MCP 서버 구현
 
 #### 1.2.1 핵심 기능 구현
-```typescript
-class KubernetesMCPServer implements MCPServer {
-  private k8sApi: k8s.KubernetesApi;
-  private config: K8sConfig;
-  
-  constructor(config: K8sConfig) {
-    this.config = config;
-    this.k8sApi = new k8s.KubernetesApi(config);
-  }
-  
-  // Pod 관리
-  async listPods(namespace?: string): Promise<Pod[]> {
-    const response = await this.k8sApi.listNamespacedPod(
-      namespace || 'default'
-    );
-    return response.body.items.map(this.mapToPod);
-  }
-  
-  async getPod(name: string, namespace?: string): Promise<Pod> {
-    const response = await this.k8sApi.readNamespacedPod(
-      name,
-      namespace || 'default'
-    );
-    return this.mapToPod(response.body);
-  }
-  
-  async createPod(pod: Pod): Promise<Pod> {
-    const response = await this.k8sApi.createNamespacedPod(
-      pod.metadata.namespace || 'default',
-      this.mapToK8sPod(pod)
-    );
-    return this.mapToPod(response.body);
-  }
-  
-  // Deployment 관리
-  async listDeployments(namespace?: string): Promise<Deployment[]> {
-    const response = await this.k8sApi.listNamespacedDeployment(
-      namespace || 'default'
-    );
-    return response.body.items.map(this.mapToDeployment);
-  }
-  
-  async updateDeployment(name: string, deployment: Deployment): Promise<Deployment> {
-    const response = await this.k8sApi.patchNamespacedDeployment(
-      name,
-      deployment.metadata.namespace || 'default',
-      this.mapToK8sDeployment(deployment)
-    );
-    return this.mapToDeployment(response.body);
-  }
-  
-  // 로그 및 메트릭
-  async getPodLogs(podName: string, namespace?: string, container?: string): Promise<string> {
-    const response = await this.k8sApi.readNamespacedPodLog(
-      podName,
-      namespace || 'default',
-      container
-    );
-    return response.body;
-  }
-  
-  async executePodCommand(
-    podName: string, 
-    namespace: string, 
-    command: string[]
-  ): Promise<CommandResult> {
-    const exec = new k8s.Exec(this.config);
-    return new Promise((resolve, reject) => {
-      exec.exec(
-        namespace,
-        podName,
-        command,
-        'default',
-        process.stdout,
-        process.stderr,
-        null,
-        false,
-        (status) => {
-          resolve({ exitCode: status.status, output: status.stdout });
-        }
-      );
-    });
-  }
-}
+```python
+import asyncio
+import json
+from typing import Dict, List, Optional, Any
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+from mcp.server import Server
+from mcp.server.models import InitializationOptions
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
+
+class KubernetesMCPServer:
+    """Python 기반 Kubernetes MCP 서버"""
+    
+    def __init__(self):
+        self.server = Server("kubernetes-server")
+        self.k8s_api = None
+        self._setup_kubernetes()
+        self._register_tools()
+    
+    def _setup_kubernetes(self):
+        """Kubernetes 클라이언트 설정"""
+        try:
+            config.load_incluster_config()  # 클러스터 내부에서 실행
+        except config.ConfigException:
+            config.load_kube_config()  # 로컬 kubeconfig 사용
+        
+        self.k8s_api = client.CoreV1Api()
+        self.apps_api = client.AppsV1Api()
+    
+    def _register_tools(self):
+        """MCP 도구 등록"""
+        self.server.list_tools = self._list_tools
+        self.server.call_tool = self._call_tool
+    
+    async def _list_tools(self) -> List[Tool]:
+        """사용 가능한 도구 목록 반환"""
+        return [
+            Tool(
+                name="list_pods",
+                description="Kubernetes Pod 목록 조회",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "namespace": {"type": "string", "default": "default"}
+                    }
+                }
+            ),
+            Tool(
+                name="get_pod",
+                description="특정 Pod 정보 조회",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string", "default": "default"}
+                    },
+                    "required": ["name"]
+                }
+            ),
+            Tool(
+                name="create_deployment",
+                description="Deployment 생성",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "image": {"type": "string"},
+                        "replicas": {"type": "integer", "default": 1},
+                        "namespace": {"type": "string", "default": "default"}
+                    },
+                    "required": ["name", "image"]
+                }
+            ),
+            Tool(
+                name="get_pod_logs",
+                description="Pod 로그 조회",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string", "default": "default"},
+                        "container": {"type": "string"}
+                    },
+                    "required": ["name"]
+                }
+            )
+        ]
+    
+    async def _call_tool(self, name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+        """도구 실행"""
+        try:
+            if name == "list_pods":
+                result = await self._list_pods(arguments.get("namespace", "default"))
+            elif name == "get_pod":
+                result = await self._get_pod(arguments["name"], arguments.get("namespace", "default"))
+            elif name == "create_deployment":
+                result = await self._create_deployment(arguments)
+            elif name == "get_pod_logs":
+                result = await self._get_pod_logs(arguments["name"], arguments.get("namespace", "default"))
+            else:
+                raise ValueError(f"Unknown tool: {name}")
+            
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+    
+    async def _list_pods(self, namespace: str) -> List[Dict[str, Any]]:
+        """Pod 목록 조회"""
+        try:
+            pods = self.k8s_api.list_namespaced_pod(namespace)
+            return [
+                {
+                    "name": pod.metadata.name,
+                    "phase": pod.status.phase,
+                    "pod_ip": pod.status.pod_ip,
+                    "ready": any(cond.type == "Ready" and cond.status == "True" 
+                               for cond in pod.status.conditions or [])
+                }
+                for pod in pods.items
+            ]
+        except ApiException as e:
+            raise Exception(f"Failed to list pods: {e}")
+    
+    async def _get_pod(self, name: str, namespace: str) -> Dict[str, Any]:
+        """특정 Pod 정보 조회"""
+        try:
+            pod = self.k8s_api.read_namespaced_pod(name, namespace)
+            return {
+                "name": pod.metadata.name,
+                "phase": pod.status.phase,
+                "pod_ip": pod.status.pod_ip,
+                "containers": [
+                    {
+                        "name": container.name,
+                        "image": container.image,
+                        "ready": container.ready
+                    }
+                    for container in pod.status.container_statuses or []
+                ]
+            }
+        except ApiException as e:
+            raise Exception(f"Failed to get pod {name}: {e}")
+    
+    async def _create_deployment(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Deployment 생성"""
+        try:
+            deployment = client.V1Deployment(
+                metadata=client.V1ObjectMeta(name=args["name"]),
+                spec=client.V1DeploymentSpec(
+                    replicas=args.get("replicas", 1),
+                    selector=client.V1LabelSelector(
+                        match_labels={"app": args["name"]}
+                    ),
+                    template=client.V1PodTemplateSpec(
+                        metadata=client.V1ObjectMeta(
+                            labels={"app": args["name"]}
+                        ),
+                        spec=client.V1PodSpec(
+                            containers=[
+                                client.V1Container(
+                                    name=args["name"],
+                                    image=args["image"]
+                                )
+                            ]
+                        )
+                    )
+                )
+            )
+            
+            result = self.apps_api.create_namespaced_deployment(
+                args.get("namespace", "default"),
+                deployment
+            )
+            
+            return {
+                "name": result.metadata.name,
+                "replicas": result.spec.replicas,
+                "status": "created"
+            }
+        except ApiException as e:
+            raise Exception(f"Failed to create deployment: {e}")
+    
+    async def _get_pod_logs(self, name: str, namespace: str) -> str:
+        """Pod 로그 조회"""
+        try:
+            logs = self.k8s_api.read_namespaced_pod_log(name, namespace)
+            return logs
+        except ApiException as e:
+            raise Exception(f"Failed to get logs for pod {name}: {e}")
+
+async def main():
+    """MCP 서버 실행"""
+    server = KubernetesMCPServer()
+    async with stdio_server() as (read_stream, write_stream):
+        await server.server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="kubernetes-server",
+                server_version="1.0.0",
+                capabilities=server.server.get_capabilities(
+                    notification_options=None,
+                    experimental_capabilities=None,
+                ),
+            ),
+        )
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 #### 1.2.2 모니터링 및 알림
@@ -391,20 +535,590 @@ class GCPMCPServer implements CloudMCPServer {
 }
 ```
 
-### 1.4 AI Agent 구현
+### 1.4 Python mcp_agent 기반 AI Agent 구현
 
 #### 1.4.1 배포 관리 Agent
-```typescript
-class DeploymentAgent {
-  private k8sMCP: KubernetesMCPServer;
-  private monitoring: KubernetesMonitor;
-  private llm: LLMClient;
-  
-  constructor(k8sMCP: KubernetesMCPServer, monitoring: KubernetesMonitor, llm: LLMClient) {
-    this.k8sMCP = k8sMCP;
-    this.monitoring = monitoring;
-    this.llm = llm;
-  }
+```python
+import asyncio
+import os
+import json
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+
+from mcp_agent.app import MCPApp
+from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.config import get_settings
+
+@dataclass
+class DeploymentConfig:
+    """배포 설정"""
+    name: str
+    image: str
+    replicas: int = 1
+    namespace: str = "default"
+    strategy: str = "RollingUpdate"
+    health_check: bool = True
+
+@dataclass
+class DeploymentResult:
+    """배포 결과"""
+    deployment_id: str
+    status: str
+    blue_deployment: Optional[str] = None
+    green_deployment: Optional[str] = None
+    current: str = "green"
+    timestamp: datetime = None
+
+class DeploymentManagementAgent:
+    """mcp_agent 기반 배포 관리 Agent"""
+    
+    def __init__(self, output_dir: str = "deployment_reports"):
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        # mcp_agent App 초기화
+        self.app = MCPApp(
+            name="deployment_management",
+            settings=get_settings("configs/mcp_agent.config.yaml"),
+            human_input_callback=None
+        )
+        
+        # Agent 설정
+        self.agent = Agent(
+            name="deployment_manager",
+            instruction="Kubernetes 애플리케이션 배포 및 업데이트를 관리하는 전문 Agent입니다.",
+            server_names=["k8s-mcp", "monitoring-mcp"],
+            llm_factory=lambda: OpenAIAugmentedLLM(
+                model="gpt-4",
+            ),
+        )
+        
+        # 배포 히스토리
+        self.deployment_history: List[DeploymentResult] = []
+        self.active_deployments: Dict[str, DeploymentConfig] = {}
+    
+    async def deploy_application(self, config: DeploymentConfig) -> DeploymentResult:
+        """애플리케이션 배포 실행"""
+        try:
+            async with self.app.run() as app_context:
+                context = app_context.context
+                logger = app_context.logger
+                
+                logger.info(f"Starting deployment for {config.name}")
+                
+                # 1. 배포 전 검증
+                await self._validate_deployment(config, context)
+                
+                # 2. Blue-Green 배포 실행
+                result = await self._execute_blue_green_deployment(config, context)
+                
+                # 3. 배포 후 검증
+                await self._validate_deployment_health(result, context)
+                
+                # 4. 트래픽 전환
+                await self._switch_traffic(result, context)
+                
+                # 5. 결과 저장
+                self.deployment_history.append(result)
+                self.active_deployments[result.deployment_id] = config
+                
+                logger.info(f"Deployment completed successfully: {result.deployment_id}")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Deployment failed: {e}")
+            # 롤백 실행
+            await self._rollback_deployment(config)
+            raise
+    
+    async def _validate_deployment(self, config: DeploymentConfig, context) -> None:
+        """배포 전 검증"""
+        # 시스템 리소스 확인
+        system_health = await context.call_tool("monitoring-mcp", "check_system_health", {
+            "threshold": 0.8
+        })
+        
+        if not system_health.get("healthy", False):
+            raise Exception("System health check failed")
+        
+        # 이미지 존재 확인
+        image_check = await context.call_tool("k8s-mcp", "check_image_exists", {
+            "image": config.image
+        })
+        
+        if not image_check.get("exists", False):
+            raise Exception(f"Image {config.image} not found")
+    
+    async def _execute_blue_green_deployment(self, config: DeploymentConfig, context) -> DeploymentResult:
+        """Blue-Green 배포 실행"""
+        deployment_id = f"{config.name}-{int(datetime.now().timestamp())}"
+        
+        # Blue 환경 생성 (0 replicas)
+        blue_deployment = await context.call_tool("k8s-mcp", "create_deployment", {
+            "name": f"{config.name}-blue",
+            "image": config.image,
+            "replicas": 0,
+            "namespace": config.namespace
+        })
+        
+        # Green 환경 생성 (실제 replicas)
+        green_deployment = await context.call_tool("k8s-mcp", "create_deployment", {
+            "name": f"{config.name}-green",
+            "image": config.image,
+            "replicas": config.replicas,
+            "namespace": config.namespace
+        })
+        
+        # Green 환경 스케일 업
+        await context.call_tool("k8s-mcp", "scale_deployment", {
+            "name": f"{config.name}-green",
+            "replicas": config.replicas,
+            "namespace": config.namespace
+        })
+        
+        # 헬스 체크 대기
+        await self._wait_for_deployment_ready(f"{config.name}-green", context)
+        
+        return DeploymentResult(
+            deployment_id=deployment_id,
+            status="completed",
+            blue_deployment=f"{config.name}-blue",
+            green_deployment=f"{config.name}-green",
+            current="green",
+            timestamp=datetime.now()
+        )
+    
+    async def _wait_for_deployment_ready(self, deployment_name: str, context, timeout: int = 300) -> None:
+        """배포 준비 완료 대기"""
+        start_time = datetime.now()
+        
+        while (datetime.now() - start_time).seconds < timeout:
+            deployment_status = await context.call_tool("k8s-mcp", "get_deployment_status", {
+                "name": deployment_name
+            })
+            
+            if deployment_status.get("ready", False):
+                return
+            
+            await asyncio.sleep(5)
+        
+        raise Exception(f"Deployment {deployment_name} not ready within {timeout} seconds")
+    
+    async def _validate_deployment_health(self, result: DeploymentResult, context) -> None:
+        """배포 후 헬스 검증"""
+        deployment_name = result.green_deployment if result.current == "green" else result.blue_deployment
+        
+        # Pod 상태 확인
+        pods = await context.call_tool("k8s-mcp", "list_pods", {
+            "namespace": "default",
+            "label_selector": f"app={deployment_name}"
+        })
+        
+        ready_pods = [pod for pod in pods if pod.get("ready", False)]
+        
+        if len(ready_pods) < len(pods):
+            raise Exception(f"Health check failed: {len(ready_pods)}/{len(pods)} pods ready")
+        
+        # 메트릭 기반 헬스 체크
+        if len(ready_pods) > 0:
+            metrics = await context.call_tool("monitoring-mcp", "get_pod_metrics", {
+                "pod_name": ready_pods[0]["name"],
+                "namespace": "default"
+            })
+            
+            cpu_usage = metrics.get("cpu", {}).get("usage", 0)
+            memory_usage = metrics.get("memory", {}).get("usage", 0)
+            
+            if cpu_usage > 0.8 or memory_usage > 0.9:
+                raise Exception("Deployment metrics indicate poor health")
+    
+    async def _switch_traffic(self, result: DeploymentResult, context) -> None:
+        """트래픽 전환"""
+        # Service 업데이트
+        service_name = f"{result.deployment_id}-service"
+        target_deployment = result.green_deployment if result.current == "green" else result.blue_deployment
+        
+        await context.call_tool("k8s-mcp", "update_service", {
+            "name": service_name,
+            "selector": {"app": target_deployment},
+            "namespace": "default"
+        })
+    
+    async def _rollback_deployment(self, config: DeploymentConfig) -> None:
+        """배포 롤백"""
+        # 이전 버전으로 롤백
+        previous_deployment = self._find_previous_deployment(config.name)
+        
+        if previous_deployment:
+            await self.deploy_application(previous_deployment)
+    
+    def _find_previous_deployment(self, app_name: str) -> Optional[DeploymentConfig]:
+        """이전 배포 설정 찾기"""
+        for result in reversed(self.deployment_history):
+            if result.deployment_id.startswith(app_name):
+                return self.active_deployments.get(result.deployment_id)
+        return None
+
+#### 1.4.2 동적 설정 생성 Agent
+```python
+import asyncio
+import os
+import json
+import yaml
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+
+from mcp_agent.app import MCPApp
+from mcp_agent.agents.agent import Agent
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+
+@dataclass
+class WorkloadRequirements:
+    """워크로드 요구사항"""
+    name: str
+    type: str  # web, api, batch, ml, etc.
+    cpu_request: str
+    memory_request: str
+    replicas: int
+    environment: str  # dev, staging, prod
+    security_level: str  # low, medium, high
+    scaling_requirements: Dict[str, Any]
+
+@dataclass
+class GeneratedConfig:
+    """생성된 설정"""
+    deployment_yaml: str
+    service_yaml: str
+    ingress_yaml: str
+    configmap_yaml: str
+    secret_yaml: str
+    network_policy_yaml: str
+    monitoring_config: Dict[str, Any]
+    security_policies: Dict[str, Any]
+
+class DynamicConfigGenerator:
+    """동적 Kubernetes 설정 생성기"""
+    
+    def __init__(self):
+        self.app = MCPApp(
+            name="dynamic_config_generator",
+            human_input_callback=None
+        )
+        
+        self.agent = Agent(
+            name="config_generator",
+            instruction="워크로드 요구사항을 분석하여 최적화된 Kubernetes 설정을 생성하는 전문 Agent입니다.",
+            server_names=["k8s-mcp", "monitoring-mcp"],
+            llm_factory=lambda: OpenAIAugmentedLLM(
+                model="gpt-4",
+            ),
+        )
+        
+        # 설정 템플릿 캐시
+        self.config_templates = self._load_config_templates()
+        
+    async def generate_k8s_config(self, requirements: WorkloadRequirements) -> GeneratedConfig:
+        """Kubernetes 설정 동적 생성"""
+        try:
+            async with self.app.run() as app_context:
+                context = app_context.context
+                logger = app_context.logger
+                
+                logger.info(f"Generating K8s config for {requirements.name}")
+                
+                # 1. 워크로드 분석
+                workload_analysis = await self._analyze_workload(requirements, context)
+                
+                # 2. 리소스 최적화
+                optimized_resources = await self._optimize_resources(workload_analysis, context)
+                
+                # 3. 보안 정책 생성
+                security_policies = await self._generate_security_policies(requirements, context)
+                
+                # 4. 네트워크 정책 생성
+                network_policies = await self._generate_network_policies(requirements, context)
+                
+                # 5. 모니터링 설정 생성
+                monitoring_config = await self._generate_monitoring_config(requirements, context)
+                
+                # 6. YAML 매니페스트 생성
+                manifests = await self._generate_manifests(requirements, optimized_resources, context)
+                
+                return GeneratedConfig(
+                    deployment_yaml=manifests["deployment"],
+                    service_yaml=manifests["service"],
+                    ingress_yaml=manifests["ingress"],
+                    configmap_yaml=manifests["configmap"],
+                    secret_yaml=manifests["secret"],
+                    network_policy_yaml=network_policies["yaml"],
+                    monitoring_config=monitoring_config,
+                    security_policies=security_policies
+                )
+                
+        except Exception as e:
+            logger.error(f"Config generation failed: {e}")
+            raise
+    
+    async def _analyze_workload(self, requirements: WorkloadRequirements, context) -> Dict[str, Any]:
+        """워크로드 특성 분석"""
+        analysis_prompt = f"""
+        워크로드 요구사항을 분석하여 최적화된 설정을 제안하세요:
+        
+        워크로드: {requirements.name}
+        타입: {requirements.type}
+        CPU 요청: {requirements.cpu_request}
+        메모리 요청: {requirements.memory_request}
+        레플리카: {requirements.replicas}
+        환경: {requirements.environment}
+        보안 레벨: {requirements.security_level}
+        스케일링 요구사항: {requirements.scaling_requirements}
+        
+        다음을 분석해주세요:
+        1. 리소스 사용량 예측
+        2. 성능 최적화 방안
+        3. 보안 요구사항
+        4. 모니터링 전략
+        5. 백업 전략
+        """
+        
+        result = await context.call_tool("config_generator", "analyze_workload", {
+            "prompt": analysis_prompt,
+            "requirements": requirements.__dict__
+        })
+        
+        return result
+    
+    async def _optimize_resources(self, analysis: Dict[str, Any], context) -> Dict[str, Any]:
+        """리소스 할당 최적화"""
+        optimization_prompt = f"""
+        워크로드 분석 결과를 바탕으로 리소스 할당을 최적화하세요:
+        
+        분석 결과: {analysis}
+        
+        다음을 고려하여 최적화하세요:
+        1. CPU/메모리 요청/제한
+        2. 레플리카 수
+        3. HPA 설정
+        4. 리소스 품질 클래스
+        5. 노드 선택기
+        """
+        
+        result = await context.call_tool("config_generator", "optimize_resources", {
+            "prompt": optimization_prompt,
+            "analysis": analysis
+        })
+        
+        return result
+    
+    async def _generate_security_policies(self, requirements: WorkloadRequirements, context) -> Dict[str, Any]:
+        """보안 정책 생성"""
+        security_prompt = f"""
+        워크로드에 적합한 보안 정책을 생성하세요:
+        
+        워크로드: {requirements.name}
+        보안 레벨: {requirements.security_level}
+        환경: {requirements.environment}
+        
+        다음을 포함하세요:
+        1. Pod Security Standards
+        2. Network Policies
+        3. RBAC 설정
+        4. Secret 관리
+        5. 컨테이너 보안 설정
+        """
+        
+        result = await context.call_tool("config_generator", "generate_security_policies", {
+            "prompt": security_prompt,
+            "requirements": requirements.__dict__
+        })
+        
+        return result
+    
+    async def _generate_network_policies(self, requirements: WorkloadRequirements, context) -> Dict[str, Any]:
+        """네트워크 정책 생성"""
+        network_prompt = f"""
+        워크로드에 적합한 네트워크 정책을 생성하세요:
+        
+        워크로드: {requirements.name}
+        타입: {requirements.type}
+        보안 레벨: {requirements.security_level}
+        
+        다음을 포함하세요:
+        1. Ingress 규칙
+        2. Egress 규칙
+        3. Pod 간 통신 정책
+        4. 서비스 메시 정책 (필요시)
+        """
+        
+        result = await context.call_tool("config_generator", "generate_network_policies", {
+            "prompt": network_prompt,
+            "requirements": requirements.__dict__
+        })
+        
+        return result
+    
+    async def _generate_monitoring_config(self, requirements: WorkloadRequirements, context) -> Dict[str, Any]:
+        """모니터링 설정 생성"""
+        monitoring_prompt = f"""
+        워크로드에 적합한 모니터링 설정을 생성하세요:
+        
+        워크로드: {requirements.name}
+        타입: {requirements.type}
+        환경: {requirements.environment}
+        
+        다음을 포함하세요:
+        1. Prometheus 메트릭
+        2. Grafana 대시보드
+        3. 알림 규칙
+        4. 로그 수집 설정
+        5. 성능 모니터링
+        """
+        
+        result = await context.call_tool("config_generator", "generate_monitoring_config", {
+            "prompt": monitoring_prompt,
+            "requirements": requirements.__dict__
+        })
+        
+        return result
+    
+    async def _generate_manifests(self, requirements: WorkloadRequirements, optimized_resources: Dict[str, Any], context) -> Dict[str, str]:
+        """YAML 매니페스트 생성"""
+        manifest_prompt = f"""
+        워크로드 요구사항과 최적화된 리소스를 바탕으로 Kubernetes YAML 매니페스트를 생성하세요:
+        
+        요구사항: {requirements.__dict__}
+        최적화된 리소스: {optimized_resources}
+        
+        다음 매니페스트를 생성하세요:
+        1. Deployment
+        2. Service
+        3. Ingress (필요시)
+        4. ConfigMap
+        5. Secret
+        """
+        
+        result = await context.call_tool("config_generator", "generate_manifests", {
+            "prompt": manifest_prompt,
+            "requirements": requirements.__dict__,
+            "optimized_resources": optimized_resources
+        })
+        
+        return result
+    
+    def _load_config_templates(self) -> Dict[str, Any]:
+        """설정 템플릿 로드"""
+        return {
+            "web_app": {
+                "deployment_template": self._get_web_deployment_template(),
+                "service_template": self._get_web_service_template(),
+                "ingress_template": self._get_web_ingress_template()
+            },
+            "api_service": {
+                "deployment_template": self._get_api_deployment_template(),
+                "service_template": self._get_api_service_template()
+            },
+            "batch_job": {
+                "job_template": self._get_batch_job_template(),
+                "cronjob_template": self._get_cronjob_template()
+            }
+        }
+    
+    def _get_web_deployment_template(self) -> str:
+        """웹 애플리케이션 Deployment 템플릿"""
+        return """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {name}
+  namespace: {namespace}
+  labels:
+    app: {name}
+    type: web
+spec:
+  replicas: {replicas}
+  selector:
+    matchLabels:
+      app: {name}
+  template:
+    metadata:
+      labels:
+        app: {name}
+    spec:
+      containers:
+      - name: {name}
+        image: {image}
+        ports:
+        - containerPort: {port}
+        resources:
+          requests:
+            cpu: {cpu_request}
+            memory: {memory_request}
+          limits:
+            cpu: {cpu_limit}
+            memory: {memory_limit}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {port}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: {port}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        """
+    
+    def _get_web_service_template(self) -> str:
+        """웹 애플리케이션 Service 템플릿"""
+        return """
+apiVersion: v1
+kind: Service
+metadata:
+  name: {name}-service
+  namespace: {namespace}
+spec:
+  selector:
+    app: {name}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: {port}
+  type: ClusterIP
+        """
+    
+    def _get_web_ingress_template(self) -> str:
+        """웹 애플리케이션 Ingress 템플릿"""
+        return """
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {name}-ingress
+  namespace: {namespace}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: {host}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {name}-service
+            port:
+              number: 80
+        """
+```
   
   async deployApplication(deploymentConfig: DeploymentConfig): Promise<DeploymentResult> {
     try {
