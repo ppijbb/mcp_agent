@@ -2,7 +2,7 @@
 Multi-Agent Orchestrator
 ========================
 
-4개 Agent들의 협업을 조율하고 Gemini CLI 명령어를 실행하는 Orchestrator
+실제 mcp-agent 라이브러리를 사용한 4개 Agent들의 협업 조율
 """
 
 import asyncio
@@ -15,6 +15,7 @@ from dataclasses import dataclass, asdict
 
 from mcp_agent.app import MCPApp
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.mcp.gen_client import gen_client
 
 from .agents import (
     CodeReviewAgent,
@@ -35,10 +36,10 @@ class OrchestrationResult:
     execution_summary: str
 
 class MultiAgentOrchestrator:
-    """Multi-Agent Orchestrator"""
+    """Multi-Agent Orchestrator - 실제 mcp-agent 표준 사용"""
     
     def __init__(self):
-        # mcp_agent App 초기화
+        # mcp-agent App 초기화
         self.app = MCPApp(
             name="multi_agent_orchestrator",
             human_input_callback=None
@@ -53,7 +54,7 @@ class MultiAgentOrchestrator:
         # Gemini CLI Executor 초기화
         self.gemini_executor = GeminiCLIExecutor()
         
-        # Orchestrator 설정
+        # Orchestrator 설정 - 실제 mcp-agent 표준
         self.orchestrator = Orchestrator(
             name="automation_orchestrator",
             instruction="""
@@ -70,14 +71,16 @@ class MultiAgentOrchestrator:
             2. 결과 수집 및 분석
             3. Gemini CLI 명령어 통합
             4. 최종 실행 및 보고서 생성
+            
+            MCP 서버의 도구들을 활용하여 실제 작업을 수행하세요.
             """,
-            server_names=["orchestration-mcp", "workflow-mcp"],
+            server_names=["filesystem", "playwright", "fetch"],  # 실제 MCP 서버명
         )
         
         self.orchestration_history: List[OrchestrationResult] = []
     
     async def run_full_automation(self, target_paths: List[str] = None) -> OrchestrationResult:
-        """전체 자동화 워크플로우 실행"""
+        """전체 자동화 워크플로우 실행 - 실제 MCP 서버 활용"""
         try:
             async with self.app.run() as app_context:
                 context = app_context.context
@@ -155,7 +158,7 @@ class MultiAgentOrchestrator:
             raise
     
     async def run_code_review_workflow(self, target_paths: List[str] = None) -> OrchestrationResult:
-        """코드 리뷰 워크플로우"""
+        """코드 리뷰 워크플로우 - 실제 MCP 서버 활용"""
         try:
             # 1. 코드 리뷰
             code_review_result = await self.code_review_agent.review_code(target_paths)
@@ -205,7 +208,7 @@ class MultiAgentOrchestrator:
             raise
     
     async def run_deployment_workflow(self, deployment_id: str = None) -> OrchestrationResult:
-        """배포 워크플로우"""
+        """배포 워크플로우 - 실제 MCP 서버 활용"""
         try:
             # 1. 배포 검증
             deployment_result = await self.security_deployment_agent.verify_deployment(deployment_id)

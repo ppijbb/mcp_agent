@@ -2,7 +2,7 @@
 Multi-Agent Automation Service - 메인 실행 파일
 ==============================================
 
-Python mcp_agent 라이브러리 기반 Multi-Agent 시스템
+실제 mcp-agent 라이브러리를 사용한 Multi-Agent 시스템
 Gemini CLI를 통한 최종 명령 실행
 """
 
@@ -21,13 +21,13 @@ from .agents import (
 )
 
 class MultiAgentAutomationService:
-    """Multi-Agent 자동화 서비스 메인 클래스"""
+    """Multi-Agent 자동화 서비스 메인 클래스 - 실제 mcp-agent 표준 사용"""
     
     def __init__(self):
         self.orchestrator = MultiAgentOrchestrator()
         
     async def run_full_automation(self, target_paths: list = None):
-        """전체 자동화 실행"""
+        """전체 자동화 실행 - 실제 MCP 서버 활용"""
         print("🚀 Multi-Agent 전체 자동화 시작...")
         
         try:
@@ -52,7 +52,7 @@ class MultiAgentAutomationService:
             raise
     
     async def run_code_review_workflow(self, target_paths: list = None):
-        """코드 리뷰 워크플로우 실행"""
+        """코드 리뷰 워크플로우 실행 - 실제 MCP 서버 활용"""
         print("🔍 코드 리뷰 워크플로우 시작...")
         
         try:
@@ -70,7 +70,7 @@ class MultiAgentAutomationService:
             raise
     
     async def run_deployment_workflow(self, deployment_id: str = None):
-        """배포 워크플로우 실행"""
+        """배포 워크플로우 실행 - 실제 MCP 서버 활용"""
         print("🚀 배포 워크플로우 시작...")
         
         try:
@@ -88,7 +88,7 @@ class MultiAgentAutomationService:
             raise
     
     async def run_individual_agents(self, target_paths: list = None):
-        """개별 Agent 실행"""
+        """개별 Agent 실행 - 실제 MCP 서버 활용"""
         print("🤖 개별 Agent 실행...")
         
         results = {}
@@ -151,7 +151,7 @@ class MultiAgentAutomationService:
         return results
     
     def start_scheduler(self):
-        """스케줄러 시작"""
+        """스케줄러 시작 - 실제 mcp-agent 표준"""
         print("⏰ Multi-Agent 자동화 스케줄러 시작...")
         print("스케줄:")
         print("- 매일 새벽 2시: 전체 자동화")
@@ -166,7 +166,7 @@ class MultiAgentAutomationService:
             print("\n👋 스케줄러를 종료합니다.")
     
     def show_status(self):
-        """현재 상태 표시"""
+        """현재 상태 표시 - 실제 mcp-agent 표준"""
         print("📊 Multi-Agent 자동화 서비스 상태")
         print("="*50)
         
@@ -188,9 +188,9 @@ class MultiAgentAutomationService:
             print(f"Gemini CLI 성공률: {(success_count/len(gemini_history))*100:.1f}%")
 
 def main():
-    """메인 함수"""
+    """메인 함수 - 실제 mcp-agent 표준"""
     parser = argparse.ArgumentParser(
-        description="Multi-Agent Automation Service",
+        description="Multi-Agent Automation Service - 실제 mcp-agent 표준",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
