@@ -1,22 +1,19 @@
 """
-Multi-Agent Automation Service - Agents
-=======================================
+Multi-Agent Automation Service - Agents Package
 
-4개 전문 Agent들의 역할 분담:
-1. CodeReviewAgent - 코드 리뷰
-2. DocumentationAgent - 자동 문서화  
-3. PerformanceTestAgent - 성능 및 테스트
-4. SecurityDeploymentAgent - 보안/배포 검증
+전문 Agent들을 포함하는 패키지입니다.
 """
 
 from .code_review_agent import CodeReviewAgent
 from .documentation_agent import DocumentationAgent
-from .performance_test_agent import PerformanceTestAgent
-from .security_deployment_agent import SecurityDeploymentAgent
+from .performance_agent import PerformanceAgent
+from .security_agent import SecurityAgent
+from .kubernetes_agent import KubernetesAgent
 
 __all__ = [
     "CodeReviewAgent",
     "DocumentationAgent", 
-    "PerformanceTestAgent",
-    "SecurityDeploymentAgent"
+    "PerformanceAgent",
+    "SecurityAgent",
+    "KubernetesAgent"
 ] 

@@ -1,322 +1,268 @@
 """
-자동 문서화 Agent
-================
+Documentation Agent
 
-코드 변경사항 분석 및 자동 문서 업데이트
+실제 mcp_agent 라이브러리를 사용한 자동 문서화 전문 Agent입니다.
 """
 
 import asyncio
-import json
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from srcs.common.utils import setup_agent_app, save_report
+
 
 @dataclass
 class DocumentationResult:
     """문서화 결과"""
-    doc_id: str
-    timestamp: str
-    files_updated: List[str]
-    new_docs_created: List[str]
-    api_docs_updated: List[str]
-    readme_updated: bool
-    changelog_updated: bool
-    gemini_cli_commands: List[str]
+    file_path: str
+    doc_type: str  # README, API, CHANGELOG, etc.
+    content: str
+    gemini_commands: List[str]
+    timestamp: datetime
+
 
 class DocumentationAgent:
-    """자동 문서화 전담 Agent"""
+    """자동 문서화 전담 Agent - 실제 mcp_agent 표준 사용"""
     
     def __init__(self):
-        # mcp_agent App 초기화
-        self.app = MCPApp(
-            name="documentation_agent",
-            human_input_callback=None
-        )
-        
-        # Agent 설정
+        self.app = setup_agent_app("documentation_system")
         self.agent = Agent(
             name="documentation_writer",
             instruction="""
             당신은 전문적인 기술 문서 작성자입니다. 다음을 수행하세요:
             
-            1. 코드 변경사항 분석
-            2. API 문서 자동 업데이트
-            3. README.md 업데이트
+            1. 코드 분석을 통한 자동 문서 생성
+            2. README.md 파일 업데이트 및 개선
+            3. API 문서 자동 생성
             4. CHANGELOG.md 업데이트
-            5. 새로운 기능에 대한 문서 생성
-            6. Gemini CLI 명령어 생성 (실제 문서 수정용)
+            5. 문서화 작업에 대한 Gemini CLI 명령어 생성
             
-            모든 문서는 명확하고 이해하기 쉽게 작성하고, 개발자가 바로 사용할 수 있도록 하세요.
+            MCP 서버의 도구들을 활용하여 실제 코드를 분석하고,
+            고품질의 문서를 생성하세요.
             """,
-            server_names=["git-mcp", "file-system-mcp", "code-analysis-mcp"],
-            llm_factory=lambda: OpenAIAugmentedLLM(
-                model="gpt-4",
-            ),
+            server_names=["filesystem", "github"],  # 실제 MCP 서버명
         )
-        
-        self.doc_history: List[DocumentationResult] = []
+        self.documentation_history: List[DocumentationResult] = []
     
-    async def update_documentation(self, target_paths: List[str] = None) -> DocumentationResult:
-        """문서 자동 업데이트"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
-                logger = app_context.logger
+    async def update_documentation(self, target_path: str = ".") -> List[DocumentationResult]:
+        """전체 문서화 업데이트"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            logger = app_context.logger
+            
+            # 파일시스템 서버 설정
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                logger.info("Filesystem server configured")
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
                 
-                logger.info("문서 자동 업데이트 시작")
+                # 문서화 작업 수행
+                doc_prompt = f"""
+                다음 경로의 프로젝트를 분석하여 문서를 업데이트하세요: {target_path}
                 
-                # 1. 코드 변경사항 분석
-                analysis_prompt = f"""
-                다음 경로의 코드 변경사항을 분석하여 문서를 업데이트해주세요: {target_paths or ['현재 디렉토리']}
+                다음 문서들을 생성/업데이트하세요:
+                1. README.md - 프로젝트 개요, 설치, 사용법
+                2. API 문서 - 주요 함수와 클래스 설명
+                3. CHANGELOG.md - 최근 변경사항
+                4. CONTRIBUTING.md - 기여 가이드
                 
-                다음을 수행하세요:
-                1. 새로운 API 엔드포인트나 함수 발견
-                2. 변경된 설정이나 환경 변수 확인
-                3. 새로운 의존성이나 라이브러리 추가 확인
-                4. 기존 문서와의 차이점 분석
-                5. Gemini CLI 명령어 생성 (실제 문서 수정용)
-                
-                결과를 JSON 형태로 반환하세요:
-                {{
-                    "files_updated": ["업데이트된 파일 목록"],
-                    "new_docs_created": ["새로 생성된 문서 목록"],
-                    "api_docs_updated": ["업데이트된 API 문서 목록"],
-                    "readme_updated": true,
-                    "changelog_updated": true,
-                    "gemini_cli_commands": [
-                        "gemini 'README.md에 새로운 API 엔드포인트 정보를 추가해줘'",
-                        "gemini 'CHANGELOG.md에 최근 변경사항을 추가해줘'",
-                        "gemini '새로운 설정 파일에 대한 문서를 생성해줘'"
-                    ]
-                }}
+                각 문서에 대한 Gemini CLI 명령어도 생성하세요.
                 """
                 
-                # Agent 실행
-                result = await context.call_tool(
-                    "documentation_analysis",
-                    {
-                        "prompt": analysis_prompt,
-                        "target_paths": target_paths
-                    }
+                result = await llm.generate_str(
+                    message=doc_prompt,
+                    request_params=RequestParams(model="gpt-4o")
                 )
                 
-                # 결과 파싱
-                doc_data = json.loads(result.get("content", "{}"))
+                # 결과 파싱 및 구조화
+                doc_results = self._parse_documentation_result(result, target_path)
+                self.documentation_history.extend(doc_results)
                 
-                # DocumentationResult 생성
-                doc_result = DocumentationResult(
-                    doc_id=f"doc_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    timestamp=datetime.now().isoformat(),
-                    files_updated=doc_data.get("files_updated", []),
-                    new_docs_created=doc_data.get("new_docs_created", []),
-                    api_docs_updated=doc_data.get("api_docs_updated", []),
-                    readme_updated=doc_data.get("readme_updated", False),
-                    changelog_updated=doc_data.get("changelog_updated", False),
-                    gemini_cli_commands=doc_data.get("gemini_cli_commands", [])
+                return doc_results
+    
+    async def update_readme(self, project_path: str = ".") -> DocumentationResult:
+        """README.md 업데이트"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
+                
+                prompt = f"""
+                다음 프로젝트의 README.md를 분석하고 개선하세요: {project_path}
+                
+                다음을 포함하세요:
+                - 프로젝트 개요 및 목적
+                - 설치 방법
+                - 사용 예제
+                - API 개요
+                - 기여 방법
+                - 라이선스 정보
+                
+                Gemini CLI 명령어도 생성하세요.
+                """
+                
+                result = await llm.generate_str(
+                    message=prompt,
+                    request_params=RequestParams(model="gpt-4o")
                 )
                 
-                # 히스토리 저장
-                self.doc_history.append(doc_result)
-                
-                logger.info(f"문서 업데이트 완료: {len(doc_result.files_updated)}개 파일 업데이트")
+                doc_result = self._parse_single_documentation(result, "README.md", project_path)
+                self.documentation_history.append(doc_result)
                 
                 return doc_result
-                
-        except Exception as e:
-            logger.error(f"문서 업데이트 실패: {e}")
-            raise
     
-    async def update_api_documentation(self) -> DocumentationResult:
-        """API 문서 자동 업데이트"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
+    async def update_api_documentation(self, source_path: str = "srcs") -> DocumentationResult:
+        """API 문서 생성"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
                 
-                # API 엔드포인트 스캔
-                api_result = await context.call_tool(
-                    "scan_api_endpoints",
-                    {}
-                )
-                
-                api_endpoints = api_result.get("endpoints", [])
-                
-                # API 문서 업데이트 요청
-                api_doc_prompt = f"""
-                다음 API 엔드포인트들을 분석하여 문서를 업데이트해주세요:
-                {api_endpoints}
+                prompt = f"""
+                다음 소스 코드를 분석하여 API 문서를 생성하세요: {source_path}
                 
                 다음을 포함하세요:
-                1. 각 엔드포인트의 설명
-                2. 요청/응답 예시
-                3. 파라미터 설명
-                4. 에러 코드 설명
-                5. Gemini CLI 명령어 (실제 문서 수정용)
+                - 클래스 및 함수 설명
+                - 매개변수 및 반환값
+                - 사용 예제
+                - 의존성 정보
+                
+                Gemini CLI 명령어도 생성하세요.
                 """
                 
-                result = await context.call_tool(
-                    "update_api_docs",
-                    {"prompt": api_doc_prompt}
+                result = await llm.generate_str(
+                    message=prompt,
+                    request_params=RequestParams(model="gpt-4o")
                 )
                 
-                # 결과 처리
-                doc_data = json.loads(result.get("content", "{}"))
+                doc_result = self._parse_single_documentation(result, "API.md", source_path)
+                self.documentation_history.append(doc_result)
                 
-                return DocumentationResult(
-                    doc_id=f"api_doc_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    timestamp=datetime.now().isoformat(),
-                    files_updated=doc_data.get("files_updated", []),
-                    new_docs_created=doc_data.get("new_docs_created", []),
-                    api_docs_updated=doc_data.get("api_docs_updated", []),
-                    readme_updated=False,
-                    changelog_updated=False,
-                    gemini_cli_commands=doc_data.get("gemini_cli_commands", [])
-                )
-                
-        except Exception as e:
-            print(f"API 문서 업데이트 실패: {e}")
-            raise
+                return doc_result
     
-    async def update_readme(self) -> DocumentationResult:
-        """README.md 자동 업데이트"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
+    async def update_changelog(self, project_path: str = ".") -> DocumentationResult:
+        """CHANGELOG.md 업데이트"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
                 
-                # 프로젝트 구조 분석
-                project_analysis = await context.call_tool(
-                    "analyze_project_structure",
-                    {}
-                )
+                prompt = f"""
+                다음 프로젝트의 최근 변경사항을 분석하여 CHANGELOG.md를 업데이트하세요: {project_path}
                 
-                # README 업데이트 요청
-                readme_prompt = f"""
-                프로젝트 구조를 분석하여 README.md를 업데이트해주세요:
-                {project_analysis}
+                다음 형식을 사용하세요:
+                ## [버전] - YYYY-MM-DD
+                ### Added
+                - 새로운 기능
+                ### Changed
+                - 변경된 기능
+                ### Fixed
+                - 수정된 버그
                 
-                다음을 포함하세요:
-                1. 프로젝트 개요
-                2. 설치 방법
-                3. 사용법
-                4. API 문서 링크
-                5. 기여 방법
-                6. 라이선스 정보
-                7. Gemini CLI 명령어 (실제 README 수정용)
+                Gemini CLI 명령어도 생성하세요.
                 """
                 
-                result = await context.call_tool(
-                    "update_readme",
-                    {"prompt": readme_prompt}
+                result = await llm.generate_str(
+                    message=prompt,
+                    request_params=RequestParams(model="gpt-4o")
                 )
                 
-                # 결과 처리
-                doc_data = json.loads(result.get("content", "{}"))
+                doc_result = self._parse_single_documentation(result, "CHANGELOG.md", project_path)
+                self.documentation_history.append(doc_result)
                 
-                return DocumentationResult(
-                    doc_id=f"readme_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    timestamp=datetime.now().isoformat(),
-                    files_updated=doc_data.get("files_updated", []),
-                    new_docs_created=doc_data.get("new_docs_created", []),
-                    api_docs_updated=doc_data.get("api_docs_updated", []),
-                    readme_updated=True,
-                    changelog_updated=False,
-                    gemini_cli_commands=doc_data.get("gemini_cli_commands", [])
-                )
-                
-        except Exception as e:
-            print(f"README 업데이트 실패: {e}")
-            raise
+                return doc_result
     
-    async def update_changelog(self) -> DocumentationResult:
-        """CHANGELOG.md 자동 업데이트"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
-                
-                # Git 커밋 히스토리 분석
-                git_history = await context.call_tool(
-                    "analyze_git_history",
-                    {"days": 7}  # 최근 7일
-                )
-                
-                # CHANGELOG 업데이트 요청
-                changelog_prompt = f"""
-                Git 커밋 히스토리를 분석하여 CHANGELOG.md를 업데이트해주세요:
-                {git_history}
-                
-                다음을 포함하세요:
-                1. 새로운 기능 (Features)
-                2. 버그 수정 (Bug Fixes)
-                3. 개선사항 (Improvements)
-                4. 변경사항 (Changes)
-                5. Gemini CLI 명령어 (실제 CHANGELOG 수정용)
-                """
-                
-                result = await context.call_tool(
-                    "update_changelog",
-                    {"prompt": changelog_prompt}
-                )
-                
-                # 결과 처리
-                doc_data = json.loads(result.get("content", "{}"))
-                
-                return DocumentationResult(
-                    doc_id=f"changelog_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    timestamp=datetime.now().isoformat(),
-                    files_updated=doc_data.get("files_updated", []),
-                    new_docs_created=doc_data.get("new_docs_created", []),
-                    api_docs_updated=doc_data.get("api_docs_updated", []),
-                    readme_updated=False,
-                    changelog_updated=True,
-                    gemini_cli_commands=doc_data.get("gemini_cli_commands", [])
-                )
-                
-        except Exception as e:
-            print(f"CHANGELOG 업데이트 실패: {e}")
-            raise
+    def get_documentation_summary(self) -> Dict[str, Any]:
+        """문서화 요약 정보"""
+        if not self.documentation_history:
+            return {"message": "No documentation generated yet"}
+        
+        doc_types = {}
+        for result in self.documentation_history:
+            doc_type = result.doc_type
+            if doc_type not in doc_types:
+                doc_types[doc_type] = 0
+            doc_types[doc_type] += 1
+        
+        return {
+            "total_documents": len(self.documentation_history),
+            "document_types": doc_types,
+            "recent_documents": [
+                {
+                    "file_path": result.file_path,
+                    "doc_type": result.doc_type,
+                    "timestamp": result.timestamp.isoformat()
+                }
+                for result in self.documentation_history[-5:]  # 최근 5개
+            ]
+        }
     
-    def get_documentation_summary(self, doc_result: DocumentationResult) -> str:
-        """문서화 결과 요약"""
-        summary = f"""
-문서 자동 업데이트 결과 요약
-==========================
-
-📝 업데이트된 파일: {len(doc_result.files_updated)}개
-📄 새로 생성된 문서: {len(doc_result.new_docs_created)}개
-🔗 API 문서 업데이트: {len(doc_result.api_docs_updated)}개
-📖 README 업데이트: {'✅' if doc_result.readme_updated else '❌'}
-📋 CHANGELOG 업데이트: {'✅' if doc_result.changelog_updated else '❌'}
-
-업데이트된 파일:
-"""
+    def _parse_documentation_result(self, result: str, target_path: str) -> List[DocumentationResult]:
+        """문서화 결과 파싱"""
+        # 실제 구현에서는 더 정교한 파싱 로직 필요
+        doc_results = []
         
-        for file in doc_result.files_updated[:5]:  # 상위 5개만
-            summary += f"- {file}\n"
+        # 간단한 파싱 예시
+        sections = result.split('##')
+        for section in sections:
+            if 'README' in section or 'API' in section or 'CHANGELOG' in section:
+                doc_type = "README.md" if "README" in section else "API.md" if "API" in section else "CHANGELOG.md"
+                doc_results.append(self._parse_single_documentation(section, doc_type, target_path))
         
-        summary += f"\nGemini CLI 명령어 ({len(doc_result.gemini_cli_commands)}개):\n"
-        for cmd in doc_result.gemini_cli_commands[:3]:  # 상위 3개만
-            summary += f"- {cmd}\n"
+        return doc_results if doc_results else [self._parse_single_documentation(result, "GENERAL.md", target_path)]
+    
+    def _parse_single_documentation(self, content: str, doc_type: str, file_path: str) -> DocumentationResult:
+        """단일 문서 결과 파싱"""
+        # 간단한 파싱 예시
+        lines = content.split('\n')
+        gemini_commands = []
         
-        return summary
+        for line in lines:
+            if line.strip().startswith('gemini') or 'gemini' in line.lower():
+                gemini_commands.append(line.strip())
+        
+        return DocumentationResult(
+            file_path=file_path,
+            doc_type=doc_type,
+            content=content,
+            gemini_commands=gemini_commands,
+            timestamp=datetime.now()
+        )
 
-# 사용 예시
+
 async def main():
-    """사용 예시"""
+    """테스트 실행"""
     agent = DocumentationAgent()
     
-    # 전체 문서 업데이트
-    result = await agent.update_documentation()
+    # README 업데이트
+    result = await agent.update_readme()
+    print(f"README updated for: {result.file_path}")
+    print(f"Generated {len(result.gemini_commands)} Gemini CLI commands")
     
-    # 결과 출력
-    print(agent.get_documentation_summary(result))
-    
-    # 특정 문서 업데이트
-    readme_result = await agent.update_readme()
-    changelog_result = await agent.update_changelog()
-    api_result = await agent.update_api_documentation()
+    # 요약 정보
+    summary = agent.get_documentation_summary()
+    print(f"Documentation summary: {summary}")
+
 
 if __name__ == "__main__":
     asyncio.run(main()) 

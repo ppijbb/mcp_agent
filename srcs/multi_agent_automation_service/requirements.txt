@@ -1,0 +1,69 @@
+# Multi-Agent Automation Service Requirements
+# 실제 mcp_agent 라이브러리 기반
+
+# Core MCP Agent Framework
+mcp-agent>=0.0.21
+mcp>=1.0.0
+
+# LLM Providers
+openai>=1.0.0
+anthropic>=0.7.0
+google-generativeai>=0.3.0
+
+# Async Support
+asyncio
+aiohttp>=3.8.0
+
+# Data Processing
+pydantic>=2.0.0
+dataclasses-json>=0.6.0
+
+# File System & OS
+pathlib
+os
+subprocess
+
+# Date & Time
+datetime
+time
+
+# Type Hints
+typing-extensions>=4.0.0
+
+# JSON Processing
+json5>=0.9.0
+
+# Logging
+rich>=13.0.0
+loguru>=0.7.0
+
+# Configuration
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Development Tools
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.0.0
+
+# Documentation
+sphinx>=7.0.0
+sphinx-rtd-theme>=1.3.0
+
+# Optional: Web Interface
+streamlit>=1.28.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Optional: Database
+sqlalchemy>=2.0.0
+alembic>=1.11.0
+
+# Optional: Monitoring
+prometheus-client>=0.17.0
+grafana-api>=1.0.0 

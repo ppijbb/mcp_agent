@@ -1,279 +1,222 @@
 """
-코드 리뷰 Agent
-==============
+Code Review Agent
 
-실제 mcp-agent 라이브러리를 사용한 코드 품질 검토 및 보안 취약점 발견
+실제 mcp_agent 라이브러리를 사용한 코드 리뷰 전문 Agent입니다.
 """
 
 import asyncio
-import json
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from mcp_agent.mcp.gen_client import gen_client
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from srcs.common.utils import setup_agent_app, save_report
+
 
 @dataclass
 class CodeReviewResult:
     """코드 리뷰 결과"""
-    review_id: str
-    timestamp: str
-    files_reviewed: List[str]
-    issues_found: List[Dict[str, Any]]
-    security_vulnerabilities: List[Dict[str, Any]]
-    improvement_suggestions: List[str]
-    code_quality_score: float
-    gemini_cli_commands: List[str]
+    file_path: str
+    issues: List[Dict[str, Any]]
+    suggestions: List[str]
+    severity: str  # LOW, MEDIUM, HIGH, CRITICAL
+    gemini_commands: List[str]
+    timestamp: datetime
+
 
 class CodeReviewAgent:
-    """코드 리뷰 전담 Agent - 실제 mcp-agent 표준 사용"""
+    """코드 리뷰 전담 Agent - 실제 mcp_agent 표준 사용"""
     
     def __init__(self):
-        # mcp-agent App 초기화
-        self.app = MCPApp(
-            name="code_review_agent",
-            human_input_callback=None
-        )
-        
-        # Agent 설정 - 실제 mcp-agent 표준
+        self.app = setup_agent_app("code_review_system")
         self.agent = Agent(
             name="code_reviewer",
             instruction="""
             당신은 전문적인 코드 리뷰어입니다. 다음을 수행하세요:
             
-            1. 코드 품질 검토 (가독성, 성능, 유지보수성)
-            2. 보안 취약점 발견 (SQL 인젝션, XSS, 인증 취약점 등)
+            1. 코드 품질 분석: 가독성, 성능, 보안, 유지보수성
+            2. 잠재적 버그 및 취약점 식별
             3. 코딩 표준 준수 여부 확인
-            4. 개선사항 제안
-            5. Gemini CLI 명령어 생성 (실제 수정 작업용)
+            4. 개선 제안 및 최적화 방안 제시
+            5. 발견된 문제점에 대한 구체적인 Gemini CLI 명령어 생성
             
             MCP 서버의 도구들을 활용하여 실제 코드를 분석하고, 
             발견된 문제점에 대해 구체적인 Gemini CLI 명령어를 생성하세요.
             """,
             server_names=["filesystem", "github"],  # 실제 MCP 서버명
-            llm_factory=lambda: OpenAIAugmentedLLM(
-                model="gpt-4o",
-            ),
         )
-        
         self.review_history: List[CodeReviewResult] = []
     
-    async def review_code(self, target_paths: List[str] = None) -> CodeReviewResult:
-        """코드 리뷰 실행 - 실제 MCP 서버 활용"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
-                logger = app_context.logger
+    async def review_code(self, target_path: str = ".", file_pattern: str = "*.py") -> CodeReviewResult:
+        """코드 리뷰 수행"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            logger = app_context.logger
+            
+            # 파일시스템 서버 설정
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                logger.info("Filesystem server configured")
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
                 
-                logger.info("코드 리뷰 시작")
+                # 코드 리뷰 수행
+                review_prompt = f"""
+                다음 경로의 코드를 리뷰하세요: {target_path}
+                파일 패턴: {file_pattern}
                 
-                # 1. 파일 시스템 MCP 서버를 통한 코드 분석
-                async with gen_client("filesystem") as fs_client:
-                    # 대상 경로의 파일 목록 조회
-                    if target_paths:
-                        files_to_review = target_paths
-                    else:
-                        # 현재 디렉토리 파일 목록 조회
-                        files_result = await fs_client.list_files()
-                        files_to_review = [f["name"] for f in files_result.get("files", []) if f["name"].endswith(('.py', '.js', '.ts', '.java', '.cpp', '.c'))]
-                    
-                    # 각 파일의 내용 읽기
-                    file_contents = {}
-                    for file_path in files_to_review[:10]:  # 최대 10개 파일만 처리
-                        try:
-                            content_result = await fs_client.read_file({"path": file_path})
-                            file_contents[file_path] = content_result.get("content", "")
-                        except Exception as e:
-                            logger.warning(f"파일 읽기 실패: {file_path} - {e}")
+                다음 형식으로 결과를 제공하세요:
                 
-                # 2. Agent를 통한 코드 분석 및 Gemini CLI 명령어 생성
-                analysis_prompt = f"""
-                다음 파일들의 코드를 분석하여 리뷰해주세요:
+                ## 발견된 문제점
+                - [심각도] 문제 설명
                 
-                {json.dumps(file_contents, indent=2)}
+                ## 개선 제안
+                - 구체적인 개선 방안
                 
-                다음을 수행하세요:
-                1. 코드 품질 분석 (가독성, 성능, 유지보수성)
-                2. 보안 취약점 스캔
-                3. 코딩 표준 준수 여부 확인
-                4. 개선사항 제안
-                5. Gemini CLI에서 실행할 수 있는 구체적인 수정 명령어 생성
-                
-                결과를 JSON 형태로 반환하세요:
-                {{
-                    "files_reviewed": ["파일 목록"],
-                    "issues_found": [
-                        {{
-                            "file": "파일명",
-                            "line": "라인번호", 
-                            "severity": "high/medium/low",
-                            "description": "문제 설명",
-                            "suggestion": "해결 방안"
-                        }}
-                    ],
-                    "security_vulnerabilities": [
-                        {{
-                            "type": "취약점 타입",
-                            "file": "파일명",
-                            "line": "라인번호",
-                            "description": "취약점 설명",
-                            "fix_command": "Gemini CLI 수정 명령어"
-                        }}
-                    ],
-                    "improvement_suggestions": ["개선 제안 목록"],
-                    "code_quality_score": 0.85,
-                    "gemini_cli_commands": [
-                        "gemini '특정 파일의 특정 라인을 수정해줘'",
-                        "gemini '보안 취약점을 수정해줘'"
-                    ]
-                }}
+                ## Gemini CLI 명령어
+                - 발견된 각 문제점에 대한 Gemini CLI 명령어
                 """
                 
-                # Agent 실행 - 실제 MCP 도구 활용
-                result = await self.agent.run(analysis_prompt)
-                
-                # 결과에서 JSON 추출
-                try:
-                    # Agent 응답에서 JSON 부분 추출
-                    response_text = result.get("content", "") if isinstance(result, dict) else str(result)
-                    
-                    # JSON 부분 찾기
-                    start_idx = response_text.find('{')
-                    end_idx = response_text.rfind('}') + 1
-                    
-                    if start_idx != -1 and end_idx != 0:
-                        json_str = response_text[start_idx:end_idx]
-                        review_data = json.loads(json_str)
-                    else:
-                        # JSON이 없으면 기본 구조 생성
-                        review_data = {
-                            "files_reviewed": list(file_contents.keys()),
-                            "issues_found": [],
-                            "security_vulnerabilities": [],
-                            "improvement_suggestions": [],
-                            "code_quality_score": 0.0,
-                            "gemini_cli_commands": []
-                        }
-                        
-                except json.JSONDecodeError:
-                    logger.error("JSON 파싱 실패, 기본 구조 사용")
-                    review_data = {
-                        "files_reviewed": list(file_contents.keys()),
-                        "issues_found": [],
-                        "security_vulnerabilities": [],
-                        "improvement_suggestions": [],
-                        "code_quality_score": 0.0,
-                        "gemini_cli_commands": []
-                    }
-                
-                # CodeReviewResult 생성
-                review_result = CodeReviewResult(
-                    review_id=f"review_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    timestamp=datetime.now().isoformat(),
-                    files_reviewed=review_data.get("files_reviewed", []),
-                    issues_found=review_data.get("issues_found", []),
-                    security_vulnerabilities=review_data.get("security_vulnerabilities", []),
-                    improvement_suggestions=review_data.get("improvement_suggestions", []),
-                    code_quality_score=review_data.get("code_quality_score", 0.0),
-                    gemini_cli_commands=review_data.get("gemini_cli_commands", [])
+                result = await llm.generate_str(
+                    message=review_prompt,
+                    request_params=RequestParams(model="gpt-4o")
                 )
                 
-                # 히스토리 저장
+                # 결과 파싱 및 구조화
+                review_result = self._parse_review_result(result, target_path)
                 self.review_history.append(review_result)
                 
-                logger.info(f"코드 리뷰 완료: {len(review_result.files_reviewed)}개 파일 검토")
-                
                 return review_result
-                
-        except Exception as e:
-            logger.error(f"코드 리뷰 실패: {e}")
-            raise
     
     async def review_specific_file(self, file_path: str) -> CodeReviewResult:
         """특정 파일 리뷰"""
-        return await self.review_code([file_path])
+        return await self.review_code(target_path=file_path)
     
-    async def review_recent_changes(self, days: int = 1) -> CodeReviewResult:
-        """최근 변경사항 리뷰 - GitHub MCP 서버 활용"""
-        try:
-            async with self.app.run() as app_context:
-                context = app_context.context
+    async def review_recent_changes(self, days: int = 7) -> List[CodeReviewResult]:
+        """최근 변경사항 리뷰"""
+        async with self.app.run() as app_context:
+            context = app_context.context
+            logger = app_context.logger
+            
+            if "filesystem" in context.config.mcp.servers:
+                context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+            
+            async with self.agent:
+                llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
                 
-                # GitHub MCP 서버를 통한 최근 변경사항 조회
-                async with gen_client("github") as github_client:
-                    # 최근 커밋 조회
-                    commits_result = await github_client.list_commits({"days": days})
-                    changed_files = []
-                    
-                    for commit in commits_result.get("commits", []):
-                        files = commit.get("files", [])
-                        changed_files.extend([f["path"] for f in files])
-                    
-                    return await self.review_code(list(set(changed_files)))
+                prompt = f"""
+                최근 {days}일간 변경된 파일들을 찾아서 리뷰하세요.
+                각 파일별로 문제점과 개선사항을 분석하고,
+                Gemini CLI 명령어를 생성하세요.
+                """
                 
-        except Exception as e:
-            print(f"최근 변경사항 리뷰 실패: {e}")
-            raise
+                result = await llm.generate_str(
+                    message=prompt,
+                    request_params=RequestParams(model="gpt-4o")
+                )
+                
+                # 결과 파싱
+                review_results = self._parse_multiple_reviews(result)
+                self.review_history.extend(review_results)
+                
+                return review_results
     
-    def get_review_summary(self, review_result: CodeReviewResult) -> str:
-        """리뷰 결과 요약"""
-        summary = f"""
-코드 리뷰 결과 요약
-==================
-
-📁 검토된 파일: {len(review_result.files_reviewed)}개
-🔍 발견된 이슈: {len(review_result.issues_found)}개
-🚨 보안 취약점: {len(review_result.security_vulnerabilities)}개
-💡 개선 제안: {len(review_result.improvement_suggestions)}개
-⭐ 코드 품질 점수: {review_result.code_quality_score:.2f}/1.0
-
-주요 이슈:
-"""
+    def get_review_summary(self) -> Dict[str, Any]:
+        """리뷰 요약 정보"""
+        if not self.review_history:
+            return {"message": "No reviews performed yet"}
         
-        for issue in review_result.issues_found[:5]:  # 상위 5개만
-            summary += f"- {issue['file']}:{issue['line']} - {issue['description']}\n"
+        total_files = len(self.review_history)
+        total_issues = sum(len(result.issues) for result in self.review_history)
+        critical_issues = sum(1 for result in self.review_history 
+                            for issue in result.issues 
+                            if issue.get("severity") == "CRITICAL")
         
-        summary += f"\nGemini CLI 명령어 ({len(review_result.gemini_cli_commands)}개):\n"
-        for cmd in review_result.gemini_cli_commands[:3]:  # 상위 3개만
-            summary += f"- {cmd}\n"
-        
-        return summary
+        return {
+            "total_files_reviewed": total_files,
+            "total_issues_found": total_issues,
+            "critical_issues": critical_issues,
+            "review_history": [
+                {
+                    "file_path": result.file_path,
+                    "severity": result.severity,
+                    "issues_count": len(result.issues),
+                    "timestamp": result.timestamp.isoformat()
+                }
+                for result in self.review_history
+            ]
+        }
     
-    def get_critical_issues(self, review_result: CodeReviewResult) -> List[Dict[str, Any]]:
-        """심각한 이슈만 필터링"""
-        critical_issues = []
+    def _parse_review_result(self, result: str, file_path: str) -> CodeReviewResult:
+        """리뷰 결과 파싱"""
+        # 실제 구현에서는 더 정교한 파싱 로직 필요
+        issues = []
+        suggestions = []
+        gemini_commands = []
         
-        # High severity 이슈
-        critical_issues.extend([
-            issue for issue in review_result.issues_found 
-            if issue.get("severity") == "high"
-        ])
+        # 간단한 파싱 예시
+        lines = result.split('\n')
+        current_section = None
         
-        # 보안 취약점
-        critical_issues.extend(review_result.security_vulnerabilities)
+        for line in lines:
+            if "## 발견된 문제점" in line:
+                current_section = "issues"
+            elif "## 개선 제안" in line:
+                current_section = "suggestions"
+            elif "## Gemini CLI 명령어" in line:
+                current_section = "commands"
+            elif line.strip().startswith('-') and current_section:
+                content = line.strip()[1:].strip()
+                if current_section == "issues":
+                    issues.append({"description": content, "severity": "MEDIUM"})
+                elif current_section == "suggestions":
+                    suggestions.append(content)
+                elif current_section == "commands":
+                    gemini_commands.append(content)
         
-        return critical_issues
+        # 심각도 결정
+        severity = "LOW"
+        if any("CRITICAL" in issue.get("description", "") for issue in issues):
+            severity = "CRITICAL"
+        elif any("HIGH" in issue.get("description", "") for issue in issues):
+            severity = "HIGH"
+        elif any("MEDIUM" in issue.get("description", "") for issue in issues):
+            severity = "MEDIUM"
+        
+        return CodeReviewResult(
+            file_path=file_path,
+            issues=issues,
+            suggestions=suggestions,
+            severity=severity,
+            gemini_commands=gemini_commands,
+            timestamp=datetime.now()
+        )
+    
+    def _parse_multiple_reviews(self, result: str) -> List[CodeReviewResult]:
+        """다중 리뷰 결과 파싱"""
+        # 실제 구현에서는 더 정교한 파싱 로직 필요
+        return [self._parse_review_result(result, "multiple_files")]
 
-# 사용 예시
+
 async def main():
-    """사용 예시"""
+    """테스트 실행"""
     agent = CodeReviewAgent()
     
     # 전체 코드 리뷰
     result = await agent.review_code()
+    print(f"Code review completed for: {result.file_path}")
+    print(f"Found {len(result.issues)} issues")
+    print(f"Generated {len(result.gemini_commands)} Gemini CLI commands")
     
-    # 결과 출력
-    print(agent.get_review_summary(result))
-    
-    # 심각한 이슈 확인
-    critical_issues = agent.get_critical_issues(result)
-    if critical_issues:
-        print(f"\n🚨 심각한 이슈 {len(critical_issues)}개 발견!")
-        for issue in critical_issues:
-            print(f"- {issue.get('description', 'Unknown issue')}")
+    # 요약 정보
+    summary = agent.get_review_summary()
+    print(f"Review summary: {summary}")
+
 
 if __name__ == "__main__":
     asyncio.run(main()) 

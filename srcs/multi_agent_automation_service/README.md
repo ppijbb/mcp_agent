@@ -1,396 +1,441 @@
-# 🤖 Multi-Agent Automation Service
+# Multi-Agent Automation Service
 
-**실제 mcp-agent 라이브러리 기반 Multi-Agent 시스템**
-**Gemini CLI를 통한 최종 명령 실행**
+실제 `mcp_agent` 라이브러리를 사용한 코드 리뷰, 자동 문서화, 성능 테스트, 보안 검증, **Kubernetes 제어**를 담당하는 Multi-Agent 시스템입니다. Gemini CLI를 통한 최종 명령어 실행을 지원합니다.
 
-## 📋 개요
+## 🎯 주요 기능
 
-이 프로젝트는 **4개 전문 Agent**들이 협업하여 코드 리뷰, 자동 문서화, 성능 테스트, 보안/배포 검증을 수행하고, **Gemini CLI**를 통해 실제 수정 작업을 실행하는 자동화 시스템입니다.
+### 🤖 전문 Agent들
+- **CodeReviewAgent**: 코드 품질 분석, 버그 식별, 개선 제안
+- **DocumentationAgent**: 자동 문서화, README/API 문서 생성
+- **PerformanceAgent**: 성능 분석, 병목 지점 식별, 최적화 제안
+- **SecurityAgent**: 보안 취약점 스캔, 배포 검증, 자동 롤백
+- **KubernetesAgent**: 🆕 Kubernetes 클러스터 제어, 배포 관리, 모니터링
 
-### 🌟 주요 특징
-
-- **🔍 코드 리뷰 Agent**: 코드 품질 검토 및 보안 취약점 발견
-- **📚 문서화 Agent**: 자동 문서 생성 및 업데이트
-- **⚡ 성능 테스트 Agent**: 성능 분석 및 최적화 제안
-- **🛡️ 보안/배포 Agent**: 보안 스캔 및 배포 검증
-- **🤖 Gemini CLI 통합**: 실제 수정 작업 실행
-- **⏰ 스케줄링**: 자동화된 워크플로우 실행
-- **📊 실시간 모니터링**: 실행 상태 및 결과 추적
+### 🔧 핵심 기능
+- **실제 mcp_agent 라이브러리 사용**: 표준 MCP 프로토콜 기반
+- **동적 Gemini CLI 명령어 생성**: LLM이 분석 결과를 바탕으로 명령어 생성
+- **Multi-Agent 조율**: Orchestrator를 통한 효율적인 Agent 협업
+- **병렬 처리**: 여러 Agent의 동시 실행으로 성능 최적화
+- **실시간 모니터링**: 실행 상태 및 결과 추적
+- **Kubernetes 통합**: 🆕 실제 K8s 클러스터 제어 및 관리
 
 ## 🏗️ 아키텍처
 
 ```
-Multi-Agent Automation Service
-├── CodeReviewAgent (코드 리뷰)
-├── DocumentationAgent (자동 문서화)
-├── PerformanceTestAgent (성능 테스트)
-├── SecurityDeploymentAgent (보안/배포)
-├── MultiAgentOrchestrator (조율)
-└── GeminiCLIExecutor (최종 실행)
+┌─────────────────────────────────────────────────────────────┐
+│                    Multi-Agent Orchestrator                 │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────┐ │
+│  │ Code Review │ │Documentation│ │Performance  │ │Security │ │
+│  │   Agent     │ │   Agent     │ │   Agent     │ │ Agent   │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────┘ │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │              Kubernetes Agent 🆕                        │ │
+│  │  • 애플리케이션 배포                                     │ │
+│  │  • 스케일링 및 업데이트                                  │ │
+│  │  • 설정 관리 (ConfigMap/Secret)                         │ │
+│  │  • 모니터링 및 로그 분석                                 │ │
+│  │  • 롤백 및 복구 작업                                     │ │
+│  │  • 클러스터 상태 진단                                    │ │
+│  └─────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│                    Gemini CLI Executor                      │
+│              (동적 명령어 생성 및 실행)                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Agent 역할 분담
+## 🚀 설치 및 설정
 
-| Agent | 역할 | 주요 기능 |
-|-------|------|-----------|
-| **CodeReviewAgent** | 코드 품질 검토 | 코드 분석, 보안 취약점 발견, 개선사항 제안 |
-| **DocumentationAgent** | 자동 문서화 | README 업데이트, API 문서 생성, 변경사항 기록 |
-| **PerformanceTestAgent** | 성능 분석 | 성능 병목 지점 발견, 최적화 제안, 테스트 생성 |
-| **SecurityDeploymentAgent** | 보안/배포 | 보안 스캔, 배포 검증, 자동 롤백 |
-
-## 🚀 설치 및 실행
-
-### 필수 요구사항
-
-- Python 3.11+
-- Node.js 18+ (MCP 서버용)
-- Gemini CLI 설치
-
-### 설치
-
+### 1. 의존성 설치
 ```bash
-# 1. 저장소 클론
-git clone <repository-url>
-cd multi_agent_automation_service
-
-# 2. Python 의존성 설치
 pip install -r requirements.txt
-
-# 3. MCP 서버 설치
-npm install -g @modelcontextprotocol/server-filesystem
-npm install -g @playwright/mcp@latest
-npm install -g @modelcontextprotocol/server-github
-
-# 4. Gemini CLI 설치 (별도 설치 필요)
-# https://ai.google.dev/gemini-api/docs/quickstart
 ```
 
-### 설정
-
-1. **환경 변수 설정** (`.env` 파일):
+### 2. 환경 변수 설정
 ```bash
-OPENAI_API_KEY=your_openai_api_key
-GEMINI_API_KEY=your_gemini_api_key
+# OpenAI API 키
+export OPENAI_API_KEY="your-openai-api-key"
+
+# Gemini CLI 설정 (선택사항)
+export GEMINI_API_KEY="your-gemini-api-key"
 ```
 
-2. **MCP 설정 확인** (`mcp_agent.config.yaml`):
-```yaml
-mcp:
-  servers:
-    filesystem:
-      command: "npx"
-      args: ["@modelcontextprotocol/server-filesystem"]
-    playwright:
-      command: "npx"
-      args: ["@playwright/mcp@latest"]
+### 3. kubectl 설치 확인 (Kubernetes 기능 사용시)
+```bash
+# kubectl 설치 확인
+kubectl version --client
+
+# 클러스터 연결 확인
+kubectl cluster-info
 ```
 
 ## 📖 사용법
 
-### 1. 전체 자동화 실행
-
+### 전체 자동화 워크플로우
 ```bash
-python -m multi_agent_automation_service full
+# 전체 자동화 실행
+python -m srcs.multi_agent_automation_service.main --workflow full --target srcs
+
+# 또는 간단히
+python -m srcs.multi_agent_automation_service.main
 ```
 
-**실행 과정:**
-1. 4개 Agent가 병렬로 작업 수행
-2. 결과 수집 및 분석
-3. Gemini CLI 명령어 생성
-4. 실제 수정 작업 실행
-
-### 2. 코드 리뷰 워크플로우
-
+### Kubernetes 워크플로우 🆕
 ```bash
-python -m multi_agent_automation_service review --paths src/ tests/
+# Kubernetes 애플리케이션 배포 및 관리
+python -m srcs.multi_agent_automation_service.main \
+  --workflow kubernetes \
+  --app-name myapp \
+  --config-path k8s/
+
+# 특정 네임스페이스에서 K8s 작업
+python -m srcs.multi_agent_automation_service.main \
+  --workflow kubernetes \
+  --app-name production-app \
+  --config-path production/k8s/
 ```
 
-**실행 과정:**
-1. 코드 리뷰 Agent 실행
-2. 심각한 이슈 발견 시 보안 스캔 추가
-3. Gemini CLI를 통한 수정 작업
-
-### 3. 배포 워크플로우
-
+### 개별 워크플로우
 ```bash
-python -m multi_agent_automation_service deploy --deployment-id deployment-123
+# 코드 리뷰만 실행
+python -m srcs.multi_agent_automation_service.main --workflow code_review --target srcs
+
+# 배포 워크플로우 실행
+python -m srcs.multi_agent_automation_service.main --workflow deployment --target srcs
 ```
 
-**실행 과정:**
-1. 배포 검증
-2. 실패 시 자동 롤백
-3. 성공 시 성능 테스트 및 문서 업데이트
-
-### 4. 개별 Agent 실행
-
+### 개별 Agent 실행
 ```bash
-python -m multi_agent_automation_service individual --paths src/
+# 개별 Agent 실행
+python -m srcs.multi_agent_automation_service.main --agent code_review --target srcs
+python -m srcs.multi_agent_automation_service.main --agent documentation --target srcs
+python -m srcs.multi_agent_automation_service.main --agent performance --target srcs
+python -m srcs.multi_agent_automation_service.main --agent security --target srcs
+python -m srcs.multi_agent_automation_service.main --agent kubernetes --target k8s/  # 🆕
 ```
 
-### 5. 스케줄러 시작
-
+### 요약 정보 확인
 ```bash
-python -m multi_agent_automation_service scheduler
+# 전체 요약 정보 표시
+python -m srcs.multi_agent_automation_service.main --summary
 ```
 
-**스케줄:**
-- 매일 새벽 2시: 전체 자동화
-- 매주 월요일 오전 9시: 코드 리뷰 워크플로우
-- 매시간: 배포 상태 확인
+## 🐳 Kubernetes 기능 상세 설명 🆕
 
-### 6. 상태 확인
+### KubernetesAgent 주요 기능
 
-```bash
-python -m multi_agent_automation_service status
+#### 1. 애플리케이션 배포
+```python
+# 애플리케이션 배포
+result = await kubernetes_agent.deploy_application("myapp", "k8s/")
+print(f"Deployment Status: {result.status}")
+print(f"Generated Commands: {len(result.gemini_commands)}")
+```
+
+#### 2. 배포 스케일링
+```python
+# 배포 스케일링
+result = await kubernetes_agent.scale_deployment("myapp", "default", 5)
+print(f"Scaling Status: {result.status}")
+```
+
+#### 3. 설정 업데이트
+```python
+# ConfigMap 업데이트
+config_data = {"DATABASE_URL": "postgresql://new-db:5432/mydb"}
+result = await kubernetes_agent.update_config("ConfigMap", "app-config", config_data)
+```
+
+#### 4. 배포 롤백
+```python
+# 배포 롤백
+result = await kubernetes_agent.rollback_deployment("myapp", "default", revision=2)
+```
+
+#### 5. 클러스터 모니터링
+```python
+# 클러스터 모니터링
+result = await kubernetes_agent.monitor_cluster("production")
+print(f"Monitoring Output: {result.output}")
+```
+
+### Kubernetes 워크플로우
+
+Kubernetes 워크플로우는 다음 단계로 구성됩니다:
+
+1. **보안 검증**: 배포 전 보안 스캔 수행
+2. **애플리케이션 배포**: K8s 리소스 배포
+3. **배포 후 모니터링**: 클러스터 상태 확인
+4. **성능 분석**: 배포된 애플리케이션 성능 분석
+5. **자동 롤백**: 문제 발생시 자동 롤백
+
+## ⏰ 스케줄링
+
+### Cron 기반 자동화
+```python
+import schedule
+import time
+from srcs.multi_agent_automation_service.main import MultiAgentAutomationService
+
+service = MultiAgentAutomationService()
+
+# 매일 오전 9시에 전체 자동화 실행
+schedule.every().day.at("09:00").do(
+    lambda: asyncio.run(service.run_full_automation())
+)
+
+# 매시간 Kubernetes 모니터링
+schedule.every().hour.do(
+    lambda: asyncio.run(service.run_kubernetes_workflow("production-app"))
+)
+
+# 매주 월요일 오전 8시에 코드 리뷰
+schedule.every().monday.at("08:00").do(
+    lambda: asyncio.run(service.run_code_review_workflow())
+)
+
+while True:
+    schedule.run_pending()
+    time.sleep(60)
 ```
 
 ## 📊 예시 결과
 
-### 코드 리뷰 결과
-
-```
-코드 리뷰 결과 요약
-==================
-
-📁 검토된 파일: 15개
-🔍 발견된 이슈: 8개
-🚨 보안 취약점: 2개
-💡 개선 제안: 12개
-⭐ 코드 품질 점수: 0.78/1.0
-
-주요 이슈:
-- src/auth.py:45 - SQL 인젝션 취약점 발견
-- src/utils.py:23 - 메모리 누수 가능성
-- tests/test_auth.py:67 - 테스트 커버리지 부족
-
-Gemini CLI 명령어 (5개):
-- gemini 'SQL 인젝션 취약점을 수정해줘'
-- gemini '메모리 누수 문제를 해결해줘'
-- gemini '테스트 커버리지를 개선해줘'
-```
-
 ### 전체 자동화 결과
-
 ```
-Multi-Agent 자동화 실행 요약
-===========================
+🚀 Starting Full Automation Workflow...
+Target Path: srcs
+============================================================
 
-📊 Agent 실행 결과:
-- code_review: ✅ 성공
-- documentation: ✅ 성공
-- performance_test: ✅ 성공
-- security_deployment: ✅ 성공
+✅ Full Automation Completed!
+Success: True
+Duration: 45.23s
+Gemini Commands Executed: 12
 
-🔧 Gemini CLI 명령어 실행: 15개
-- 성공: 14개
-- 실패: 1개
+📊 Multi-Agent Automation Service Summary
+============================================================
+Total Orchestrations: 1
+Success Rate: 100.00%
+Average Duration: 45.23s
+
+🤖 Agent Summaries:
+  code_review: 5 reviews, 100.00% success rate
+  documentation: 3 documentations, 100.00% success rate
+  performance: 2 analyses, 100.00% success rate
+  security: 1 scans, 100.00% success rate
+  kubernetes: 1 operations, 100.00% success rate
+  gemini_executor: 12 executions, 100.00% success rate
+```
+
+### Kubernetes 워크플로우 결과
+```
+🐳 Starting Kubernetes Workflow...
+Application: myapp
+Config Path: k8s/
+============================================================
+
+✅ Kubernetes Workflow Completed!
+Success: True
+Duration: 23.45s
+K8s Commands Executed: 8
+Deployment Status: SUCCESS
+Target: myapp
+Monitoring Status: SUCCESS
 ```
 
 ## 🛠️ 기술 스택
 
-### 핵심 라이브러리
+### Core Framework
+- **mcp-agent**: Multi-Agent 프레임워크
+- **MCP (Model Context Protocol)**: 표준화된 LLM 도구 인터페이스
+- **asyncio**: 비동기 프로그래밍
 
-- **mcp-agent**: 실제 MCP Agent 라이브러리
-- **MCP Servers**: 파일시스템, Playwright, GitHub 등
-- **Gemini CLI**: 최종 명령 실행
-- **asyncio**: 비동기 처리
-- **schedule**: 스케줄링
+### LLM Providers
+- **OpenAI GPT-4o**: 주요 LLM 제공자
+- **Anthropic Claude**: 대안 LLM 제공자
+- **Google Gemini**: Gemini CLI 통합
 
-### MCP 서버
+### Kubernetes Integration 🆕
+- **kubectl**: Kubernetes 명령줄 도구
+- **helm**: Kubernetes 패키지 매니저
+- **kustomize**: Kubernetes 설정 관리
 
-- `@modelcontextprotocol/server-filesystem`: 파일 시스템 접근
-- `@playwright/mcp@latest`: 웹 브라우저 자동화
-- `@modelcontextprotocol/server-github`: GitHub 접근
-- `mcp-server-fetch`: 웹 콘텐츠 가져오기
+### External Tools
+- **Gemini CLI**: Google의 AI 명령줄 도구
+- **GitHub API**: 코드 저장소 통합
+- **File System**: 로컬 파일 시스템 접근
 
 ## 📁 프로젝트 구조
 
 ```
-multi_agent_automation_service/
-├── agents/
-│   ├── __init__.py
-│   ├── code_review_agent.py      # 코드 리뷰 Agent
-│   ├── documentation_agent.py    # 문서화 Agent
-│   ├── performance_test_agent.py # 성능 테스트 Agent
-│   └── security_deployment_agent.py # 보안/배포 Agent
-├── orchestrator.py               # Multi-Agent 조율
-├── gemini_cli_executor.py        # Gemini CLI 실행
-├── main.py                       # 메인 실행 파일
-├── mcp_agent.config.yaml         # MCP 설정
-├── requirements.txt              # Python 의존성
-└── README.md                     # 프로젝트 문서
+srcs/multi_agent_automation_service/
+├── __init__.py
+├── main.py                          # 메인 진입점
+├── orchestrator.py                  # Multi-Agent 조율기
+├── gemini_executor.py              # Gemini CLI 실행기
+├── requirements.txt                 # 의존성 목록
+├── README.md                       # 프로젝트 문서
+└── agents/                         # 전문 Agent들
+    ├── __init__.py
+    ├── code_review_agent.py        # 코드 리뷰 Agent
+    ├── documentation_agent.py      # 문서화 Agent
+    ├── performance_agent.py        # 성능 분석 Agent
+    ├── security_agent.py           # 보안 검증 Agent
+    └── kubernetes_agent.py         # 🆕 Kubernetes Agent
 ```
 
 ## 🔄 워크플로우
 
-### 1. 전체 자동화 워크플로우
-
+### 전체 자동화 워크플로우
 ```mermaid
 graph TD
-    A[시작] --> B[4개 Agent 병렬 실행]
-    B --> C[결과 수집]
-    C --> D[Gemini CLI 명령어 생성]
-    D --> E[실제 수정 작업 실행]
-    E --> F[결과 보고서 생성]
-    F --> G[완료]
+    A[시작] --> B[병렬 Agent 실행]
+    B --> C[CodeReviewAgent]
+    B --> D[DocumentationAgent]
+    B --> E[PerformanceAgent]
+    B --> F[SecurityAgent]
+    B --> G[KubernetesAgent 🆕]
+    C --> H[결과 수집]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
+    H --> I[Gemini CLI 명령어 생성]
+    I --> J[명령어 실행]
+    J --> K[결과 평가]
+    K --> L[완료]
 ```
 
-### 2. 코드 리뷰 워크플로우
-
+### Kubernetes 워크플로우 🆕
 ```mermaid
 graph TD
-    A[코드 리뷰 시작] --> B[파일 분석]
-    B --> C[품질 검토]
-    C --> D{심각한 이슈?}
-    D -->|Yes| E[보안 스캔 추가]
-    D -->|No| F[Gemini CLI 명령어 생성]
-    E --> F
-    F --> G[수정 작업 실행]
-    G --> H[완료]
-```
-
-### 3. 배포 워크플로우
-
-```mermaid
-graph TD
-    A[배포 검증] --> B{배포 성공?}
-    B -->|No| C[자동 롤백]
-    B -->|Yes| D[성능 테스트]
-    C --> E[롤백 완료]
-    D --> F[문서 업데이트]
-    F --> G[Gemini CLI 실행]
-    G --> H[완료]
+    A[K8s 워크플로우 시작] --> B[보안 검증]
+    B --> C{보안 통과?}
+    C -->|Yes| D[애플리케이션 배포]
+    C -->|No| M[롤백]
+    D --> E[배포 후 모니터링]
+    E --> F[성능 분석]
+    F --> G{문제 발생?}
+    G -->|Yes| H[자동 롤백]
+    G -->|No| I[배포 완료]
+    H --> J[롤백 완료]
+    I --> K[워크플로우 완료]
+    J --> K
+    M --> K
 ```
 
 ## 📈 모니터링
 
 ### 실시간 모니터링
+- 각 Agent의 실행 상태 추적
+- Gemini CLI 명령어 실행 결과 모니터링
+- 성공/실패율 통계
+- 실행 시간 분석
 
-- **Agent 실행 상태**: 성공/실패 추적
-- **Gemini CLI 실행**: 명령어별 결과 추적
-- **성능 메트릭**: 실행 시간, 리소스 사용량
-- **오류 로그**: 상세한 오류 정보
+### 로그 관리
+```python
+# 로그 레벨 설정
+import logging
+logging.basicConfig(level=logging.INFO)
 
-### 알림 시스템
-
-- **이메일 알림**: 중요 이슈 발견 시
-- **Slack 통합**: 실시간 상태 업데이트
-- **웹훅**: 외부 시스템 연동
+# 상세 로그 활성화
+logging.getLogger('mcp_agent').setLevel(logging.DEBUG)
+```
 
 ## 🔧 개발 가이드
 
 ### 새로운 Agent 추가
-
 1. `agents/` 디렉토리에 새 Agent 클래스 생성
-2. `Orchestrator`에 Agent 등록
-3. `main.py`에 실행 모드 추가
-4. 테스트 코드 작성
+2. `mcp_agent` 패턴에 따라 구현
+3. `orchestrator.py`에 통합
+4. `main.py`에 실행 옵션 추가
 
 ### MCP 서버 추가
+```python
+# 새로운 MCP 서버 추가
+server_names=["filesystem", "github", "new-server"]
+```
 
-1. `mcp_agent.config.yaml`에 서버 설정 추가
-2. Agent에서 `gen_client` 사용
-3. 도구 호출 로직 구현
-
-### Gemini CLI 명령어 커스터마이징
-
-1. `GeminiCLIExecutor` 클래스 수정
-2. 명령어 템플릿 추가
-3. 실행 결과 파싱 로직 개선
+### Gemini CLI 명령어 확장
+```python
+# 새로운 명령어 타입 추가
+def generate_custom_commands(self, analysis_result):
+    # LLM 기반 동적 명령어 생성
+    return self._generate_gemini_commands(analysis_result)
+```
 
 ## 🐛 문제 해결
 
-### 일반적인 문제
+### 일반적인 문제들
 
-1. **MCP 서버 연결 실패**
-   ```bash
-   # MCP 서버 재설치
-   npm install -g @modelcontextprotocol/server-filesystem
-   ```
-
-2. **Gemini CLI 실행 실패**
-   ```bash
-   # Gemini CLI 재설치 및 인증
-   gemini auth
-   ```
-
-3. **메모리 부족**
-   ```bash
-   # 동시 실행 Agent 수 제한
-   export MAX_CONCURRENT_AGENTS=2
-   ```
-
-### 로그 확인
-
+#### 1. kubectl 연결 실패
 ```bash
-# 상세 로그 확인
-tail -f logs/multi_agent_automation.log
+# kubectl 설정 확인
+kubectl config current-context
+kubectl cluster-info
 
-# 오류만 필터링
-grep "ERROR" logs/multi_agent_automation.log
+# 클러스터 재연결
+kubectl config use-context your-context
 ```
 
-## 🚀 성능 최적화
+#### 2. MCP 서버 연결 실패
+```bash
+# MCP 서버 상태 확인
+mcp-server-filesystem --help
+mcp-server-github --help
+```
+
+#### 3. Gemini CLI 명령어 실행 실패
+```bash
+# Gemini CLI 설치 확인
+gemini --version
+
+# API 키 설정 확인
+echo $GEMINI_API_KEY
+```
+
+### 디버깅 모드
+```bash
+# 상세 로그와 함께 실행
+python -m srcs.multi_agent_automation_service.main --workflow kubernetes --debug
+```
+
+## ⚡ 성능 최적화
 
 ### 병렬 처리 최적화
+- Agent들의 병렬 실행으로 전체 시간 단축
+- Gemini CLI 명령어 배치 실행
+- 비동기 I/O 활용
 
-- **Agent 병렬 실행**: 4개 Agent 동시 실행
-- **파일 처리 최적화**: 청크 단위 처리
-- **메모리 관리**: 가비지 컬렉션 최적화
+### 리소스 관리
+- 메모리 사용량 모니터링
+- CPU 사용률 최적화
+- 네트워크 요청 최소화
 
 ### 캐싱 전략
+- 중복 분석 결과 캐싱
+- Gemini CLI 명령어 결과 캐싱
+- K8s 상태 정보 캐싱
 
-- **결과 캐싱**: 중복 작업 방지
-- **파일 캐싱**: 변경된 파일만 처리
-- **명령어 캐싱**: 동일 명령어 재사용
+## 📄 라이선스
+
+MIT License
 
 ## 🤝 기여하기
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-### 개발 환경 설정
+## 📞 지원
 
-```bash
-# 개발 의존성 설치
-pip install -r requirements-dev.txt
-
-# 테스트 실행
-pytest tests/
-
-# 코드 포맷팅
-black srcs/
-isort srcs/
-
-# 린팅
-flake8 srcs/
-mypy srcs/
-```
-
-## 📄 라이선스
-
-MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🗺️ 로드맵
-
-### v1.1 (예정)
-- [ ] 웹 UI 대시보드 추가
-- [ ] 더 많은 MCP 서버 지원
-- [ ] 실시간 협업 기능
-
-### v1.2 (예정)
-- [ ] 머신러닝 기반 예측 분석
-- [ ] 고급 스케줄링 기능
-- [ ] API 엔드포인트 제공
-
-### v2.0 (예정)
-- [ ] 분산 실행 지원
-- [ ] 플러그인 시스템
-- [ ] 엔터프라이즈 기능
+- Issues: GitHub Issues 사용
+- 문서: README.md 참조
+- 예제: `examples/` 디렉토리 확인
 
 ---
 
-**Made with ❤️ using 실제 mcp-agent 라이브러리 + Gemini CLI** 
+**Multi-Agent Automation Service** - 실제 `mcp_agent` 라이브러리를 사용한 강력한 자동화 시스템 🚀 
