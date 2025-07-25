@@ -67,7 +67,8 @@ class KubernetesAgent:
                 ["kubectl", "version", "--client"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                shell=True
             )
             if result.returncode == 0:
                 print(f"✅ kubectl installed: {result.stdout.strip()}")

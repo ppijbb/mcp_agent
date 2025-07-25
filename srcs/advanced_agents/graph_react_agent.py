@@ -358,7 +358,7 @@ async def main():
             # The orchestrator is the main entry point
             # Pass the agent instance to the orchestrator upon creation
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=GoogleAugmentedLLM,
                 available_agents=[graph_agent]
             )
             

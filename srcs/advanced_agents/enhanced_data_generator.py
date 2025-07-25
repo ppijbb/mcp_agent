@@ -19,6 +19,7 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityR
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.core.config.loader import settings
 
 # Configuration
@@ -196,7 +197,7 @@ class SyntheticDataAgent:
 
             # The orchestrator will manage the workflow
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=GoogleAugmentedLLM,
                 available_agents=[schema_agent, data_generator_agent, validator_agent, refiner_agent],
                 plan_type="full",
             )
@@ -236,11 +237,11 @@ class SyntheticDataAgent:
                 for iteration in range(max_refine_iters):
                     # Validation step
                     async with validator_agent:
-                        val_llm = await validator_agent.attach_llm(OpenAIAugmentedLLM)
+                        val_llm = await validator_agent.attach_llm(GoogleAugmentedLLM)
                         validation_report = await val_llm.generate_str(message=current_data)
                     # Refinement step
                     async with refiner_agent:
-                        ref_llm = await refiner_agent.attach_llm(OpenAIAugmentedLLM)
+                        ref_llm = await refiner_agent.attach_llm(GoogleAugmentedLLM)
                         current_data = await ref_llm.generate_str(
                             message=f"Dataset: {current_data}\nValidation Report: {validation_report}\nPlease refine the dataset accordingly."
                         )

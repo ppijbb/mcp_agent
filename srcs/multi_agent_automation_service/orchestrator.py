@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
@@ -58,22 +58,8 @@ class MultiAgentOrchestrator:
         
         # 메인 Orchestrator Agent
         self.orchestrator = Orchestrator(
+            llm_factory=GoogleAugmentedLLM,
             name="automation_orchestrator",
-            instruction="""
-            당신은 5개 전문 Agent들의 협업을 조율하는 Orchestrator입니다.
-            
-            다음 Agent들을 조율하세요:
-            1. CodeReviewAgent - 코드 리뷰 및 품질 분석
-            2. DocumentationAgent - 자동 문서화
-            3. PerformanceAgent - 성능 분석 및 최적화
-            4. SecurityAgent - 보안 검증 및 배포 검증
-            5. KubernetesAgent - Kubernetes 클러스터 제어 🆕
-            
-            각 Agent의 결과를 수집하고, Gemini CLI 명령어를 생성하여 실행하세요.
-            전체 워크플로우의 성공/실패를 판단하고 최종 결과를 제공하세요.
-            
-            MCP 서버의 도구들을 활용하여 실제 작업을 수행하세요.
-            """,
             server_names=["filesystem", "playwright", "fetch", "kubernetes"],  # K8s 서버 추가
         )
         self.orchestration_history: List[OrchestrationResult] = []
