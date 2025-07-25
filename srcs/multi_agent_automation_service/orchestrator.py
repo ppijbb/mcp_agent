@@ -19,14 +19,17 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating
 )
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from srcs.common.utils import setup_agent_app, save_report
 
-from .agents.code_review_agent import CodeReviewAgent
-from .agents.documentation_agent import DocumentationAgent
-from .agents.performance_agent import PerformanceAgent
-from .agents.security_agent import SecurityAgent
-from .agents.kubernetes_agent import KubernetesAgent
-from .gemini_executor import GeminiCLIExecutor
+from agents.code_review_agent import CodeReviewAgent
+from agents.documentation_agent import DocumentationAgent
+from agents.performance_agent import PerformanceAgent
+from agents.security_agent import SecurityAgent
+from agents.kubernetes_agent import KubernetesAgent
+from gemini_executor import GeminiCLIExecutor
 
 
 @dataclass

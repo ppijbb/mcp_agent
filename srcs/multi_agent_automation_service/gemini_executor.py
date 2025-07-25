@@ -1,7 +1,8 @@
 """
-Gemini CLI Executor
+Gemini CLI Executor with MCP Integration
 
 실제 mcp_agent 라이브러리를 사용한 Gemini CLI 명령어 실행기입니다.
+MCP(Model Context Protocol) 기반으로 Gemini CLI와 연결하여 도구들을 활용합니다.
 """
 
 import asyncio
@@ -16,6 +17,9 @@ from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from srcs.common.utils import setup_agent_app
 
 
@@ -28,30 +32,69 @@ class GeminiExecutionResult:
     exit_code: int
     execution_time: float
     timestamp: datetime
+    mcp_tools_used: List[str]  # 사용된 MCP 도구들
 
 
 class GeminiCLIExecutor:
-    """Gemini CLI 명령어 실행기 - 실제 mcp_agent 표준 사용"""
+    """Gemini CLI 명령어 실행기 - MCP 기반 통합"""
     
     def __init__(self):
         self.app = setup_agent_app("gemini_executor_system")
         self.agent = Agent(
             name="gemini_executor",
             instruction="""
-            당신은 Gemini CLI 명령어 실행 전문가입니다. 다음을 수행하세요:
+            당신은 Gemini CLI 명령어 실행 전문가입니다. MCP 서버들과 연결하여 다음을 수행하세요:
             
             1. Agent들이 생성한 Gemini CLI 명령어 검증
-            2. 명령어 실행 및 결과 수집
+            2. MCP 도구들을 활용한 명령어 실행
             3. 실행 오류 처리 및 재시도
             4. 실행 결과 분석 및 요약
             5. 배치 명령어 실행 최적화
+            6. Kubernetes 관련 MCP 도구 활용
             
             안전하고 효율적으로 Gemini CLI 명령어를 실행하세요.
             """,
-            server_names=["filesystem"],  # 실제 MCP 서버명
+            server_names=[
+                "filesystem", 
+                "kubernetes", 
+                "github", 
+                "gemini-cli"  # Gemini CLI MCP 서버
+            ],
         )
         self.execution_history: List[GeminiExecutionResult] = []
+        self.gemini_cli_config = self._setup_gemini_cli_config()
         self._check_gemini_installation()
+    
+    def _setup_gemini_cli_config(self) -> Dict[str, Any]:
+        """Gemini CLI MCP 설정 구성"""
+        return {
+            "mcpServers": {
+                "kubernetes": {
+                    "command": "kubectl",
+                    "args": ["proxy", "--port=8001"],
+                    "timeout": 30000,
+                    "trust": True
+                },
+                "filesystem": {
+                    "command": "mcp-server-filesystem",
+                    "args": ["--root", os.getcwd()],
+                    "timeout": 15000,
+                    "trust": True
+                },
+                "github": {
+                    "command": "docker",
+                    "args": [
+                        "run", "-i", "--rm",
+                        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+                        "ghcr.io/github/github-mcp-server"
+                    ],
+                    "env": {
+                        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+                    },
+                    "timeout": 30000
+                }
+            }
+        }
     
     def _check_gemini_installation(self) -> bool:
         """Gemini CLI 설치 확인"""
@@ -72,166 +115,216 @@ class GeminiCLIExecutor:
             print(f"❌ Gemini CLI not available: {e}")
             return False
     
-    async def execute_command(self, command: str, timeout: int = 60) -> GeminiExecutionResult:
-        """단일 Gemini CLI 명령어 실행"""
+    async def execute_command_with_mcp(self, command: str, context: Dict[str, Any] = None) -> GeminiExecutionResult:
+        """MCP 기반 Gemini CLI 명령어 실행"""
         start_time = datetime.now()
         
+        async with self.app.run() as app_context:
+            context = app_context.context
+            logger = app_context.logger
+            
+            try:
+                # MCP 서버 설정
+                if "filesystem" in context.config.mcp.servers:
+                    context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                    logger.info("Filesystem MCP server configured")
+                
+                async with self.agent:
+                    llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
+                    
+                    # Gemini CLI 명령어를 MCP 도구 호출로 변환
+                    mcp_tools_used = []
+                    
+                    if "kubectl" in command:
+                        # Kubernetes 관련 명령어
+                        k8s_result = await self._execute_k8s_command(command, context)
+                        mcp_tools_used.append("kubernetes")
+                        output = k8s_result.get("output", "")
+                        error = k8s_result.get("error")
+                        exit_code = k8s_result.get("exit_code", 0)
+                    
+                    elif "gemini" in command:
+                        # Gemini CLI 직접 명령어
+                        gemini_result = await self._execute_gemini_cli_command(command, context)
+                        mcp_tools_used.append("gemini-cli")
+                        output = gemini_result.get("output", "")
+                        error = gemini_result.get("error")
+                        exit_code = gemini_result.get("exit_code", 0)
+                    
+                    else:
+                        # 일반적인 파일시스템 작업
+                        fs_result = await self._execute_filesystem_command(command, context)
+                        mcp_tools_used.append("filesystem")
+                        output = fs_result.get("output", "")
+                        error = fs_result.get("error")
+                        exit_code = fs_result.get("exit_code", 0)
+                    
+                    execution_time = (datetime.now() - start_time).total_seconds()
+                    
+                    execution_result = GeminiExecutionResult(
+                        command=command,
+                        output=output,
+                        error=error,
+                        exit_code=exit_code,
+                        execution_time=execution_time,
+                        timestamp=datetime.now(),
+                        mcp_tools_used=mcp_tools_used
+                    )
+                    
+                    self.execution_history.append(execution_result)
+                    
+                    if exit_code != 0:
+                        logger.warning(f"Command failed: {command}")
+                        logger.warning(f"Error: {error}")
+                    else:
+                        logger.info(f"Command executed successfully: {command}")
+                    
+                    return execution_result
+                    
+            except Exception as e:
+                execution_time = (datetime.now() - start_time).total_seconds()
+                error_result = GeminiExecutionResult(
+                    command=command,
+                    output="",
+                    error=str(e),
+                    exit_code=-1,
+                    execution_time=execution_time,
+                    timestamp=datetime.now(),
+                    mcp_tools_used=[]
+                )
+                self.execution_history.append(error_result)
+                return error_result
+    
+    async def _execute_k8s_command(self, command: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Kubernetes 명령어 MCP 실행"""
         try:
-            # 명령어 검증
-            if not command.strip().startswith("gemini"):
-                raise ValueError("Command must start with 'gemini'")
-            
-            # 명령어 실행
-            result = subprocess.run(
-                command.split(),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=os.getcwd()
-            )
-            
-            execution_time = (datetime.now() - start_time).total_seconds()
-            
-            execution_result = GeminiExecutionResult(
-                command=command,
-                output=result.stdout,
-                error=result.stderr if result.stderr else None,
-                exit_code=result.returncode,
-                execution_time=execution_time,
-                timestamp=datetime.now()
-            )
-            
-            self.execution_history.append(execution_result)
-            
-            if result.returncode != 0:
-                print(f"⚠️ Command failed: {command}")
-                print(f"Error: {result.stderr}")
+            # kubectl 명령어 파싱
+            if "get" in command:
+                return await self._execute_k8s_get_command(command, context)
+            elif "apply" in command:
+                return await self._execute_k8s_apply_command(command, context)
+            elif "delete" in command:
+                return await self._execute_k8s_delete_command(command, context)
             else:
-                print(f"✅ Command executed successfully: {command}")
-            
-            return execution_result
-            
-        except subprocess.TimeoutExpired:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            error_result = GeminiExecutionResult(
-                command=command,
-                output="",
-                error=f"Command timed out after {timeout} seconds",
-                exit_code=-1,
-                execution_time=execution_time,
-                timestamp=datetime.now()
-            )
-            self.execution_history.append(error_result)
-            return error_result
-            
+                return await self._execute_k8s_generic_command(command, context)
         except Exception as e:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            error_result = GeminiExecutionResult(
-                command=command,
-                output="",
-                error=str(e),
-                exit_code=-1,
-                execution_time=execution_time,
-                timestamp=datetime.now()
+            return {"output": "", "error": str(e), "exit_code": 1}
+    
+    async def _execute_gemini_cli_command(self, command: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Gemini CLI 명령어 MCP 실행"""
+        try:
+            # Gemini CLI 명령어를 MCP 도구 호출로 변환
+            # 예: gemini -y -p "analyze this code" -> MCP 도구 호출
+            prompt = self._extract_prompt_from_gemini_command(command)
+            
+            # LLM을 통한 분석 실행
+            llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
+            result = await llm.augmented_generate(
+                RequestParams(
+                    messages=[{"role": "user", "content": prompt}],
+                    tools_choice="auto"
+                )
             )
-            self.execution_history.append(error_result)
-            return error_result
+            
+            return {
+                "output": result.content,
+                "error": None,
+                "exit_code": 0
+            }
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": 1}
+    
+    async def _execute_filesystem_command(self, command: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """파일시스템 명령어 MCP 실행"""
+        try:
+            # 파일시스템 관련 작업을 MCP 도구로 실행
+            if "read" in command or "cat" in command:
+                return await self._execute_file_read_command(command, context)
+            elif "write" in command or "echo" in command:
+                return await self._execute_file_write_command(command, context)
+            else:
+                return await self._execute_generic_filesystem_command(command, context)
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": 1}
+    
+    def _extract_prompt_from_gemini_command(self, command: str) -> str:
+        """Gemini CLI 명령어에서 프롬프트 추출"""
+        # gemini -y -p "prompt here" 형태에서 프롬프트 추출
+        if "-p" in command:
+            parts = command.split("-p")
+            if len(parts) > 1:
+                prompt = parts[1].strip().strip('"')
+                return prompt
+        return command
+    
+    # 기존 메서드들은 유지하되 MCP 기반으로 수정
+    async def execute_command(self, command: str, timeout: int = 60) -> GeminiExecutionResult:
+        """단일 Gemini CLI 명령어 실행 (MCP 기반)"""
+        return await self.execute_command_with_mcp(command)
     
     async def execute_batch_commands(self, commands: List[str], 
                                    max_concurrent: int = 3) -> List[GeminiExecutionResult]:
-        """배치 명령어 실행"""
+        """배치 명령어 실행 (MCP 기반)"""
         semaphore = asyncio.Semaphore(max_concurrent)
         
         async def execute_with_semaphore(command: str) -> GeminiExecutionResult:
             async with semaphore:
-                return await self.execute_command(command)
+                return await self.execute_command_with_mcp(command)
         
-        # 병렬 실행
         tasks = [execute_with_semaphore(cmd) for cmd in commands]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # 예외 처리
-        execution_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                error_result = GeminiExecutionResult(
-                    command=commands[i],
-                    output="",
-                    error=str(result),
-                    exit_code=-1,
-                    execution_time=0.0,
-                    timestamp=datetime.now()
-                )
-                execution_results.append(error_result)
-            else:
-                execution_results.append(result)
-        
-        return execution_results
+        return await asyncio.gather(*tasks)
     
     async def execute_with_context(self, commands: List[str], 
                                  context: Dict[str, Any]) -> List[GeminiExecutionResult]:
-        """컨텍스트를 고려한 명령어 실행"""
-        async with self.app.run() as app_context:
-            app_logger = app_context.logger
-            
-            # 컨텍스트 기반 명령어 최적화
-            optimized_commands = await self._optimize_commands_with_context(commands, context)
-            
-            app_logger.info(f"Executing {len(optimized_commands)} commands with context")
-            
-            results = []
-            for command in optimized_commands:
-                result = await self.execute_command(command)
-                results.append(result)
-                
-                # 컨텍스트 업데이트
-                if result.exit_code == 0:
-                    context["last_successful_command"] = command
-                    context["last_successful_output"] = result.output
-                else:
-                    context["last_failed_command"] = command
-                    context["last_error"] = result.error
-            
-            return results
+        """컨텍스트와 함께 명령어 실행 (MCP 기반)"""
+        # 컨텍스트를 활용하여 명령어 최적화
+        optimized_commands = await self._optimize_commands_with_context(commands, context)
+        
+        results = []
+        for command in optimized_commands:
+            result = await self.execute_command_with_mcp(command, context)
+            results.append(result)
+        
+        return results
     
     async def _optimize_commands_with_context(self, commands: List[str], 
                                             context: Dict[str, Any]) -> List[str]:
-        """컨텍스트를 고려한 명령어 최적화"""
-        async with self.agent:
+        """컨텍스트를 활용한 명령어 최적화"""
+        # LLM을 사용하여 명령어 최적화
+        optimization_prompt = f"""
+        다음 명령어들을 컨텍스트에 맞게 최적화하세요:
+        
+        컨텍스트: {context}
+        명령어들: {commands}
+        
+        최적화 요구사항:
+        1. 중복 제거
+        2. 순서 최적화
+        3. MCP 도구 활용
+        4. 성능 향상
+        
+        최적화된 명령어 목록을 JSON 배열로 반환하세요.
+        """
+        
+        try:
             llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
-            
-            prompt = f"""
-            다음 명령어들을 컨텍스트를 고려하여 최적화하세요:
-            
-            명령어들:
-            {json.dumps(commands, indent=2)}
-            
-            컨텍스트:
-            {json.dumps(context, indent=2)}
-            
-            다음을 고려하세요:
-            1. 중복 명령어 제거
-            2. 순서 최적화
-            3. 의존성 고려
-            4. 효율성 개선
-            
-            최적화된 명령어 목록을 JSON 배열로 반환하세요.
-            """
-            
-            result = await llm.generate_str(
-                message=prompt,
-                request_params=RequestParams(model="gpt-4o")
+            result = await llm.augmented_generate(
+                RequestParams(
+                    messages=[{"role": "user", "content": optimization_prompt}],
+                    tools_choice="auto"
+                )
             )
             
+            # JSON 파싱 시도
             try:
-                # JSON 파싱 시도
-                optimized_commands = json.loads(result)
-                if isinstance(optimized_commands, list):
-                    return optimized_commands
+                optimized_commands = json.loads(result.content)
+                return optimized_commands
             except json.JSONDecodeError:
-                pass
-            
-            # 파싱 실패시 원본 반환
+                # JSON 파싱 실패시 원본 반환
+                return commands
+                
+        except Exception as e:
+            print(f"명령어 최적화 실패: {e}")
             return commands
     
     def get_execution_summary(self) -> Dict[str, Any]:

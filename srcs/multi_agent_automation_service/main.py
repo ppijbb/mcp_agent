@@ -11,13 +11,13 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 
-from .orchestrator import MultiAgentOrchestrator
-from .agents.code_review_agent import CodeReviewAgent
-from .agents.documentation_agent import DocumentationAgent
-from .agents.performance_agent import PerformanceAgent
-from .agents.security_agent import SecurityAgent
-from .agents.kubernetes_agent import KubernetesAgent  # 🆕 K8s Agent 추가
-from .gemini_executor import GeminiCLIExecutor
+from orchestrator import MultiAgentOrchestrator
+from agents.code_review_agent import CodeReviewAgent
+from agents.documentation_agent import DocumentationAgent
+from agents.performance_agent import PerformanceAgent
+from agents.security_agent import SecurityAgent
+from agents.kubernetes_agent import KubernetesAgent  # 🆕 K8s Agent 추가
+from gemini_executor import GeminiCLIExecutor
 
 
 class MultiAgentAutomationService:
