@@ -271,4 +271,8 @@ def get_llm_client(api_key: Optional[str] = None) -> GeminiLLMClient:
 def reset_llm_client():
     """LLM 클라이언트 초기화 (테스트용)"""
     global _global_llm_client
-    _global_llm_client = None 
+    _global_llm_client = None
+
+
+# 별칭 추가
+LLMClient = GeminiLLMClient 

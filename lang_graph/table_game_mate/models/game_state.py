@@ -44,6 +44,24 @@ class PlayerInfo:
         if not self.id:
             self.id = str(uuid.uuid4())
 
+
+# 별칭 추가
+Player = PlayerInfo
+
+
+@dataclass
+class GameInfo:
+    """게임 정보"""
+    name: str
+    description: str
+    min_players: int
+    max_players: int
+    estimated_duration: int  # 분
+    complexity: str  # simple, moderate, complex
+    game_type: str
+    rules_url: Optional[str] = None
+    bgg_id: Optional[int] = None
+
 @dataclass 
 class GameMetadata:
     """게임 메타데이터"""
