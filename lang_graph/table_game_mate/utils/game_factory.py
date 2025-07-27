@@ -55,7 +55,7 @@ class GameTemplate:
     
     def __post_init__(self):
         if self.recommended_personas is None:
-            self.recommended_personas = [PersonaArchetype.CASUAL, PersonaArchetype.STRATEGIC]
+            self.recommended_personas = [PersonaArchetype.SOCIAL, PersonaArchetype.STRATEGIC]
         if self.special_mechanics is None:
             self.special_mechanics = []
         if self.victory_conditions is None:
@@ -106,7 +106,7 @@ class GameFactory:
             estimated_duration=5,
             ai_decision_time=1.0,
             ai_creativity_factor=0.3,
-            recommended_personas=[PersonaArchetype.CASUAL],
+            recommended_personas=[PersonaArchetype.SOCIAL],
             victory_conditions=["3개 연속 배치"]
         )
         
@@ -401,7 +401,7 @@ class GameFactory:
                 player_count=4,
                 avg_play_time=20,
                 game_mechanics=["Hand Management", "Matching"],
-                recommended_personas=[PersonaArchetype.CASUAL],
+                recommended_personas=[PersonaArchetype.SOCIAL],
             )
         )
     

@@ -97,19 +97,20 @@ JSON 형태로 응답해주세요.
         
         for i, persona in enumerate(personas):
             player_state = PlayerState(
-                player_id=persona.persona_id,
-                name=persona.name,
+                player_id=f"ai_player_{i+1}",
+                name=persona["name"],
                 persona=persona,
                 score=0,
                 is_ai=True,
                 turn_order=i
             )
             
-            self.active_players[persona.persona_id] = player_state
+            self.active_players[f"ai_player_{i+1}"] = player_state
             created_players.append(player_state)
         
         return {
             "action": "players_created",
+            "players": created_players,
             "created_players": created_players,
             "total_players": len(created_players)
         }

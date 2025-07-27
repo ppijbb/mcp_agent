@@ -84,7 +84,7 @@ class PlayerAgent(BaseAgent):
                 "avoid_actions": ["isolate", "betray"],
                 "interaction_style": "collaborative"
             })
-        elif self.persona.archetype == PersonaArchetype.CASUAL:
+        elif self.persona.archetype == PersonaArchetype.SOCIAL:
             base_strategy.update({
                 "preferred_actions": ["simple", "fun", "balanced"],
                 "avoid_actions": ["complex", "stressful"],
@@ -457,7 +457,7 @@ class PlayerAgent(BaseAgent):
                 interpretation["situation_assessment"] = "안정적 관계 유지"
                 interpretation["strategic_priority"] = "상호 이익"
         
-        elif self.persona.archetype == PersonaArchetype.CASUAL:
+        elif self.persona.archetype == PersonaArchetype.SOCIAL:
             interpretation["situation_assessment"] = "재미있는 게임 진행 중"
             interpretation["strategic_priority"] = "즐거운 플레이"
             interpretation["risk_assessment"] = "부담스럽지 않은 선택"
@@ -492,7 +492,7 @@ class PlayerAgent(BaseAgent):
                     prompt += "당신은 신중한 전략가입니다. 장기적인 관점에서 최적의 수를 계산하고, 효율적인 자원 관리를 통해 승리하세요.\n"
                 elif self.persona.archetype == PersonaArchetype.SOCIAL:
                     prompt += "당신은 사교적인 플레이어입니다. 다른 플레이어와의 상호작용을 즐기며, 협상과 동맹을 통해 유리한 상황을 만드세요.\n"
-                elif self.persona.archetype == PersonaArchetype.CASUAL:
+                elif self.persona.archetype == PersonaArchetype.SOCIAL:
                     prompt += "당신은 게임 자체를 즐기는 캐주얼 플레이어입니다. 너무 복잡한 계산보다는 재미있는 플레이를 선호합니다.\n"
                 
                 # 게임 상태 정보 추가

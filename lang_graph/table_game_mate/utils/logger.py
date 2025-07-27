@@ -196,6 +196,25 @@ class PerformanceLogger:
             duration=duration,
             **context
         )
+    
+    def timer(self, timer_name: str):
+        """타이머 컨텍스트 매니저"""
+        return TimerContext(self, timer_name)
+
+
+class TimerContext:
+    """타이머 컨텍스트 매니저"""
+    
+    def __init__(self, logger: PerformanceLogger, timer_name: str):
+        self.logger = logger
+        self.timer_name = timer_name
+    
+    def __enter__(self):
+        self.logger.start_timer(self.timer_name)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.logger.end_timer(self.timer_name)
 
 
 class AgentLogger:

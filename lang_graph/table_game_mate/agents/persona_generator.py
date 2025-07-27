@@ -9,7 +9,7 @@ import json
 import random
 import re
 from ..core.agent_base import BaseAgent
-from ..models.persona import PersonaArchetype, PersonaProfile
+from ..models.persona import PersonaArchetype, PersonaProfile, CommunicationStyle, PersonaTraits
 
 
 class PersonaGeneratorAgent(BaseAgent):
@@ -23,8 +23,8 @@ class PersonaGeneratorAgent(BaseAgent):
     - 게임 재미 극대화를 위한 다양성
     """
     
-    def __init__(self, agent_id: str = "persona_generator"):
-        super().__init__(agent_id=agent_id, instruction="게임 특성에 맞는 AI 플레이어 페르소나를 동적으로 생성합니다.")
+    def __init__(self, llm_client, mcp_client, agent_id: str = "persona_generator"):
+        super().__init__(llm_client, mcp_client, agent_id)
         self.base_personas = self._load_base_personas()
         
     def _load_base_personas(self) -> Dict[str, Dict]:
@@ -205,21 +205,17 @@ class PersonaGeneratorAgent(BaseAgent):
         persona_profiles = []
         for i, persona_data in enumerate(personas_data):
             try:
-                profile = PersonaProfile(
-                    persona_id=f"ai_player_{i+1}",
-                    name=persona_data.get("name", f"플레이어 {i+1}"),
-                    archetype=PersonaArchetype(persona_data.get("type", "casual")),
-                    personality_traits=persona_data.get("personality_traits", ["balanced"]),
-                    decision_style=persona_data.get("decision_style", "균형잡힌 의사결정"),
-                    risk_preference=persona_data.get("risk_preference", 5),
-                    cooperation_tendency=persona_data.get("cooperation_tendency", 5),
-                    aggression_level=persona_data.get("aggression_level", 5),
-                    adaptability=persona_data.get("adaptability", 5),
-                    game_focus=persona_data.get("game_focus", "overall_strategy"),
-                    catchphrase=persona_data.get("catchphrase", "좋은 게임이네요!"),
-                    communication_style=persona_data.get("communication_style"),
-                    background_story=persona_data.get("background_story")
-                )
+                profile = {
+                    "name": persona_data.get("name", f"플레이어 {i+1}"),
+                    "archetype": PersonaArchetype(persona_data.get("type", "social")),
+                    "communication_style": CommunicationStyle.FRIENDLY,
+                    "traits": PersonaTraits(),
+                    "background_story": persona_data.get("background_story", "게임을 즐기는 AI 플레이어입니다."),
+                    "catchphrases": [persona_data.get("catchphrase", "좋은 게임이네요!")],
+                    "game_behaviors": {},
+                    "created_for_game": "test_game",
+                    "difficulty_level": "medium"
+                }
                 persona_profiles.append(profile)
             except Exception as e:
                 # 개별 페르소나 생성 실패시 기본 페르소나 사용
@@ -295,36 +291,32 @@ class PersonaGeneratorAgent(BaseAgent):
     
     def _create_default_persona(self, index: int) -> PersonaProfile:
         """기본 페르소나 생성"""
-        return PersonaProfile(
-            persona_id=f"default_ai_{index+1}",
-            name=f"기본 AI {index+1}",
-            archetype=PersonaArchetype.CASUAL,
-            personality_traits=["balanced", "friendly"],
-            decision_style="균형잡힌 의사결정",
-            risk_preference=5,
-            cooperation_tendency=5,
-            aggression_level=3,
-            adaptability=6,
-            game_focus="general_strategy",
-            catchphrase="함께 즐거운 게임을 해봅시다!",
-            communication_style="friendly",
-            background_story="게임을 즐기는 평범한 플레이어입니다."
-        )
+        return {
+            "name": f"기본 AI {index+1}",
+            "archetype": PersonaArchetype.SOCIAL,
+            "communication_style": CommunicationStyle.FRIENDLY,
+            "traits": PersonaTraits(),
+            "background_story": "게임을 즐기는 평범한 플레이어입니다.",
+            "catchphrases": ["함께 즐거운 게임을 해봅시다!"],
+            "game_behaviors": {},
+            "created_for_game": "test_game",
+            "difficulty_level": "medium"
+        }
     
     def _analyze_persona_balance(self, personas: List[PersonaProfile]) -> Dict[str, Any]:
         """페르소나 간 밸런스 분석"""
         if not personas:
             return {"balanced": False, "reason": "페르소나가 없음"}
         
-        # 각 특성별 평균 계산
-        avg_risk = sum(p.risk_preference for p in personas) / len(personas)
-        avg_coop = sum(p.cooperation_tendency for p in personas) / len(personas)
-        avg_aggr = sum(p.aggression_level for p in personas) / len(personas)
-        avg_adapt = sum(p.adaptability for p in personas) / len(personas)
+        # 각 특성별 평균 계산 (TypedDict 접근)
+        avg_risk = sum(p["traits"].risk_tolerance for p in personas) / len(personas)
+        avg_coop = sum(p["traits"].cooperation for p in personas) / len(personas)
+        avg_aggr = sum(p["traits"].aggression for p in personas) / len(personas)
+        avg_adapt = sum(p["traits"].adaptability for p in personas) / len(personas)
         
         # 다양성 측정 (표준편차)
         import statistics
-        risk_diversity = statistics.stdev([p.risk_preference for p in personas]) if len(personas) > 1 else 0
+        risk_diversity = statistics.stdev([p["traits"].risk_tolerance for p in personas]) if len(personas) > 1 else 0
         
         return {
             "balanced": risk_diversity > 1.5,  # 충분한 다양성
@@ -335,7 +327,7 @@ class PersonaGeneratorAgent(BaseAgent):
                 "adaptability": avg_adapt
             },
             "diversity_score": risk_diversity,
-            "persona_types": [p.archetype.value for p in personas],
+            "persona_types": [p["archetype"].value for p in personas],
             "recommendations": self._get_balance_recommendations(avg_risk, avg_coop, avg_aggr, risk_diversity)
         }
     

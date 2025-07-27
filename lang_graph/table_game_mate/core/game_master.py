@@ -50,6 +50,8 @@ class GameMasterState(GameState):
     # 진행 상태 추적
     workflow_step: str
     step_start_time: Optional[datetime]
+    
+
 
 
 class GameMasterGraph:
@@ -171,40 +173,41 @@ class GameMasterGraph:
             
             return state
         
-        # 3. 플레이어 관리 노드
-        async def manage_players_node(state: GameMasterState) -> GameMasterState:
-            """PlayerManagerAgent를 호출하여 플레이어 생성 및 관리"""
-            print("👥 플레이어 생성 시작...")
+        # 3. 페르소나 생성 노드
+        async def generate_personas_node(state: GameMasterState) -> GameMasterState:
+            """PersonaGeneratorAgent를 호출하여 AI 플레이어 페르소나 부여"""
+            print("🎭 플레이어 페르소나 생성 시작...")
             
-            state["workflow_step"] = "managing_players"
+            state["workflow_step"] = "generating_personas"
             state["step_start_time"] = datetime.now()
             
             try:
                 environment = {
-                    "parsed_rules": state.get("parsed_rules"),
-                    "desired_player_count": state["game_config"]["desired_player_count"],
+                    "game_analysis": state.get("analysis_result", {}),
+                    "personas_needed": state["game_config"]["desired_player_count"],
+                    "complexity": state.get("analysis_result", {}).get("complexity", "moderate"),
+                    "suggested_types": ["strategic", "social", "aggressive"],
                     "current_state": state
                 }
                 
-                result = await self.player_manager.run_cycle(environment)
+                result = await self.persona_generator.run_cycle(environment)
                 
                 if result["cycle_complete"]:
-                    state["generated_players"] = result["action_result"]["players"]
-                    state["players"] = result["action_result"]["players"]
-                    state["phase"] = GamePhase.PLAYER_GENERATION
-                    print(f"✅ 플레이어 {len(state['players'])}명 생성 완료")
+                    state["assigned_personas"] = result["action_result"]
+                    state["phase"] = GamePhase.PERSONA_GENERATION
+                    print("✅ 페르소나 생성 완료")
                 else:
                     state["agent_errors"].append(result["error"])
-                    print(f"❌ 플레이어 생성 실패: {result['error']}")
+                    print(f"❌ 페르소나 생성 실패: {result['error']}")
                 
             except Exception as e:
-                error_info = {"agent": "player_manager", "error": str(e), "timestamp": datetime.now()}
+                error_info = {"agent": "persona_generator", "error": str(e), "timestamp": datetime.now()}
                 state["agent_errors"].append(error_info)
-                print(f"❌ 플레이어 관리 노드 오류: {e}")
+                print(f"❌ 페르소나 생성 노드 오류: {e}")
             
             return state
         
-        # 4. 페르소나 생성 노드
+        # 4. 플레이어 관리 노드
         async def generate_personas_node(state: GameMasterState) -> GameMasterState:
             """PersonaGeneratorAgent를 호출하여 AI 플레이어 페르소나 부여"""
             print("🎭 플레이어 페르소나 생성 시작...")
@@ -242,7 +245,40 @@ class GameMasterGraph:
             
             return state
         
-        # 4.5. 플레이어 에이전트 생성 노드
+        # 4.5. 플레이어 관리 노드
+        async def manage_players_node(state: GameMasterState) -> GameMasterState:
+            """PlayerManagerAgent를 호출하여 플레이어 생성 및 관리"""
+            print("👥 플레이어 생성 시작...")
+            
+            state["workflow_step"] = "managing_players"
+            state["step_start_time"] = datetime.now()
+            
+            try:
+                environment = {
+                    "persona_profiles": state.get("assigned_personas", {}).get("persona_profiles", []),
+                    "game_config": state["game_config"],
+                    "current_state": state
+                }
+                
+                result = await self.player_manager.run_cycle(environment)
+                
+                if result["cycle_complete"]:
+                    state["generated_players"] = result["action_result"]["players"]
+                    state["players"] = result["action_result"]["players"]
+                    state["phase"] = GamePhase.PLAYER_GENERATION
+                    print(f"✅ 플레이어 {len(state['players'])}명 생성 완료")
+                else:
+                    state["agent_errors"].append(result["error"])
+                    print(f"❌ 플레이어 생성 실패: {result['error']}")
+                
+            except Exception as e:
+                error_info = {"agent": "player_manager", "error": str(e), "timestamp": datetime.now()}
+                state["agent_errors"].append(error_info)
+                print(f"❌ 플레이어 관리 노드 오류: {e}")
+            
+            return state
+        
+        # 5. 플레이어 에이전트 생성 노드
         async def create_player_agents_node(state: GameMasterState) -> GameMasterState:
             """생성된 플레이어와 페르소나를 바탕으로 PlayerAgent 인스턴스 생성"""
             print("🤖 플레이어 AI 에이전트 생성 시작...")
@@ -445,8 +481,8 @@ class GameMasterGraph:
         # === 엣지 연결 ===
         workflow.add_edge(START, "analyze_game")
         workflow.add_edge("analyze_game", "parse_rules")
-        workflow.add_edge("parse_rules", "manage_players")
-        workflow.add_edge("manage_players", "generate_personas")
+        workflow.add_edge("parse_rules", "generate_personas")
+        workflow.add_edge("generate_personas", "manage_players")
         workflow.add_edge("generate_personas", "create_player_agents")
         workflow.add_edge("create_player_agents", "setup_game")
         workflow.add_edge("setup_game", "play_turn")
@@ -508,7 +544,7 @@ class GameMasterGraph:
         
         # 초기 상태 구성
         initial_state: GameMasterState = {
-            # 기본 게임 정보
+            # 기본 게임 정보 (GameState에서 상속받은 필드들)
             "game_id": session_id,
             "game_metadata": None,
             "phase": GamePhase.SETUP,
