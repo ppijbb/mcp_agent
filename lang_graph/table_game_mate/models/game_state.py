@@ -14,6 +14,7 @@ class GamePhase(Enum):
     SETUP = "setup"
     PLAYER_GENERATION = "player_generation"
     RULE_PARSING = "rule_parsing"
+    PERSONA_GENERATION = "persona_generation"
     GAME_START = "game_start"
     PLAYER_TURN = "player_turn"
     GAME_END = "game_end"
@@ -84,6 +85,7 @@ class GameAction:
     timestamp: datetime = field(default_factory=lambda: datetime.now())
     is_valid: Optional[bool] = None
     validation_message: Optional[str] = None
+    reason: Optional[str] = None
 
 # LangGraph State 호환을 위한 TypedDict
 class GameState(TypedDict):

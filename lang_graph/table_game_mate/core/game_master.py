@@ -208,44 +208,6 @@ class GameMasterGraph:
             return state
         
         # 4. 플레이어 관리 노드
-        async def generate_personas_node(state: GameMasterState) -> GameMasterState:
-            """PersonaGeneratorAgent를 호출하여 AI 플레이어 페르소나 부여"""
-            print("🎭 플레이어 페르소나 생성 시작...")
-            
-            state["workflow_step"] = "generating_personas"
-            state["step_start_time"] = datetime.now()
-            
-            try:
-                environment = {
-                    "players": state.get("generated_players", []),
-                    "parsed_rules": state.get("parsed_rules"),
-                    "game_type": state.get("analysis_result", {}).get("game_type"),
-                    "current_state": state
-                }
-                
-                result = await self.persona_generator.run_cycle(environment)
-                
-                if result["cycle_complete"]:
-                    state["assigned_personas"] = result["action_result"]
-                    # 플레이어 정보에 페르소나 적용
-                    for player in state["players"]:
-                        if player.id in result["action_result"]["persona_assignments"]:
-                            player.persona_type = result["action_result"]["persona_assignments"][player.id]
-                    
-                    state["phase"] = GamePhase.GAME_START
-                    print("✅ 페르소나 생성 완료")
-                else:
-                    state["agent_errors"].append(result["error"])
-                    print(f"❌ 페르소나 생성 실패: {result['error']}")
-                
-            except Exception as e:
-                error_info = {"agent": "persona_generator", "error": str(e), "timestamp": datetime.now()}
-                state["agent_errors"].append(error_info)
-                print(f"❌ 페르소나 생성 노드 오류: {e}")
-            
-            return state
-        
-        # 4.5. 플레이어 관리 노드
         async def manage_players_node(state: GameMasterState) -> GameMasterState:
             """PlayerManagerAgent를 호출하여 플레이어 생성 및 관리"""
             print("👥 플레이어 생성 시작...")
@@ -285,10 +247,25 @@ class GameMasterGraph:
             state["workflow_step"] = "creating_player_agents"
             
             try:
-                personas = state.get("assigned_personas", {}).get("persona_profiles", {})
+                personas = state.get("assigned_personas", {}).get("persona_profiles", [])
                 for player in state["players"]:
+                    # player가 dict인 경우 PlayerInfo 객체로 변환
+                    if isinstance(player, dict):
+                        player = PlayerInfo(
+                            id=player.get("id", str(uuid.uuid4())),
+                            name=player.get("name", "Unknown"),
+                            is_ai=player.get("is_ai", True),
+                            persona_type=player.get("persona_type"),
+                            score=player.get("score", 0)
+                        )
+                    
                     if player.is_ai and player.id not in self.player_agents:
-                        persona_profile = personas.get(player.id)
+                        # personas가 리스트인 경우 첫 번째 사용 가능한 페르소나 사용
+                        persona_profile = None
+                        if personas and len(personas) > 0:
+                            # 간단한 페르소나 매칭 (실제로는 더 정교한 로직 필요)
+                            persona_profile = personas[0]  # 첫 번째 페르소나 사용
+                        
                         if persona_profile:
                             self.player_agents[player.id] = PlayerAgent(
                                 self.llm_client,
@@ -296,6 +273,10 @@ class GameMasterGraph:
                                 player_info=player,
                                 persona=persona_profile
                             )
+                            print(f"   ✅ AI 에이전트 생성: {player.name} ({persona_profile.get('persona_type', 'unknown')})")
+                        else:
+                            print(f"   ⚠️  페르소나 없음, AI 에이전트 생성 건너뜀: {player.name}")
+                
                 print(f"✅ AI 에이전트 {len(self.player_agents)}명 생성 완료")
             except Exception as e:
                 error_info = {"agent": "player_agent_creation", "error": str(e), "timestamp": datetime.now()}
@@ -350,7 +331,18 @@ class GameMasterGraph:
             
             try:
                 current_player = state["players"][state["current_player_index"]]
-                print(f"   현재 플레이어: {current_player.name} ({current_player.player_type})")
+                
+                # player가 dict인 경우 PlayerInfo 객체로 변환
+                if isinstance(current_player, dict):
+                    current_player = PlayerInfo(
+                        id=current_player.get("id", str(uuid.uuid4())),
+                        name=current_player.get("name", "Unknown"),
+                        is_ai=current_player.get("is_ai", True),
+                        persona_type=current_player.get("persona_type"),
+                        score=current_player.get("score", 0)
+                    )
+                
+                print(f"   현재 플레이어: {current_player.name} ({current_player.persona_type or 'human'})")
 
                 # 1. 플레이어 행동 결정
                 player_action = None
@@ -367,7 +359,8 @@ class GameMasterGraph:
                         action_result = await player_agent.run_cycle(env_for_player)
                         player_action = action_result.get("action_result", {})
                     else:
-                        raise Exception(f"PlayerAgent for {current_player.id} not found!")
+                        print(f"   ⚠️  PlayerAgent 없음, 자동 패스로 처리")
+                        player_action = {"action_type": "pass", "action_data": {"reason": "no_player_agent"}}
                 else:
                     # TODO: 인간 플레이어의 입력을 받는 로직
                     print("   인간 플레이어 턴. (현재는 자동 패스)")
@@ -419,6 +412,12 @@ class GameMasterGraph:
                 state["current_player_index"] = (state["current_player_index"] + 1) % len(state["players"])
                 if state["current_player_index"] == 0:
                     state["turn_count"] += 1
+                
+                # 무한 루프 방지: 최대 10턴으로 제한
+                if state["turn_count"] >= 10:
+                    state["game_ended"] = True
+                    state["phase"] = GamePhase.SCORE_CALCULATION
+                    print("🏁 최대 턴 수 도달로 게임 종료")
                 
                 print(f"✅ 턴 진행 완료")
                 
@@ -483,7 +482,7 @@ class GameMasterGraph:
         workflow.add_edge("analyze_game", "parse_rules")
         workflow.add_edge("parse_rules", "generate_personas")
         workflow.add_edge("generate_personas", "manage_players")
-        workflow.add_edge("generate_personas", "create_player_agents")
+        workflow.add_edge("manage_players", "create_player_agents")
         workflow.add_edge("create_player_agents", "setup_game")
         workflow.add_edge("setup_game", "play_turn")
         
@@ -492,7 +491,7 @@ class GameMasterGraph:
             """게임 계속 여부 결정"""
             if state.get("game_ended", False):
                 return "calculate_scores"
-            elif state.get("turn_count", 0) >= 50:  # 무한 루프 방지
+            elif state.get("turn_count", 0) >= 10:  # 무한 루프 방지 (10턴으로 제한)
                 return "calculate_scores"
             else:
                 return "play_turn"
