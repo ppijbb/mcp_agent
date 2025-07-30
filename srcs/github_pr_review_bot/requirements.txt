@@ -1,0 +1,11 @@
+# GitHub PR Review Bot 필수 패키지
+mcp>=1.0.0
+PyGithub>=2.1.1
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+pydantic>=2.0.0
+python-jose>=3.3.0
+aiohttp>=3.8.5
+langchain>=0.0.267 
