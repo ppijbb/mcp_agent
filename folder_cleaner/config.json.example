@@ -1,0 +1,43 @@
+{
+  "version": "0.1.0",
+  "scan_options": {
+    "large_file_threshold_mb": 500,
+    "old_file_threshold_days": 90,
+    "exclude_paths": [
+      "/bin",
+      "/sbin",
+      "/usr/bin",
+      "/usr/sbin",
+      "/usr/lib",
+      "/usr/libexec",
+      "/lib",
+      "/lib64",
+      "/etc",
+      "/var/log",
+      "/System",
+      "/Library",
+      "C:\\Windows"
+    ],
+    "temp_patterns": [
+      "*.tmp",
+      "*.temp",
+      "*.bak",
+      "*.swp",
+      "~*.*"
+    ],
+    "cache_dirs": [
+      "__pycache__",
+      ".cache",
+      "node_modules",
+      "bower_components"
+    ]
+  },
+  "safety": {
+    "dry_run": false,
+    "ask_for_confirmation": true
+  },
+  "logging": {
+    "log_file": "logs/optimizer.log",
+    "log_level": "INFO"
+  }
+}

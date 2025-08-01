@@ -1,0 +1,16 @@
+# Ignore virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Ignore configuration and secrets
+.env
+config.json
+
+# Ignore log files
+logs/*.log
+!logs/.gitkeep
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db

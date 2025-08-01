@@ -1,0 +1,4 @@
+# Python dependencies
+psutil
+google-generativeai
+python-dotenv
