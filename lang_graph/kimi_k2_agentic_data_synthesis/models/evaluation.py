@@ -134,6 +134,28 @@ class EvaluationConfig(BaseModel):
         }
 
 
+class HumanFeedback(BaseModel):
+    """Model for capturing human feedback on simulation results."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    reviewer_id: str
+    rating: float = Field(ge=0.0, le=1.0, description="Overall quality rating from the human reviewer.")
+    qualitative_feedback: str = Field(description="Detailed textual feedback from the reviewer.")
+    bias_flags: List[str] = Field(default_factory=list, description="Flags for any detected biases (e.g., gender, race).")
+    suggested_edits: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "reviewer_id": "human_expert_01",
+                "rating": 0.9,
+                "qualitative_feedback": "The agent's reasoning was sound, but the final code snippet had a minor, non-critical bug.",
+                "bias_flags": [],
+                "suggested_edits": "Change line 42 to `x > 0` instead of `x >= 0`."
+            }
+        }
+
+
 class EvaluationResult(BaseModel):
     """Complete evaluation result"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -146,6 +168,7 @@ class EvaluationResult(BaseModel):
     feedback: str
     recommendations: List[str] = []
     evaluation_time: float = 0.0  # in seconds
+    human_feedback: Optional[HumanFeedback] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:

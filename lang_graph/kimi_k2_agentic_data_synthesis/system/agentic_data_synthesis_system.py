@@ -21,12 +21,13 @@ from ..core.environment_manager import EnvironmentManager
 from ..core.user_agent_manager import UserAgentManager
 from ..evaluation.llm_judge import LLMJudgeSystem
 from ..evaluation.quality_filter import QualityFilter
+from ..evaluation.human_feedback_manager import HumanFeedbackManager
 from ..data.data_generator import DataGenerator
 from ..models.domain import Domain, DomainConfig
 from ..models.tool import ToolType, ToolParameter, ParameterType, ToolConfig
 from ..models.agent import Agent, AgentConfig
 from ..models.simulation import SimulationConfig, SimulationState, SimulationStatus, SimulationSession as SimulationResult # SimulationResult is now LangGraph state dict
-from ..models.evaluation import EvaluationConfig, EvaluationResult
+from ..models.evaluation import EvaluationConfig, EvaluationResult, HumanFeedback
 from ..models.data import TrainingData, DataExportConfig, DataFormat
 from ..models.domain import ComplexityLevel
 from ..agents.kimi_k2_agent import KimiK2ConversableAgent # Added missing import
@@ -87,6 +88,7 @@ class AgenticDataSynthesisSystem:
         self.llm_judge = LLMJudgeSystem()
         self.quality_filter = QualityFilter()
         self.data_generator = DataGenerator()
+        self.human_feedback_manager = HumanFeedbackManager()
         
         # System state
         self.active_simulations: Dict[str, Dict[str, Any]] = {} # Changed type hint to Dict for LangGraph state
@@ -546,4 +548,41 @@ class AgenticDataSynthesisSystem:
         # Clear active simulations
         self.active_simulations.clear()
         
-        self.logger.info("System cleanup completed") 
+        self.logger.info("System cleanup completed")
+
+    def add_human_feedback(self, evaluation_id: str, reviewer_id: str, rating: float, feedback_text: str) -> None:
+        """
+        Adds human feedback to an evaluation result.
+
+        Args:
+            evaluation_id: The ID of the evaluation to add feedback to.
+            reviewer_id: The ID of the human reviewer.
+            rating: The rating given by the reviewer (0.0 to 1.0).
+            feedback_text: The qualitative feedback.
+        """
+        feedback = HumanFeedback(
+            reviewer_id=reviewer_id,
+            rating=rating,
+            qualitative_feedback=feedback_text
+        )
+        self.human_feedback_manager.add_feedback(evaluation_id, feedback)
+
+        # Optionally link it to the evaluation result object if it exists
+        for ev_res in self.evaluation_results:
+            if ev_res.id == evaluation_id:
+                ev_res.human_feedback = feedback
+                self.logger.info(f"Successfully linked feedback to evaluation result {evaluation_id}")
+                break
+
+    def get_human_feedback(self, evaluation_id: str) -> Optional[HumanFeedback]:
+        """
+        Retrieves human feedback for a specific evaluation.
+
+        Args:
+            evaluation_id: The ID of the evaluation.
+
+        Returns:
+            The HumanFeedback object or None if not found.
+        """
+        return self.human_feedback_manager.get_feedback(evaluation_id)
+ 

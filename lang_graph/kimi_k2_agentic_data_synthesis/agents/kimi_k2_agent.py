@@ -54,6 +54,14 @@ Problem-Solving Approach: {config.problem_solving_approach}
 Collaboration Style: {config.collaboration_style}
 
 Your goal is to contribute effectively to the given task, utilizing your skills and preferred tools.
+
+When responding, you must follow this format strictly:
+<thought>
+Your reasoning, analysis, and plan to address the user's request go here. Explain your thought process step-by-step.
+</thought>
+<action>
+Your final response or action to the user goes here. This could be a message, a tool call, or a question.
+</action>
 """
         return system_message
 
@@ -113,10 +121,15 @@ Your goal is to contribute effectively to the given task, utilizing your skills 
         # Simulate agent processing and response generation
         # In a real AutoGen setup, this would be handled by the group chat manager or direct message
         
-        # For now, a simplified direct response
-        response_content = f"Agent {self.agent_config.name} processed task: '{task_message}'."
+        # For now, a simplified direct response with thought and action
+        thought = f"The user wants me to process the task: '{task_message}'. I should analyze the request and provide a clear, actionable response. Based on my configuration as {self.agent_config.name}, I will formulate a professional reply."
+        action = f"Agent {self.agent_config.name} has analyzed the task '{task_message}' and is preparing the appropriate action."
         
-        # If the agent needs to call tools based on the task, that logic would be here.
-        # For demonstration, we'll just log and return.
+        # In a real AutoGen setup, this would be handled by the group chat manager or direct message
+        # and the response would be parsed to extract thought and action.
         
-        return {"content": response_content, "agent_id": self.agent_config.agent_id} 
+        return {
+            "thought": thought,
+            "action": action, # This will become the "content" for the next step in the simulation
+            "agent_id": self.agent_config.agent_id
+        } 

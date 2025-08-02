@@ -5,14 +5,17 @@ Manages multi-agent simulations using LangGraph for complex scenarios.
 """
 
 from typing import Dict, Any, List, Optional, Annotated
-from models.simulation import SimulationState, SimulationStep, StepType, StepStatus, SimulationStatus, EnvironmentState
-from models.agent import Agent
-from agents.kimi_k2_agent import KimiK2ConversableAgent
+from ..models.simulation import SimulationState, SimulationStep, StepType, StepStatus, SimulationStatus, EnvironmentState, SimulationSession
+from ..models.agent import Agent
+from ..agents.kimi_k2_agent import KimiK2ConversableAgent
 from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 import logging
 import random
 import re
 import time
+import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -213,11 +216,13 @@ class SimulationEngine:
         try:
             # In a real AutoGen setup, you would use agent.initiate_chat or agent.generate_reply
             # to get the agent's response, which might include tool calls.
-            # For this example, we simulate a response.
-            ai_response = f"Agent {acting_agent.name} is working on the task. Current environment: {environment_state}."
-            # This is where the actual LLM call for the agent would happen. For demonstration:
-            # response = await acting_agent.a_run_task(state["user_query"]) # Or messages[-1].content
-            # ai_response = response["content"]
+            # For this example, we simulate a response by calling our modified a_run_task.
+            response_dict = acting_agent.a_run_task(
+                task_message=messages[-1]["content"] if messages else state["user_query"]
+            )
+            
+            agent_thought = response_dict.get("thought", "No thought recorded.")
+            ai_response = response_dict.get("action", "No action recorded.")
 
             # Simulate a tool call sometimes
             if random.random() < 0.5: # 50% chance to simulate a tool call
@@ -231,6 +236,7 @@ class SimulationEngine:
             # Log the turn result
             logger.info(f"=== TURN {len(messages) // 2} RESULT ===")
             logger.info(f"Agent: {acting_agent.name}")
+            logger.info(f"Thought: {agent_thought}")
             logger.info(f"Response: {ai_response}")
             logger.info(f"================================")
 
@@ -243,6 +249,7 @@ class SimulationEngine:
                 description=f"Agent {acting_agent.name} executes turn",
                 step_type=StepType.AGENT_ACTION,
                 agent_id=acting_agent.name,
+                agent_thought=agent_thought, # Record the agent's thought process
                 input_data=state["messages"][-2] if len(state["messages"]) > 1 else {}, # Extract content as dict
                 output_data={"response": ai_response}
             )

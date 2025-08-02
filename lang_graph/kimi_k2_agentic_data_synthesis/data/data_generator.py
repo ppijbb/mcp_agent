@@ -106,12 +106,15 @@ class DataGenerator:
             conversation_history = []
             for step in session.steps:
                 if step.output_data and "response" in step.output_data:
-                    conversation_history.append({
+                    turn = {
                         "role": "assistant",
                         "content": step.output_data["response"],
                         "step": step.step_number,
                         "timestamp": step.start_time.isoformat() if step.start_time else None
-                    })
+                    }
+                    if step.agent_thought:
+                        turn["thought"] = step.agent_thought
+                    conversation_history.append(turn)
             
             # Extract tool usage log
             tool_usage_log = []

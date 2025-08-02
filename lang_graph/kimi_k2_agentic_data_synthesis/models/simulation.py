@@ -64,6 +64,7 @@ class SimulationStep(BaseModel):
     step_type: StepType
     description: str
     agent_id: Optional[str] = None
+    agent_thought: Optional[str] = None
     tool_used: Optional[str] = None
     input_data: Dict[str, Any] = {}
     output_data: Dict[str, Any] = {}
