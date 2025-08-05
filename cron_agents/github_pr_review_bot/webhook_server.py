@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Header
 from fastapi.responses import JSONResponse
 
-from .pr_review_server import GitHubPRReviewServer
+from .core.pr_review_server import GitHubPRReviewServer
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="GitHub PR Review Webhook Server")

@@ -7,9 +7,9 @@ GitHub PR Review Bot - MCP 기반 자동 코드 리뷰 시스템
 __version__ = "0.1.0"
 __author__ = "MCP Agent Team"
 
-from .pr_review_server import GitHubPRReviewServer
-from .github_client import GitHubClient
-from .review_generator import ReviewGenerator
+from .core.pr_review_server import GitHubPRReviewServer
+from .core.github_client import GitHubClient
+from .core.review_generator import ReviewGenerator
 
 __all__ = [
     "GitHubPRReviewServer",

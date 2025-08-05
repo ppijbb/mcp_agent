@@ -1,11 +1,52 @@
-# GitHub PR Review Bot 필수 패키지
-mcp>=1.0.0
-PyGithub>=2.1.1
-fastapi>=0.100.0
-uvicorn>=0.23.0
-python-dotenv>=1.0.0
-requests>=2.31.0
-pydantic>=2.0.0
-python-jose>=3.3.0
-aiohttp>=3.8.5
-langchain>=0.0.267 
+# GitHub PR Review Bot - 고도화된 버전
+mcp>=1.12.3
+PyGithub>=2.7.0
+fastapi>=0.116.1
+uvicorn>=0.35.0
+python-dotenv>=1.1.1
+requests>=2.32.4
+pydantic>=2.11.7
+python-jose>=3.5.0
+aiohttp>=3.12.15
+langchain>=0.3.27
+
+# 다중 LLM 지원
+openai>=1.98.0
+anthropic>=0.60.0
+google-generativeai>=0.8.5
+
+# 성능 최적화 및 확장성
+redis>=6.2.0
+celery>=5.5.3
+sqlalchemy>=2.0.42
+alembic>=1.16.4
+psycopg2-binary>=2.9.10
+
+# 모니터링 및 로깅
+prometheus-client>=0.22.1
+structlog>=25.4.0
+tenacity>=9.1.2
+
+# 개발 도구
+pytest>=8.4.1
+pytest-asyncio>=1.1.0
+black>=25.1.0
+flake8>=7.3.0
+mypy>=1.17.1
+pre-commit>=4.2.0
+PyGithub>=2.7.0
+
+# 추가 유틸리티
+httpx>=0.28.1
+websockets>=15.0.1
+
+# 웹 검색 및 분석
+beautifulsoup4>=4.13.4
+lxml>=6.0.0
+
+# 시스템 모니터링
+psutil>=7.0.0
+
+# 코드 분석 도구
+ast>=0.0.2
+tree-sitter>=0.25.0

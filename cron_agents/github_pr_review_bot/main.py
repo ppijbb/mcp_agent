@@ -9,7 +9,7 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 
-from .pr_review_server import GitHubPRReviewServer
+from .core.pr_review_server import GitHubPRReviewServer
 
 # 환경 변수 로드
 load_dotenv()
