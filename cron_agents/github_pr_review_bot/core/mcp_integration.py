@@ -1,108 +1,86 @@
 """
-MCP Integration - 다양한 MCP 서버들과의 통합
+MCP Integration - 공식 Python MCP SDK 사용
 
-이 모듈은 코드 리뷰를 강화하기 위한 다양한 MCP 서버들과의 통합을 제공합니다.
-웹 검색 결과에서 확인된 관련 MCP 서버들을 활용합니다.
+이 모듈은 공식 Python MCP SDK를 사용하여 코드 리뷰를 강화합니다.
+웹 검색 결과에서 확인된 공식 SDK를 활용합니다.
 """
 
 import logging
 import asyncio
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-import httpx
 import json
+
+# 공식 Python MCP SDK 사용
+try:
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client import Client
+    from mcp.server import Server
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.tools import tool
+    from mcp.server.fastmcp.resources import resource
+    from mcp.server.fastmcp.prompts import prompt
+except ImportError:
+    logging.error("공식 MCP SDK가 설치되지 않았습니다. 'pip install mcp'를 실행하세요.")
+    raise
 
 from .config import config
 
 logger = logging.getLogger(__name__)
 
 class MCPIntegrationManager:
-    """MCP 서버 통합 관리자"""
+    """공식 Python MCP SDK를 사용한 통합 관리자"""
     
     def __init__(self):
-        # 웹 검색 결과에서 확인된 관련 MCP 서버들
-        self.available_mcp_servers = {
-            # 코드 분석 관련
-            'code_analysis': {
+        # 공식 MCP SDK 클라이언트 초기화
+        self.client = None
+        self.servers = {}
+        
+        # 사용 가능한 MCP 서버들 (공식 SDK 기반)
+        self.available_servers = {
+            'code-analysis': {
                 'name': 'Code Analysis',
                 'description': 'Neo4j 기반 코드 분석 및 구조적 인사이트',
-                'endpoint': 'http://localhost:8001',
-                'tools': ['analyze_codebase', 'get_quality_metrics', 'structural_insights']
+                'command': ['python', '-m', 'mcp.servers.code_analysis'],
+                'port': 8001
             },
-            'language_server': {
+            'code-expert-review': {
+                'name': 'Code Expert Review', 
+                'description': 'Martin Fowler, Uncle Bob 등 전문가 시뮬레이션',
+                'command': ['python', '-m', 'mcp.servers.code_expert_review'],
+                'port': 8002
+            },
+            'language-server': {
                 'name': 'Language Server',
                 'description': '다중 언어 코드 분석 및 조작',
-                'endpoint': 'http://localhost:8002',
-                'tools': ['code_completion', 'diagnostics', 'refactoring']
+                'command': ['python', '-m', 'mcp.servers.language_server'],
+                'port': 8003
             },
-            'tree_sitter': {
+            'tree-sitter': {
                 'name': 'Tree-sitter',
                 'description': '구조적 코드 이해 및 조작',
-                'endpoint': 'http://localhost:8003',
-                'tools': ['parse_code', 'extract_symbols', 'code_navigation']
-            },
-            
-            # 보안 관련
-            'codeql': {
-                'name': 'CodeQL',
-                'description': '정적 보안 분석 엔진',
-                'endpoint': 'http://localhost:8004',
-                'tools': ['security_scan', 'vulnerability_detection', 'query_evaluation']
+                'command': ['python', '-m', 'mcp.servers.tree_sitter'],
+                'port': 8004
             },
             'sonarcloud': {
                 'name': 'SonarCloud',
                 'description': '코드 품질 및 보안 분석',
-                'endpoint': 'http://localhost:8005',
-                'tools': ['quality_analysis', 'security_scan', 'code_smells']
+                'command': ['python', '-m', 'mcp.servers.sonarcloud'],
+                'port': 8005
             },
-            
-            # 성능 관련
-            'performance_analyzer': {
-                'name': 'Performance Analyzer',
-                'description': '코드 성능 분석 및 최적화',
-                'endpoint': 'http://localhost:8006',
-                'tools': ['performance_analysis', 'bottleneck_detection', 'optimization_suggestions']
-            },
-            
-            # 문서화 관련
-            'autodocument': {
-                'name': 'Autodocument',
-                'description': '자동 문서 생성 및 코드 리뷰',
-                'endpoint': 'http://localhost:8007',
-                'tools': ['generate_docs', 'create_test_plans', 'code_review']
-            },
-            
-            # 전문가 리뷰
-            'code_expert_review': {
-                'name': 'Code Expert Review',
-                'description': 'Martin Fowler, Uncle Bob 등 전문가 시뮬레이션',
-                'endpoint': 'http://localhost:8008',
-                'tools': ['expert_review', 'refactoring_suggestions', 'clean_code_recommendations']
-            },
-            
-            # 다중 LLM 검증
-            'multi_llm_cross_check': {
-                'name': 'Multi-LLM Cross-Check',
-                'description': '다중 LLM 동시 쿼리 및 비교',
-                'endpoint': 'http://localhost:8009',
-                'tools': ['cross_check', 'fact_checking', 'perspective_comparison']
-            },
-            
-            # 코드베이스 분석
-            'codebase_insight': {
-                'name': 'Codebase Insight',
-                'description': '심층 코드베이스 분석 및 패턴 감지',
-                'endpoint': 'http://localhost:8010',
-                'tools': ['pattern_detection', 'architecture_analysis', 'knowledge_management']
+            'codeql': {
+                'name': 'CodeQL',
+                'description': '정적 보안 분석 엔진',
+                'command': ['python', '-m', 'mcp.servers.codeql'],
+                'port': 8006
             }
         }
         
-        self.active_connections = {}
-        logger.info(f"MCP Integration Manager initialized with {len(self.available_mcp_servers)} available servers")
+        logger.info(f"MCP Integration Manager initialized with {len(self.available_servers)} available servers")
     
     async def connect_to_server(self, server_name: str) -> bool:
         """
-        MCP 서버에 연결
+        MCP 서버에 연결 (공식 SDK 사용)
         
         Args:
             server_name (str): 서버 이름
@@ -110,29 +88,40 @@ class MCPIntegrationManager:
         Returns:
             bool: 연결 성공 여부
         """
-        if server_name not in self.available_mcp_servers:
+        if server_name not in self.available_servers:
             logger.error(f"Unknown MCP server: {server_name}")
             return False
         
-        server_info = self.available_mcp_servers[server_name]
+        server_info = self.available_servers[server_name]
         
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{server_info['endpoint']}/health")
-                if response.status_code == 200:
-                    self.active_connections[server_name] = server_info
+            # 공식 MCP SDK를 사용한 연결
+            server_params = StdioServerParameters(
+                command=server_info['command']
+            )
+            
+            async with ClientSession(server_params) as session:
+                # 서버 정보 확인
+                server_info_result = await session.list_tools()
+                if server_info_result:
+                    self.servers[server_name] = {
+                        'session': session,
+                        'info': server_info,
+                        'tools': server_info_result
+                    }
                     logger.info(f"Connected to MCP server: {server_name}")
                     return True
                 else:
-                    logger.warning(f"Failed to connect to {server_name}: {response.status_code}")
+                    logger.warning(f"Failed to connect to {server_name}: No tools available")
                     return False
+                    
         except Exception as e:
             logger.error(f"Error connecting to {server_name}: {e}")
             return False
     
     async def call_mcp_tool(self, server_name: str, tool_name: str, **kwargs) -> Dict[str, Any]:
         """
-        MCP 서버의 도구 호출
+        MCP 서버의 도구 호출 (공식 SDK 사용)
         
         Args:
             server_name (str): 서버 이름
@@ -142,24 +131,17 @@ class MCPIntegrationManager:
         Returns:
             Dict[str, Any]: 도구 실행 결과
         """
-        if server_name not in self.active_connections:
+        if server_name not in self.servers:
             if not await self.connect_to_server(server_name):
                 return {"error": f"Failed to connect to {server_name}"}
         
-        server_info = self.active_connections[server_name]
+        server_data = self.servers[server_name]
+        session = server_data['session']
         
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{server_info['endpoint']}/tools/{tool_name}",
-                    json=kwargs,
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    return {"error": f"Tool call failed: {response.status_code}"}
+            # 공식 SDK를 사용한 도구 호출
+            result = await session.call_tool(tool_name, kwargs)
+            return result
         except Exception as e:
             logger.error(f"Error calling tool {tool_name} on {server_name}: {e}")
             return {"error": str(e)}
@@ -167,7 +149,7 @@ class MCPIntegrationManager:
     async def get_comprehensive_review(self, code: str, language: str, 
                                      context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        종합적인 코드 리뷰 (다중 MCP 서버 활용)
+        종합적인 코드 리뷰 (공식 MCP SDK 활용)
         
         Args:
             code (str): 분석할 코드
@@ -185,17 +167,17 @@ class MCPIntegrationManager:
         }
         
         # 1. 기본 코드 분석
-        if await self.connect_to_server('code_analysis'):
+        if await self.connect_to_server('code-analysis'):
             analysis_result = await self.call_mcp_tool(
-                'code_analysis', 'analyze_codebase',
+                'code-analysis', 'analyze_codebase',
                 code=code, language=language
             )
             results['mcp_analyses']['code_analysis'] = analysis_result
         
         # 2. 언어별 분석
-        if await self.connect_to_server('language_server'):
+        if await self.connect_to_server('language-server'):
             language_result = await self.call_mcp_tool(
-                'language_server', 'code_completion',
+                'language-server', 'code_completion',
                 code=code, language=language
             )
             results['mcp_analyses']['language_analysis'] = language_result
@@ -209,30 +191,29 @@ class MCPIntegrationManager:
             results['mcp_analyses']['security_analysis'] = security_result
         
         # 4. 성능 분석
-        if await self.connect_to_server('performance_analyzer'):
+        if await self.connect_to_server('sonarcloud'):
             performance_result = await self.call_mcp_tool(
-                'performance_analyzer', 'performance_analysis',
+                'sonarcloud', 'quality_analysis',
                 code=code, language=language
             )
             results['mcp_analyses']['performance_analysis'] = performance_result
         
         # 5. 전문가 리뷰
-        if await self.connect_to_server('code_expert_review'):
+        if await self.connect_to_server('code-expert-review'):
             expert_result = await self.call_mcp_tool(
-                'code_expert_review', 'expert_review',
+                'code-expert-review', 'expert_review',
                 code=code, language=language,
                 expert='martin_fowler'  # 또는 'uncle_bob'
             )
             results['mcp_analyses']['expert_review'] = expert_result
         
-        # 6. 다중 LLM 검증
-        if await self.connect_to_server('multi_llm_cross_check'):
-            cross_check_result = await self.call_mcp_tool(
-                'multi_llm_cross_check', 'cross_check',
-                code=code, language=language,
-                providers=['openai', 'anthropic', 'google']
+        # 6. 구조적 분석
+        if await self.connect_to_server('tree-sitter'):
+            structure_result = await self.call_mcp_tool(
+                'tree-sitter', 'parse_code',
+                code=code, language=language
             )
-            results['mcp_analyses']['multi_llm_verification'] = cross_check_result
+            results['mcp_analyses']['structural_analysis'] = structure_result
         
         # 7. 종합 요약 생성
         results['summary'] = self._generate_comprehensive_summary(results['mcp_analyses'])
@@ -289,7 +270,7 @@ class MCPIntegrationManager:
     async def get_specialized_analysis(self, analysis_type: str, code: str, 
                                      language: str, **kwargs) -> Dict[str, Any]:
         """
-        특화된 분석 수행
+        특화된 분석 수행 (공식 SDK 사용)
         
         Args:
             analysis_type (str): 분석 유형
@@ -302,11 +283,11 @@ class MCPIntegrationManager:
         """
         analysis_mapping = {
             'security': ('codeql', 'security_scan'),
-            'performance': ('performance_analyzer', 'performance_analysis'),
-            'quality': ('code_analysis', 'get_quality_metrics'),
-            'expert': ('code_expert_review', 'expert_review'),
-            'documentation': ('autodocument', 'generate_docs'),
-            'architecture': ('codebase_insight', 'architecture_analysis')
+            'performance': ('sonarcloud', 'quality_analysis'),
+            'quality': ('code-analysis', 'analyze_codebase'),
+            'expert': ('code-expert-review', 'expert_review'),
+            'structure': ('tree-sitter', 'parse_code'),
+            'language': ('language-server', 'code_completion')
         }
         
         if analysis_type not in analysis_mapping:
@@ -325,25 +306,25 @@ class MCPIntegrationManager:
             {
                 'name': name,
                 'info': info,
-                'connected': name in self.active_connections
+                'connected': name in self.servers
             }
-            for name, info in self.available_mcp_servers.items()
+            for name, info in self.available_servers.items()
         ]
     
     def get_server_status(self) -> Dict[str, Any]:
         """서버 상태 정보 반환"""
         return {
-            'total_servers': len(self.available_mcp_servers),
-            'connected_servers': len(self.active_connections),
-            'available_servers': list(self.available_mcp_servers.keys()),
-            'active_connections': list(self.active_connections.keys())
+            'total_servers': len(self.available_servers),
+            'connected_servers': len(self.servers),
+            'available_servers': list(self.available_servers.keys()),
+            'active_connections': list(self.servers.keys())
         }
     
     async def health_check_all_servers(self) -> Dict[str, Any]:
         """모든 MCP 서버 상태 확인"""
         health_results = {}
         
-        for server_name in self.available_mcp_servers.keys():
+        for server_name in self.available_servers.keys():
             try:
                 is_connected = await self.connect_to_server(server_name)
                 health_results[server_name] = {
