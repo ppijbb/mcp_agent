@@ -137,7 +137,7 @@ class SimulationEngine:
         try:
             # Invoke the LangGraph application
             final_state = await self.app.ainvoke(initial_state, config=config)
-            logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get("status")}")
+            logger.info(f"LangGraph simulation {simulation_id} finished with status: {final_state.get('status')}")
             return final_state
         except Exception as e:
             logger.error(f"LangGraph simulation {simulation_id} failed: {e}")
@@ -150,7 +150,7 @@ class SimulationEngine:
         LangGraph node to initialize the simulation state.
         This will prepare the initial environment and set up the first turn.
         """
-        logger.info(f"Node: initialize_simulation for {state["simulation_id"]}")
+        logger.info(f"Node: initialize_simulation for {state['simulation_id']}")
         # Add initial user query as a message
         messages = state.get("messages", [])
         messages.append(HumanMessage(content=state["user_query"]).model_dump())
@@ -217,19 +217,22 @@ class SimulationEngine:
             # In a real AutoGen setup, you would use agent.initiate_chat or agent.generate_reply
             # to get the agent's response, which might include tool calls.
             # For this example, we simulate a response by calling our modified a_run_task.
-            response_dict = acting_agent.a_run_task(
+            response_dict = acting_agent.run_task(
                 task_message=messages[-1]["content"] if messages else state["user_query"]
             )
             
             agent_thought = response_dict.get("thought", "No thought recorded.")
             ai_response = response_dict.get("action", "No action recorded.")
 
-            # Simulate a tool call sometimes
-            if random.random() < 0.5: # 50% chance to simulate a tool call
-                tool_name = random.choice(acting_agent.agent_config.tool_preferences or ["generic_tool"])
-                tool_params = {"input": "simulated_input"}
-                ai_response += f"\n<tool_code>\n{tool_name}({tool_params})\n</tool_code>"
-                logger.info(f"Agent {acting_agent.name} simulated tool call: {tool_name}")
+            # Attach tool call if decided by the agent
+            tool_block = None
+            tool_call = response_dict.get("tool_call")
+            if tool_call:
+                tool_name = tool_call.get("name")
+                tool_params = tool_call.get("parameters", {})
+                tool_block = f"{tool_name}({tool_params})"
+                ai_response += f"\n<tool_code>\n{tool_block}\n</tool_code>"
+                logger.info(f"Agent {acting_agent.name} decided tool call: {tool_name}")
 
             messages.append(AIMessage(content=ai_response).model_dump())
             
@@ -253,6 +256,9 @@ class SimulationEngine:
                 input_data=state["messages"][-2] if len(state["messages"]) > 1 else {}, # Extract content as dict
                 output_data={"response": ai_response}
             )
+            if tool_block:
+                sim_step.tool_used = tool_name
+                sim_step.input_data.setdefault("parameters", {}).update(tool_params)
             sim_steps = state.get("sim_steps", [])
             sim_steps.append(sim_step.model_dump())
             sim_step.start()
@@ -489,7 +495,7 @@ class SimulationEngine:
         This is where DataGenerator would be used to export data.
         """
         sim_id = state["simulation_id"]
-        logger.info(f"Node: finalize_simulation for {sim_id}. Status: {state["status"]}")
+        logger.info(f"Node: finalize_simulation for {sim_id}. Status: {state['status']}")
 
         # Convert raw simulation steps (dicts) back to SimulationStep objects if needed for processing
         # sim_steps_objects = [SimulationStep(**s) for s in state.get("sim_steps", [])]

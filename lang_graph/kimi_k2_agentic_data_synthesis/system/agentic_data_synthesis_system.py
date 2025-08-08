@@ -26,7 +26,7 @@ from ..data.data_generator import DataGenerator
 from ..models.domain import Domain, DomainConfig
 from ..models.tool import ToolType, ToolParameter, ParameterType, ToolConfig
 from ..models.agent import Agent, AgentConfig
-from ..models.simulation import SimulationConfig, SimulationState, SimulationStatus, SimulationSession as SimulationResult # SimulationResult is now LangGraph state dict
+from ..models.simulation import SimulationConfig, SimulationState, SimulationStatus, SimulationSession
 from ..models.evaluation import EvaluationConfig, EvaluationResult, HumanFeedback
 from ..models.data import TrainingData, DataExportConfig, DataFormat
 from ..models.domain import ComplexityLevel
@@ -132,6 +132,7 @@ class AgenticDataSynthesisSystem:
                         for key, value in tool_config.parameters.items()
                     ]
                     self.tool_registry.register_tool(
+                        tool_id=tool_config.tool_id,
                         name=tool_config.name,
                         type=ToolType(tool_config.tool_type), # Convert string to ToolType enum
                         description=tool_config.description,
@@ -338,13 +339,30 @@ class AgenticDataSynthesisSystem:
         
         for simulation_result in simulation_results:
             try:
-                # Evaluate simulation - llm_judge should be able to handle LangGraph state dict
+                # Convert LangGraph state dict into a SimulationSession model for evaluation
+                session = SimulationSession(
+                    id=simulation_result.get("simulation_id"),
+                    domain_id=simulation_result.get("domain_id", "unknown"),
+                    scenario_id=simulation_result.get("scenario", "unknown"),
+                    agent_ids=simulation_result.get("current_agents", []),
+                    status=SimulationStatus(simulation_result.get("status", SimulationStatus.COMPLETED.value)),
+                    steps=[s for s in simulation_result.get("sim_steps", [])],
+                    start_time=None,
+                    end_time=datetime.utcnow(),
+                    duration=None,
+                    total_steps=len(simulation_result.get("sim_steps", [])),
+                    completed_steps=sum(1 for s in simulation_result.get("sim_steps", []) if s.get("status") == "completed"),
+                    failed_steps=sum(1 for s in simulation_result.get("sim_steps", []) if s.get("status") == "failed"),
+                    quality_score=simulation_result.get("final_outcome", {}).get("score"),
+                    metadata={},
+                )
                 evaluation_result = await self.llm_judge.evaluate_simulation(
-                    simulation_result=simulation_result,
-                    config=evaluation_config
+                    simulation_session=session,
+                    rubric_id=evaluation_config.evaluation_id,
                 )
                 
-                evaluation_results.append(evaluation_result)
+                if evaluation_result:
+                    evaluation_results.append(evaluation_result)
                 
             except Exception as e:
                 self.logger.error(f"Evaluation failed for simulation {simulation_result.get('simulation_id', 'unknown')}: {e}")

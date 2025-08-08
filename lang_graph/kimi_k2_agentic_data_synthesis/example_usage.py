@@ -255,8 +255,8 @@ async def create_simulation_configs():
             name="Web Development Collaboration",
             description="Senior and junior developers collaborating on a React project.",
             agent_configs=[
-                AgentConfig(agent_id="senior_developer", name="Senior Developer", description="An experienced software developer.", agent_type="EXPERT", preferred_tools=["code_editor", "terminal", "git"]),
-                AgentConfig(agent_id="junior_developer", name="Junior Developer", description="A less experienced developer learning from the senior.", agent_type="LEARNER", preferred_tools=["code_editor"])
+                AgentConfig(agent_id="senior_developer", name="Senior Developer", description="An experienced software developer.", agent_type="EXPERT", tool_preferences=["code_editor", "terminal", "git"]),
+                AgentConfig(agent_id="junior_developer", name="Junior Developer", description="A less experienced developer learning from the senior.", agent_type="LEARNER", tool_preferences=["code_editor"]) 
             ],
             environment_config=EnvironmentConfig(environment_type="development_workspace", resources={"cpu": "4 cores", "memory": "16GB", "disk_space": "100GB"}, tools_available=["code_editor", "terminal", "git"]),
             max_turns=50, # Increased max_turns
@@ -268,7 +268,7 @@ async def create_simulation_configs():
             name="Data Analysis Task",
             description="Data scientist analyzing a dataset and creating visualizations.",
             agent_configs=[
-                AgentConfig(agent_id="data_scientist", name="Data Scientist", description="An expert in data analysis and visualization.", agent_type="EXPERT", preferred_tools=["python", "pandas", "matplotlib", "jupyter"])
+                AgentConfig(agent_id="data_scientist", name="Data Scientist", description="An expert in data analysis and visualization.", agent_type="EXPERT", tool_preferences=["python", "pandas", "matplotlib", "jupyter"]) 
             ],
             environment_config=EnvironmentConfig(environment_type="data_science_workbench", resources={"cpu": "8 cores", "memory": "32GB", "file_size": "10MB"}, tools_available=["python", "pandas", "matplotlib", "jupyter"]),
             max_turns=50, # Increased max_turns

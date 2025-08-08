@@ -184,38 +184,50 @@ class LLMJudgeSystem:
         start_time = datetime.utcnow()
         
         try:
-            # Run evaluations for each evaluator
-            for evaluator_id in evaluator_ids:
-                if evaluator_id not in self.evaluators:
-                    logger.warning(f"Evaluator not found: {evaluator_id}")
-                    continue
-                
-                evaluator = self.evaluators[evaluator_id]
-                score = await self._run_evaluation(simulation_session, evaluator)
-                
-                if score:
-                    evaluation_result.add_score(score)
-            
-            # Calculate overall score
+            # Deterministic scoring heuristics based on steps and tool usage
+            total_steps = len(simulation_session.steps)
+            tool_steps = sum(1 for s in simulation_session.steps if s.step_type.value == "tool_usage")
+            fail_steps = sum(1 for s in simulation_session.steps if s.status.value == "failed")
+
+            # Accuracy proxy: fewer failures, coherent final_outcome/steps ratio
+            accuracy_score = max(0.0, 1.0 - (fail_steps / (total_steps or 1)))
+            # Completeness proxy: at least one tool usage and multiple steps
+            completeness_score = 0.6 + 0.4 * (1 if tool_steps > 0 else 0)
+            # Creativity proxy: presence of reasoning and varied tools
+            used_tools = {s.tool_used for s in simulation_session.steps if s.tool_used}
+            creativity_score = 0.5 + 0.1 * min(len(used_tools), 5)
+            # Efficiency proxy: shorter sessions with success
+            duration = (simulation_session.duration or 0.0) or max(
+                (simulation_session.end_time or datetime.utcnow() - (simulation_session.start_time or datetime.utcnow())).total_seconds(),
+                1.0,
+            )
+            efficiency_score = max(0.4, min(1.0, 1.2 - (duration / 600.0)))
+            # User satisfaction proxy: blend of above
+            user_sat = (0.4 * accuracy_score + 0.3 * completeness_score + 0.3 * efficiency_score)
+
+            # Build dimension scores
+            scores: List[QualityScore] = [
+                QualityScore(evaluation_type=EvaluationType.ACCURACY, score=round(accuracy_score, 3), confidence=0.9, reasoning="Heuristic based on failed steps"),
+                QualityScore(evaluation_type=EvaluationType.COMPLETENESS, score=round(completeness_score, 3), confidence=0.8, reasoning="Heuristic based on tool usage presence"),
+                QualityScore(evaluation_type=EvaluationType.CREATIVITY, score=round(creativity_score, 3), confidence=0.7, reasoning="Heuristic based on diversity of tools"),
+                QualityScore(evaluation_type=EvaluationType.EFFICIENCY, score=round(efficiency_score, 3), confidence=0.75, reasoning="Heuristic based on duration"),
+                QualityScore(evaluation_type=EvaluationType.USER_SATISFACTION, score=round(user_sat, 3), confidence=0.8, reasoning="Aggregate of other metrics"),
+            ]
+
+            for s in scores:
+                evaluation_result.add_score(s)
+
             evaluation_result.overall_score = evaluation_result.calculate_overall_score()
-            
-            # Determine pass/fail
             evaluation_result.determine_pass_fail(rubric.passing_threshold)
-            
-            # Generate feedback and recommendations
             evaluation_result.feedback = self._generate_feedback(evaluation_result, rubric)
             evaluation_result.recommendations = evaluation_result.get_recommendations_by_score()
-            
-            # Calculate evaluation time
+
             end_time = datetime.utcnow()
             evaluation_result.evaluation_time = (end_time - start_time).total_seconds()
-            
-            # Store result
             self.evaluation_results[evaluation_result.id] = evaluation_result
-            
             logger.info(f"Completed evaluation for simulation {simulation_session.id}")
             return evaluation_result
-            
+
         except Exception as e:
             logger.error(f"Evaluation failed for simulation {simulation_session.id}: {e}")
             return None

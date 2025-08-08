@@ -105,27 +105,37 @@ class DataGenerator:
             # Extract conversation history
             conversation_history = []
             for step in session.steps:
-                if step.output_data and "response" in step.output_data:
+                # steps may be dicts when passed from LangGraph state; normalize access
+                out = step.get("output_data") if isinstance(step, dict) else step.output_data
+                thought = step.get("agent_thought") if isinstance(step, dict) else step.agent_thought
+                step_no = step.get("step_number") if isinstance(step, dict) else step.step_number
+                start_time = step.get("start_time") if isinstance(step, dict) else (step.start_time.isoformat() if getattr(step, "start_time", None) else None)
+                if out and "response" in out:
                     turn = {
                         "role": "assistant",
-                        "content": step.output_data["response"],
-                        "step": step.step_number,
-                        "timestamp": step.start_time.isoformat() if step.start_time else None
+                        "content": out["response"],
+                        "step": step_no,
+                        "timestamp": start_time,
                     }
-                    if step.agent_thought:
-                        turn["thought"] = step.agent_thought
+                    if thought:
+                        turn["thought"] = thought
                     conversation_history.append(turn)
             
             # Extract tool usage log
             tool_usage_log = []
             for step in session.steps:
-                if step.tool_used:
+                tool_used = step.get("tool_used") if isinstance(step, dict) else step.tool_used
+                if tool_used:
+                    input_data = step.get("input_data") if isinstance(step, dict) else step.input_data
+                    output_data = step.get("output_data") if isinstance(step, dict) else step.output_data
+                    start_time = step.get("start_time") if isinstance(step, dict) else (step.start_time.isoformat() if getattr(step, "start_time", None) else None)
+                    duration = step.get("duration") if isinstance(step, dict) else step.duration
                     tool_usage_log.append({
-                        "tool": step.tool_used,
-                        "parameters": step.input_data.get("parameters", {}),
-                        "result": step.output_data.get("result", ""),
-                        "timestamp": step.start_time.isoformat() if step.start_time else None,
-                        "duration": step.duration
+                        "tool": tool_used,
+                        "parameters": (input_data or {}).get("parameters", {}),
+                        "result": (output_data or {}).get("result", ""),
+                        "timestamp": start_time,
+                        "duration": duration,
                     })
             
             # Create final outcome

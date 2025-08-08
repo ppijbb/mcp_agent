@@ -5,10 +5,14 @@ Manages MCP tools, synthetic tools, and their metadata for the synthesis system.
 """
 
 from typing import List, Dict, Any, Optional, Set
-from models.tool import Tool, ToolType, ToolParameter, ToolExample, ParameterType
+from ..models.tool import Tool, ToolType, ToolParameter, ToolExample, ParameterType
 import json
 import logging
 from datetime import datetime
+import subprocess
+import shlex
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -523,57 +527,101 @@ class ToolRegistry:
             return {"error": f"Tool execution failed: {str(e)}"}
     
     def _execute_mcp_tool(self, tool: Tool, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute MCP tool (placeholder implementation)"""
-        # In a real implementation, this would connect to actual MCP servers
-        return {
-            "status": "success",
-            "tool": tool.name,
-            "result": f"Simulated MCP tool execution for {tool.name}",
-            "parameters": parameters
-        }
+        """Execute built-in MCP-like tools with real effects (no network)."""
+        name = tool.name
+        try:
+            if name == "terminal":
+                command = parameters.get("command")
+                if not command:
+                    return {"error": "Missing 'command'"}
+                cwd = parameters.get("working_dir") or os.getcwd()
+                completed = subprocess.run(
+                    command,
+                    cwd=cwd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+                return {
+                    "status": "success",
+                    "tool": name,
+                    "result": completed.stdout.strip(),
+                    "stderr": completed.stderr.strip(),
+                    "returncode": completed.returncode,
+                }
+
+            if name == "code_editor":
+                action = parameters.get("action")
+                file_path = parameters.get("file_path")
+                content = parameters.get("content", "")
+                if not action:
+                    return {"error": "Missing 'action'"}
+                if action in {"open", "read"}:
+                    if not file_path:
+                        return {"error": "Missing 'file_path'"}
+                    path = Path(file_path)
+                    if not path.exists():
+                        return {"error": f"File not found: {file_path}"}
+                    text = path.read_text(encoding="utf-8")
+                    return {"status": "success", "tool": name, "result": text}
+                if action in {"write", "save", "edit"}:
+                    if not file_path:
+                        return {"error": "Missing 'file_path'"}
+                    path = Path(file_path)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(content, encoding="utf-8")
+                    return {"status": "success", "tool": name, "result": f"Wrote {len(content)} bytes to {file_path}"}
+                if action == "close":
+                    return {"status": "success", "tool": name, "result": "Closed"}
+                return {"error": f"Unsupported action: {action}"}
+
+            # default for other MCP tools
+            return {"status": "success", "tool": name, "result": f"Executed {name}", "parameters": parameters}
+        except subprocess.TimeoutExpired:
+            return {"error": f"{name} timed out"}
+        except Exception as e:
+            return {"error": f"{name} failed: {e}"}
     
     def _execute_synthetic_tool(self, tool: Tool, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute synthetic tool (simulated implementation)"""
-        import time
-        import random
-        
-        # Simulate execution time
-        execution_time = random.uniform(0.1, 2.0)
-        time.sleep(execution_time)
-        
-        # Simulate different tool behaviors
-        if tool.name == "python":
+        """Execute synthetic tools with real local effects where applicable."""
+        name = tool.name
+        if name == "python":
+            import tempfile
             code = parameters.get("code", "")
-            return {
-                "status": "success",
-                "tool": "python",
-                "result": f"Executed Python code: {code[:100]}...",
-                "execution_time": execution_time
-            }
-        elif tool.name == "code_editor":
-            action = parameters.get("action", "")
-            file_path = parameters.get("file_path", "")
-            return {
-                "status": "success",
-                "tool": "code_editor",
-                "result": f"Performed {action} on {file_path}",
-                "execution_time": execution_time
-            }
-        elif tool.name == "terminal":
-            command = parameters.get("command", "")
-            return {
-                "status": "success",
-                "tool": "terminal",
-                "result": f"Executed command: {command}",
-                "execution_time": execution_time
-            }
-        else:
-            return {
-                "status": "success",
-                "tool": tool.name,
-                "result": f"Simulated execution of {tool.name}",
-                "execution_time": execution_time
-            }
+            timeout = int(parameters.get("timeout", 10))
+            try:
+                with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tf:
+                    tf.write(code)
+                    temp_path = tf.name
+                completed = subprocess.run(
+                    ["python", temp_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=timeout,
+                    check=False,
+                )
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+                return {
+                    "status": "success",
+                    "tool": name,
+                    "result": completed.stdout.strip(),
+                    "stderr": completed.stderr.strip(),
+                    "returncode": completed.returncode,
+                }
+            except subprocess.TimeoutExpired:
+                return {"error": "python timed out"}
+            except Exception as e:
+                return {"error": f"python failed: {e}"}
+
+        # fallback to MCP handler if a synthetic tool mirrors file/terminal behaviors
+        return self._execute_mcp_tool(tool, parameters)
     
     def _update_tool_usage_stats(self, tool_id: str, success: bool, response_time: float) -> None:
         """Update tool usage statistics"""
