@@ -58,18 +58,19 @@ class PlayerAgent(BaseAgent):
         """페르소나 기반 초기 전략 설정"""
         # persona가 dict인 경우 처리
         if isinstance(self.persona, dict):
-            traits = self.persona.get("traits", {})
+            traits_obj = self.persona.get("traits")
             base_strategy = {
-                "risk_tolerance": traits.get("risk_tolerance", 0.5),
-                "cooperation_level": traits.get("social_interaction", 0.5),
-                "aggression_level": 0.3,  # 기본값
-                "adaptability": 0.5,  # 기본값
+                "risk_tolerance": getattr(traits_obj, "risk_tolerance", 0.5),
+                "cooperation_level": getattr(traits_obj, "cooperation", 0.5),
+                "aggression_level": getattr(traits_obj, "aggression", 0.3),
+                "adaptability": getattr(traits_obj, "adaptability", 0.5),
                 "focus_areas": ["general"],
-                "decision_style": "balanced"
+                "decision_style": "balanced",
             }
             
             # 페르소나 타입별 특화 전략
-            persona_type = self.persona.get("persona_type", "strategic")
+            arch = self.persona.get("archetype")
+            persona_type = arch.value if hasattr(arch, "value") else (arch or "strategic")
             if persona_type == "aggressive":
                 base_strategy.update({
                     "preferred_actions": ["attack", "challenge", "compete"],
@@ -653,12 +654,17 @@ class PlayerAgent(BaseAgent):
     
     def _convert_to_game_action(self, chosen_action: str, reasoning: Dict[str, Any]) -> Dict[str, Any]:
         """선택된 행동을 게임 액션으로 변환"""
+        if isinstance(self.persona, dict):
+            arch = self.persona.get("archetype")
+            persona_archetype_value = arch.value if hasattr(arch, "value") else str(arch)
+        else:
+            persona_archetype_value = getattr(self.persona, "archetype", PersonaArchetype.STRATEGIC).value
         return {
             "action_type": chosen_action,
             "action_data": {
                 "player_id": self.player_info.id,
                 "player_name": self.player_info.name,
-                "persona_type": self.persona.archetype.value,
+                "persona_type": persona_archetype_value,
                 "confidence": reasoning.get("confidence", 0.5),
                 "reasoning_summary": reasoning.get("action_reasoning", {}).get("reasoning", ""),
                 "timestamp": datetime.now().isoformat()
@@ -720,8 +726,12 @@ class PlayerAgent(BaseAgent):
         """페르소나 영향 설명"""
         interpretation = reasoning.get("situation_interpretation", {})
         strategic_priority = interpretation.get("strategic_priority", "")
-        
-        return f"{self.persona.archetype.value} 성향으로 {strategic_priority} 중심의 판단"
+        if isinstance(self.persona, dict):
+            arch = self.persona.get("archetype")
+            persona_arch_value = arch.value if hasattr(arch, "value") else str(arch)
+        else:
+            persona_arch_value = getattr(self.persona, "archetype", PersonaArchetype.STRATEGIC).value
+        return f"{persona_arch_value} 성향으로 {strategic_priority} 중심의 판단"
     
     def get_memory_summary(self) -> Dict[str, Any]:
         """게임 메모리 요약"""
