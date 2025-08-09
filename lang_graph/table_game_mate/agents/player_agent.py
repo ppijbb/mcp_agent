@@ -194,16 +194,21 @@ class PlayerAgent(BaseAgent):
         # 페르소나 기반 상황 해석
         situation_interpretation = await self._interpret_situation_with_persona(current_situation)
         
-        # 가능한 행동들 평가
+        # 가능한 행동들 평가 및 최적 행동 선택 (엄격 모드)
         available_actions = current_situation.get("available_actions", [])
-        action_evaluations = await self._evaluate_actions_with_llm(
-            available_actions, 
-            current_situation, 
-            situation_interpretation
-        )
-        
-        # 최적 행동 선택
-        best_action = self._select_best_action(action_evaluations)
+        try:
+            action_evaluations = await self._evaluate_actions_with_llm(
+                available_actions,
+                current_situation,
+                situation_interpretation,
+            )
+            best_action = self._select_best_action(action_evaluations)
+        except Exception as e:
+            return {
+                "decision": "no_valid_action",
+                "error": f"행동 평가/선택 실패: {e}",
+                "confidence": 0.0
+            }
         
         # 전략 조정 필요성 검토
         strategy_adjustment = self._check_strategy_adjustment(current_situation, best_action)
@@ -242,7 +247,7 @@ class PlayerAgent(BaseAgent):
         validation_result = self._validate_action_before_execution(game_action)
         
         if not validation_result["is_valid"]:
-            # 대안 행동 시도
+            # 대안 행동 시도 (실패 시 폴백 없음)
             alternative_actions = reasoning.get("alternative_actions", [])
             for alt_action in alternative_actions:
                 alt_game_action = self._convert_to_game_action(alt_action, reasoning)
@@ -252,9 +257,11 @@ class PlayerAgent(BaseAgent):
                     chosen_action = alt_action
                     break
             else:
-                # 모든 대안이 실패하면 기본 행동
-                game_action = self._create_fallback_action()
-                chosen_action = "fallback"
+                return {
+                    "action": "no_valid_action",
+                    "error": "검증 가능한 대안 행동이 없습니다",
+                    "timestamp": datetime.now().isoformat()
+                }
         
         # 행동 기록
         decision_record = {
@@ -502,94 +509,64 @@ class PlayerAgent(BaseAgent):
         return interpretation
     
     async def _evaluate_actions_with_llm(
-        self, 
-        available_actions: List[str], 
-        situation: Dict[str, Any], 
-        interpretation: Dict[str, Any]
+        self,
+        available_actions: List[str],
+        situation: Dict[str, Any],
+        interpretation: Dict[str, Any],
     ) -> Dict[str, Dict[str, Any]]:
-        """LLM을 사용한 행동 평가"""
-        
+        """LLM을 사용한 행동 평가 (폴백 없이 엄격 모드)"""
+
         if not available_actions:
-            return {"pass": {"score": 0.5, "reasoning": "행동 옵션 없음"}}
-        
+            raise ValueError("사용 가능한 행동이 없습니다")
+
+        if not self.llm_client:
+            raise RuntimeError("LLM 클라이언트가 설정되지 않았습니다")
+
+        persona_type = (
+            self.persona.get("persona_type", "strategic")
+            if isinstance(self.persona, dict)
+            else getattr(self.persona, "archetype", PersonaArchetype.STRATEGIC)
+        )
+
+        prompt = (
+            "당신은 보드게임 플레이어 AI입니다. 주어진 상황과 페르소나에 따라 가능한 행동을 평가하세요.\n"
+            "반드시 다음 JSON 형식만 반환하세요 (키는 행동명):\n"
+            "{\n"
+            "  \"<action_name>\": {\n"
+            "    \"score\": 0.0-1.0, \"persona_alignment\": 0.0-1.0, \"risk_level\": \"low|medium|high\", \"reasoning\": \"...\"\n"
+            "  }\n"
+            "}\n"
+            "available_actions: "
+            + json.dumps(available_actions, ensure_ascii=False)
+            + "\n"
+            + "situation: "
+            + json.dumps(situation, ensure_ascii=False)
+            + "\n"
+            + f"persona: {str(persona_type)}\n"
+        )
+
+        llm_response = await self.llm_client.complete(prompt)
         try:
-            if self.llm_client:
-                # 현재 페르소나와 게임 상태에 기반한 동적 프롬프트 생성
-                prompt = "당신은 보드게임 플레이어 AI입니다.\n"
-                
-                # 페르소나 유형에 따른 기본 지침 추가
-                persona_type = self.persona.get("persona_type", "strategic") if isinstance(self.persona, dict) else getattr(self.persona, 'archetype', PersonaArchetype.STRATEGIC)
-                
-                if persona_type == "aggressive" or persona_type == PersonaArchetype.AGGRESSIVE:
-                    prompt += "당신은 매우 공격적이고, 항상 승리를 위해 과감한 수를 둡니다. 다른 플레이어들을 견제하고 점수 획득을 최우선으로 생각하세요.\n"
-                elif persona_type == "strategic" or persona_type == PersonaArchetype.STRATEGIC:
-                    prompt += "당신은 신중한 전략가입니다. 장기적인 관점에서 최적의 수를 계산하고, 효율적인 자원 관리를 통해 승리하세요.\n"
-                elif persona_type == "social" or persona_type == PersonaArchetype.SOCIAL:
-                    prompt += "당신은 사교적인 플레이어입니다. 다른 플레이어와의 상호작용을 즐기며, 협상과 동맹을 통해 유리한 상황을 만드세요.\n"
-                else:
-                    prompt += "당신은 게임 자체를 즐기는 캐주얼 플레이어입니다. 너무 복잡한 계산보다는 재미있는 플레이를 선호합니다.\n"
-                
-                # 게임 상태 정보 추가
-                prompt += f"\n--- 현재 게임 정보 ---\n"
-                prompt += f"게임명: {game_state.game_name}\n"
-                prompt += f"현재 턴: {situation.get('turn_count', 0)}\n"
-                prompt += f"현재 점수: {self.player_info.score}\n"
-                prompt += f"현재 순위: {situation.get('my_position', {}).get('rank', '?')}위\n"
-                prompt += f"승리 확률: {situation.get('winning_probability', 0.5):.1%}\n"
-                prompt += f"위협 요소: {len(situation.get('immediate_threats', []))}개\n"
-                prompt += f"기회 요소: {len(situation.get('opportunities', []))}개\n"
-                
-                # 페르소나 기반 동적 프롬프트 생성
-                prompt = "당신은 AI 보드게임 플레이어입니다. 다른 플레이어의 행동에 대해 어떻게 생각하는지 말해주세요.\n"
+            evaluations = json.loads(llm_response)
+        except json.JSONDecodeError as je:
+            raise ValueError(f"LLM 응답 JSON 파싱 실패: {je}")
 
-                if persona_type == "aggressive" or persona_type == PersonaArchetype.AGGRESSIVE:
-                    prompt += f"'{action.player_id}'의 행동은 나에게 위협적인가? 나의 승리에 방해가 되는가? 어떻게 대응해야 할까?\n"
-                elif persona_type == "social" or persona_type == PersonaArchetype.SOCIAL:
-                    prompt += f"'{action.player_id}'의 행동은 우리에게 어떤 영향을 미칠까? 협력의 기회가 될 수 있을까, 아니면 경계해야 할까?\n"
-                
-                prompt += f"\n--- 방금 일어난 행동 ---\n"
-                prompt += f"플레이어: {action.player_id}\n"
-                
-                # 페르소나 기반 동적 프롬프트 생성
-                prompt = "당신은 AI 보드게임 플레이어입니다. 지금은 게임이 종료되었고, 다른 플레이어들과 대화를 나누는 상황입니다.\n"
+        # 유효성 검사 및 최종 점수 계산
+        for act, eval_data in list(evaluations.items()):
+            if act not in available_actions or not isinstance(eval_data, dict):
+                evaluations.pop(act, None)
+                continue
+            base_score = float(eval_data.get("score", 0.0))
+            persona_alignment = float(eval_data.get("persona_alignment", 0.5))
+            risk_level = str(eval_data.get("risk_level", "medium"))
+            eval_data["final_score"] = self._adjust_score_for_persona(
+                base_score, persona_alignment, risk_level
+            )
 
-                if persona_type == "social" or persona_type == PersonaArchetype.SOCIAL:
-                    prompt += "사교적인 플레이어로서 게임이 아주 재미있었다고 말하며, 다음 게임을 기약하는 인사를 건네세요.\n"
-                elif persona_type == "aggressive" or persona_type == PersonaArchetype.AGGRESSIVE:
-                    prompt += "승부욕이 강한 플레이어로서, 이겼다면 승리를 자축하고, 졌다면 아쉬움을 표현하며 다음엔 꼭 이기겠다고 다짐하는 말을 하세요.\n"
-                elif persona_type == "deceptive" or persona_type == PersonaArchetype.DECEPTIVE:
-                    prompt += "정체를 숨기는 플레이어로서, 자신의 정체나 전략에 대해 모호하게 말하며 다른 플레이어들을 헷갈리게 하는 작별 인사를 하세요.\n"
-                else:
-                    prompt += "게임이 끝났습니다. 수고했다는 의미로 간단한 작별 인사를 하세요.\n"
-                
-                prompt += f"\n--- 최종 게임 결과 ---\n"
-                
-                llm_response = await self.llm_client.complete(prompt)
-                
-                # JSON 파싱 시도
-                try:
-                    evaluations = json.loads(llm_response)
-                    
-                    # 페르소나 기반 점수 조정
-                    for action, eval_data in evaluations.items():
-                        if isinstance(eval_data, dict):
-                            eval_data["final_score"] = self._adjust_score_for_persona(
-                                eval_data.get("score", 0.5),
-                                eval_data.get("persona_alignment", 0.5),
-                                eval_data.get("risk_level", "medium")
-                            )
-                    
-                    return evaluations
-                    
-                except json.JSONDecodeError:
-                    # JSON 파싱 실패시 기본 평가
-                    return self._create_fallback_evaluations(available_actions)
-            else:
-                return self._create_fallback_evaluations(available_actions)
-        
-        except Exception as e:
-            print(f"⚠️ LLM 행동 평가 실패: {e}")
-            return self._create_fallback_evaluations(available_actions)
+        if not evaluations:
+            raise ValueError("유효한 행동 평가가 없습니다")
+
+        return evaluations
     
     def _adjust_score_for_persona(self, base_score: float, persona_alignment: float, risk_level: str) -> float:
         """페르소나 특성을 반영한 점수 조정"""
@@ -609,39 +586,12 @@ class PlayerAgent(BaseAgent):
         
         return max(0.0, min(1.0, adjusted_score))
     
-    def _create_fallback_evaluations(self, available_actions: List[str]) -> Dict[str, Dict[str, Any]]:
-        """폴백 행동 평가"""
-        evaluations = {}
-        
-        for action in available_actions:
-            # 페르소나 기반 기본 점수
-            base_score = 0.5
-            
-            # 행동 이름 기반 간단한 평가
-            if self.persona.archetype == PersonaArchetype.AGGRESSIVE:
-                if any(word in action.lower() for word in ["attack", "challenge", "aggressive"]):
-                    base_score = 0.8
-            elif self.persona.archetype == PersonaArchetype.SOCIAL:
-                if any(word in action.lower() for word in ["cooperate", "trade", "alliance"]):
-                    base_score = 0.8
-            elif action.lower() in ["pass", "wait", "observe"]:
-                base_score = 0.3  # 소극적 행동은 낮은 점수
-            
-            evaluations[action] = {
-                "score": base_score,
-                "final_score": base_score,
-                "reasoning": f"기본 페르소나 평가: {self.persona.archetype.value}",
-                "persona_alignment": 0.6,
-                "risk_level": "medium",
-                "expected_outcome": "표준적인 결과 예상"
-            }
-        
-        return evaluations
+    # 폴백 평가 로직 제거 (프로덕션 모드)
     
     def _select_best_action(self, action_evaluations: Dict[str, Dict[str, Any]]) -> str:
         """최적 행동 선택"""
         if not action_evaluations:
-            return "pass"
+            raise ValueError("행동 평가가 비어 있습니다")
         
         # final_score 기준으로 정렬
         sorted_actions = sorted(
@@ -651,7 +601,11 @@ class PlayerAgent(BaseAgent):
         )
         
         # 약간의 랜덤성 추가 (페르소나의 adaptability 반영)
-        adaptability = self.persona.adaptability / 10.0
+        traits_obj = (
+            self.persona.get("traits") if isinstance(self.persona, dict) else getattr(self.persona, "traits", None)
+        )
+        adaptability_value = getattr(traits_obj, "adaptability", 0.0) if traits_obj else 0.0
+        adaptability = adaptability_value  # already 0.0-1.0 scale
         if random.random() < adaptability * 0.3:  # 최대 30% 확률로 두 번째 선택
             if len(sorted_actions) > 1:
                 return sorted_actions[1][0]
@@ -753,8 +707,12 @@ class PlayerAgent(BaseAgent):
         base_description = f"{self.player_info.name}이(가) {chosen_action}을(를) 선택했습니다"
         
         # 페르소나 특성 반영
-        if self.persona.catchphrase and random.random() < 0.3:  # 30% 확률로 캐치프레이즈 사용
-            base_description += f". \"{self.persona.catchphrase}\""
+        if isinstance(self.persona, dict):
+            catchphrases = self.persona.get("catchphrases", [])
+        else:
+            catchphrases = getattr(self.persona, "catchphrases", [])
+        if catchphrases and random.random() < 0.3:
+            base_description += f". \"{catchphrases[0]}\""
         
         return base_description
     

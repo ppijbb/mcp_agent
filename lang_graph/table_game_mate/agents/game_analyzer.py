@@ -73,8 +73,7 @@ class GameAnalyzerAgent(BaseAgent):
         except Exception as e:
             return {
                 "error": f"BGG API 호출 실패: {str(e)}",
-                "game_query": game_query,
-                "fallback_needed": True
+                "game_query": game_query
             }
     
     async def reason(self, perception: Dict[str, Any]) -> Dict[str, Any]:
@@ -124,20 +123,14 @@ class GameAnalyzerAgent(BaseAgent):
         try:
             llm_response = await self.llm_client.complete(analysis_prompt)
             
-            # JSON 파싱 시도
+            # JSON 파싱 시도 (실패 시 폴백 없이 에러 반환)
             try:
                 analysis = json.loads(llm_response)
             except json.JSONDecodeError:
-                # JSON 파싱 실패시 기본값 사용
-                analysis = {
-                    "player_feasibility": target_players >= game_details.get('min_players', 2) and target_players <= game_details.get('max_players', 8),
-                    "complexity_level": "moderate",
-                    "recommended_ai_personas": ["strategic", "casual", "aggressive"],
-                    "estimated_play_time": game_details.get('playing_time', 60),
-                    "key_mechanics": game_details.get('mechanics', []),
-                    "difficulty_factors": ["rules_complexity", "strategic_depth"],
-                    "strategic_depth": min(int(game_details.get('complexity', 2) * 2), 10),
-                    "social_interaction": 5
+                return {
+                    "analysis_failed": True,
+                    "error": "LLM 응답 JSON 파싱 실패",
+                    "raw_llm_response": llm_response
                 }
             
             return {
@@ -150,12 +143,7 @@ class GameAnalyzerAgent(BaseAgent):
         except Exception as e:
             return {
                 "analysis_failed": True,
-                "error": f"LLM 분석 실패: {str(e)}",
-                "fallback_analysis": {
-                    "complexity_level": "moderate",
-                    "recommended_ai_personas": ["balanced"],
-                    "estimated_play_time": 60
-                }
+                "error": f"LLM 분석 실패: {str(e)}"
             }
     
     async def act(self, reasoning: Dict[str, Any]) -> Dict[str, Any]:
@@ -175,16 +163,35 @@ class GameAnalyzerAgent(BaseAgent):
         
         analysis = reasoning.get("game_analysis", {})
         
+        # 필수 필드 검증 (폴백 없이 엄격 모드)
+        required_fields = [
+            "player_feasibility",
+            "complexity_level",
+            "estimated_play_time",
+            "recommended_ai_personas",
+            "strategic_depth",
+            "social_interaction",
+            "key_mechanics",
+            "difficulty_factors",
+        ]
+        missing = [f for f in required_fields if f not in analysis]
+        if missing:
+            return {
+                "action": "analysis_invalid",
+                "error": f"분석 결과 누락 필드: {', '.join(missing)}",
+                "timestamp": self._get_timestamp()
+            }
+        
         # 게임 설정 생성
         game_config = {
-            "is_playable": analysis.get("player_feasibility", False),
-            "complexity": analysis.get("complexity_level", "moderate"),
-            "estimated_duration": analysis.get("estimated_play_time", 60),
-            "ai_persona_suggestions": analysis.get("recommended_ai_personas", ["balanced"]),
-            "strategic_depth": analysis.get("strategic_depth", 5),
-            "social_interaction": analysis.get("social_interaction", 5),
-            "key_mechanics": analysis.get("key_mechanics", []),
-            "difficulty_factors": analysis.get("difficulty_factors", [])
+            "is_playable": analysis["player_feasibility"],
+            "complexity": analysis["complexity_level"],
+            "estimated_duration": analysis["estimated_play_time"],
+            "ai_persona_suggestions": analysis["recommended_ai_personas"],
+            "strategic_depth": analysis["strategic_depth"],
+            "social_interaction": analysis["social_interaction"],
+            "key_mechanics": analysis["key_mechanics"],
+            "difficulty_factors": analysis["difficulty_factors"],
         }
         
         # 다음 단계 에이전트들을 위한 매개변수

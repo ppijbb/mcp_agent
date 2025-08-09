@@ -147,20 +147,17 @@ class PersonaGeneratorAgent(BaseAgent):
 """
         
         try:
-            # MCPApp을 통해 LLM 클라이언트 사용
-            llm_response_str = await self.app.llm.complete(prompt=persona_prompt)
+            # LLM 클라이언트 사용 (엄격 모드, 폴백 없음)
+            llm_response_str = await self.llm_client.complete(persona_prompt)
             
-            # JSON 파싱 시도
+            # JSON 파싱 (실패 시 에러 반환)
             try:
-                # llm_response_str이 모델의 응답 객체일 경우, 실제 텍스트를 추출해야 할 수 있습니다.
-                # 우선 문자열이라고 가정합니다.
                 llm_response = llm_response_str
                 personas_data = json.loads(llm_response)
                 if not isinstance(personas_data, list):
                     raise ValueError("응답이 배열 형태가 아닙니다")
-            except (json.JSONDecodeError, ValueError):
-                # 파싱 실패시 기본 페르소나 생성
-                personas_data = self._generate_fallback_personas(personas_needed, suggested_types)
+            except (json.JSONDecodeError, ValueError) as parse_err:
+                return {"personas_generated": False, "error": f"LLM 응답 파싱 실패: {parse_err}"}
             
             # 페르소나 유효성 검증 및 보완
             validated_personas = []
@@ -171,19 +168,12 @@ class PersonaGeneratorAgent(BaseAgent):
             return {
                 "personas_generated": True,
                 "personas": validated_personas,
-                "generation_method": "llm" if isinstance(json.loads(llm_response), list) else "fallback",
+                "generation_method": "llm",
                 "raw_llm_response": llm_response
             }
             
         except Exception as e:
-            # 완전 실패시 기본 페르소나 사용
-            fallback_personas = self._generate_fallback_personas(personas_needed, suggested_types)
-            return {
-                "personas_generated": True,
-                "personas": fallback_personas,
-                "generation_method": "fallback",
-                "error": f"LLM 생성 실패: {str(e)}"
-            }
+            return {"personas_generated": False, "error": f"LLM 생성 실패: {str(e)}"}
     
     async def act(self, reasoning: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -201,13 +191,14 @@ class PersonaGeneratorAgent(BaseAgent):
         
         personas_data = reasoning.get("personas", [])
         
-        # PersonaProfile 객체들 생성
+        # PersonaProfile 객체들 생성 (실패 시 폴백 없이 에러 반환)
         persona_profiles = []
         for i, persona_data in enumerate(personas_data):
             try:
+                archetype_str = persona_data.get("type", "social")
                 profile = {
                     "name": persona_data.get("name", f"플레이어 {i+1}"),
-                    "archetype": PersonaArchetype(persona_data.get("type", "social")),
+                    "archetype": PersonaArchetype(archetype_str),
                     "communication_style": CommunicationStyle.FRIENDLY,
                     "traits": PersonaTraits(),
                     "background_story": persona_data.get("background_story", "게임을 즐기는 AI 플레이어입니다."),
@@ -218,9 +209,7 @@ class PersonaGeneratorAgent(BaseAgent):
                 }
                 persona_profiles.append(profile)
             except Exception as e:
-                # 개별 페르소나 생성 실패시 기본 페르소나 사용
-                default_profile = self._create_default_persona(i)
-                persona_profiles.append(default_profile)
+                return {"action": "persona_generation_failed", "error": f"페르소나 변환 실패(index={i}): {e}"}
         
         # 페르소나 밸런스 분석
         balance_analysis = self._analyze_persona_balance(persona_profiles)
@@ -234,37 +223,7 @@ class PersonaGeneratorAgent(BaseAgent):
             "timestamp": self._get_timestamp()
         }
     
-    def _generate_fallback_personas(self, count: int, suggested_types: List[str]) -> List[Dict]:
-        """기본 페르소나 생성 (LLM 실패시)"""
-        fallback_personas = []
-        available_types = list(self.base_personas.keys())
-        
-        for i in range(count):
-            # 순환하며 다양한 타입 선택
-            if i < len(suggested_types):
-                persona_type = suggested_types[i]
-            else:
-                persona_type = available_types[i % len(available_types)]
-            
-            base_template = self.base_personas.get(persona_type, self.base_personas["casual"])
-            
-            persona = {
-                "name": f"{base_template['name']} {i+1}",
-                "type": persona_type,
-                "personality_traits": base_template["traits"],
-                "decision_style": f"{base_template['play_style']} 기반 의사결정",
-                "risk_preference": {"low": 3, "medium": 5, "high": 7, "extreme": 9, "variable": 5}.get(base_template["risk_tolerance"], 5),
-                "cooperation_tendency": 5,
-                "aggression_level": {"minimal": 2, "social": 6, "confrontational": 8, "responsive": 5, "chaotic": 7}.get(base_template["interaction_style"], 5),
-                "adaptability": 5,
-                "game_focus": "general_strategy",
-                "catchphrase": f"{base_template['name']}답게 플레이하겠습니다!",
-                "communication_style": base_template.get("communication_style"),
-                "background_story": base_template.get("background_story")
-            }
-            fallback_personas.append(persona)
-        
-        return fallback_personas
+    # 폴백 페르소나 생성 로직 제거 (프로덕션 모드)
     
     def _validate_and_complete_persona(self, persona_data: Dict, index: int) -> Dict:
         """페르소나 데이터 유효성 검증 및 보완"""
@@ -283,25 +242,13 @@ class PersonaGeneratorAgent(BaseAgent):
             "background_story": persona_data.get("background_story")
         }
         
-        # 타입이 유효하지 않으면 기본값 사용
+        # 타입이 유효하지 않으면 에러 반환
         if validated["type"] not in self.base_personas:
-            validated["type"] = "casual"
+            raise ValueError(f"유효하지 않은 페르소나 타입: {validated['type']}")
         
         return validated
     
-    def _create_default_persona(self, index: int) -> PersonaProfile:
-        """기본 페르소나 생성"""
-        return {
-            "name": f"기본 AI {index+1}",
-            "archetype": PersonaArchetype.SOCIAL,
-            "communication_style": CommunicationStyle.FRIENDLY,
-            "traits": PersonaTraits(),
-            "background_story": "게임을 즐기는 평범한 플레이어입니다.",
-            "catchphrases": ["함께 즐거운 게임을 해봅시다!"],
-            "game_behaviors": {},
-            "created_for_game": "test_game",
-            "difficulty_level": "medium"
-        }
+    # 기본 페르소나 생성 로직 제거 (프로덕션 모드)
     
     def _analyze_persona_balance(self, personas: List[PersonaProfile]) -> Dict[str, Any]:
         """페르소나 간 밸런스 분석"""
