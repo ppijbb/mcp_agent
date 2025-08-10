@@ -432,7 +432,7 @@ class ProductPlannerAgent(BaseAgent):
 
             if self.state["step"] == "figma_analysis" and self.state["data"]["figma_file_id"]:
                 logger.info(f"Analyzing Figma file with ID: {self.state['data']['figma_file_id']}")
-                figma_context = {}  # Use self.state["data"] directly in sub-agent if needed
+                figma_context = self.state["data"]
                 analysis_result = await self.figma_analyzer.run_workflow(figma_context)
                 self.state["data"]["figma_analysis"] = analysis_result
                 logger.info("Figma analysis completed.")
@@ -477,7 +477,7 @@ class ProductPlannerAgent(BaseAgent):
                         figma_result["dashboard_layout"] = dashboard_result
                     
                     self.state["data"]["figma_creation_result"] = figma_result
-                    response["message"] += f"\n🎨 Figma 컴포넌트 생성 완료! {figma_result.get('components_created', 0)}개 컴포넌트가 생성되었습니다. 레이아웃 최적화도 적용되었습니다."
+                    response["message"] += f"\n🎨 Figma 레이아웃 스펙 생성 완료! {figma_result.get('components_spec_count', 0)}개 컴포넌트 스펙이 생성되었습니다. 레이아웃 최적화도 적용되었습니다."
                     
                 except Exception as e:
                     self.logger.error(f"Figma 생성 단계 오류: {str(e)}")
@@ -497,7 +497,11 @@ class ProductPlannerAgent(BaseAgent):
             if self.state["step"] == "save_report":
                 save_status = await self._save_final_report(self.state["data"]["final_report"], self.state["data"]["product_concept"])
                 self.state["data"]["final_report"]["save_status"] = save_status
-                response["message"] += "\nReport saved to Google Drive."
+                saved_path = save_status.get("file_path") if isinstance(save_status, dict) else None
+                if saved_path:
+                    response["message"] += f"\nReport saved to local filesystem: {saved_path}"
+                else:
+                    response["message"] += "\nReport save status recorded (local filesystem)."
                 self.state["step"] = "complete"
             
             if self.state["step"] == "complete":

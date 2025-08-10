@@ -50,12 +50,12 @@ class FigmaCreatorAgent(BaseAgent):
             # 컴포넌트 레이아웃 생성
             layout_result = await self._create_component_layout(components)
             
-            # 결과 반환
+            # 결과 반환 (spec-only)
             result = {
                 "status": "success",
-                "components_created": len(components),
-                "layout": layout_result,
-                "components": components
+                "components_spec_count": len(components),
+                "layout_spec": layout_result,
+                "components_spec": components
             }
             
             self.logger.info(f"Figma 컴포넌트 생성 완료: {len(components)}개 컴포넌트")
@@ -173,18 +173,7 @@ class FigmaCreatorAgent(BaseAgent):
                     }
                 ))
         
-        # 기본 사각형 (컴포넌트가 없을 경우)
-        if not components:
-            components.append(UIComponentSpec(
-                type="rectangle",
-                content="기본 컨테이너",
-                width=400,
-                height=300,
-                style={
-                    "fill_color": "#F5F5F5",
-                    "corner_radius": 8
-                }
-            ))
+        # 컴포넌트가 없는 경우에도 더미를 생성하지 않습니다 (no-fallback policy)
         
         self.logger.info(f"PRD에서 {len(components)}개 컴포넌트 추출")
         return components
@@ -242,8 +231,8 @@ class FigmaCreatorAgent(BaseAgent):
             
             return {
                 "status": "success",
-                "components_created": len(components),
-                "layout": layout_result
+                "components_spec_count": len(components),
+                "layout_spec": layout_result
             }
             
         except Exception as e:
@@ -302,8 +291,8 @@ class FigmaCreatorAgent(BaseAgent):
             return {
                 "status": "success",
                 "app_name": app_name,
-                "components_created": len(components),
-                "layout": layout_result
+                "components_spec_count": len(components),
+                "layout_spec": layout_result
             }
             
         except Exception as e:
@@ -362,8 +351,8 @@ class FigmaCreatorAgent(BaseAgent):
             return {
                 "status": "success",
                 "dashboard_title": dashboard_title,
-                "components_created": len(components),
-                "layout": layout_result
+                "components_spec_count": len(components),
+                "layout_spec": layout_result
             }
             
         except Exception as e:

@@ -1,6 +1,8 @@
 """
 Figma Integration
-Figma REST API와 통신하여 디자인을 생성, 수정, 조회하는 기능을 담당합니다.
+Read operations use the Figma REST API where applicable. "Creation" helpers below
+produce spec-only structures describing intended nodes/layouts. They do not attempt
+to write to Figma (the Figma REST API does not support arbitrary node creation).
 """
 
 import aiohttp
@@ -29,11 +31,11 @@ class FigmaIntegration:
         self.file_key = os.getenv('FIGMA_FILE_KEY')
         self.base_url = "https://api.figma.com/v1"
         
-        # 환경변수가 없어도 시뮬레이션 모드로 동작
+        # 환경변수가 없어도 스펙 전용 모드로 동작 (쓰기 호출은 수행되지 않음)
         if not self.access_token:
-            print("⚠️ FIGMA_ACCESS_TOKEN 환경변수가 설정되지 않았습니다. 시뮬레이션 모드로 동작합니다.")
+            print("⚠️ FIGMA_ACCESS_TOKEN 환경변수가 설정되지 않았습니다. 스펙 전용 모드로 동작합니다.")
         if not self.file_key:
-            print("⚠️ FIGMA_FILE_KEY 환경변수가 설정되지 않았습니다. 시뮬레이션 모드로 동작합니다.")
+            print("⚠️ FIGMA_FILE_KEY 환경변수가 설정되지 않았습니다. 스펙 전용 모드로 동작합니다.")
     
     async def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
         """Figma API 요청 공통 메서드"""
@@ -65,7 +67,7 @@ class FigmaIntegration:
     
     async def create_rectangle(self, x: float, y: float, width: float, height: float, 
                              fill_color: str = "#E1E5E9", corner_radius: float = 0) -> Dict:
-        """사각형 노드 생성"""
+        """사각형 노드 스펙 생성 (Figma에 기록하지 않음)"""
         node_data = {
             "name": "Rectangle",
             "type": "RECTANGLE",
@@ -82,7 +84,7 @@ class FigmaIntegration:
     async def create_text(self, x: float, y: float, content: str, 
                          font_size: float = 14, font_family: str = "Inter",
                          color: str = "#000000", width: Optional[float] = None) -> Dict:
-        """텍스트 노드 생성"""
+        """텍스트 노드 스펙 생성 (Figma에 기록하지 않음)"""
         node_data = {
             "name": "Text",
             "type": "TEXT",
@@ -107,7 +109,7 @@ class FigmaIntegration:
                            width: float = 120, height: float = 40,
                            bg_color: str = "#007AFF", text_color: str = "#FFFFFF",
                            corner_radius: float = 8) -> Dict:
-        """버튼 컴포넌트 생성 (배경 + 텍스트)"""
+        """버튼 컴포넌트 스펙 생성 (배경 + 텍스트, Figma에 기록하지 않음)"""
         # 배경 사각형 생성
         bg_rect = await self.create_rectangle(
             x=x, y=y, width=width, height=height,
@@ -136,7 +138,7 @@ class FigmaIntegration:
     async def create_input_field(self, x: float, y: float, placeholder: str = "입력하세요",
                                 width: float = 200, height: float = 40,
                                 border_color: str = "#CCCCCC", bg_color: str = "#FFFFFF") -> Dict:
-        """입력 필드 컴포넌트 생성"""
+        """입력 필드 컴포넌트 스펙 생성 (Figma에 기록하지 않음)"""
         # 배경 사각형 (테두리 포함)
         border_rect = await self.create_rectangle(
             x=x, y=y, width=width, height=height,
@@ -182,7 +184,7 @@ class FigmaIntegration:
     async def create_card(self, x: float, y: float, title: str, content: str,
                          width: float = 300, height: float = 200,
                          bg_color: str = "#FFFFFF", shadow: bool = True) -> Dict:
-        """카드 컴포넌트 생성"""
+        """카드 컴포넌트 스펙 생성 (Figma에 기록하지 않음)"""
         # 카드 배경
         card_bg = await self.create_rectangle(
             x=x, y=y, width=width, height=height,
@@ -217,7 +219,7 @@ class FigmaIntegration:
     async def create_layout(self, components: List[FigmaComponent], 
                            start_x: float = 0, start_y: float = 0,
                            spacing: float = 20) -> Dict:
-        """컴포넌트들을 레이아웃으로 배치"""
+        """컴포넌트들을 레이아웃 스펙으로 배치 (쓰기 호출 없음)"""
         created_components = []
         current_x = start_x
         current_y = start_y
@@ -284,18 +286,14 @@ class FigmaIntegration:
         }
     
     async def _create_node(self, node_data: Dict) -> Dict:
-        """노드 생성 (실제 Figma API 호출)"""
-        # 실제 Figma API에서는 노드 생성이 제한적이므로
-        # 여기서는 시뮬레이션된 응답을 반환
+        """노드 스펙 생성 (Figma에 기록하지 않음; ID를 생성하지 않음)"""
         return {
-            "id": f"node_{hash(str(node_data))}",
+            "spec_only": True,
             "name": node_data.get("name", "Node"),
             "type": node_data.get("type", "RECTANGLE"),
-            "x": node_data.get("x", 0),
-            "y": node_data.get("y", 0),
-            "width": node_data.get("width", 100),
-            "height": node_data.get("height", 100),
-            "data": node_data
+            "position": {"x": node_data.get("x", 0), "y": node_data.get("y", 0)},
+            "size": {"width": node_data.get("width", 100), "height": node_data.get("height", 100)},
+            "data": node_data,
         }
     
     def _hex_to_rgb(self, hex_color: str) -> Dict[str, float]:
