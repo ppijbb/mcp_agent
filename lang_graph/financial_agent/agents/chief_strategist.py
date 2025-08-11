@@ -35,24 +35,30 @@ def chief_strategist_node(state: AgentState) -> Dict:
         raise ValueError(error_message)
 
     prompt = f"""
-    당신은 최고의 금융 분석가입니다. 아래의 기술적 분석 데이터와 뉴스 감성 분석 결과를 바탕으로, 시장 전체에 대한 명확하고 간결한 전망을 제시해주세요.
-    긍정적, 부정적, 중립적 요인을 모두 고려하여 종합적인 결론을 내려주세요.
+역할: 수석 전략가. 아래 기술적 분석과 뉴스 감성 결과를 통합하여 시장 전망을 산출하라.
+요구 사항:
+1) 긍/부/중립 요인을 모두 고려해 단일 결론을 내린다(결정적).
+2) 불확실성은 수치형 신뢰도(0~1)로 표현한다.
+3) 출력은 오직 아래 JSON 스키마만 반환한다. 추가 텍스트 금지.
 
-    **기술적 분석 데이터:**
-    ```json
-    {json.dumps(tech_analysis, indent=2, cls=NumpyEncoder)}
-    ```
+입력:
+- 기술적 분석(JSON):
+{json.dumps(tech_analysis, indent=2, cls=NumpyEncoder)}
 
-    **뉴스 감성 분석 결과:**
-    ```json
-    {json.dumps(sentiment_analysis, indent=2, ensure_ascii=False)}
-    ```
+- 뉴스 감성 분석(JSON):
+{json.dumps(sentiment_analysis, indent=2, ensure_ascii=False)}
 
-    **분석 결과 (시장 전망):**
-    """
+출력(JSON only):
+{{
+  "outlook": "bullish|bearish|neutral",
+  "rationale": "핵심 근거를 한국어로 2~4문장",
+  "risks": ["최대 3개 리스크"],
+  "confidence": 0.0
+}}
+"""
     
     outlook = call_llm(prompt)
     print(f"LLM이 생성한 시장 전망:\n{outlook}")
     state["log"].append("LLM 기반 시장 전망 분석 완료.")
     
-    return {"market_outlook": outlook} 
+    return {"market_outlook": outlook}

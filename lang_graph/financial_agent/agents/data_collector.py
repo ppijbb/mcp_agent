@@ -18,10 +18,9 @@ def market_data_collector_node(state: AgentState) -> Dict:
         state["log"].append(error_message)
         return {"error_message": error_message}
 
-    all_technicals = {}
-    for ticker in tickers:
-        print(f"Fetching technical data for {ticker} via MCP...")
-        all_technicals[ticker] = call_technical_indicators_tool(ticker)
+    # 동시 호출 지원: 한 번에 모든 티커를 요청
+    print(f"Fetching technical data for {tickers} via MCP (concurrent)...")
+    all_technicals = call_technical_indicators_tool(tickers)
 
     log_message = f"{len(tickers)}개의 티커에 대한 기술적 분석 데이터 수집 완료."
     state["log"].append(log_message)

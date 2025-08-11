@@ -25,18 +25,34 @@ def portfolio_manager_node(state: AgentState) -> Dict:
         return {"error_message": error_message}
 
     prompt = f"""
-    당신은 포트폴리오 매니저입니다. 아래의 시장 전망과 투자자의 리스크 성향을 바탕으로 구체적인 투자 계획을 JSON 형식으로 제시해주세요.
-    매수(buy), 매도(sell), 보유(hold)할 티커 목록을 명확히 구분하여 응답해야 합니다. 다른 설명은 절대 추가하지 마세요.
+역할: 포트폴리오 매니저. 시장 전망, 리스크 성향, 대상 티커로 실행 가능한 계획을 산출하라.
+제약:
+- 응답은 오직 JSON.
+- buy/sell/hold는 제공된 티커 집합의 부분집합이며 중복 금지.
+- 각 티커의 조치 근거를 reason_by_ticker에 포함.
+- 리스크 성향 규칙:
+  - conservative: buy≤1, sell≥0, 신규 편입 최소화
+  - moderate: buy≤2, 포지션 균형
+  - aggressive: buy≤3, 공세적 포지셔닝 허용
+- 불확실할 경우 hold로 분류.
 
-    **시장 전망:**
-    {outlook}
+입력:
+- 시장 전망:
+{outlook}
 
-    **투자자 리스크 성향:** {risk_profile}
+- 리스크 성향: {risk_profile}
+- 대상 티커: {tickers}
 
-    **분석 대상 티커:** {tickers}
-
-    **투자 계획 (오직 JSON 객체만 응답):**
-    """
+출력(JSON only):
+{{
+  "buy": ["..."],
+  "sell": ["..."],
+  "hold": ["..."],
+  "reason_by_ticker": {{
+    "TICKER": "한국어 1문장 근거"
+  }}
+}}
+"""
 
     plan = None
     last_error = None
@@ -81,8 +97,8 @@ def portfolio_manager_node(state: AgentState) -> Dict:
         error_message = f"LLM으로부터 유효한 JSON 형식의 투자 계획을 받지 못했습니다. 마지막 오류: {last_error}"
         print(error_message)
         state["log"].append(error_message)
-        # 폴백: 모든 자산을 보유하는 것으로 처리
-        plan = {"buy": [], "sell": [], "hold": tickers}
+        # NO FALLBACK: 실패를 상위로 전파
+        raise ValueError(error_message)
 
     print(f"수립된 투자 계획: {plan}")
     state["log"].append(f"LLM 기반 투자 계획: {plan}")

@@ -30,19 +30,23 @@ def news_analyzer_node(state: AgentState) -> Dict:
         headlines = "- " + "\n- ".join([item['title'] for item in news_items if item.get('title')])
         
         prompt = f"""
-        당신은 금융 뉴스 분석가입니다. 다음은 특정 주식 티커 '{ticker}'에 대한 최신 뉴스 헤드라인 목록입니다.
-        이 헤드라인들을 종합하여, 해당 주식에 대한 전반적인 시장 감성(sentiment)을 'positive', 'negative', 'neutral' 중 하나로 평가하고,
-        핵심 내용을 한 문장으로 요약해주세요.
+역할: 뉴스 분석가. 아래 티커('{ticker}')의 최신 헤드라인을 평가하라.
+요구 사항:
+- sentiment 값은 ["positive","negative","neutral"] 중 하나.
+- summary는 한국어 1문장(최대 120자).
+- evidence는 상위 2~3개 근거(헤드라인 발췌).
+- 출력은 오직 JSON. 추가 텍스트 금지.
 
-        **뉴스 헤드라인:**
-        {headlines}
+입력 헤드라인:
+{headlines}
 
-        **분석 결과 (오직 JSON 객체만 응답):**
-        {{
-          "sentiment": "...",
-          "summary": "..."
-        }}
-        """
+출력(JSON only):
+{{
+  "sentiment": "positive|negative|neutral",
+  "summary": "...",
+  "evidence": ["...", "..."]
+}}
+"""
         
         try:
             response_str = call_llm(prompt)

@@ -15,10 +15,9 @@ def news_collector_node(state: AgentState) -> Dict:
     if not tickers:
         return {"news_data": {"news": {}}}
 
-    all_news = {}
-    for ticker in tickers:
-        print(f"Fetching news for {ticker} via MCP...")
-        all_news[ticker] = call_market_news_tool(ticker)
+    # 동시 호출 지원: 한 번에 모든 티커를 요청
+    print(f"Fetching news for {tickers} via MCP (concurrent)...")
+    all_news = call_market_news_tool(tickers)
     
     log_message = f"{len(tickers)}개의 티커에 대한 최신 뉴스 수집 완료."
     state["log"].append(log_message)

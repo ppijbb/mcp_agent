@@ -16,7 +16,7 @@ llm = None
 
 if not api_key:
     # 환경변수가 없을 경우 경고 메시지를 출력하고, None으로 설정
-    print("⚠️ 경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. LLM 기능이 제한됩니다.")
+    print("⚠️ 경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. LLM 호출은 오류를 발생시킵니다.")
 else:
     try:
         # LangChain을 통해 Gemini 모델 초기화
@@ -33,21 +33,21 @@ else:
 def call_llm(prompt: str) -> str:
     """
     지정된 프롬프트로 Gemini LLM을 호출하고 응답을 문자열로 반환합니다.
-    API 키가 없거나 초기화에 실패하면, 규칙 기반의 기본 응답을 반환합니다.
+    API 키가 없거나 초기화에 실패하면 예외를 발생시킵니다. (NO FALLBACK)
     """
     if not llm:
-        # LLM 사용 불가 시, 간단한 규칙 기반 응답 (폴백)
-        print("LLM 클라이언트가 초기화되지 않아 폴백 로직을 실행합니다.")
-        if "시장 전망" in prompt:
-            return "시장 데이터에 기반한 분석이 필요하지만, 현재는 시장이 혼조세인 것으로 보입니다."
-        elif "투자 계획" in prompt:
-            return '{"buy": [], "sell": [], "hold": ["NVDA", "AMD", "QCOM"]}'
-        return "LLM 호출에 필요한 API 키가 없거나 클라이언트 초기화에 실패했습니다."
+        raise RuntimeError("GEMINI_API_KEY가 설정되지 않았거나 LLM 클라이언트 초기화에 실패했습니다.")
 
     try:
         # LangChain의 invoke 메서드를 사용
         messages = [
-            SystemMessage(content="You are an expert financial analyst. Provide clear, concise, and data-driven insights."),
+            SystemMessage(content=(
+                "당신은 지시를 엄격히 준수하는 수석 금융 에이전트다.\n"
+                "- 목표: 입력 데이터로부터 일관되고 검증 가능한 결론을 산출한다.\n"
+                "- 원칙: 명확성, 간결성, 근거 기반, 결정성(회피적 표현 금지).\n"
+                "- 금지: 사족/서론/사과/불필요한 수사. 요구된 출력 이외의 텍스트.\n"
+                "- 형식: 요청된 출력 스키마와 언어(한국어)를 반드시 준수한다."
+            )),
             HumanMessage(content=prompt)
         ]
         response = llm.invoke(messages)
@@ -55,4 +55,4 @@ def call_llm(prompt: str) -> str:
         return content if isinstance(content, str) else "Error: Empty or invalid response from LLM."
     except Exception as e:
         print(f"LLM 호출 중 에러 발생: {e}")
-        return f"Error: LLM으로부터 응답을 받을 수 없습니다. 상세 정보: {e}" 
+        raise
