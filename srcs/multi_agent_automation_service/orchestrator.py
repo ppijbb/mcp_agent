@@ -29,6 +29,7 @@ from agents.documentation_agent import DocumentationAgent
 from agents.performance_agent import PerformanceAgent
 from agents.security_agent import SecurityAgent
 from agents.kubernetes_agent import KubernetesAgent
+from .external_mcp import configure_external_servers
 from gemini_executor import GeminiCLIExecutor
 
 
@@ -77,6 +78,22 @@ class MultiAgentOrchestrator:
                 if "filesystem" in context.config.mcp.servers:
                     context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                     logger.info("Filesystem server configured")
+
+                # 외부 MCP 서버 동적 등록 (OpenAPI/Oracle/Alpaca 등)
+                added = configure_external_servers(
+                    context,
+                    candidates=[
+                        "openapi",       # 범용 OpenAPI MCP
+                        "oracle",        # 오라클 DB MCP
+                        "alpaca",        # 트레이딩 MCP
+                        "finnhub",       # 시세/뉴스 MCP
+                        "polygon",       # 시세/지표 MCP
+                        "edgar",         # 공시/규제 MCP
+                        "coinstats",     # 크립토 MCP
+                    ],
+                )
+                if added:
+                    logger.info(f"External MCP servers configured: {added}")
                 
                 logger.info("Starting full automation workflow")
                 

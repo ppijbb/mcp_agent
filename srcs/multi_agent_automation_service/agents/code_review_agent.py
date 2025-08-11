@@ -38,18 +38,15 @@ class CodeReviewAgent:
         self.app = setup_agent_app("code_review_system")
         self.agent = Agent(
             name="code_reviewer",
-            instruction="""
-            당신은 전문적인 코드 리뷰어입니다. 다음을 수행하세요:
-            
-            1. 코드 품질 분석: 가독성, 성능, 보안, 유지보수성
-            2. 잠재적 버그 및 취약점 식별
-            3. 코딩 표준 준수 여부 확인
-            4. 개선 제안 및 최적화 방안 제시
-            5. 발견된 문제점에 대한 구체적인 Gemini CLI 명령어 생성
-            
-            MCP 서버의 도구들을 활용하여 실제 코드를 분석하고, 
-            발견된 문제점에 대해 구체적인 Gemini CLI 명령어를 생성하세요.
-            """,
+            instruction=(
+                "역할: 코드 리뷰 에이전트. 다음을 수행하라.\n"
+                "1) 코드 품질(가독성/성능/보안/유지보수성) 평가\n"
+                "2) 잠재 버그/취약점 식별\n"
+                "3) 표준 준수 여부 확인\n"
+                "4) 실행 가능한 개선 제안\n"
+                "5) 문제별 구체적 Gemini CLI 명령어 생성\n"
+                "형식: 섹션 헤더와 리스트를 사용하되 군더더기 없이 간결하게. 불필요한 텍스트 금지."
+            ),
             server_names=["filesystem", "github"],  # 실제 MCP 서버명
         )
         self.review_history: List[CodeReviewResult] = []

@@ -42,18 +42,13 @@ class GeminiCLIExecutor:
         self.app = setup_agent_app("gemini_executor_system")
         self.agent = Agent(
             name="gemini_executor",
-            instruction="""
-            당신은 Gemini CLI 명령어 실행 전문가입니다. MCP 서버들과 연결하여 다음을 수행하세요:
-            
-            1. Agent들이 생성한 Gemini CLI 명령어 검증
-            2. MCP 도구들을 활용한 명령어 실행
-            3. 실행 오류 처리 및 재시도
-            4. 실행 결과 분석 및 요약
-            5. 배치 명령어 실행 최적화
-            6. Kubernetes 관련 MCP 도구 활용
-            
-            안전하고 효율적으로 Gemini CLI 명령어를 실행하세요.
-            """,
+            instruction=(
+                "당신은 지시를 엄격히 준수하는 실행 에이전트다.\n"
+                "- 목표: 제공된 명령어를 안전하게 검증하고 필요한 MCP 도구로 실행한다.\n"
+                "- 원칙: 명확성, 간결성, 결정성. 불필요한 서술 금지.\n"
+                "- 금지: 요구된 출력 이외의 사족/사과/추측.\n"
+                "- 형식: 요청된 결과만 반환한다."
+            ),
             server_names=[
                 "filesystem", 
                 "kubernetes", 
@@ -128,6 +123,19 @@ class GeminiCLIExecutor:
                 if "filesystem" in context.config.mcp.servers:
                     context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                     logger.info("Filesystem MCP server configured")
+                # 외부 MCP 서버 추가 등록: orchestrator와 동일 환경 변수를 사용
+                try:
+                    from .external_mcp import configure_external_servers
+                    added = configure_external_servers(
+                        context,
+                        candidates=[
+                            "openapi", "oracle", "alpaca", "finnhub", "polygon", "edgar", "coinstats"
+                        ],
+                    )
+                    if added:
+                        logger.info(f"External MCP servers configured: {added}")
+                except Exception as e:
+                    logger.warning(f"External MCP configuration skipped: {e}")
                 
                 async with self.agent:
                     llm = await self.agent.attach_llm(OpenAIAugmentedLLM)
