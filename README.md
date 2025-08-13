@@ -2,6 +2,15 @@
 
 A comprehensive multi-agent system for enterprise automation and intelligence, featuring basic agents for simple tasks and sophisticated enterprise-level agents for complex business automation.
 
+## ✅ What's New (Current Version)
+
+- Stronger agentic prompts across the stack (directive tone, JSON-only outputs, explicit schemas)
+- NO FALLBACK policy enforced for LLM calls and workflows (fail fast on misconfiguration)
+- External MCP server integration via environment variables (OpenAPI, Oracle, Alpaca, Finnhub, Polygon, EDGAR, CoinStats, etc.)
+- Financial LangGraph workflow with multi-node pipeline (collector → analyzer → strategist → portfolio → trader → auditor)
+- Concurrent MCP calls for batch ticker processing
+- Strict output validation for goal setting and investment plans
+
 ## 📁 Project Structure
 
 ```
@@ -40,6 +49,39 @@ srcs/
 └── COMMON_MODULES.md      # Common modules usage guide
 ```
 
+### Additional Modules
+
+```
+lang_graph/
+└── financial_agent/
+    ├── agents/
+    │   ├── auditor.py
+    │   ├── chief_strategist.py
+    │   ├── data_collector.py
+    │   ├── news_analyzer.py
+    │   ├── news_collector.py
+    │   ├── portfolio_manager.py
+    │   ├── sync_node.py
+    │   └── trader.py
+    ├── financial_mcp_server.py    # MCP tools for technical indicators/news via yfinance
+    ├── graph.py                   # LangGraph workflow (includes entrypoint)
+    ├── llm_client.py              # Gemini LLM client (NO FALLBACK)
+    ├── mcp_client.py              # Parallel MCP tool invocation utilities
+    ├── external_mcp.py            # Note: Automation service uses its own external MCP registrar
+    └── state.py                   # Type definitions and state schema
+
+srcs/
+└── multi_agent_automation_service/
+    ├── orchestrator.py            # Multi-agent orchestration (auto-register external MCP servers)
+    ├── gemini_executor.py         # Gemini CLI executor (agentic, MCP-based)
+    ├── external_mcp.py            # Env-var driven registrar for external MCP servers
+    └── agents/ ...                # code review/documentation/performance/security/K8s agents
+
+srcs/
+└── goal_setter_agent/
+    └── goal_setter.py             # Decomposes high-level goals into a JSON plan (strict schema + validation)
+```
+
 ## 🚀 Installation
 
 1. Clone the repository
@@ -57,6 +99,43 @@ srcs/
      google:
        api_key: your-google-api-key
      ```
+
+4. Optional: Gemini (for financial_agent) and External MCP servers
+
+   - Environment variables (examples):
+
+     ```bash
+     # LLM
+     export GEMINI_API_KEY="your-gemini-api-key"
+     export GEMINI_MODEL="gemini-2.5-flash-lite-preview-0607"
+
+     # External MCP servers (OpenAPI wrapper, Oracle, Brokers, Market Data, Filings, Crypto)
+     export OPENAPI_MCP_CMD=node
+     export OPENAPI_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/polygon.yaml --apiKey $POLYGON_API_KEY"
+
+     export ORACLE_MCP_CMD=python
+     export ORACLE_MCP_ARGS="/opt/mcp/oracle_mcp_server.py --tns $TNS --user $DB_USER --pass $DB_PASS"
+
+     export ALPACA_MCP_CMD=node
+     export ALPACA_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/alpaca.yaml --apiKey $ALPACA_KEY --secret $ALPACA_SECRET"
+
+     export FINNHUB_MCP_CMD=node
+     export FINNHUB_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/finnhub.yaml --apiKey $FINNHUB_KEY"
+
+     export POLYGON_MCP_CMD=node
+     export POLYGON_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/polygon.yaml --apiKey $POLYGON_API_KEY"
+
+     export EDGAR_MCP_CMD=node
+     export EDGAR_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/secapi.yaml --apiKey $SEC_API_KEY"
+
+     export COINSTATS_MCP_CMD=node
+     export COINSTATS_MCP_ARGS="/opt/mcp/openapi-server.js --spec /opt/specs/coinstats.yaml --apiKey $COINSTATS_API_KEY"
+     ```
+
+   - Optional per-server settings:
+     - `<NAME>_MCP_TIMEOUT_MS` (default: 30000)
+     - `<NAME>_MCP_TRUST` (true|false, default: true)
+     - `<NAME>_MCP_ENV_JSON` (JSON string for additional env)
 
 ## 🎯 Running Agents
 
@@ -92,6 +171,20 @@ python run_agent.py --dev template_basic      # Basic agent template
 python run_agent.py --dev template_enterprise # Enterprise agent template
 ```
 
+### Financial Agent Workflow (LangGraph)
+
+```bash
+# Run the LangGraph workflow (prints summary to stdout)
+python lang_graph/financial_agent/graph.py
+
+# Start the financial MCP server (technical indicators & news via yfinance)
+python lang_graph/financial_agent/financial_mcp_server.py
+```
+
+- Workflow nodes: market_data_collector → news_collector → sync → news_analyzer (LLM) → chief_strategist (LLM) → portfolio_manager (LLM) → trader → auditor
+- Prompts are agentic, JSON-only where required; NO FALLBACK in LLM client (`llm_client.py`).
+- External sources can be added via environment-driven MCP servers (registered automatically in the automation service; financial graph uses its own `mcp_client`).
+
 ### Direct Execution
 
 You can also run agents directly:
@@ -111,6 +204,32 @@ python enterprise_agents/customer_lifetime_value_agent.py
 # Utilities
 python enterprise_agents/mental.py
 ```
+
+### Multi-Agent Automation Service
+
+```bash
+# Full automation
+python -m srcs.multi_agent_automation_service.main --workflow full --target srcs
+
+# Kubernetes workflow
+python -m srcs.multi_agent_automation_service.main --workflow kubernetes --app-name myapp --config-path k8s/
+
+# Single agent
+python -m srcs.multi_agent_automation_service.main --agent code_review --target srcs
+```
+
+- On start, the service will auto-register external MCP servers present in env (`openapi`, `oracle`, `alpaca`, `finnhub`, `polygon`, `edgar`, `coinstats`).
+- `gemini_executor.py` executes Gemini CLI tasks through MCP tools; instructions are strict and agentic.
+- All MCP calls use concurrency where applicable.
+
+### Goal Setter Agent
+
+```bash
+python -m srcs.goal_setter_agent.goal_setter --goal "Improve conversion rate of new SaaS feature by 20%"
+```
+
+- Output is a strict JSON plan (Korean text allowed) with SMART sub-goals, KPIs (name/metric/target/data_source), actions (agent, due_days, acceptance_criteria), risks, and overall_success_criteria.
+- A validator enforces schema and domain constraints; invalid outputs raise errors (no fallback).
 
 ## 🔧 Common Modules System
 
@@ -197,6 +316,24 @@ The enterprise agents provide comprehensive business automation with:
 - **Scalable Architecture**: Multi-agent orchestration with quality control systems
 - **Real-time Analytics**: Performance monitoring and continuous optimization
 - **Integration Ready**: API-first design for enterprise system integration
+
+## 🔒 Security & Compliance Posture
+
+- NO FALLBACK policy: Misconfigured API keys or LLM failures raise explicit errors instead of returning placeholder data.
+- External MCP servers are configured via explicit env vars; trust/timeouts can be tuned per server.
+- Audit trail: Financial workflow writes a daily report via `auditor.py`.
+- Secrets via environment variables or dedicated secret files; do not hardcode keys.
+
+## ⚙️ Configuration Quick Reference
+
+- LLM
+  - `OPENAI_API_KEY` (for OpenAI-based components)
+  - `GEMINI_API_KEY`, `GEMINI_MODEL` (for Gemini-based components)
+- Financial MCP Server (built-in)
+  - Run with `python lang_graph/financial_agent/financial_mcp_server.py`
+- External MCP (automation service auto-registers)
+  - `<NAME>_MCP_CMD`, `<NAME>_MCP_ARGS` required
+  - Optional: `<NAME>_MCP_TIMEOUT_MS`, `<NAME>_MCP_TRUST`, `<NAME>_MCP_ENV_JSON`
 
 ## 🔧 Requirements
 
@@ -298,62 +435,133 @@ python run_agent.py --basic researcher_v2
 *For detailed documentation on individual agents and their capabilities, refer to the agent-specific files and `COMMON_MODULES.md` for development guidelines.*
 
 
-# 🤖 MCP Agent Hub - Agent UI
-
-## 📁 디렉토리 구조
+# MCP Agent Hub - Agent UI
+ 
+## Directory Structure
 
 ```
 mcp_agent/
-├── main.py                    # 메인 Streamlit 앱
-├── pages/                     # Streamlit 페이지들
-│   ├── business_strategy.py   # 비즈니스 전략 에이전트
-│   ├── seo_doctor.py          # SEO 닥터
-│   ├── finance_health.py      # 재무 건강도 분석
-│   ├── cybersecurity.py       # 사이버보안 에이전트
-│   ├── data_generator.py      # 데이터 생성기
-│   ├── hr_recruitment.py      # HR 채용 에이전트
-│   ├── ai_architect.py        # AI 아키텍트
-│   ├── decision_agent.py      # 🤖 결정 에이전트
-│   ├── travel_scout.py        # 최저가 여행 에이전트
-│   ├── workflow.py            # 워크플로우 오케스트레이터
-│   ├── research.py            # 리서치 에이전트
-│   └── rag_agent.py           # RAG 에이전트
-├── srcs/                      # 소스 코드
-│   ├── ...                    # 에이전트 코드
+├── main.py                    # Streamlit main app
+├── pages/                     # Streamlit pages
+│   ├── business_strategy.py
+│   ├── seo_doctor.py
+│   ├── finance_health.py
+│   ├── cybersecurity.py
+│   ├── data_generator.py
+│   ├── hr_recruitment.py
+│   ├── ai_architect.py
+│   ├── decision_agent.py
+│   ├── travel_scout.py
+│   ├── workflow.py
+│   ├── research.py
+│   └── rag_agent.py
+├── srcs/                      # source code
+│   ├── ...                    # agent code
 │   └── ...                    # ...
-└── configs/                   # 설정 파일들
+└── configs/                   # configuration
 ```
 
-## 🔄 실행 방법
+## How to Run
 
-### 메인 앱 실행
+### Run the main app
 ```bash
 streamlit run main.py
 ```
 
-### 개별 에이전트 실행
+### Run specific agent pages
 ```bash
-# 비즈니스 전략 에이전트
+# Business strategy agent
 cd srcs/business_strategy_agents
 streamlit run streamlit_app.py
 
-# SEO 닥터
+# SEO Doctor
 cd srcs/seo_doctor  
 streamlit run seo_doctor_app.py
 ```
 
-## 📈 향후 개선 계획
+## Roadmap
 
-1. **모바일 최적화**: 반응형 디자인 완성
-2. **다크모드 개선**: 테마 전환 기능 추가
-3. **성능 최적화**: 로딩 속도 개선
-4. **에이전트 통합**: 실제 에이전트들과 완전 연동
-5. **사용자 인증**: 개인화 기능 추가
+1. Mobile UI optimization (responsive design)
+2. Dark mode improvements
+3. Performance optimization (loading time)
+4. Full integration with production agents
+5. User authentication and personalization
 
-## 🛠️ 개발 가이드라인
+## Development Guidelines
 
-1. **공통 모듈 사용**: 새로운 기능 개발 시 common 모듈 우선 활용
-2. **일관성 유지**: 기존 패턴과 스타일 가이드 준수
-3. **에러 처리**: 안전한 임포트와 폴백 메커니즘 구현
-4. **문서화**: 새로운 기능 추가 시 문서 업데이트
-5. **테스트**: 다양한 환경에서 동작 확인 
+1. Prefer common modules for new features
+2. Maintain consistency with existing patterns and style guides
+3. Robust error handling; avoid fallbacks that mask failures
+4. Keep docs up-to-date with feature changes
+5. Test across environments
+
+
+## AI CLI Tools
+
+### 1. Gemini CLI
+
+Overview: Google’s AI development CLI to interact with Gemini models for code generation, debugging, and docs. Reference: [Gemini CLI](https://developers.google.com/gemini-code-assist/docs/gemini-cli)
+
+Install:
+
+```bash
+npx https://github.com/google-gemini/gemini-cli
+```
+
+Key features:
+
+- Code generation and debugging
+- File I/O
+- Web/search integration
+- System command execution
+
+Example:
+
+```bash
+gemini > Write Python code using turtle to draw a blue circle with radius 100.
+```
+
+### 2. Claude CLI
+
+Overview: Anthropic’s AI CLI for code generation/refactoring/testing via natural language.
+
+Install:
+
+```bash
+npm install -g @anthropic/claude-cli
+```
+
+Key features:
+
+- Natural language code generation/modification
+- Code quality and style checks
+- Test generation
+
+Example:
+
+```bash
+claude > Refactor the following JavaScript function to improve readability.
+```
+
+### 3. Cursor CLI
+
+Overview: Cursor editor’s CLI for code changes, review, and generation. Reference: [Cursor CLI](https://cursor.com/cli)
+
+Install:
+
+```bash
+curl https://cursor.com/install -fsS | bash
+```
+
+Key features:
+
+- Review/apply code changes
+- Real-time agent directives
+- Custom rule configuration
+
+Example:
+
+```bash
+cursor > Review agent edits
+```
+
