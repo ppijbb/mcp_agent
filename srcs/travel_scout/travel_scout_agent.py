@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
 """
-Travel Scout Agent - MCP-Agent Implementation
+Travel Scout Agent - streamlined MCP integration
 
-A travel search agent using the mcp_agent framework for consistent
-integration with the MCP ecosystem.
+Provides a thin orchestration layer over `MCPBrowserClient` and concrete
+scrapers so the CLI runner can call a consistent API.
 """
-import asyncio
-import os
-from datetime import datetime
-from typing import Dict, Any
-from srcs.core.errors import WorkflowError
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.context import AgentContext
-from srcs.core.agent.base import BaseAgent, async_memoize
+import logging
+from typing import Dict, Any, Optional
 from .mcp_browser_client import MCPBrowserClient
 from .scrapers import BookingComScraper, GoogleFlightsScraper
-from . import utils as travel_utils
 
 # Re-export commonly used helper functions so that UI code can import directly
 from .utils import load_destination_options, load_origin_options  # noqa: F401
@@ -26,112 +19,48 @@ __all__ = [
     "load_origin_options",
 ]
 
-class TravelScoutAgent(BaseAgent):
-    """
-    A travel search agent using the mcp_agent framework for consistent
-    integration with the MCP ecosystem.
-    """
 
-    def __init__(self):
-        super().__init__("travel_scout_agent")
+class TravelScoutAgent:
+    """Orchestrates travel searches using MCP-controlled browser."""
 
-    @async_memoize
-    async def _search_hotels(self, browser_client: MCPBrowserClient, destination: str, check_in: str, check_out: str, guests: int = 2) -> Dict[str, Any]:
-        """Uses the browser client to search for hotels."""
-        self.logger.info(f"🏨 Searching for hotels in {destination} from {check_in} to {check_out}")
-        scraper = BookingComScraper(browser_client, self.logger)
-        return await scraper.scrape(destination, check_in, check_out, guests)
+    def __init__(self, browser_client: MCPBrowserClient):
+        self.browser_client = browser_client
+        self.logger = logging.getLogger(__name__)
 
-    @async_memoize
-    async def _search_flights(self, browser_client: MCPBrowserClient, origin: str, destination: str, departure_date: str, return_date: str = None) -> Dict[str, Any]:
-        """Uses the browser client to search for flights."""
-        self.logger.info(f"✈️ Searching for flights from {origin} to {destination} on {departure_date}")
-        scraper = GoogleFlightsScraper(browser_client, self.logger)
-        return await scraper.scrape(origin, destination, departure_date, return_date)
+    async def search_hotels(
+        self,
+        destination: str,
+        check_in: str,
+        check_out: str,
+        guests: int = 2,
+    ) -> Dict[str, Any]:
+        """Run a hotel search via Booking.com scraper and return structured results."""
+        scraper = BookingComScraper(self.browser_client)
+        search_params: Dict[str, Any] = {
+            "destination": destination,
+            "check_in": check_in,
+            "check_out": check_out,
+            "guests": guests,
+        }
+        return await scraper.search(search_params)
 
-    async def run_workflow(self, context: AgentContext):
-        """
-        Runs the travel search workflow based on parameters from the context.
-        """
-        search_params = context.get("search_params", {})
-        destination = search_params.get("destination")
-        check_in = search_params.get("check_in")
-        check_out = search_params.get("check_out")
-        origin = search_params.get("origin")
-        departure_date = search_params.get("departure_date")
-        return_date = search_params.get("return_date")
+    async def search_flights(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        return_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a flight search via Google Flights scraper and return structured results."""
+        scraper = GoogleFlightsScraper(self.browser_client)
+        search_params: Dict[str, Any] = {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+        }
+        return await scraper.search(search_params)
 
-        if not all([destination, check_in, check_out, origin, departure_date]):
-            raise WorkflowError("Missing required search parameters in the context.")
-
-        self.logger.info(f"Starting travel scout workflow for destination: {destination}")
-
-        # Use a real browser for this agent
-        browser_client = MCPBrowserClient(
-            headless=self.settings.get("browser.headless", False),
-            logger=self.logger
-        )
-        await browser_client.launch()
-
-        try:
-            # Perform searches in parallel
-            hotel_task = self._search_hotels(browser_client, destination, check_in, check_out)
-            flight_task = self._search_flights(browser_client, origin, destination, departure_date, return_date)
-            
-            hotel_results, flight_results = await asyncio.gather(hotel_task, flight_task)
-
-            results = {
-                "hotels": hotel_results,
-                "flights": flight_results,
-                "recommendations": {},
-                "analysis": {}
-            }
-
-            self.logger.info("Generating travel report...")
-            report_content = travel_utils.generate_travel_report_content(results, search_params)
-            
-            reports_dir = self.settings.get("reporting.reports_dir", "reports")
-            report_path = travel_utils.save_travel_report(
-                report_content, 
-                f"{destination}_travel_plan",
-                reports_dir=os.path.join(reports_dir, 'travel_scout')
-            )
-
-            self.logger.info(f"✅ Travel search completed. Report saved to {report_path}")
-
-            # Save result using BaseAgent's save_result method
-            result_data = {
-                'results': results,
-                'report_path': report_path,
-                'search_params': search_params,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            # Determine search type for result_type
-            search_type = "travel_search"
-            if 'hotels' in results and results['hotels']:
-                search_type = "hotel_search"
-            elif 'flights' in results and results['flights']:
-                search_type = "flight_search"
-            
-            self.save_result(
-                result=result_data,
-                result_type=search_type,
-                metadata={
-                    'destination': destination,
-                    'origin': origin,
-                    'search_type': search_type,
-                    'report_path': report_path,
-                    'has_hotels': bool(results.get('hotels')),
-                    'has_flights': bool(results.get('flights'))
-                }
-            )
-
-            context.set("results", results)
-            context.set("report_path", report_path)
-
-        except Exception as e:
-            raise WorkflowError(f"An error occurred during the travel search workflow: {e}") from e
-        finally:
-            if browser_client.is_running():
-                await browser_client.close()
+    async def cleanup(self) -> None:
+        """Release browser resources held by the underlying MCP session."""
+        await self.browser_client.cleanup()

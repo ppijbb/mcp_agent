@@ -271,22 +271,6 @@ class MCPBrowserClient:
             logger.error(f"❌ 스크린샷 캡처 중 오류: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
     
-    def take_screenshot(self) -> Dict[str, Any]:
-        """스크린샷 캡처 (동기 wrapper)"""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 이미 실행 중인 루프가 있는 경우
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.take_screenshot_async())
-                    return future.result()
-            else:
-                return loop.run_until_complete(self.take_screenshot_async())
-        except Exception as e:
-            logger.error(f"스크린샷 동기 실행 오류: {e}")
-            return {"success": False, "error": str(e)}
-    
     def clear_screenshots(self):
         """스크린샷 기록 삭제"""
         self.screenshots = []
@@ -296,58 +280,27 @@ class MCPBrowserClient:
 
     async def navigate_and_capture(self, url: str) -> Dict[str, Any]:
         """URL 탐색 및 스크린샷 캡처"""
-        async def _navigate_and_capture():
-            # 연결 확인
+        try:
             if not self.is_connected():
                 connected = await self.connect_to_mcp_server()
                 if not connected:
                     return {"success": False, "error": "브라우저 연결 실패"}
-            
-            # 탐색
+
             nav_result = await self.navigate_to_url(url)
-            if not nav_result["success"]:
+            if not nav_result.get("success"):
                 return nav_result
-            
-            # 잠시 대기 (페이지 로딩)
+
             await asyncio.sleep(2)
-            
-            # 스크린샷
             screenshot_result = await self.take_screenshot_async()
-            
+
             return {
                 "success": True,
                 "url": url,
                 "screenshot": screenshot_result
             }
-        
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, _navigate_and_capture())
-                    return future.result()
-            else:
-                return loop.run_until_complete(_navigate_and_capture())
         except Exception as e:
             logger.error(f"탐색 및 캡처 오류: {e}")
             return {"success": False, "error": str(e)}
-    
-    def search_hotels(self, destination: str, guests: int = 2, url: Optional[str] = None) -> Dict[str, Any]:
-        """호텔 검색"""
-        search_url = url or self.browser_settings.get('default_url', 'booking')
-        
-        # 실제 검색 로직 구현 필요
-        # 현재는 기본 탐색만 수행
-        return self.navigate_and_capture(search_url)
-    
-    def search_flights(self, origin: str, destination: str, url: Optional[str] = None) -> Dict[str, Any]:
-        """항공편 검색"""
-        search_url = url or self.browser_settings.get('default_url', 'google_flights')
-        
-        # 실제 검색 로직 구현 필요
-        # 현재는 기본 탐색만 수행
-        return self.navigate_and_capture(search_url)
     
     async def cleanup(self):
         """MCP 세션 정리"""
