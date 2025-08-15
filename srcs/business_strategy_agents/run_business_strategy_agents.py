@@ -9,29 +9,15 @@ This script provides unified access to all business strategy analysis capabiliti
 import asyncio
 import sys
 import json
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import time
 
-# Import all business strategy MCPAgents
-try:
-    from .business_data_scout_agent import run_business_data_scout
-    from .trend_analyzer_agent import run_trend_analysis  
-    from .strategy_planner_agent import run_strategy_planning
-    from .unified_business_strategy_agent import run_unified_business_strategy
-except ImportError:
-    # Direct imports if running as main
-    import os
-    sys.path.append(os.path.dirname(__file__))
-    from business_data_scout_agent import run_business_data_scout
-    from trend_analyzer_agent import run_trend_analysis
-    from strategy_planner_agent import run_strategy_planning
-    from unified_business_strategy_agent import run_unified_business_strategy
-import aiohttp
+from .strategy_planner_agent import StrategyPlanner
+from .unified_business_strategy_agent import UnifiedBusinessStrategy
 
-# Helper function to create the HTTP client session
-def get_http_session():
-    return aiohttp.ClientSession()
+ 
 
 
 class BusinessStrategyRunner:
@@ -46,12 +32,12 @@ class BusinessStrategyRunner:
         self.google_drive_mcp_url = google_drive_mcp_url
         self.data_sourcing_mcp_url = data_sourcing_mcp_url
         
-        # Initialize agents with all required MCP URLs
-        self.planner = StrategyPlannerMCPAgent(
+        # Initialize dependency-light agents
+        self.planner = StrategyPlanner(
             google_drive_mcp_url=self.google_drive_mcp_url,
             data_sourcing_mcp_url=self.data_sourcing_mcp_url
         )
-        self.unifier = UnifiedBusinessStrategyMCPAgent(
+        self.unifier = UnifiedBusinessStrategy(
             google_drive_mcp_url=self.google_drive_mcp_url,
             data_sourcing_mcp_url=self.data_sourcing_mcp_url
         )
@@ -96,42 +82,20 @@ class BusinessStrategyRunner:
         
         return final_summary
 
-    async def save_summary_report(self, summary_data: Dict, file_name: str):
-        """Save execution results to JSON file on Google Drive via MCP"""
-        
-        if not filename:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"business_strategy_execution_{timestamp}.json"
-        
+    async def save_summary_report(self, summary_data: Dict, file_name: str) -> str:
+        """Save execution results to local JSON file in reports directory."""
+        output_dir = "business_strategy_reports"
+        os.makedirs(output_dir, exist_ok=True)
+        path = os.path.join(output_dir, file_name)
         report_data = {
             "execution_timestamp": datetime.now().isoformat(),
-            "agent_type": "Business Strategy MCPAgent",
-            "architecture": "mcp_agent.app.MCPApp + mcp_agent.agents.agent.Agent",
-            "results": self.results
+            "runner": "BusinessStrategyRunner",
+            "results": summary_data,
         }
-        
-        report_content = json.dumps(report_data, indent=2, default=str)
-        upload_url = f"{self.google_drive_mcp_url}/upload"
-        payload = {"fileName": filename, "content": report_content}
-
-        try:
-            async with get_http_session() as session:
-                async with session.post(upload_url, json=payload) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-            
-            if result.get("success"):
-                file_id = result.get('fileId')
-                file_url = f"https://docs.google.com/document/d/{file_id}"
-                print(f"📄 Execution report uploaded: {file_url}")
-                return file_url
-            else:
-                raise Exception(f"MCP upload failed: {result.get('message')}")
-
-        except Exception as e:
-            print(f"❌ Failed to upload execution report: {e}")
-            # Fallback or re-raise
-            return f"upload_failed: {e}"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
+        print(f"📄 Execution report saved: {path}")
+        return path
 
 
 # CLI Functions
