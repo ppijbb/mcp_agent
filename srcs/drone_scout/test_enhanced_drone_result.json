@@ -1,0 +1,123 @@
+{
+    "success": true,
+    "summary": {
+        "mission": "서울숲 공원 상공을 50m 고도로 비행하며 주요 시설물의 현재 상태를 촬영하고 보고서를 작성해줘. 비행 고도는 50m로 유지해.",
+        "status": "completed",
+        "output_files_location": "drone_scout_reports/",
+        "mission_id": "daac30c7-c8cc-4967-a43e-efc762236e2e",
+        "execution_time": "2025-08-17T11:44:07.661502"
+    },
+    "trajectory": [
+        [
+            126.978,
+            37.5665,
+            50.0
+        ],
+        [
+            126.979,
+            37.5675,
+            50.0
+        ],
+        [
+            126.979,
+            37.5655,
+            50.0
+        ],
+        [
+            126.977,
+            37.5665,
+            50.0
+        ],
+        [
+            126.978,
+            37.5665,
+            50.0
+        ]
+    ],
+    "enhanced_data": {
+        "weather_data": null,
+        "safety_analysis": {
+            "mission": "서울숲 공원 상공을 50m 고도로 비행하며 주요 시설물의 현재 상태를 촬영하고 보고서를 작성해줘. 비행 고도는 50m로 유지해.",
+            "weather_safe": true,
+            "regulatory_compliant": true,
+            "risk_factors": [],
+            "recommendations": [],
+            "timestamp": "2025-08-17T11:44:07.159695"
+        },
+        "research_data": {
+            "mission": "서울숲 공원 상공을 50m 고도로 비행하며 주요 시설물의 현재 상태를 촬영하고 보고서를 작성해줘. 비행 고도는 50m로 유지해.",
+            "search_results": [],
+            "weather_data": [],
+            "gis_data": [],
+            "web_data": [],
+            "timestamp": "2025-08-17T11:44:07.159625"
+        },
+        "execution_log": [
+            {
+                "timestamp": "2025-08-17T11:44:07.159813",
+                "action": "Reached waypoint 1/5",
+                "position": {
+                    "latitude": 37.5665,
+                    "longitude": 126.978,
+                    "altitude": 50.0,
+                    "heading": null,
+                    "speed": null,
+                    "timestamp": "2025-08-17T11:44:07.159521"
+                },
+                "progress": 0.0
+            },
+            {
+                "timestamp": "2025-08-17T11:44:07.260623",
+                "action": "Reached waypoint 2/5",
+                "position": {
+                    "latitude": 37.5675,
+                    "longitude": 126.979,
+                    "altitude": 50.0,
+                    "heading": null,
+                    "speed": null,
+                    "timestamp": "2025-08-17T11:44:07.159528"
+                },
+                "progress": 20.0
+            },
+            {
+                "timestamp": "2025-08-17T11:44:07.360743",
+                "action": "Reached waypoint 3/5",
+                "position": {
+                    "latitude": 37.5655,
+                    "longitude": 126.979,
+                    "altitude": 50.0,
+                    "heading": null,
+                    "speed": null,
+                    "timestamp": "2025-08-17T11:44:07.159530"
+                },
+                "progress": 40.0
+            },
+            {
+                "timestamp": "2025-08-17T11:44:07.460854",
+                "action": "Reached waypoint 4/5",
+                "position": {
+                    "latitude": 37.5665,
+                    "longitude": 126.977,
+                    "altitude": 50.0,
+                    "heading": null,
+                    "speed": null,
+                    "timestamp": "2025-08-17T11:44:07.159531"
+                },
+                "progress": 60.0
+            },
+            {
+                "timestamp": "2025-08-17T11:44:07.561374",
+                "action": "Reached waypoint 5/5",
+                "position": {
+                    "latitude": 37.5665,
+                    "longitude": 126.978,
+                    "altitude": 50.0,
+                    "heading": null,
+                    "speed": null,
+                    "timestamp": "2025-08-17T11:44:07.159532"
+                },
+                "progress": 80.0
+            }
+        ]
+    }
+}
