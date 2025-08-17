@@ -66,6 +66,17 @@ def list_agents():
     
     for example, description in examples.items():
         print(f"  • {example:20} - {description}")
+    
+    print("\n🧬 Specialized Agents:")
+    specialized_agents = {
+        "genome": "Genome analysis and bioinformatics agent",
+        "goal_setter": "Goal setting and planning agent",
+        "decision": "Decision making and analysis agent",
+        "ai_architect": "AI architecture design and optimization agent"
+    }
+    
+    for agent, description in specialized_agents.items():
+        print(f"  • {agent:20} - {description}")
 
 def run_basic_agent(agent_name):
     """Run a basic agent"""
@@ -126,14 +137,42 @@ def run_enterprise_agent(agent_name):
         print(f"❌ Error running enterprise agent {agent_name}: {str(e)}")
         return False
 
+def run_specialized_agent(agent_name):
+    """Run a specialized agent"""
+    agent_map = {
+        "genome": "genome_agent.run_genome_agent",
+        "goal_setter": "goal_setter_agent.goal_setter",
+        "decision": "advanced_agents.decision_agent",
+        "ai_architect": "evolutionary_ai_architect.architect"
+    }
+    
+    if agent_name not in agent_map:
+        print(f"❌ Unknown specialized agent: {agent_name}")
+        return False
+    
+    try:
+        print(f"🧬 Starting specialized agent: {agent_name}")
+        module_name = agent_map[agent_name]
+        
+        # Import and run the main function
+        exec(f"from {module_name} import main; main()")
+        return True
+    except Exception as e:
+        print(f"❌ Error running specialized agent {agent_name}: {str(e)}")
+        return False
+
+
 def run_utility(util_name):
     """Run a utility script"""
     util_map = {
         "mental": "enterprise_agents.mental",
-        "mental_viz": "utils.mental_visualization", 
+        "mental_viz": "utils.mental_visualization",
         "swarm": "basic_agents.swarm",
         "workflow": "basic_agents.workflow_orchestration"
     }
+    
+    if util_name == "genome":
+        return run_specialized_agent(util_name)
     
     if util_name not in util_map:
         print(f"❌ Unknown utility: {util_name}")
@@ -230,6 +269,7 @@ Examples:
   python run_agent.py --basic researcher_v2     # Run enhanced research agent
   python run_agent.py --enterprise supply_chain # Run supply chain agent
   python run_agent.py --utility mental          # Run mental model utility
+  python run_agent.py --specialized genome     # Run genome analysis agent
   python run_agent.py --dev common_demo         # Show common modules demo
         """
     )
@@ -238,6 +278,7 @@ Examples:
     parser.add_argument("--basic", metavar="AGENT", help="Run a basic agent")
     parser.add_argument("--enterprise", metavar="AGENT", help="Run an enterprise agent")
     parser.add_argument("--utility", metavar="UTIL", help="Run a utility script")
+    parser.add_argument("--specialized", metavar="AGENT", help="Run a specialized agent")
     parser.add_argument("--dev", metavar="EXAMPLE", help="Run development examples")
     
     args = parser.parse_args()
@@ -256,6 +297,10 @@ Examples:
     
     if args.utility:
         success = run_utility(args.utility)
+        sys.exit(0 if success else 1)
+    
+    if args.specialized:
+        success = run_specialized_agent(args.specialized)
         sys.exit(0 if success else 1)
     
     if args.dev:
