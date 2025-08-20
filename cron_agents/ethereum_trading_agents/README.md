@@ -4,9 +4,10 @@
 
 ## 주요 특징
 
-- **Gemini 2.5 Flash AI**: Google의 최신 AI 모델을 사용한 시장 분석 및 거래 결정
-- **MCP 통합**: 이더리움 거래 및 시장 데이터 수집을 위한 MCP 서버 활용
-- **멀티 에이전트 구조**: 보수적, 공격적, 균형잡힌 전략을 가진 3개 에이전트
+- **Gemini 2.0 Flash AI**: Google의 최신 AI 모델을 사용한 시장 분석 및 거래 결정
+- **LangChain 0.3.0 + LangGraph 통합**: 최신 LangChain 프레임워크와 LangGraph를 활용한 향상된 에이전트 오케스트레이션
+- **강화된 MCP 통합**: 우선순위 기반 병렬 처리, 타임아웃 관리, 재시도 로직을 갖춘 고급 MCP 서버 활용
+- **멀티 에이전트 구조**: 전통적 에이전트 3개 + LangChain 향상 에이전트 3개 (총 6개)
 - **5분 단위 실행**: cron 스케줄러를 통한 정기적인 거래 사이클 실행
 - **완전한 기록 관리**: 모든 실행 내용을 데이터베이스에 저장하고 다음 실행 시 참조
 - **리스크 관리**: 일일 거래 한도, 손실 한도 등 체계적인 리스크 관리
@@ -46,6 +47,11 @@
 ```bash
 pip install -r requirements.txt
 ```
+
+**참고**: 
+- `google-generativeai` 라이브러리는 더 이상 사용되지 않으며, `google-genai`로 업데이트되었습니다. 이는 Google의 최신 생성형 AI 라이브러리입니다.
+- **LangChain 0.3.0**을 사용하므로 Python 3.9 이상이 필요합니다.
+- Pydantic 2.0을 사용하여 향상된 데이터 검증을 제공합니다.
 
 ### 2. 환경 변수 설정
 
@@ -111,6 +117,7 @@ python main.py
 
 ### 3. 개별 에이전트 테스트
 
+#### 전통적 에이전트
 ```python
 from cron_agents.ethereum_trading_agents.trading_agent import TradingAgent
 
@@ -122,22 +129,58 @@ result = await agent.execute_trading_cycle()
 print(result)
 ```
 
+#### LangChain + LangGraph 향상 에이전트
+```python
+from cron_agents.ethereum_trading_agents.langchain_agent import LangChainTradingAgent
+
+# 향상된 에이전트 생성
+agent = LangChainTradingAgent("test_enhanced_agent")
+
+# LangGraph 워크플로우 실행
+result = await agent.execute_trading_cycle()
+print(result)
+
+# MCP 강화 기능 테스트
+async with agent.mcp_client:
+    enhanced_ops = await agent.mcp_client.enhanced_mcp_operations()
+    print(f"MCP Health Score: {enhanced_ops.get('health_score', 0)}%")
+```
+
 ## 에이전트 전략
 
-### 1. Conservative Trader (보수적 거래자)
+### 전통적 에이전트 (Traditional Agents)
+
+#### 1. Conservative Trader (보수적 거래자)
 - 낮은 리스크 선호
 - 작은 거래 금액
 - 엄격한 손절매/익절매
 
-### 2. Aggressive Trader (공격적 거래자)
+#### 2. Aggressive Trader (공격적 거래자)
 - 높은 리스크 허용
 - 큰 거래 금액
 - 빠른 진입/청산
 
-### 3. Balanced Trader (균형잡힌 거래자)
+#### 3. Balanced Trader (균형잡힌 거래자)
 - 중간 리스크 수준
 - 적응적 거래 전략
 - 시장 상황에 따른 유연한 대응
+
+### LangChain 향상 에이전트 (LangChain Enhanced Agents)
+
+#### 1. LangChain Conservative (LangChain 보수적 거래자)
+- LangChain 0.3.0의 도구 기반 에이전트 시스템 활용
+- 향상된 시장 분석 및 리스크 평가
+- 구조화된 의사결정 프로세스
+
+#### 2. LangChain Aggressive (LangChain 공격적 거래자)
+- LangChain 에이전트 실행기를 통한 고급 거래 전략
+- 실시간 시장 연구 및 인사이트 분석
+- 동적 리스크 관리
+
+#### 3. LangChain Balanced (LangChain 균형잡힌 거래자)
+- LangChain 프레임워크의 최신 기능 활용
+- 멀티 도구 기반 의사결정
+- 적응형 전략 실행
 
 ## 데이터베이스 스키마
 
@@ -212,6 +255,20 @@ print(status)
 - 데이터베이스 연결 풀링
 - 정기적인 리소스 정리
 
+### 4. LangChain 0.3.0 + LangGraph 최적화
+- 도구 기반 에이전트 시스템으로 효율적인 작업 분배
+- 구조화된 프롬프트 템플릿으로 일관된 응답 품질
+- 에이전트 실행기(AgentExecutor)를 통한 최적화된 실행
+- LangGraph 워크플로우로 복잡한 거래 프로세스 자동화
+- 상태 기반 워크플로우 관리로 에러 처리 및 복구 자동화
+
+### 5. 강화된 MCP 기능
+- 우선순위 기반 병렬 처리 (고/중/저 우선순위)
+- 지능형 타임아웃 관리 (15초/25초/45초)
+- 자동 재시도 로직 및 에러 복구
+- MCP 서버 상태 모니터링 및 헬스 스코어링
+- 실시간 MCP 작업 추적 및 로깅
+
 ## 보안 고려사항
 
 ### 1. API 키 보안
@@ -229,6 +286,8 @@ print(status)
 ## 확장성
 
 ### 1. 새로운 에이전트 추가
+
+#### 전통적 에이전트
 ```python
 class CustomTradingAgent(TradingAgent):
     def __init__(self, agent_name: str):
@@ -240,12 +299,37 @@ class CustomTradingAgent(TradingAgent):
         pass
 ```
 
+#### LangChain 향상 에이전트
+```python
+class CustomLangChainAgent(LangChainTradingAgent):
+    def __init__(self, agent_name: str):
+        super().__init__(agent_name)
+        # 추가 도구 및 커스텀 로직
+    
+    def _setup_langchain_components(self):
+        super()._setup_langchain_components()
+        # 추가 도구 등록
+        self.tools.append(self._create_custom_tool())
+```
+
 ### 2. 새로운 MCP 서버 통합
 ```python
 class CustomMCPClient(MCPClient):
     async def custom_function(self):
         # 커스텀 MCP 기능
         pass
+```
+
+### 3. LangChain 도구 확장
+```python
+@tool
+def custom_market_tool(self) -> BaseTool:
+    return BaseTool(
+        name="custom_market_analysis",
+        description="Custom market analysis tool",
+        func=self._custom_analysis,
+        args_schema=CustomSchema
+    )
 ```
 
 ## 문제 해결
@@ -256,6 +340,15 @@ class CustomMCPClient(MCPClient):
 - API 키 확인
 - 할당량 확인
 - 네트워크 연결 확인
+- `google-genai` 라이브러리 버전 확인 (최신 버전 권장)
+
+#### LangChain 0.3.0 + LangGraph 오류
+- Python 3.9 이상 버전 확인
+- Pydantic 2.0 호환성 확인
+- LangChain 패키지 버전 확인 (`langchain>=0.3.0,<0.4.0`)
+- LangGraph 패키지 버전 확인 (`langgraph>=0.2.20,<0.3`)
+- 도구(Tools) 설정 및 스키마 검증 확인
+- 워크플로우 컴파일 및 상태 그래프 설정 확인
 
 #### MCP 서버 연결 오류
 - 서버 상태 확인

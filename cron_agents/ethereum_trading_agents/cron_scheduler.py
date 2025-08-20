@@ -12,12 +12,19 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import signal
 
+# Check Python version for LangChain 0.3.0 compatibility
+if sys.version_info < (3, 9):
+    print("Error: Python 3.9 or higher is required for LangChain 0.3.0")
+    print(f"Current Python version: {sys.version}")
+    sys.exit(1)
+
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from cron_agents.ethereum_trading_agents.multi_agent_orchestrator import MultiAgentOrchestrator
 from cron_agents.ethereum_trading_agents.trading_agent import TradingAgent
+from cron_agents.ethereum_trading_agents.langchain_agent import LangChainTradingAgent
 from cron_agents.ethereum_trading_agents.config import Config
 
 # Configure logging
@@ -49,17 +56,27 @@ class CronScheduler:
     def setup_agents(self):
         """Setup and register trading agents"""
         try:
-            # Create trading agents with different strategies
+            # Create traditional trading agents with different strategies
             conservative_agent = TradingAgent("conservative_trader")
             aggressive_agent = TradingAgent("aggressive_trader")
             balanced_agent = TradingAgent("balanced_trader")
             
-            # Register agents with orchestrator
+            # Create LangChain enhanced agents (LangChain 0.3.0 features)
+            langchain_conservative = LangChainTradingAgent("langchain_conservative")
+            langchain_aggressive = LangChainTradingAgent("langchain_aggressive")
+            langchain_balanced = LangChainTradingAgent("langchain_balanced")
+            
+            # Register traditional agents with orchestrator
             self.orchestrator.register_agent("conservative_trader", conservative_agent)
             self.orchestrator.register_agent("aggressive_trader", aggressive_agent)
             self.orchestrator.register_agent("balanced_trader", balanced_agent)
             
-            logger.info("All agents registered successfully")
+            # Register LangChain enhanced agents
+            self.orchestrator.register_agent("langchain_conservative", langchain_conservative)
+            self.orchestrator.register_agent("langchain_aggressive", langchain_aggressive)
+            self.orchestrator.register_agent("langchain_balanced", langchain_balanced)
+            
+            logger.info("All agents registered successfully (6 total: 3 traditional + 3 LangChain enhanced)")
             
         except Exception as e:
             logger.error(f"Failed to setup agents: {e}")

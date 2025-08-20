@@ -9,12 +9,19 @@ import sys
 import os
 from pathlib import Path
 
+# Check Python version for LangChain 0.3.0 compatibility
+if sys.version_info < (3, 9):
+    print("Error: Python 3.9 or higher is required for LangChain 0.3.0")
+    print(f"Current Python version: {sys.version}")
+    sys.exit(1)
+
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from cron_agents.ethereum_trading_agents.multi_agent_orchestrator import MultiAgentOrchestrator
 from cron_agents.ethereum_trading_agents.trading_agent import TradingAgent
+from cron_agents.ethereum_trading_agents.langchain_agent import LangChainTradingAgent
 from cron_agents.ethereum_trading_agents.config import Config
 
 # Configure logging
@@ -41,14 +48,25 @@ async def main():
         
         # Create and register trading agents
         # You can create multiple agents with different strategies
+        # Traditional agents
         conservative_agent = TradingAgent("conservative_trader")
         aggressive_agent = TradingAgent("aggressive_trader")
         balanced_agent = TradingAgent("balanced_trader")
         
-        # Register agents with orchestrator
+        # LangChain enhanced agents (LangChain 0.3.0 features)
+        langchain_conservative = LangChainTradingAgent("langchain_conservative")
+        langchain_aggressive = LangChainTradingAgent("langchain_aggressive")
+        langchain_balanced = LangChainTradingAgent("langchain_balanced")
+        
+        # Register traditional agents with orchestrator
         orchestrator.register_agent("conservative_trader", conservative_agent)
         orchestrator.register_agent("aggressive_trader", aggressive_agent)
         orchestrator.register_agent("balanced_trader", balanced_agent)
+        
+        # Register LangChain enhanced agents
+        orchestrator.register_agent("langchain_conservative", langchain_conservative)
+        orchestrator.register_agent("langchain_aggressive", langchain_aggressive)
+        orchestrator.register_agent("langchain_balanced", langchain_balanced)
         
         logger.info("All agents registered successfully")
         

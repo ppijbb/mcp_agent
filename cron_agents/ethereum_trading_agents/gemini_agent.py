@@ -2,7 +2,7 @@
 Gemini 2.5 Flash AI Agent for Ethereum Trading
 """
 
-import google.generativeai as genai
+import google.genai as genai
 import asyncio
 import json
 import logging
@@ -259,7 +259,7 @@ class GeminiAgent:
     async def _get_ai_response(self, prompt: str) -> str:
         """Get response from Gemini AI"""
         try:
-            response = self.chat.send_message(prompt)
+            response = await self.chat.send_message(prompt)
             return response.text
         except Exception as e:
             logger.error(f"Failed to get AI response: {e}")
