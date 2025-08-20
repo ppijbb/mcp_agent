@@ -133,7 +133,11 @@ class MCPClient:
     async def enhanced_mcp_operations(self) -> Dict[str, Any]:
         """Execute enhanced MCP operations with parallel processing and retry logic"""
         try:
-            # Define MCP operations with different priorities
+            # Validate MCP client state
+            if not self.session:
+                raise ValueError("MCP client session not available")
+            
+            # Define MCP operations with different priorities and validation
             high_priority_ops = [
                 self.get_ethereum_price(),
                 self.get_gas_price()
@@ -149,7 +153,7 @@ class MCPClient:
                 self.get_ethereum_balance("0x0000000000000000000000000000000000000000")  # Dummy address for testing
             ]
             
-            # Execute operations with priority-based timeouts
+            # Execute operations with priority-based timeouts and enhanced error handling
             results = {}
             
             # High priority operations (fast timeout)
@@ -160,7 +164,11 @@ class MCPClient:
                 )
                 results["high_priority"] = self._process_mcp_results(high_results, ["price", "gas"])
             except asyncio.TimeoutError:
-                results["high_priority"] = {"status": "timeout", "retry_available": True}
+                logger.warning("High priority MCP operations timed out")
+                results["high_priority"] = {"status": "timeout", "retry_available": True, "priority": "high"}
+            except Exception as high_error:
+                logger.error(f"High priority MCP operations failed: {high_error}")
+                results["high_priority"] = {"status": "error", "error": str(high_error), "retry_available": True, "priority": "high"}
             
             # Medium priority operations
             try:
@@ -170,7 +178,11 @@ class MCPClient:
                 )
                 results["medium_priority"] = self._process_mcp_results(medium_results, ["trends", "indicators"])
             except asyncio.TimeoutError:
-                results["medium_priority"] = {"status": "timeout", "retry_available": True}
+                logger.warning("Medium priority MCP operations timed out")
+                results["medium_priority"] = {"status": "timeout", "retry_available": True, "priority": "medium"}
+            except Exception as medium_error:
+                logger.error(f"Medium priority MCP operations failed: {medium_error}")
+                results["medium_priority"] = {"status": "error", "error": str(medium_error), "retry_available": True, "priority": "medium"}
             
             # Low priority operations (longer timeout)
             try:
@@ -180,22 +192,41 @@ class MCPClient:
                 )
                 results["low_priority"] = self._process_mcp_results(low_results, ["news", "balance"])
             except asyncio.TimeoutError:
-                results["low_priority"] = {"status": "timeout", "retry_available": True}
+                logger.warning("Low priority MCP operations timed out")
+                results["low_priority"] = {"status": "timeout", "retry_available": True, "priority": "low"}
+            except Exception as low_error:
+                logger.error(f"Low priority MCP operations failed: {low_error}")
+                results["low_priority"] = {"status": "error", "error": str(low_error), "retry_available": True, "priority": "low"}
             
-            # Calculate overall MCP health score
+            # Calculate overall MCP health score with validation
             health_score = self._calculate_mcp_health_score(results)
+            
+            # Determine overall status based on health score and critical operations
+            overall_status = "healthy"
+            if health_score < 50:
+                overall_status = "critical"
+            elif health_score < 80:
+                overall_status = "degraded"
+            
+            # Check if critical operations (high priority) failed
+            high_priority_status = results.get("high_priority", {}).get("status")
+            if high_priority_status in ["error", "timeout"]:
+                overall_status = "critical"
+                logger.error("Critical MCP operations failed - system status degraded")
             
             return {
                 "status": "success",
                 "timestamp": datetime.now().isoformat(),
                 "mcp_operations": results,
                 "health_score": health_score,
-                "overall_status": "healthy" if health_score >= 80 else "degraded" if health_score >= 50 else "critical"
+                "overall_status": overall_status,
+                "critical_operations_status": high_priority_status,
+                "retry_recommendations": self._generate_retry_recommendations(results)
             }
             
         except Exception as e:
             logger.error(f"Enhanced MCP operations failed: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": str(e), "error_type": type(e).__name__}
     
     def _process_mcp_results(self, results: List, operation_names: List[str]) -> Dict[str, Any]:
         """Process MCP operation results with detailed status"""
@@ -235,6 +266,37 @@ class MCPClient:
             return 0
         
         return int((successful_operations / total_operations) * 100)
+    
+    def _generate_retry_recommendations(self, results: Dict) -> Dict[str, Any]:
+        """Generate retry recommendations based on MCP operation results"""
+        recommendations = {
+            "immediate_retry": [],
+            "delayed_retry": [],
+            "no_retry": [],
+            "system_impact": "none"
+        }
+        
+        for priority, result in results.items():
+            if result.get("status") in ["error", "timeout"]:
+                if priority == "high_priority":
+                    recommendations["immediate_retry"].append(priority)
+                    recommendations["system_impact"] = "critical"
+                elif priority == "medium_priority":
+                    recommendations["delayed_retry"].append(priority)
+                    if recommendations["system_impact"] != "critical":
+                        recommendations["system_impact"] = "moderate"
+                else:
+                    recommendations["delayed_retry"].append(priority)
+            elif result.get("status") == "success":
+                recommendations["no_retry"].append(priority)
+        
+        # Add timing recommendations
+        if recommendations["immediate_retry"]:
+            recommendations["retry_delay_seconds"] = 5
+        elif recommendations["delayed_retry"]:
+            recommendations["retry_delay_seconds"] = 30
+        
+        return recommendations
     
     async def health_check(self) -> Dict[str, Any]:
         """Check health of MCP servers"""
