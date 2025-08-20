@@ -8,4 +8,10 @@ mcp:
       description: "Figma Context MCP"
     notion:
       url: "http://localhost:3004"
-      description: "Notion Context MCP" 
+      description: "Notion Context MCP"
+    ethereum_trading:
+      url: "http://localhost:3005"
+      description: "Ethereum Trading MCP"
+    market_data:
+      url: "http://localhost:3006"
+      description: "Market Data Collection MCP" 
