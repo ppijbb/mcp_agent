@@ -24,9 +24,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field, field_validator
 
 from .gemini_agent import GeminiAgent
-from .mcp_client import MCPClient
-from .database import TradingDatabase
-from .config import Config
+from ..utils.mcp_client import MCPClient
+from ..utils.database import TradingDatabase
+from ..utils.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class TradingDecision(BaseModel):
             raise ValueError('Amount must be non-negative')
         return v
 
-class LangChainTradingAgent:
+class TradingAgentChain:
     """Enhanced trading agent using LangChain 0.3.0 and LangGraph features"""
     
     class WorkflowState(TypedDict, total=False):
@@ -532,7 +532,7 @@ class LangChainTradingAgent:
             
             # Initialize workflow state with validation
             try:
-                initial_state: LangChainTradingAgent.WorkflowState = {
+                initial_state: TradingAgentChain.WorkflowState = {
                     "messages": [HumanMessage(content="Execute trading cycle")],
                     "mcp_operations": [],
                     "workflow_step": "initialized",
@@ -540,7 +540,7 @@ class LangChainTradingAgent:
                 }
                 
                 # Validate state using Pydantic validator
-                self.workflow_state_validator = LangChainTradingAgent.WorkflowStateValidator(**initial_state)
+                self.workflow_state_validator = TradingAgentChain.WorkflowStateValidator(**initial_state)
                 
             except Exception as state_error:
                 raise ValueError(f"Failed to initialize workflow state: {state_error}")

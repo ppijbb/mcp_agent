@@ -22,10 +22,10 @@ if sys.version_info < (3, 9):
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from cron_agents.ethereum_trading_agents.multi_agent_orchestrator import MultiAgentOrchestrator
-from cron_agents.ethereum_trading_agents.trading_agent import TradingAgent
-from cron_agents.ethereum_trading_agents.langchain_agent import LangChainTradingAgent
-from cron_agents.ethereum_trading_agents.config import Config
+from ..agents.multi_agent_orchestrator import MultiAgentOrchestrator
+from ..agents.trading_agent import TradingAgent
+from ..agents.langchain_agent import TradingAgentChain
+from ..utils.config import Config
 
 # Configure logging
 logging.basicConfig(
@@ -62,9 +62,9 @@ class CronScheduler:
             balanced_agent = TradingAgent("balanced_trader")
             
             # Create LangChain enhanced agents (LangChain 0.3.0 features)
-            langchain_conservative = LangChainTradingAgent("langchain_conservative")
-            langchain_aggressive = LangChainTradingAgent("langchain_aggressive")
-            langchain_balanced = LangChainTradingAgent("langchain_balanced")
+            langchain_conservative = TradingAgentChain("langchain_conservative")
+            langchain_aggressive = TradingAgentChain("langchain_aggressive")
+            langchain_balanced = TradingAgentChain("langchain_balanced")
             
             # Register traditional agents with orchestrator
             self.orchestrator.register_agent("conservative_trader", conservative_agent)
