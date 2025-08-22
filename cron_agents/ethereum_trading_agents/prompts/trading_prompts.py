@@ -1,312 +1,517 @@
 """
-Ethereum Trading Prompts
+Ethereum Trading Prompts - Enhanced Strategic Version
 
-This module contains prompt templates for various trading operations:
-1. Market Analysis Prompts
-2. Trading Decision Prompts
-3. Risk Management Prompts
+This module contains structured and strategic prompt templates for various trading operations:
+1. Market Analysis Prompts with structured data
+2. Strategic Trading Decision Prompts
+3. Risk Management Prompts with quantitative parameters
 4. Portfolio Management Prompts
+5. Information Gathering and Research Prompts
 """
 
 from langchain.prompts import PromptTemplate
+from typing import Dict, Any, List
+import json
 
-# Market Analysis Prompts
-MARKET_ANALYSIS_PROMPT = PromptTemplate(
-    input_variables=["market_data", "timeframe", "analysis_type"],
+# ============================================================================
+# STRUCTURED TRADING STRATEGY PROMPTS
+# ============================================================================
+
+STRUCTURED_TRADING_STRATEGY_PROMPT = PromptTemplate(
+    input_variables=["strategy_type", "asset_pair", "market_conditions", "risk_profile"],
     template="""
-    You are an expert cryptocurrency market analyst. Analyze the following market data:
+    You are an expert cryptocurrency trading strategist. Create a structured trading strategy based on the following parameters:
+    
+    Strategy Type: {strategy_type}
+    Asset Pair: {asset_pair}
+    Market Conditions: {market_conditions}
+    Risk Profile: {risk_profile}
+    
+    Provide a structured response in the following JSON format:
+    {{
+        "strategy_name": "Descriptive strategy name",
+        "entry_conditions": {{
+            "technical_indicators": {{
+                "moving_averages": {{
+                    "short_term": "period and condition",
+                    "long_term": "period and condition",
+                    "crossover": "bullish/bearish"
+                }},
+                "rsi": {{
+                    "period": "14",
+                    "oversold_threshold": "30",
+                    "overbought_threshold": "70"
+                }},
+                "macd": {{
+                    "signal_line": "condition",
+                    "histogram": "condition"
+                }},
+                "bollinger_bands": {{
+                    "position": "upper/middle/lower",
+                    "volatility": "high/medium/low"
+                }}
+            }},
+            "fundamental_factors": {{
+                "market_sentiment": "bullish/bearish/neutral",
+                "volume_analysis": "above/below average",
+                "news_impact": "positive/negative/neutral"
+            }},
+            "entry_price_levels": {{
+                "primary": "exact price",
+                "secondary": "alternative price",
+                "stop_loss": "price level"
+            }}
+        }},
+        "exit_conditions": {{
+            "profit_targets": {{
+                "conservative": "percentage",
+                "moderate": "percentage",
+                "aggressive": "percentage"
+            }},
+            "stop_loss": {{
+                "initial": "percentage",
+                "trailing": "percentage"
+            }}
+        }},
+        "risk_management": {{
+            "position_sizing": "percentage of account",
+            "max_loss_per_trade": "percentage",
+            "max_portfolio_risk": "percentage",
+            "correlation_limits": "with existing positions"
+        }},
+        "execution_plan": {{
+            "entry_timing": "immediate/limit order/wait for pullback",
+            "order_type": "market/limit/stop",
+            "scaling": "yes/no with conditions"
+        }}
+    }}
+    
+    Ensure all recommendations align with the specified risk profile and current market conditions.
+    """
+)
+
+# ============================================================================
+# ENHANCED MARKET ANALYSIS PROMPTS
+# ============================================================================
+
+COMPREHENSIVE_MARKET_ANALYSIS_PROMPT = PromptTemplate(
+    input_variables=["market_data", "timeframe", "analysis_depth", "data_sources"],
+    template="""
+    You are an expert cryptocurrency market analyst with access to multiple data sources.
+    Perform a comprehensive market analysis using the following structured approach:
     
     Market Data: {market_data}
     Timeframe: {timeframe}
-    Analysis Type: {analysis_type}
+    Analysis Depth: {analysis_depth}
+    Data Sources: {data_sources}
     
-    Provide a comprehensive analysis including:
-    1. Current market sentiment (bullish/bearish/neutral)
-    2. Key support and resistance levels
-    3. Volume analysis and trends
-    4. Technical indicators interpretation
-    5. Risk factors and opportunities
-    6. Short-term and medium-term outlook
+    Provide analysis in this structured format:
     
-    Your analysis should be:
-    - Data-driven and objective
-    - Specific with price levels
-    - Actionable for traders
-    - Risk-aware and balanced
+    ## TECHNICAL ANALYSIS
+    1. Price Action Patterns:
+       - Support/Resistance levels
+       - Trend direction and strength
+       - Chart patterns (head & shoulders, triangles, etc.)
+       - Volume analysis
     
-    Analysis:
+    2. Technical Indicators:
+       - Moving averages (20, 50, 200 day)
+       - RSI, MACD, Bollinger Bands
+       - Stochastic oscillator
+       - Williams %R
+    
+    ## FUNDAMENTAL ANALYSIS
+    1. Token Metrics:
+       - Market cap and circulating supply
+       - Token utility and adoption
+       - Developer activity and GitHub metrics
+    
+    2. Network Analysis:
+       - Transaction volume and fees
+       - Active addresses and wallets
+       - DeFi TVL and protocol usage
+    
+    ## SENTIMENT ANALYSIS
+    1. Social Media Sentiment:
+       - Twitter/X sentiment trends
+       - Reddit community sentiment
+       - Telegram/Discord activity
+    
+    2. News and Media:
+       - Recent news impact
+       - Regulatory developments
+       - Institutional adoption news
+    
+    ## RISK ASSESSMENT
+    1. Market Risks:
+       - Volatility levels
+       - Liquidity concerns
+       - Correlation with other assets
+    
+    2. External Risks:
+       - Regulatory changes
+       - Security concerns
+       - Market manipulation risks
+    
+    ## RECOMMENDATIONS
+    1. Short-term outlook (1-7 days)
+    2. Medium-term outlook (1-4 weeks)
+    3. Key levels to watch
+    4. Risk factors to monitor
+    
+    Provide specific price levels, percentages, and actionable insights.
     """
 )
 
-TECHNICAL_ANALYSIS_PROMPT = PromptTemplate(
-    input_variables=["price_data", "indicators", "timeframe"],
-    template="""
-    Perform detailed technical analysis on the following data:
-    
-    Price Data: {price_data}
-    Technical Indicators: {indicators}
-    Timeframe: {timeframe}
-    
-    Analyze:
-    1. Price trends and patterns
-    2. Moving averages and crossovers
-    3. RSI, MACD, and Bollinger Bands
-    4. Support and resistance levels
-    5. Volume-price relationships
-    6. Chart patterns and formations
-    
-    Provide specific price levels and actionable insights.
-    
-    Technical Analysis:
-    """
-)
+# ============================================================================
+# STRATEGIC TRADING DECISION PROMPTS
+# ============================================================================
 
-# Trading Decision Prompts
-TRADING_SIGNAL_PROMPT = PromptTemplate(
-    input_variables=["market_analysis", "trading_strategy", "risk_tolerance"],
+STRATEGIC_ENTRY_DECISION_PROMPT = PromptTemplate(
+    input_variables=["market_analysis", "trading_strategy", "portfolio_status", "risk_parameters"],
     template="""
-    Based on the market analysis, generate trading signals:
+    As a senior trading strategist, make a strategic entry decision based on comprehensive analysis:
     
     Market Analysis: {market_analysis}
     Trading Strategy: {trading_strategy}
-    Risk Tolerance: {risk_tolerance}
+    Portfolio Status: {portfolio_status}
+    Risk Parameters: {risk_parameters}
     
-    Generate:
-    1. Entry signals (BUY/SELL/HOLD)
-    2. Entry price levels
-    3. Stop loss levels
-    4. Take profit targets
-    5. Position sizing recommendations
-    6. Risk-reward ratios
+    ## DECISION FRAMEWORK
     
-    Ensure all recommendations align with the specified risk tolerance.
+    1. ENTRY DECISION (YES/NO/WAIT):
+       - Decision: [Your decision]
+       - Confidence Level: [1-10 scale]
+       - Reasoning: [Detailed explanation]
     
-    Trading Signals:
+    2. ENTRY EXECUTION:
+       - Entry Method: [Market/Limit/Stop order]
+       - Entry Price: [Specific price level]
+       - Entry Timing: [Immediate/Wait for pullback/Specific time]
+       - Position Size: [Percentage of account]
+    
+    3. RISK CONTROLS:
+       - Stop Loss: [Exact price level]
+       - Take Profit: [Multiple targets with percentages]
+       - Trailing Stop: [Yes/No with conditions]
+       - Position Scaling: [Entry in parts or all at once]
+    
+    4. MONITORING REQUIREMENTS:
+       - Key Levels to Watch: [Specific prices]
+       - Time-based Exits: [If not profitable by X time]
+       - News Events: [Upcoming events that could impact]
+    
+    5. ALTERNATIVE SCENARIOS:
+       - If entry fails: [Plan B]
+       - If market changes: [Adaptation strategy]
+       - If news breaks: [Response plan]
+    
+    Provide specific numbers, percentages, and actionable steps.
     """
 )
 
-ENTRY_DECISION_PROMPT = PromptTemplate(
-    input_variables=["trading_signals", "current_position", "market_conditions"],
-    template="""
-    Make entry decisions based on trading signals:
-    
-    Trading Signals: {trading_signals}
-    Current Position: {current_position}
-    Market Conditions: {market_conditions}
-    
-    Decision:
-    1. Execute entry (YES/NO)
-    2. Entry timing (immediate/wait for pullback)
-    3. Entry method (market/limit order)
-    4. Position size adjustment
-    5. Additional risk controls
-    
-    Trading Decision:
-    """
-)
+# ============================================================================
+# ENHANCED RISK MANAGEMENT PROMPTS
+# ============================================================================
 
-# Risk Management Prompts
-RISK_ASSESSMENT_PROMPT = PromptTemplate(
-    input_variables=["trading_plan", "portfolio_status", "market_volatility"],
+QUANTITATIVE_RISK_ASSESSMENT_PROMPT = PromptTemplate(
+    input_variables=["trading_plan", "portfolio_status", "market_volatility", "risk_tolerance"],
     template="""
-    Assess the risk of the proposed trading plan:
+    Conduct a quantitative risk assessment for the proposed trading plan:
     
     Trading Plan: {trading_plan}
     Portfolio Status: {portfolio_status}
     Market Volatility: {market_volatility}
+    Risk Tolerance: {risk_tolerance}
     
-    Risk Assessment:
-    1. Portfolio risk exposure
-    2. Correlation with existing positions
-    3. Maximum potential loss
-    4. Risk-adjusted return expectations
-    5. Position sizing limits
-    6. Risk mitigation strategies
+    ## RISK METRICS CALCULATION
     
-    Provide specific risk metrics and recommendations.
+    1. POSITION RISK:
+       - Dollar Risk per Trade: [Calculate exact amount]
+       - Portfolio Risk Exposure: [Percentage of total portfolio]
+       - Maximum Drawdown Potential: [Worst-case scenario]
+       - Risk-Reward Ratio: [Calculate ratio]
     
-    Risk Assessment:
+    2. PORTFOLIO RISK:
+       - Correlation with Existing Positions: [Calculate correlation]
+       - Portfolio Beta: [Market sensitivity]
+       - VaR (Value at Risk): [95% confidence level]
+       - Expected Shortfall: [Average loss beyond VaR]
+    
+    3. RISK MITIGATION:
+       - Position Sizing Limits: [Maximum position size]
+       - Stop Loss Adjustments: [Dynamic stop loss levels]
+       - Hedging Strategies: [Correlation-based hedges]
+       - Diversification Impact: [Portfolio balance]
+    
+    4. MONITORING AND ALERTS:
+       - Risk Thresholds: [Specific levels to trigger alerts]
+       - Rebalancing Triggers: [When to adjust positions]
+       - Emergency Exits: [Conditions for immediate exit]
+    
+    Provide specific numbers, formulas used, and risk management recommendations.
     """
 )
 
-POSITION_SIZING_PROMPT = PromptTemplate(
-    input_variables=["account_size", "risk_per_trade", "stop_loss_distance"],
+# ============================================================================
+# INFORMATION GATHERING AND RESEARCH PROMPTS
+# ============================================================================
+
+COMPREHENSIVE_RESEARCH_PROMPT = PromptTemplate(
+    input_variables=["research_topic", "data_sources", "analysis_depth", "output_format"],
     template="""
-    Calculate optimal position size based on risk parameters:
+    Conduct comprehensive research on the specified topic using multiple data sources:
     
-    Account Size: {account_size}
-    Risk Per Trade: {risk_per_trade}
-    Stop Loss Distance: {stop_loss_distance}
+    Research Topic: {research_topic}
+    Data Sources: {data_sources}
+    Analysis Depth: {analysis_depth}
+    Output Format: {output_format}
     
-    Calculate:
-    1. Maximum position size
-    2. Risk-adjusted position size
-    3. Number of contracts/shares
-    4. Dollar risk per position
-    5. Portfolio impact assessment
+    ## RESEARCH METHODOLOGY
     
-    Position Sizing Calculation:
+    1. PRIMARY SOURCES:
+       - Official Documentation: [Token/Protocol docs]
+       - GitHub Repositories: [Code analysis and activity]
+       - Official Announcements: [Team communications]
+       - Regulatory Filings: [Legal documents]
+    
+    2. SECONDARY SOURCES:
+       - Financial News: [Reuters, Bloomberg, CoinDesk]
+       - Social Media: [Twitter, Reddit, Telegram]
+       - Expert Opinions: [Analyst reports, podcasts]
+       - Academic Research: [Papers, studies]
+    
+    3. DATA ANALYSIS:
+       - On-chain Metrics: [Blockchain data analysis]
+       - Market Data: [Price, volume, order book]
+       - Social Metrics: [Sentiment, engagement]
+       - Network Metrics: [Transactions, addresses]
+    
+    4. EXPERT INSIGHTS:
+       - Industry Leaders: [CEO, CTO statements]
+       - Technical Analysts: [Chart analysis]
+       - Fundamental Analysts: [Valuation models]
+       - Risk Managers: [Risk assessment]
+    
+    5. COMPETITIVE ANALYSIS:
+       - Direct Competitors: [Similar projects]
+       - Market Position: [Market share analysis]
+       - Competitive Advantages: [Unique features]
+       - Market Trends: [Industry direction]
+    
+    Provide structured analysis with specific data points, sources, and actionable insights.
     """
 )
 
-# Portfolio Management Prompts
-PORTFOLIO_REVIEW_PROMPT = PromptTemplate(
-    input_variables=["portfolio_positions", "performance_metrics", "market_outlook"],
+# ============================================================================
+# ENHANCED PORTFOLIO MANAGEMENT PROMPTS
+# ============================================================================
+
+STRATEGIC_PORTFOLIO_REVIEW_PROMPT = PromptTemplate(
+    input_variables=["portfolio_positions", "performance_metrics", "market_outlook", "risk_parameters"],
     template="""
-    Review and optimize the current portfolio:
+    Conduct a strategic portfolio review and optimization analysis:
     
     Portfolio Positions: {portfolio_positions}
     Performance Metrics: {performance_metrics}
     Market Outlook: {market_outlook}
+    Risk Parameters: {risk_parameters}
     
-    Portfolio Review:
-    1. Position performance analysis
-    2. Risk exposure assessment
-    3. Diversification analysis
-    4. Rebalancing recommendations
-    5. Exit strategy for underperformers
-    6. New opportunity identification
+    ## PORTFOLIO ANALYSIS
     
-    Portfolio Recommendations:
+    1. PERFORMANCE ASSESSMENT:
+       - Total Return: [Calculate percentage]
+       - Risk-Adjusted Return: [Sharpe ratio, Sortino ratio]
+       - Drawdown Analysis: [Maximum and current drawdown]
+       - Sector Performance: [Performance by category]
+    
+    2. RISK EXPOSURE:
+       - Portfolio Beta: [Market sensitivity]
+       - Concentration Risk: [Largest positions]
+       - Correlation Matrix: [Position relationships]
+       - Volatility Analysis: [Portfolio volatility]
+    
+    3. OPTIMIZATION RECOMMENDATIONS:
+       - Rebalancing Actions: [Specific trades needed]
+       - Risk Reduction: [Positions to reduce]
+       - Opportunity Seizing: [Positions to increase]
+       - New Opportunities: [Assets to consider]
+    
+    4. EXECUTION PLAN:
+       - Priority Actions: [Order of execution]
+       - Timing: [When to execute]
+       - Order Types: [Market/Limit orders]
+       - Monitoring: [What to watch]
+    
+    Provide specific recommendations with numbers, percentages, and execution steps.
     """
 )
 
-REBALANCING_PROMPT = PromptTemplate(
-    input_variables=["current_allocation", "target_allocation", "market_conditions"],
-    template="""
-    Generate portfolio rebalancing recommendations:
-    
-    Current Allocation: {current_allocation}
-    Target Allocation: {target_allocation}
-    Market Conditions: {market_conditions}
-    
-    Rebalancing Plan:
-    1. Required position adjustments
-    2. Priority of changes
-    3. Implementation timing
-    4. Transaction costs consideration
-    5. Tax implications
-    6. Risk management during rebalancing
-    
-    Rebalancing Recommendations:
-    """
-)
+# ============================================================================
+# NEWS AND SENTIMENT ANALYSIS PROMPTS
+# ============================================================================
 
-# Market Research Prompts
-TOKEN_RESEARCH_PROMPT = PromptTemplate(
-    input_variables=["token_info", "market_data", "ecosystem_analysis"],
+REAL_TIME_SENTIMENT_ANALYSIS_PROMPT = PromptTemplate(
+    input_variables=["news_data", "social_media", "market_data", "timeframe"],
     template="""
-    Research and analyze a cryptocurrency token:
+    Analyze real-time market sentiment from multiple sources:
     
-    Token Information: {token_info}
-    Market Data: {market_data}
-    Ecosystem Analysis: {ecosystem_analysis}
-    
-    Research Analysis:
-    1. Token utility and use cases
-    2. Technology and innovation assessment
-    3. Team and development activity
-    4. Market adoption and growth
-    5. Competitive landscape
-    6. Investment thesis and risks
-    
-    Provide a comprehensive investment analysis.
-    
-    Token Research Report:
-    """
-)
-
-SENTIMENT_ANALYSIS_PROMPT = PromptTemplate(
-    input_variables=["social_media_data", "news_data", "community_activity"],
-    template="""
-    Analyze market sentiment from various sources:
-    
-    Social Media Data: {social_media_data}
     News Data: {news_data}
-    Community Activity: {community_activity}
+    Social Media: {social_media}
+    Market Data: {market_data}
+    Timeframe: {timeframe}
     
-    Sentiment Analysis:
-    1. Overall market sentiment
-    2. Social media sentiment trends
-    3. News impact assessment
-    4. Community engagement analysis
-    5. Influencer sentiment
-    6. Sentiment change drivers
+    ## SENTIMENT ANALYSIS FRAMEWORK
     
-    Sentiment Analysis Results:
+    1. NEWS IMPACT ASSESSMENT:
+       - Breaking News: [Recent developments]
+       - News Sentiment: [Positive/Negative/Neutral]
+       - Market Impact: [Price/volume reaction]
+       - Credibility Score: [Source reliability]
+    
+    2. SOCIAL MEDIA SENTIMENT:
+       - Twitter/X Sentiment: [Trending topics, sentiment]
+       - Reddit Sentiment: [Community discussions]
+       - Telegram Sentiment: [Group activity]
+       - Influencer Opinions: [Key opinion leaders]
+    
+    3. MARKET REACTION:
+       - Immediate Response: [Price/volume changes]
+       - Pattern Recognition: [Similar past events]
+       - Volatility Impact: [Market stability]
+       - Liquidity Changes: [Trading activity]
+    
+    4. FORWARD-LOOKING ANALYSIS:
+       - Short-term Impact: [Next 24-48 hours]
+       - Medium-term Impact: [Next week]
+       - Long-term Implications: [Next month]
+       - Risk Factors: [What could go wrong]
+    
+    5. TRADING IMPLICATIONS:
+       - Entry Opportunities: [When to enter]
+       - Exit Strategies: [When to exit]
+       - Risk Management: [Stop loss levels]
+       - Position Sizing: [How much to trade]
+    
+    Provide real-time insights with specific recommendations and risk warnings.
     """
 )
 
-# Performance Tracking Prompts
-PERFORMANCE_ANALYSIS_PROMPT = PromptTemplate(
-    input_variables=["trading_history", "performance_metrics", "benchmark_data"],
+# ============================================================================
+# TECHNICAL ANALYSIS ENHANCEMENT PROMPTS
+# ============================================================================
+
+ADVANCED_TECHNICAL_ANALYSIS_PROMPT = PromptTemplate(
+    input_variables=["price_data", "volume_data", "indicators", "timeframe", "analysis_type"],
     template="""
-    Analyze trading performance and identify areas for improvement:
+    Perform advanced technical analysis using multiple timeframes and indicators:
     
-    Trading History: {trading_history}
-    Performance Metrics: {performance_metrics}
-    Benchmark Data: {benchmark_data}
+    Price Data: {price_data}
+    Volume Data: {volume_data}
+    Technical Indicators: {indicators}
+    Timeframe: {timeframe}
+    Analysis Type: {analysis_type}
     
-    Performance Analysis:
-    1. Win rate and profit factor
-    2. Risk-adjusted returns
-    3. Drawdown analysis
-    4. Trade duration patterns
-    5. Entry/exit timing analysis
-    6. Strategy effectiveness assessment
+    ## ADVANCED TECHNICAL ANALYSIS
     
-    Performance Insights and Recommendations:
+    1. MULTI-TIMEFRAME ANALYSIS:
+       - Higher Timeframe Trend: [Daily/Weekly trend]
+       - Lower Timeframe Entry: [4H/1H entry points]
+       - Timeframe Alignment: [Trend consistency]
+       - Divergence Analysis: [Price vs indicator]
+    
+    2. ADVANCED PATTERN RECOGNITION:
+       - Harmonic Patterns: [Gartley, Bat, Butterfly]
+       - Elliott Wave: [Wave structure analysis]
+       - Fibonacci Retracements: [Key levels]
+       - Support/Resistance: [Dynamic levels]
+    
+    3. VOLUME ANALYSIS:
+       - Volume Profile: [High/low volume areas]
+       - Volume Divergence: [Price vs volume]
+       - Accumulation/Distribution: [Smart money flow]
+       - Breakout Confirmation: [Volume validation]
+    
+    4. INDICATOR CONFLUENCE:
+       - Multiple Indicator Signals: [Converging signals]
+       - Signal Strength: [Strong/Weak signals]
+       - False Signal Filtering: [Noise reduction]
+       - Confirmation Requirements: [Entry validation]
+    
+    5. RISK MANAGEMENT:
+       - Key Levels: [Support/resistance]
+       - Stop Loss Placement: [Optimal levels]
+       - Position Sizing: [Risk-based sizing]
+       - Exit Strategies: [Multiple targets]
+    
+    Provide specific price levels, percentages, and risk management parameters.
     """
 )
 
-# Custom Prompt Builder
-def create_custom_prompt(
+# ============================================================================
+# CUSTOM PROMPT BUILDER WITH ENHANCED FEATURES
+# ============================================================================
+
+def create_enhanced_strategic_prompt(
     template: str,
     input_variables: list,
-    system_message: str = None
+    system_message: str = None,
+    strategy_framework: str = None,
+    risk_parameters: Dict[str, Any] = None
 ) -> PromptTemplate:
     """
-    Create a custom prompt template with optional system message
+    Create an enhanced strategic prompt template with advanced features
     
     Args:
         template: The prompt template string
         input_variables: List of input variable names
         system_message: Optional system message to prepend
+        strategy_framework: Optional strategic framework to include
+        risk_parameters: Optional risk management parameters
     
     Returns:
         PromptTemplate object
     """
+    enhanced_template = template
+    
     if system_message:
-        full_template = f"System: {system_message}\n\n{template}"
-    else:
-        full_template = template
+        enhanced_template = f"System: {system_message}\n\n{enhanced_template}"
+    
+    if strategy_framework:
+        enhanced_template += f"\n\nStrategic Framework:\n{strategy_framework}"
+    
+    if risk_parameters:
+        risk_section = "\n\nRisk Management Parameters:\n"
+        for key, value in risk_parameters.items():
+            risk_section += f"- {key}: {value}\n"
+        enhanced_template += risk_section
     
     return PromptTemplate(
         input_variables=input_variables,
-        template=full_template
+        template=enhanced_template
     )
 
-# Prompt Collection
-TRADING_PROMPTS = {
-    "market_analysis": MARKET_ANALYSIS_PROMPT,
-    "technical_analysis": TECHNICAL_ANALYSIS_PROMPT,
-    "trading_signal": TRADING_SIGNAL_PROMPT,
-    "entry_decision": ENTRY_DECISION_PROMPT,
-    "risk_assessment": RISK_ASSESSMENT_PROMPT,
-    "position_sizing": POSITION_SIZING_PROMPT,
-    "portfolio_review": PORTFOLIO_REVIEW_PROMPT,
-    "rebalancing": REBALANCING_PROMPT,
-    "token_research": TOKEN_RESEARCH_PROMPT,
-    "sentiment_analysis": SENTIMENT_ANALYSIS_PROMPT,
-    "performance_analysis": PERFORMANCE_ANALYSIS_PROMPT
+# ============================================================================
+# ENHANCED PROMPT COLLECTION
+# ============================================================================
+
+ENHANCED_TRADING_PROMPTS = {
+    "structured_strategy": STRUCTURED_TRADING_STRATEGY_PROMPT,
+    "comprehensive_analysis": COMPREHENSIVE_MARKET_ANALYSIS_PROMPT,
+    "strategic_entry": STRATEGIC_ENTRY_DECISION_PROMPT,
+    "quantitative_risk": QUANTITATIVE_RISK_ASSESSMENT_PROMPT,
+    "comprehensive_research": COMPREHENSIVE_RESEARCH_PROMPT,
+    "strategic_portfolio": STRATEGIC_PORTFOLIO_REVIEW_PROMPT,
+    "real_time_sentiment": REAL_TIME_SENTIMENT_ANALYSIS_PROMPT,
+    "advanced_technical": ADVANCED_TECHNICAL_ANALYSIS_PROMPT
 }
 
-def get_prompt(prompt_name: str) -> PromptTemplate:
+def get_enhanced_prompt(prompt_name: str) -> PromptTemplate:
     """
-    Get a prompt template by name
+    Get an enhanced prompt template by name
     
     Args:
-        prompt_name: Name of the prompt template
+        prompt_name: Name of the enhanced prompt template
     
     Returns:
         PromptTemplate object
@@ -314,16 +519,62 @@ def get_prompt(prompt_name: str) -> PromptTemplate:
     Raises:
         KeyError: If prompt name doesn't exist
     """
-    if prompt_name not in TRADING_PROMPTS:
-        raise KeyError(f"Prompt '{prompt_name}' not found. Available prompts: {list(TRADING_PROMPTS.keys())}")
+    if prompt_name not in ENHANCED_TRADING_PROMPTS:
+        raise KeyError(f"Enhanced prompt '{prompt_name}' not found. Available prompts: {list(ENHANCED_TRADING_PROMPTS.keys())}")
     
-    return TRADING_PROMPTS[prompt_name]
+    return ENHANCED_TRADING_PROMPTS[prompt_name]
 
-def list_available_prompts() -> list:
+def list_enhanced_prompts() -> list:
     """
-    Get list of available prompt names
+    Get list of available enhanced prompt names
     
     Returns:
-        List of prompt names
+        List of enhanced prompt names
     """
-    return list(TRADING_PROMPTS.keys())
+    return list(ENHANCED_TRADING_PROMPTS.keys())
+
+# ============================================================================
+# INFORMATION SOURCES AND DATA COLLECTION
+# ============================================================================
+
+INFORMATION_SOURCES = {
+    "news_apis": [
+        "NewsAPI.org",
+        "Alpha Vantage News",
+        "CryptoCompare News",
+        "CoinGecko News"
+    ],
+    "social_media": [
+        "Twitter/X API",
+        "Reddit API",
+        "Telegram Channels",
+        "Discord Servers"
+    ],
+    "technical_data": [
+        "CoinGecko API",
+        "CoinMarketCap API",
+        "Binance API",
+        "Coinbase API"
+    ],
+    "on_chain_data": [
+        "Etherscan API",
+        "Glassnode API",
+        "Santiment API",
+        "Messari API"
+    ],
+    "expert_opinions": [
+        "Bloomberg Terminal",
+        "Reuters",
+        "CoinDesk",
+        "The Block"
+    ]
+}
+
+def get_information_sources() -> Dict[str, List[str]]:
+    """
+    Get available information sources for data collection
+    
+    Returns:
+        Dictionary of information source categories
+    """
+    return INFORMATION_SOURCES
