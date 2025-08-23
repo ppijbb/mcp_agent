@@ -7,8 +7,7 @@ BGG API를 활용하여 게임 정보를 수집하고 분석하는 에이전트
 from typing import Dict, List, Any, Optional
 import json
 from ..core.agent_base import BaseAgent
-from ..core.error_handler import handle_errors, ErrorSeverity, ErrorCategory
-from ..core.cache_manager import cached
+from ..core.core_system import handle_errors, cached, monitor_performance, ErrorSeverity, ErrorCategory
 
 
 class GameAnalyzerAgent(BaseAgent):
@@ -235,6 +234,7 @@ class GameAnalyzerAgent(BaseAgent):
         return datetime.now().isoformat()
 
     @cached(key_prefix="game_analysis", ttl_seconds=3600)  # 1시간 캐싱
+    @monitor_performance("game_analysis_time")
     async def analyze_specific_game(self, game_name: str, player_count: int = 4) -> Dict[str, Any]:
         """
         특정 게임 분석을 위한 편의 메서드
