@@ -7,6 +7,8 @@ BGG API를 활용하여 게임 정보를 수집하고 분석하는 에이전트
 from typing import Dict, List, Any, Optional
 import json
 from ..core.agent_base import BaseAgent
+from ..core.error_handler import handle_errors, ErrorSeverity, ErrorCategory
+from ..core.cache_manager import cached
 
 
 class GameAnalyzerAgent(BaseAgent):
@@ -24,6 +26,7 @@ class GameAnalyzerAgent(BaseAgent):
         super().__init__(llm_client, mcp_client, agent_id)
         self.supported_sources = ["bgg", "tabletopia", "manual"]
         
+    @handle_errors(severity=ErrorSeverity.MEDIUM, category=ErrorCategory.AGENT_ERROR)
     async def perceive(self, environment: Dict[str, Any]) -> Dict[str, Any]:
         """
         게임 분석을 위한 환경 인식
@@ -76,6 +79,7 @@ class GameAnalyzerAgent(BaseAgent):
                 "game_query": game_query
             }
     
+    @handle_errors(severity=ErrorSeverity.HIGH, category=ErrorCategory.LLM_ERROR)
     async def reason(self, perception: Dict[str, Any]) -> Dict[str, Any]:
         """
         LLM 기반 게임 분석 및 추론
@@ -146,6 +150,7 @@ class GameAnalyzerAgent(BaseAgent):
                 "error": f"LLM 분석 실패: {str(e)}"
             }
     
+    @handle_errors(severity=ErrorSeverity.MEDIUM, category=ErrorCategory.AGENT_ERROR)
     async def act(self, reasoning: Dict[str, Any]) -> Dict[str, Any]:
         """
         게임 분석 결과를 정리하고 다음 단계 준비
@@ -229,6 +234,7 @@ class GameAnalyzerAgent(BaseAgent):
         from datetime import datetime
         return datetime.now().isoformat()
 
+    @cached(key_prefix="game_analysis", ttl_seconds=3600)  # 1시간 캐싱
     async def analyze_specific_game(self, game_name: str, player_count: int = 4) -> Dict[str, Any]:
         """
         특정 게임 분석을 위한 편의 메서드
