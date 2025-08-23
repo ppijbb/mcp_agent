@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any, Annotated
 from datetime import datetime
 import json
 
+from typing import Dict, List, Optional, Any, TypedDict, Annotated
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
@@ -23,9 +24,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field, field_validator
 
 from .gemini_agent import GeminiAgent
-from .mcp_client import MCPClient
-from .database import TradingDatabase
-from .config import Config
+from ..utils.mcp_client import MCPClient
+from ..utils.database import TradingDatabase
+from ..utils.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +72,42 @@ class TradingDecision(BaseModel):
             raise ValueError('Amount must be non-negative')
         return v
 
-class LangChainTradingAgent:
+class TradingAgentChain:
     """Enhanced trading agent using LangChain 0.3.0 and LangGraph features"""
     
+    class WorkflowState(TypedDict, total=False):
+        """State for LangGraph workflow with enhanced validation"""
+        messages: List[HumanMessage]
+        market_data: Optional[Dict[str, Any]]
+        analysis_result: Optional[Dict[str, Any]]
+        trading_decision: Optional[Dict[str, Any]]
+        execution_result: Optional[Dict[str, Any]]
+        mcp_operations: List[Dict[str, Any]]
+        errors: List[str]
+        workflow_step: str
+        retry_count: int
+    
+    # Create Pydantic model for validation
+    class WorkflowStateValidator(BaseModel):
+        """Pydantic validator for WorkflowState"""
+        messages: List[HumanMessage] = Field(default_factory=list)
+        market_data: Optional[Dict[str, Any]] = None
+        analysis_result: Optional[Dict[str, Any]] = None
+        trading_decision: Optional[Dict[str, Any]] = None
+        execution_result: Optional[Dict[str, Any]] = None
+        mcp_operations: List[Dict[str, Any]] = Field(default_factory=list)
+        errors: List[str] = Field(default_factory=list)
+        workflow_step: str = Field(default="initialized")
+        retry_count: int = Field(default=0, ge=0, le=3)  # Max 3 retries
+        
+        @field_validator('workflow_step')
+        @classmethod
+        def validate_workflow_step(cls, v):
+            valid_steps = ['initialized', 'collecting', 'analyzing', 'assessing', 'deciding', 'executing', 'updating', 'completed', 'error']
+            if v not in valid_steps:
+                raise ValueError(f'Invalid workflow step: {v}')
+            return v
+
     def __init__(self, agent_name: str):
         """Initialize LangChain trading agent"""
         self.agent_name = agent_name
@@ -101,41 +135,76 @@ class LangChainTradingAgent:
         logger.info(f"LangChain + LangGraph trading agent {agent_name} initialized")
     
     def _setup_langchain_components(self):
-        """Setup LangChain 0.3.0 components"""
+        """Setup LangChain 0.3.0 components with enhanced error handling"""
         try:
-            # Create tools for the agent
-            self.tools = [
-                self._create_market_analysis_tool(),
-                self._create_trading_decision_tool(),
-                self._create_risk_assessment_tool(),
-                self._create_market_research_tool()
+            # Validate required components before setup
+            if not self.gemini_agent or not self.gemini_agent.model:
+                raise ValueError("Gemini agent not properly initialized")
+            
+            # Create tools for the agent with validation
+            tools = []
+            tool_creation_methods = [
+                self._create_market_analysis_tool,
+                self._create_trading_decision_tool,
+                self._create_risk_assessment_tool,
+                self._create_market_research_tool
             ]
             
-            # Create prompt template
+            for tool_method in tool_creation_methods:
+                try:
+                    tool = tool_method()
+                    if tool and hasattr(tool, 'name') and hasattr(tool, 'func'):
+                        tools.append(tool)
+                        logger.debug(f"Tool {tool.name} created successfully")
+                    else:
+                        logger.warning(f"Tool creation method {tool_method.__name__} returned invalid tool")
+                except Exception as tool_error:
+                    logger.error(f"Failed to create tool {tool_method.__name__}: {tool_error}")
+                    # Continue with other tools instead of failing completely
+            
+            if not tools:
+                raise ValueError("No valid tools could be created")
+            
+            self.tools = tools
+            logger.info(f"Created {len(tools)} valid tools")
+            
+            # Create prompt template with validation
+            system_prompt = self._get_system_prompt()
+            if not system_prompt or len(system_prompt.strip()) < 10:
+                raise ValueError("System prompt is invalid or too short")
+            
             self.prompt = ChatPromptTemplate.from_messages([
-                ("system", self._get_system_prompt()),
+                ("system", system_prompt),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{input}"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ])
             
-            # Create agent
+            # Create agent with validation
             self.agent = create_openai_tools_agent(
                 llm=self.gemini_agent.model,
                 tools=self.tools,
                 prompt=self.prompt
             )
             
-            # Create agent executor
+            if not self.agent:
+                raise ValueError("Failed to create agent")
+            
+            # Create agent executor with enhanced error handling
             self.agent_executor = AgentExecutor(
                 agent=self.agent,
                 tools=self.tools,
                 verbose=True,
-                handle_parsing_errors=True
+                handle_parsing_errors=True,
+                max_iterations=5,  # Prevent infinite loops
+                early_stopping_method="generate"  # Stop on generation errors
             )
             
             # Create output parser
             self.output_parser = JsonOutputParser()
+            
+            # Validate all components
+            self._validate_langchain_components()
             
             logger.info("LangChain components initialized successfully")
             
@@ -143,57 +212,109 @@ class LangChainTradingAgent:
             logger.error(f"Failed to setup LangChain components: {e}")
             raise
     
+    def _validate_langchain_components(self):
+        """Validate all LangChain components are properly initialized"""
+        validation_errors = []
+        
+        if not self.tools:
+            validation_errors.append("No tools available")
+        
+        if not self.prompt:
+            validation_errors.append("No prompt template")
+        
+        if not self.agent:
+            validation_errors.append("No agent created")
+        
+        if not self.agent_executor:
+            validation_errors.append("No agent executor")
+        
+        if not self.output_parser:
+            validation_errors.append("No output parser")
+        
+        if validation_errors:
+            error_msg = f"LangChain component validation failed: {', '.join(validation_errors)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+    
     def _setup_langgraph_workflow(self):
-        """Setup LangGraph workflow for enhanced MCP processing"""
+        """Setup LangGraph workflow for enhanced MCP processing with stability improvements"""
         try:
+            # Validate tools before creating tool executor
+            if not self.tools:
+                raise ValueError("Cannot create workflow without valid tools")
+            
             # Create tool executor for MCP operations
             self.tool_executor = ToolExecutor(self.tools)
             
-            # Define workflow state
-            class WorkflowState(BaseModel):
-                """State for LangGraph workflow"""
-                messages: List[HumanMessage] = Field(default_factory=list)
-                market_data: Optional[Dict] = None
-                analysis_result: Optional[Dict] = None
-                trading_decision: Optional[Dict] = None
-                execution_result: Optional[Dict] = None
-                mcp_operations: List[Dict] = Field(default_factory=list)
-                errors: List[str] = Field(default_factory=list)
-            
-            self.workflow_state = WorkflowState
+            # Define workflow state with TypedDict for better type safety
+
+            self.workflow_state = self.WorkflowState
             
             # Create state graph
-            self.workflow = StateGraph(WorkflowState)
+            self.workflow = StateGraph(self.WorkflowState)
             
-            # Add nodes for MCP-enhanced workflow
-            self.workflow.add_node("collect_market_data", self._collect_market_data_node)
-            self.workflow.add_node("analyze_market", self._analyze_market_node)
-            self.workflow.add_node("assess_risk", self._assess_risk_node)
-            self.workflow.add_node("make_decision", self._make_decision_node)
-            self.workflow.add_node("execute_trade", self._execute_trade_node)
-            self.workflow.add_node("update_database", self._update_database_node)
+            # Validate node methods exist before adding
+            node_methods = {
+                "collect_market_data": self._collect_market_data_node,
+                "analyze_market": self._analyze_market_node,
+                "assess_risk": self._assess_risk_node,
+                "make_decision": self._make_decision_node,
+                "execute_trade": self._execute_trade_node,
+                "update_database": self._update_database_node
+            }
             
-            # Define workflow edges
-            self.workflow.add_edge("collect_market_data", "analyze_market")
-            self.workflow.add_edge("analyze_market", "assess_risk")
-            self.workflow.add_edge("assess_risk", "make_decision")
-            self.workflow.add_edge("make_decision", "execute_trade")
-            self.workflow.add_edge("execute_trade", "update_database")
+            # Add nodes with validation
+            for node_name, node_method in node_methods.items():
+                if node_method and callable(node_method):
+                    self.workflow.add_node(node_name, node_method)
+                    logger.debug(f"Added workflow node: {node_name}")
+                else:
+                    raise ValueError(f"Invalid node method for {node_name}")
             
-            # Add conditional edges for error handling
-            self.workflow.add_conditional_edges(
-                "collect_market_data",
-                self._should_continue_workflow,
-                {
-                    "continue": "analyze_market",
-                    "error": "update_database"
-                }
-            )
+            # Define workflow edges with validation
+            edges = [
+                ("collect_market_data", "analyze_market"),
+                ("analyze_market", "assess_risk"),
+                ("assess_risk", "make_decision"),
+                ("make_decision", "execute_trade"),
+                ("execute_trade", "update_database")
+            ]
             
-            # Compile workflow
-            self.compiled_workflow = self.workflow.compile(
-                checkpointer=MemorySaver()
-            )
+            for from_node, to_node in edges:
+                try:
+                    self.workflow.add_edge(from_node, to_node)
+                    logger.debug(f"Added workflow edge: {from_node} -> {to_node}")
+                except Exception as edge_error:
+                    logger.error(f"Failed to add edge {from_node} -> {to_node}: {edge_error}")
+                    raise
+            
+            # Add conditional edges for error handling with validation
+            if hasattr(self, '_should_continue_workflow') and callable(self._should_continue_workflow):
+                self.workflow.add_conditional_edges(
+                    "collect_market_data",
+                    self._should_continue_workflow,
+                    {
+                        "continue": "analyze_market",
+                        "error": "update_database"
+                    }
+                )
+                logger.debug("Added conditional edges for error handling")
+            else:
+                logger.warning("Conditional edge method not available, using linear workflow")
+            
+            # Compile workflow with error handling
+            try:
+                self.compiled_workflow = self.workflow.compile(
+                    checkpointer=MemorySaver()
+                )
+                logger.info("LangGraph workflow compiled successfully")
+            except Exception as compile_error:
+                logger.error(f"Failed to compile workflow: {compile_error}")
+                raise
+            
+            # Validate compiled workflow
+            if not self.compiled_workflow:
+                raise ValueError("Workflow compilation failed - no compiled workflow available")
             
             logger.info("LangGraph workflow initialized successfully")
             
@@ -393,10 +514,14 @@ class LangChainTradingAgent:
             )
     
     async def execute_trading_cycle(self) -> Dict[str, Any]:
-        """Execute complete trading cycle using LangGraph workflow"""
+        """Execute complete trading cycle using LangGraph workflow with enhanced stability"""
         execution_id = None
         
         try:
+            # Validate workflow before execution
+            if not self.compiled_workflow:
+                raise ValueError("LangGraph workflow not properly compiled")
+            
             # Record execution start
             execution_id = self.database.record_agent_execution(
                 agent_name=self.agent_name,
@@ -405,26 +530,85 @@ class LangChainTradingAgent:
             
             logger.info(f"Starting LangGraph trading cycle {execution_id} for agent {self.agent_name}")
             
-            # Initialize workflow state
-            initial_state = self.workflow_state(
-                messages=[HumanMessage(content="Execute trading cycle")],
-                mcp_operations=[]
-            )
+            # Initialize workflow state with validation
+            try:
+                initial_state: TradingAgentChain.WorkflowState = {
+                    "messages": [HumanMessage(content="Execute trading cycle")],
+                    "mcp_operations": [],
+                    "workflow_step": "initialized",
+                    "retry_count": 0
+                }
+                
+                # Validate state using Pydantic validator
+                self.workflow_state_validator = TradingAgentChain.WorkflowStateValidator(**initial_state)
+                
+            except Exception as state_error:
+                raise ValueError(f"Failed to initialize workflow state: {state_error}")
             
-            # Execute LangGraph workflow
-            workflow_result = await self.compiled_workflow.ainvoke(initial_state)
+            # Execute LangGraph workflow with timeout and retry logic
+            max_retries = 3
+            retry_delay = 5  # seconds
             
-            # Extract results from workflow
-            market_data = workflow_result.get("market_data", {})
-            analysis_result = workflow_result.get("analysis_result", {})
-            trading_decision = workflow_result.get("trading_decision", {})
-            execution_result = workflow_result.get("execution_result", {})
-            mcp_operations = workflow_result.get("mcp_operations", [])
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f"Executing workflow attempt {attempt + 1}/{max_retries}")
+                    
+                    # Execute workflow with timeout
+                    workflow_result = await asyncio.wait_for(
+                        self.compiled_workflow.ainvoke(initial_state),
+                        timeout=300  # 5 minutes timeout
+                    )
+                    
+                    # Validate workflow result
+                    if not workflow_result:
+                        raise ValueError("Workflow returned empty result")
+                    
+                    # Extract and validate results from workflow
+                    market_data = workflow_result.get("market_data")
+                    analysis_result = workflow_result.get("analysis_result")
+                    trading_decision = workflow_result.get("trading_decision")
+                    execution_result = workflow_result.get("execution_result")
+                    mcp_operations = workflow_result.get("mcp_operations", [])
+                    errors = workflow_result.get("errors", [])
+                    
+                    # Check for critical errors
+                    if errors and len(errors) > 2:  # More than 2 errors is critical
+                        raise ValueError(f"Critical workflow errors: {errors[:3]}")  # Show first 3 errors
+                    
+                    # Validate critical data
+                    if not market_data or market_data.get("status") != "success":
+                        raise ValueError("Market data collection failed")
+                    
+                    if not analysis_result or analysis_result.get("status") != "success":
+                        raise ValueError("Market analysis failed")
+                    
+                    logger.info(f"Workflow execution successful on attempt {attempt + 1}")
+                    break
+                    
+                except asyncio.TimeoutError:
+                    logger.warning(f"Workflow execution timed out on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        raise ValueError("Workflow execution timed out after all retries")
+                        
+                except Exception as workflow_error:
+                    logger.warning(f"Workflow execution failed on attempt {attempt + 1}: {workflow_error}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        raise workflow_error
             
-            # Record results
-            self._record_execution_results(
-                execution_id, market_data, analysis_result, trading_decision, execution_result
-            )
+            # Record results with validation
+            try:
+                self._record_execution_results(
+                    execution_id, market_data, analysis_result, trading_decision, execution_result
+                )
+            except Exception as record_error:
+                logger.error(f"Failed to record execution results: {record_error}")
+                # Don't fail the entire execution for recording errors
             
             # Update execution status
             self.database.record_agent_execution(
@@ -435,7 +619,8 @@ class LangChainTradingAgent:
                     "analysis_result": analysis_result,
                     "trading_decision": trading_decision,
                     "execution_result": execution_result,
-                    "mcp_operations": mcp_operations
+                    "mcp_operations": mcp_operations,
+                    "execution_attempts": attempt + 1
                 }
             )
             
@@ -444,26 +629,36 @@ class LangChainTradingAgent:
                 "execution_id": execution_id,
                 "timestamp": datetime.now().isoformat(),
                 "workflow_result": workflow_result,
-                "mcp_operations_count": len(mcp_operations)
+                "mcp_operations_count": len(mcp_operations),
+                "execution_attempts": attempt + 1
             }
             
         except Exception as e:
             error_message = str(e)
             logger.error(f"LangGraph trading cycle failed: {error_message}")
             
-            # Record error
+            # Record error with detailed information
             if execution_id:
-                self.database.record_agent_execution(
-                    agent_name=self.agent_name,
-                    status="error",
-                    error_message=error_message
-                )
+                try:
+                    self.database.record_agent_execution(
+                        agent_name=self.agent_name,
+                        status="error",
+                        error_message=error_message,
+                        output_data={
+                            "error_type": type(e).__name__,
+                            "error_details": str(e),
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
+                except Exception as db_error:
+                    logger.error(f"Failed to record error to database: {db_error}")
             
             return {
                 "status": "error",
                 "execution_id": execution_id,
                 "timestamp": datetime.now().isoformat(),
-                "error_message": error_message
+                "error_message": error_message,
+                "error_type": type(e).__name__
             }
     
     async def _collect_market_data(self) -> Dict[str, Any]:
@@ -663,44 +858,101 @@ class LangChainTradingAgent:
             }
     
     # LangGraph workflow nodes
-    async def _collect_market_data_node(self, state: "WorkflowState") -> "WorkflowState":
-        """LangGraph node: Collect market data via MCP"""
+    async def _collect_market_data_node(self, state: WorkflowState) -> WorkflowState:
+        """LangGraph node: Collect market data via MCP with enhanced stability"""
         try:
-            async with self.mcp_client:
-                market_data = await self.mcp_client.batch_market_data()
+            # Update workflow step
+            state["workflow_step"] = "collecting"
+            
+            # Validate MCP client
+            if not self.mcp_client:
+                raise ValueError("MCP client not available")
+            
+            # Collect market data with timeout and validation
+            try:
+                async with self.mcp_client:
+                    market_data = await asyncio.wait_for(
+                        self.mcp_client.batch_market_data(),
+                        timeout=60  # 1 minute timeout for market data collection
+                    )
                 
-                if market_data["status"] == "success":
-                    state.market_data = market_data
-                    state.mcp_operations.append({
+                # Validate market data structure
+                if not market_data or not isinstance(market_data, dict):
+                    raise ValueError("Invalid market data structure received")
+                
+                if market_data.get("status") == "success":
+                    # Validate required data fields
+                    required_fields = ["ethereum_price", "market_trends", "technical_indicators"]
+                    missing_fields = [field for field in required_fields if field not in market_data]
+                    
+                    if missing_fields:
+                        raise ValueError(f"Missing required market data fields: {missing_fields}")
+                    
+                    # Validate data quality
+                    ethereum_price = market_data.get("ethereum_price", {})
+                    if ethereum_price.get("status") != "success":
+                        raise ValueError("Ethereum price data collection failed")
+                    
+                    state["market_data"] = market_data
+                    state["mcp_operations"].append({
                         "operation": "collect_market_data",
                         "status": "success",
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": datetime.now().isoformat(),
+                        "data_quality": "validated"
                     })
+                    
+                    logger.info("Market data collected and validated successfully")
+                    
                 else:
-                    state.errors.append(f"Failed to collect market data: {market_data.get('message', 'Unknown error')}")
-                    state.mcp_operations.append({
+                    error_msg = market_data.get('message', 'Unknown error')
+                    state["errors"].append(f"Failed to collect market data: {error_msg}")
+                    state["mcp_operations"].append({
                         "operation": "collect_market_data",
                         "status": "error",
-                        "error": market_data.get('message', 'Unknown error'),
+                        "error": error_msg,
                         "timestamp": datetime.now().isoformat()
                     })
-            
-            return state
-            
+                    
+                    # Don't proceed with invalid market data
+                    raise ValueError(f"Market data collection failed: {error_msg}")
+                    
+            except asyncio.TimeoutError:
+                timeout_error = "Market data collection timed out"
+                state["errors"].append(timeout_error)
+                state["mcp_operations"].append({
+                    "operation": "collect_market_data",
+                    "status": "timeout",
+                    "error": timeout_error,
+                    "timestamp": datetime.now().isoformat()
+                })
+                raise ValueError(timeout_error)
+                
         except Exception as e:
-            state.errors.append(f"Market data collection error: {str(e)}")
-            return state
+            error_msg = f"Market data collection error: {str(e)}"
+            state["errors"].append(error_msg)
+            state["mcp_operations"].append({
+                "operation": "collect_market_data",
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
+            logger.error(error_msg)
+            
+            # Update workflow step to error
+            state["workflow_step"] = "error"
+            
+        return state
     
-    async def _analyze_market_node(self, state: "WorkflowState") -> "WorkflowState":
+    async def _analyze_market_node(self, state: WorkflowState) -> WorkflowState:
         """LangGraph node: Analyze market conditions"""
         try:
-            if state.market_data and state.market_data["status"] == "success":
+            if state.get("market_data") and state["market_data"]["status"] == "success":
                 # Get historical trends
                 historical_trends = self.database.get_market_trends(hours=24)
                 
                 # Prepare data for analysis
-                ethereum_price = state.market_data["ethereum_price"]
-                market_trends = state.market_data["market_trends"]
+                ethereum_price = state["market_data"]["ethereum_price"]
+                market_trends = state["market_data"]["market_trends"]
                 
                 market_data_for_analysis = {
                     "price_usd": ethereum_price.get("primary_price_usd", 0),
@@ -717,22 +969,22 @@ class LangChainTradingAgent:
                     historical_trends
                 )
                 
-                state.analysis_result = analysis
-                state.mcp_operations.append({
+                state["analysis_result"] = analysis
+                state["mcp_operations"].append({
                     "operation": "analyze_market",
                     "status": "success",
                     "timestamp": datetime.now().isoformat()
                 })
             else:
-                state.errors.append("No market data available for analysis")
+                state["errors"].append("No market data available for analysis")
             
             return state
             
         except Exception as e:
-            state.errors.append(f"Market analysis error: {str(e)}")
+            state["errors"].append(f"Market analysis error: {str(e)}")
             return state
     
-    async def _assess_risk_node(self, state: "WorkflowState") -> "WorkflowState":
+    async def _assess_risk_node(self, state: WorkflowState) -> WorkflowState:
         """LangGraph node: Assess risk for potential trades"""
         try:
             # Get daily trading summary
@@ -764,7 +1016,7 @@ class LangChainTradingAgent:
             state.errors.append(f"Risk assessment error: {str(e)}")
             return state
     
-    async def _make_decision_node(self, state: "WorkflowState") -> "WorkflowState":
+    async def _make_decision_node(self, state: WorkflowState) -> WorkflowState:
         """LangGraph node: Make trading decision"""
         try:
             if state.analysis_result and state.analysis_result["status"] == "success":
@@ -804,7 +1056,7 @@ class LangChainTradingAgent:
             state.errors.append(f"Decision making error: {str(e)}")
             return state
     
-    async def _execute_trade_node(self, state: "WorkflowState") -> "WorkflowState":
+    async def _execute_trade_node(self, state: WorkflowState) -> WorkflowState:
         """LangGraph node: Execute trade decision"""
         try:
             if state.trading_decision and state.trading_decision["status"] == "success":
@@ -847,7 +1099,7 @@ class LangChainTradingAgent:
             state.errors.append(f"Trade execution error: {str(e)}")
             return state
     
-    async def _update_database_node(self, state: "WorkflowState") -> "WorkflowState":
+    async def _update_database_node(self, state: WorkflowState) -> WorkflowState:
         """LangGraph node: Update database with results"""
         try:
             # This node will be called after trade execution
@@ -864,8 +1116,44 @@ class LangChainTradingAgent:
             state.errors.append(f"Database update error: {str(e)}")
             return state
     
-    def _should_continue_workflow(self, state: "WorkflowState") -> str:
-        """Conditional edge function for workflow control"""
-        if state.errors:
+    def _should_continue_workflow(self, state: WorkflowState) -> str:
+        """Conditional edge function for workflow control with enhanced error handling"""
+        try:
+            # Check for critical errors
+            if state.get("errors"):
+                # Count different types of errors
+                error_types = {}
+                for error in state["errors"]:
+                    error_type = type(error).__name__ if hasattr(error, '__class__') else 'unknown'
+                    error_types[error_type] = error_types.get(error_type, 0) + 1
+                
+                # Log error summary
+                logger.warning(f"Workflow errors detected: {error_types}")
+                
+                # Check if we should retry
+                if state.get("retry_count", 0) < 3:
+                    logger.info(f"Attempting retry {state.get('retry_count', 0) + 1}/3")
+                    state["retry_count"] = state.get("retry_count", 0) + 1
+                    state["workflow_step"] = "retrying"
+                    return "continue"
+                else:
+                    logger.error("Maximum retry attempts reached, stopping workflow")
+                    state["workflow_step"] = "error"
+                    return "error"
+            
+            # Check workflow step progression
+            workflow_step = state.get("workflow_step", "unknown")
+            if workflow_step == "error":
+                return "error"
+            elif workflow_step == "completed":
+                return "completed"
+            elif workflow_step in ["initialized", "collecting", "analyzing", "assessing", "deciding", "executing", "updating"]:
+                return "continue"
+            else:
+                logger.warning(f"Unknown workflow step: {workflow_step}, continuing")
+                return "continue"
+                
+        except Exception as e:
+            logger.error(f"Error in workflow control logic: {e}")
+            state["workflow_step"] = "error"
             return "error"
-        return "continue"

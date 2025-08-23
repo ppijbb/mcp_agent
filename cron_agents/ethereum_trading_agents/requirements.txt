@@ -1,0 +1,140 @@
+# Ethereum Trading Agents - Requirements
+# LangChain-based modular trading system
+
+# Core LangChain dependencies
+langchain>=0.3.27
+langchain-community>=0.3.27
+langchain-core>=0.3.74
+langchain-openai>=0.3.31
+langchain-google-genai>=2.1.9
+
+# LLM providers
+openai>=1.101.0
+google-generativeai>=0.8.5
+anthropic>=0.64.0
+
+# Database and storage
+redis>=6.4.0
+aioredis>=2.0.1
+sqlalchemy>=2.0.43
+asyncpg>=0.30.0
+motor>=3.7.1
+
+# Async and concurrency
+asyncio-mqtt>=0.16.2
+aiohttp>=3.12.15
+httpx>=0.28.1
+uvloop>=0.21.0
+
+# Data processing and analysis
+pandas>=2.3.2
+numpy>=2.3.2
+scipy>=1.16.1
+scikit-learn>=1.7.1
+
+# Financial and trading
+ccxt>=4.5.1
+ta>=0.11.0
+yfinance>=0.2.65
+alpha-vantage>=3.0.0
+
+# Web scraping and data collection
+beautifulsoup4>=4.13.4
+requests>=2.32.5
+selenium>=4.35.0
+playwright>=1.54.0
+
+# Configuration and environment
+python-dotenv>=1.1.1
+pydantic>=2.11.7
+pydantic-settings>=2.10.1
+
+# Logging and monitoring
+structlog>=25.4.0
+prometheus-client>=0.22.1
+psutil>=7.0.0
+
+# Testing
+pytest>=8.4.1
+pytest-asyncio>=1.1.0
+pytest-cov>=6.2.1
+pytest-mock>=3.14.1
+
+# Development tools
+black>=25.1.0
+isort>=6.0.1
+flake8>=7.3.0
+mypy>=1.17.1
+
+# Documentation
+sphinx>=8.2.3
+sphinx-rtd-theme>=3.0.2
+
+# Security
+cryptography>=45.0.0
+PyJWT>=2.10.1
+passlib>=1.7.4
+
+# Cron and scheduling
+apscheduler>=3.11.0
+celery>=5.5.3
+
+# Message queues
+kombu>=5.5.4
+pika>=1.3.0
+
+# Cloud and deployment
+docker>=7.1.0
+kubernetes>=33.1.0
+helm>=0.4
+
+# Performance optimization
+orjson>=3.11.2
+ujson>=5.11.0
+msgpack>=1.1.1
+
+# Machine learning and AI
+torch>=2.8.0
+transformers>=4.55.0
+tensorflow>=2.20.0
+
+# Visualization
+matplotlib>=3.10.0
+seaborn>=0.13.2
+plotly>=6.3.0
+bokeh>=3.7.3
+
+# API frameworks
+fastapi>=0.116.1
+uvicorn>=0.35.0
+starlette>=0.47.2
+
+# CLI tools
+click>=8.2.1
+rich>=14.1.0
+tqdm>=4.67.1
+
+# Utilities
+python-dateutil>=2.9.0
+pytz>=2025.2
+tzdata>=2025.2
+
+# Network and protocols
+websockets>=15.0
+aiofiles>=24.1.0
+pathlib2>=2.3.7
+
+# Monitoring and observability
+opentelemetry-api>=1.36.0
+opentelemetry-sdk>=1.36.0
+jaeger-client>=4.8.0
+
+# Backup and recovery
+boto3>=1.40.15
+azure-storage-blob>=12.26.0
+google-cloud-storage>=3.3.0
+
+# Local development
+pre-commit>=4.3.0
+tox>=4.28.4
+coverage>=7.10.4

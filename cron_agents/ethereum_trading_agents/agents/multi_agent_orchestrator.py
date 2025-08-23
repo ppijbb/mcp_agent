@@ -13,8 +13,8 @@ import signal
 import sys
 
 from .trading_agent import TradingAgent
-from .database import TradingDatabase
-from .config import Config
+from ..utils.database import TradingDatabase
+from ..utils.config import Config
 
 logger = logging.getLogger(__name__)
 

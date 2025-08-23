@@ -10,9 +10,9 @@ from datetime import datetime
 import json
 
 from .gemini_agent import GeminiAgent
-from .mcp_client import MCPClient
-from .database import TradingDatabase
-from .config import Config
+from ..utils.mcp_client import MCPClient
+from ..utils.database import TradingDatabase
+from ..utils.config import Config
 
 logger = logging.getLogger(__name__)
 
