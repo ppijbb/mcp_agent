@@ -56,6 +56,25 @@ class DataCollector:
         if self.session:
             await self.session.close()
     
+    async def connect(self):
+        """Connect to data sources"""
+        try:
+            self.session = aiohttp.ClientSession()
+            logger.info("Data collector connected successfully")
+        except Exception as e:
+            logger.error(f"Failed to connect data collector: {e}")
+            raise
+    
+    async def close(self):
+        """Close data collector connection"""
+        try:
+            if self.session:
+                await self.session.close()
+                self.session = None
+                logger.info("Data collector connection closed")
+        except Exception as e:
+            logger.error(f"Error closing data collector: {e}")
+    
     async def collect_comprehensive_data(self, asset: str = "ETH") -> Dict[str, Any]:
         """Collect comprehensive data from all sources"""
         try:

@@ -50,6 +50,37 @@ MCP_ETHEREUM_TRADING_URL=http://localhost:3005
 # MCP Market Data Server
 MCP_MARKET_DATA_URL=http://localhost:3006
 
+# MCP Email Server (Optional - for email via MCP)
+MCP_EMAIL_URL=http://localhost:3007
+MCP_EMAIL_API_KEY=your_mcp_email_api_key_here
+
+# ============================================================================
+# EMAIL CONFIGURATION
+# ============================================================================
+
+# SMTP Configuration (Fallback if MCP email not available)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+EMAIL_ADDRESS=your_email@gmail.com
+EMAIL_PASSWORD=your_app_password_here
+SENDER_NAME=Ethereum Trading Agent
+
+# Email Recipients (comma-separated)
+EMAIL_RECIPIENTS=trader1@example.com,trader2@example.com
+
+# ============================================================================
+# TRADING MONITORING CONFIGURATION
+# ============================================================================
+
+# Monitoring Interval (seconds)
+MONITORING_INTERVAL_SECONDS=60
+
+# Report Generation Delay (seconds after transaction confirmation)
+REPORT_GENERATION_DELAY_SECONDS=30
+
+# Addresses to Monitor (comma-separated, leave empty to monitor all)
+MONITORING_ADDRESSES=0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6,0x1234567890123456789012345678901234567890
+
 # ============================================================================
 # DATA STORAGE
 # ============================================================================
@@ -102,50 +133,40 @@ REDDIT_CLIENT_SECRET=your_reddit_client_secret_here
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 
 # ============================================================================
-# EXPERT OPINIONS AND RESEARCH
+# LOGGING AND DEBUGGING
 # ============================================================================
 
-# Financial Research Platforms
-BLOOMBERG_API_KEY=your_bloomberg_key_here
-REUTERS_API_KEY=your_reuters_key_here
-COINDESK_API_KEY=your_coindesk_key_here
-
-# ============================================================================
-# ADVANCED FEATURES
-# ============================================================================
-
-# Machine Learning Models
-HUGGINGFACE_API_KEY=your_huggingface_key_here
-
-# Cloud Services
-AWS_ACCESS_KEY_ID=your_aws_access_key_here
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
-AWS_REGION=us-east-1
-
-# Monitoring and Analytics
-PROMETHEUS_ENDPOINT=http://localhost:9090
-GRAFANA_ENDPOINT=http://localhost:3000
-
-# ============================================================================
-# SECURITY AND MONITORING
-# ============================================================================
-
-# Logging Level
+# Log Level
 LOG_LEVEL=INFO
 
-# Security Settings
-ENABLE_AUDIT_LOGGING=true
-ENABLE_THREAT_DETECTION=true
-MAX_LOGIN_ATTEMPTS=5
+# Enable Debug Mode
+DEBUG_MODE=false
 
 # ============================================================================
-# PERFORMANCE OPTIMIZATION
+# PERFORMANCE AND SCALING
 # ============================================================================
 
-# Cache Settings
-CACHE_TTL_SECONDS=300
-MAX_CACHE_SIZE=1000
+# Maximum Concurrent Requests
+MAX_CONCURRENT_REQUESTS=10
 
-# Rate Limiting
-API_RATE_LIMIT_PER_MINUTE=60
-TRADING_RATE_LIMIT_PER_HOUR=100
+# Request Timeout (seconds)
+REQUEST_TIMEOUT=30
+
+# Cache TTL (seconds)
+CACHE_TTL=300
+
+# ============================================================================
+# SECURITY AND COMPLIANCE
+# ============================================================================
+
+# Enable Rate Limiting
+ENABLE_RATE_LIMITING=true
+
+# Rate Limit (requests per minute)
+RATE_LIMIT_PER_MINUTE=60
+
+# Enable IP Whitelisting
+ENABLE_IP_WHITELIST=false
+
+# Allowed IPs (comma-separated)
+ALLOWED_IPS=127.0.0.1,192.168.1.1

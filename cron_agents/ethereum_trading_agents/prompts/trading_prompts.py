@@ -506,7 +506,7 @@ ENHANCED_TRADING_PROMPTS = {
     "advanced_technical": ADVANCED_TECHNICAL_ANALYSIS_PROMPT
 }
 
-def get_enhanced_prompt(prompt_name: str) -> PromptTemplate:
+def get_prompt(prompt_name: str) -> PromptTemplate:
     """
     Get an enhanced prompt template by name
     
@@ -524,7 +524,7 @@ def get_enhanced_prompt(prompt_name: str) -> PromptTemplate:
     
     return ENHANCED_TRADING_PROMPTS[prompt_name]
 
-def list_enhanced_prompts() -> list:
+def list_available_prompts() -> list:
     """
     Get list of available enhanced prompt names
     

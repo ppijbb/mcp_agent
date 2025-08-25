@@ -4,6 +4,8 @@
 
 **🚀 LangChain 기반 모듈화된 아키텍처로 완전히 재구성되었습니다!**
 
+**📧 새로운 기능: 자동 거래 리포트 및 이메일 알림 시스템!**
+
 ## 🏗️ 새로운 모듈화된 아키텍처
 
 이 시스템은 이제 LangChain의 모범 사례를 따르는 완전히 모듈화된 구조를 가지고 있습니다:
@@ -14,6 +16,7 @@ ethereum_trading_agents/
 │   ├── trading_agent.py      # 핵심 거래 에이전트
 │   ├── gemini_agent.py       # Gemini 기반 분석 에이전트
 │   ├── langchain_agent.py    # LangChain 기반 에이전트
+│   ├── trading_report_agent.py # 거래 리포트 생성 에이전트
 │   └── multi_agent_orchestrator.py # 다중 에이전트 조율
 ├── chains/                    # LangChain 워크플로우 체인
 │   ├── trading_chain.py      # 거래 워크플로우 체인
@@ -26,7 +29,10 @@ ethereum_trading_agents/
 │   ├── database.py           # 데이터베이스 관리
 │   ├── mcp_client.py         # MCP 클라이언트
 │   ├── config.py             # 설정 관리
-│   └── cron_scheduler.py     # 크론 스케줄러
+│   ├── cron_scheduler.py     # 크론 스케줄러
+│   ├── email_service.py      # 이메일 서비스
+│   ├── trading_monitor.py    # 거래 모니터링
+│   └── data_collector.py     # 데이터 수집기
 ├── tests/                     # 테스트 스위트
 ├── main.py                   # 통합된 메인 진입점
 └── requirements.txt          # 의존성 파일
@@ -50,6 +56,15 @@ ethereum_trading_agents/
 - **TradingMemory**: Redis 기반 분산 메모리 시스템
 - **Custom Prompts**: 전문적인 거래 프롬프트 템플릿
 - **자동화된 워크플로우**: 15분마다 시장 분석, 일일 포트폴리오 리뷰, 주간 성과 분석
+
+### **🆕 새로운 이메일 리포트 및 모니터링 기능**
+- **실시간 거래 모니터링**: 블록체인에서 거래 발생 시 자동 감지
+- **상세한 거래 리포트**: "언제", "어떤 거래", "얼마나", "왜" 정보를 포함한 포괄적인 분석
+- **자동 이메일 알림**: 거래 발생 시 즉시 알림 및 상세 리포트 전송
+- **MCP 이메일 연동**: MCP 서버를 통한 이메일 전송 (SMTP 폴백 지원)
+- **일일/주간/월간 요약**: 정기적인 포트폴리오 성과 리포트
+- **리스크 분석**: 거래별 리스크 평가 및 권장사항 제공
+- **시장 컨텍스트 분석**: 거래 시점의 시장 상황 및 전략적 요인 분석
 
 ## 🏗️ 시스템 아키텍처
 
@@ -77,6 +92,14 @@ ethereum_trading_agents/
                        │ - 컨텍스트 저장   │         │ - 실행 기록      │
                        │ - Redis 백업     │         │ - 거래 데이터    │
                        └─────────────────┘         └─────────────────┘
+                                │                             │
+                                ▼                             ▼
+                       ┌─────────────────┐         ┌─────────────────┐
+                       │ TradingMonitor  │         │ EmailService    │
+                       │                 │         │                 │
+                       │ - 거래 모니터링   │         │ - 이메일 전송    │
+                       │ - 리포트 생성      │         │ - MCP 연동      │
+                       └─────────────────┘         └─────────────────┘
 ```
 
 ### **에이전트 구조**
@@ -87,7 +110,50 @@ ethereum_trading_agents/
 │ - 전통적 거래 로직 │    │ - AI 기반 분석    │    │ - LangChain 통합  │
 │ - 리스크 관리      │    │ - 감정 분석      │    │ - 체인 실행        │
 └──────────────────┘    └─────────────────┘    └───────────────────┘
+
+┌──────────────────┐    ┌─────────────────┐
+│ TradingReport    │    │ TradingMonitor  │
+│ Agent            │    │                 │
+│                  │    │                 │
+│ - 리포트 생성      │    │ - 거래 모니터링   │
+│ - 분석 로직       │    │ - 자동 알림      │
+└──────────────────┘    └─────────────────┘
 ```
+
+## 📧 이메일 리포트 시스템
+
+### **거래 발생 시 자동 알림**
+- **즉시 알림**: 거래 확인 후 30초 내 이메일 전송
+- **상세 리포트**: 거래 후 포괄적인 분석 리포트 전송
+- **HTML + 텍스트**: 모든 이메일 클라이언트 호환
+
+### **포함 정보**
+1. **언제 (When)**: 거래 실행 시간, 블록 번호, 타임스탬프
+2. **어떤 거래 (What)**: 거래 유형, 스마트 컨트랙트 상호작용 여부
+3. **얼마나 (How Much)**: 거래 금액, 가스 사용량, 가스 가격
+4. **왜 (Why)**: 시장 분석, 기술적 지표, 뉴스 영향, 전략적 요인
+
+### **이메일 전송 방식**
+- **1순위**: MCP 서버를 통한 이메일 전송
+- **2순위**: SMTP를 통한 직접 이메일 전송
+- **자동 폴백**: MCP 실패 시 자동으로 SMTP 사용
+
+## 🔍 거래 모니터링 시스템
+
+### **실시간 모니터링**
+- **블록 단위 스캔**: 새로운 블록마다 거래 확인
+- **주소 필터링**: 특정 주소만 모니터링 가능
+- **중복 방지**: 이미 처리된 거래 재처리 방지
+
+### **자동 리포트 생성**
+- **거래별 리포트**: 각 거래마다 개별 상세 리포트
+- **일일 요약**: 매일 자정 자동 생성 및 전송
+- **주간/월간 요약**: 정기적인 성과 분석 리포트
+
+### **리스크 관리**
+- **실시간 리스크 평가**: 거래별 리스크 점수 계산
+- **권장사항 제공**: 리스크 완화 전략 제시
+- **포트폴리오 모니터링**: 전체 포트폴리오 리스크 추적
 
 ## 📦 설치 및 설정
 
@@ -98,273 +164,226 @@ pip install -r requirements.txt
 ```
 
 **참고**: 
-- `google-generativeai` 라이브러리는 더 이상 사용되지 않으며, `google-genai`로 업데이트되었습니다. 이는 Google의 최신 생성형 AI 라이브러리입니다.
-- **LangChain 0.3.0**을 사용하므로 Python 3.9 이상이 필요합니다.
-- Pydantic 2.0을 사용하여 향상된 데이터 검증을 제공합니다.
+- Python 3.9+ 필요
+- LangChain 0.3.0+ 호환성 확인
+- Redis 서버 실행 필요
 
 ### 2. 환경 변수 설정
 
-`.env` 파일을 생성하고 다음 내용을 설정하세요:
-
 ```bash
-# Gemini API
-GEMINI_API_KEY=your_gemini_api_key_here
+# .env 파일 생성
+cp env_example.txt .env
 
-# OpenAI API (LangChain용)
-OPENAI_API_KEY=your_openai_api_key_here
+# 필수 설정값 입력
+GEMINI_API_KEY=your_gemini_api_key
+ETHEREUM_RPC_URL=your_ethereum_rpc_url
+ETHEREUM_PRIVATE_KEY=your_private_key
+ETHEREUM_ADDRESS=your_ethereum_address
 
-# Ethereum Configuration
-ETHEREUM_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
-ETHEREUM_PRIVATE_KEY=your_private_key_here
-ETHEREUM_ADDRESS=your_ethereum_address_here
+# 이메일 설정
+EMAIL_ADDRESS=your_email@gmail.com
+EMAIL_PASSWORD=your_app_password
+EMAIL_RECIPIENTS=trader1@example.com,trader2@example.com
 
-# Trading Configuration
-MIN_TRADE_AMOUNT_ETH=0.01
-MAX_TRADE_AMOUNT_ETH=1.0
-STOP_LOSS_PERCENT=5.0
-TAKE_PROFIT_PERCENT=10.0
-
-# Risk Management
-MAX_DAILY_TRADES=10
-MAX_DAILY_LOSS_ETH=0.1
-
-# MCP Server URLs
+# MCP 서버 설정
 MCP_ETHEREUM_TRADING_URL=http://localhost:3005
 MCP_MARKET_DATA_URL=http://localhost:3006
+MCP_EMAIL_URL=http://localhost:3007
+MCP_EMAIL_API_KEY=your_mcp_email_api_key
 
-# Redis Configuration
-REDIS_URL=redis://localhost:6379
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost/trading_db
+# 모니터링 설정
+MONITORING_ADDRESSES=0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6
+MONITORING_INTERVAL_SECONDS=60
+REPORT_GENERATION_DELAY_SECONDS=30
 ```
 
-### 3. MCP 서버 실행
+### 3. 시스템 실행
 
-#### 이더리움 거래 MCP 서버
 ```bash
-cd mcp_servers/ethereum_trading_mcp
-python server.py
-```
+# 메인 시스템 실행
+python -m ethereum_trading_agents.main
 
-#### 시장 데이터 MCP 서버
-```bash
-cd mcp_servers/market_data_mcp
-python server.py
-```
-
-## 🎯 사용법
-
-### 1. 기본 시스템 실행
-```bash
-# 시스템 실행
+# 또는 직접 실행
 python main.py
 ```
 
-### 2. LangChain 체인 사용
+## 🚀 사용법
+
+### **자동 모니터링 시작**
+시스템 실행 시 자동으로 거래 모니터링이 시작됩니다:
+
 ```python
-from chains import TradingChain, AnalysisChain
-
-# 시장 분석
-analysis_results = await analysis_chain.execute_comprehensive_analysis(
-    market_data=market_data,
-    analysis_type="technical"
-)
-
-# 거래 워크플로우
-workflow_results = await trading_chain.execute_trading_workflow(
-    market_data=market_data,
-    trading_strategy="momentum",
-    portfolio_status=portfolio_status
-)
-```
-
-### 3. 메모리 관리
-```python
-from memory import TradingMemory, MemoryType
-
-# 컨텍스트 저장
-await memory.store(
-    key="current_strategy",
-    value=trading_strategy,
-    memory_type=MemoryType.TRADING_CONTEXT
-)
-
-# 컨텍스트 검색
-strategy = await memory.retrieve(
-    key="current_strategy",
-    memory_type=MemoryType.TRADING_CONTEXT
-)
-```
-
-### 4. 커스텀 프롬프트 사용
-```python
-from prompts import get_prompt, create_custom_prompt
-
-# 미리 정의된 프롬프트 사용
-market_prompt = get_prompt("market_analysis")
-risk_prompt = get_prompt("risk_assessment")
-
-# 커스텀 프롬프트 생성
-custom_prompt = create_custom_prompt(
-    template="Analyze {data} for {purpose}",
-    input_variables=["data", "purpose"],
-    system_message="You are a trading expert"
-)
-```
-
-## 🔄 자동화된 워크플로우
-
-### 크론 작업
-시스템은 다음 자동화된 작업을 포함합니다:
-
-- **시장 분석**: 15분마다 실행
-- **포트폴리오 리뷰**: 매일 오전 9시
-- **성과 분석**: 매주 일요일 오전 10시
-
-### 커스텀 자동화
-```python
-# 커스텀 크론 작업 추가
-await cron_scheduler.add_job(
-    func=your_function,
-    trigger="interval",
-    minutes=30,
-    id="custom_job"
-)
-```
-
-## 📊 시스템 모니터링
-
-### 시스템 상태 확인
-```python
+# 시스템 상태 확인
 status = await system.get_system_status()
-print(f"시스템: {status['status']}")
-print(f"컴포넌트: {status['components']}")
-print(f"메모리 사용률: {status['memory_stats']['memory_usage_percent']}%")
+print(f"Trading Monitor: {status['components']['trading_monitor']}")
+print(f"Email Service: {status['components']['email_service']}")
 ```
 
-### 성능 지표
-- 응답 시간 추적
-- 메모리 사용량 모니터링
-- 오류율 분석
-- 에이전트 성능 지표
+### **수동 리포트 생성**
+특정 거래에 대한 리포트를 수동으로 생성:
 
-## 🧪 테스트
+```python
+# 특정 거래 해시로 리포트 생성
+report = await system.trading_monitor.force_report_generation(
+    "0x1234567890abcdef..."
+)
 
-### 테스트 실행
+# 이메일로 전송
+success = await system.trading_report_agent.send_report_email(
+    "0x1234567890abcdef..."
+)
+```
+
+### **모니터링 상태 확인**
+```python
+# 모니터링 상태 조회
+monitor_status = system.trading_monitor.get_monitoring_status()
+print(f"Active: {monitor_status['monitoring_active']}")
+print(f"Processed Transactions: {monitor_status['processed_transactions_count']}")
+print(f"Daily Trades: {monitor_status['daily_trades_count']}")
+```
+
+### **거래 히스토리 조회**
+```python
+# 전체 거래 히스토리
+history = await system.trading_monitor.get_transaction_history(limit=50)
+
+# 특정 주소 거래 히스토리
+address_history = await system.trading_monitor.get_transaction_history(
+    address="0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    limit=20
+)
+```
+
+## 📊 리포트 예시
+
+### **거래 알림 이메일**
+```
+제목: ⚡ Ethereum Transaction Executed - 0x1234567890...
+
+내용:
+- Transaction Hash: 0x1234567890abcdef...
+- Status: Confirmed
+- Amount: 1.5 ETH
+- Gas Used: 21,000
+- Timestamp: 2024-01-15 14:30:25
+```
+
+### **상세 거래 리포트**
+```
+제목: 🚀 Ethereum Trading Report - 2024-01-15 14:30
+
+내용:
+📊 Transaction Summary
+- Block Number: 18,456,789
+- From/To Addresses
+- Value: 1.5 ETH
+- Gas Details
+
+🔍 Market Analysis
+- Current ETH Price: $2,850
+- 24h Change: +3.2%
+- Market Sentiment: Bullish
+- Technical Indicators: RSI 45.2, MACD Bullish
+
+💡 Trading Insights
+- Trade executed based on: Positive market sentiment indicating upward momentum; RSI indicates oversold conditions, potential buying opportunity
+- Risk Level: Medium
+- Recommendations: Standard risk management practices apply
+```
+
+### **일일 요약 리포트**
+```
+제목: 📊 Daily Trading Summary - 2024-01-15
+
+내용:
+📈 Portfolio Summary
+- Total Trades: 8
+- Successful Trades: 7
+- Total Volume: 12.5 ETH
+- Success Rate: 87.5%
+
+🔄 Today's Trades
+- 상세 거래 목록 테이블
+```
+
+## 🔧 고급 설정
+
+### **모니터링 주소 설정**
 ```bash
-# 모든 테스트 실행
-pytest
+# 특정 주소만 모니터링
+MONITORING_ADDRESSES=0x1234...,0x5678...,0x9abc...
 
-# 커버리지와 함께 실행
-pytest --cov=.
-
-# 특정 테스트 파일 실행
-pytest tests/test_trading_agent.py
-
-# 비동기 테스트 실행
-pytest --asyncio-mode=auto
+# 모든 주소 모니터링 (빈 값)
+MONITORING_ADDRESSES=
 ```
 
-## 🔒 보안 기능
-
-- 암호화된 데이터 저장
-- 보안 API 통신
-- 역할 기반 접근 제어
-- 감사 로깅
-- 입력 검증
-
-## 🚀 배포
-
-### Docker
+### **리포트 생성 지연 시간 조정**
 ```bash
-# 이미지 빌드
-docker build -t ethereum-trading-agents .
-
-# 컨테이너 실행
-docker run -d \
-  --name trading-agents \
-  --env-file .env \
-  -p 8000:8000 \
-  ethereum-trading-agents
+# 거래 확인 후 리포트 생성까지 대기 시간 (초)
+REPORT_GENERATION_DELAY_SECONDS=60
 ```
 
-### Kubernetes
+### **모니터링 간격 조정**
 ```bash
-# 배포 적용
-kubectl apply -f k8s/deployment.yaml
-
-# 서비스 적용
-kubectl apply -f k8s/service.yaml
+# 블록 스캔 간격 (초)
+MONITORING_INTERVAL_SECONDS=30
 ```
 
-## 📈 성능 최적화
-
-- Async/await 패턴
-- Redis 캐싱
-- 연결 풀링
-- 백그라운드 작업 처리
-- 메모리 최적화
-
-## 🤝 기여
-
-### 개발 설정
+### **이메일 수신자 관리**
 ```bash
-# 개발 의존성 설치
-pip install -r requirements-dev.txt
+# 여러 수신자 설정 (쉼표로 구분)
+EMAIL_RECIPIENTS=trader1@company.com,trader2@company.com,manager@company.com
 
-# pre-commit 훅 설정
-pre-commit install
-
-# 코드 포맷팅
-black .
-isort .
-
-# 린팅
-flake8
-mypy .
+# 개별 수신자별 맞춤 설정 가능
 ```
 
-### 코드 표준
-- PEP 8 준수
-- 타입 힌트 사용
-- 포괄적인 테스트 작성
-- 모든 함수 문서화
-- LangChain 패턴 준수
+## 🛠️ 문제 해결
 
-## 📚 문서
+### **이메일 전송 실패**
+1. **MCP 이메일 서버 확인**: `MCP_EMAIL_URL` 및 `MCP_EMAIL_API_KEY` 설정 확인
+2. **SMTP 설정 확인**: Gmail 앱 비밀번호 사용 권장
+3. **방화벽 설정**: 포트 587 (SMTP) 및 3007 (MCP) 열기
 
-- [LangChain Documentation](https://python.langchain.com/)
-- [에이전트 아키텍처 가이드](docs/agents.md)
-- [체인 개발 가이드](docs/chains.md)
-- [메모리 시스템 가이드](docs/memory.md)
-- [API 참조](docs/api.md)
+### **모니터링이 작동하지 않음**
+1. **환경 변수 확인**: `MONITORING_ADDRESSES` 설정 확인
+2. **로그 확인**: `ethereum_trading.log` 파일에서 오류 메시지 확인
+3. **네트워크 연결**: 이더리움 RPC 및 MCP 서버 연결 상태 확인
 
-## 🆘 지원
+### **리포트 생성 실패**
+1. **API 키 확인**: 모든 필요한 API 키가 설정되어 있는지 확인
+2. **데이터 수집기 상태**: `DataCollector` 연결 상태 확인
+3. **메모리 사용량**: 시스템 리소스 부족 여부 확인
 
-### 문제 해결
-- 로그에서 오류 메시지 확인
-- 환경 변수 검증
-- Redis 및 데이터베이스 실행 확인
-- API 키 유효성 확인
+## 🔮 향후 개발 계획
 
-### 일반적인 문제
-1. **연결 오류**: 데이터베이스 및 Redis URL 확인
-2. **API 오류**: API 키 설정 확인
-3. **메모리 문제**: Redis 메모리 사용량 모니터링
-4. **성능 문제**: 비동기 패턴 및 캐싱 확인
+### **단기 계획 (1-2개월)**
+- [ ] 웹 대시보드 추가
+- [ ] 모바일 알림 앱 개발
+- [ ] 고급 차트 및 분석 도구
 
-## 📄 라이선스
+### **중기 계획 (3-6개월)**
+- [ ] 다중 체인 지원 (Polygon, BSC 등)
+- [ ] AI 기반 거래 전략 최적화
+- [ ] 실시간 포트폴리오 분석
 
-이 프로젝트는 MIT 라이선스 하에 제공됩니다 - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+### **장기 계획 (6개월+)**
+- [ ] 기관급 거래 시스템
+- [ ] 규제 준수 및 감사 기능
+- [ ] 글로벌 거래소 연동
 
-## 🙏 감사의 말
+## 📞 지원 및 문의
 
-- LangChain 팀의 훌륭한 프레임워크
-- OpenAI, Google, Anthropic의 LLM API
-- 오픈소스 거래 커뮤니티
-- 기여자 및 유지보수자
+### **기술 지원**
+- **GitHub Issues**: 버그 리포트 및 기능 요청
+- **Documentation**: 상세한 API 문서 및 사용법
+- **Community**: 개발자 커뮤니티 및 포럼
+
+### **상업적 지원**
+- **Enterprise Solutions**: 기업용 맞춤 솔루션
+- **Consulting**: 거래 시스템 설계 및 최적화
+- **Training**: 팀 교육 및 워크샵
 
 ---
 
-**참고**: 이는 프로덕션 준비가 완료된 거래 시스템입니다. 실제 자금으로 사용하기 전에 안전한 환경에서 충분히 테스트하세요.
+**⚠️ 주의사항**: 이 시스템은 교육 및 연구 목적으로 제작되었습니다. 실제 거래에 사용하기 전에 충분한 테스트와 검증이 필요합니다. 암호화폐 거래는 높은 위험을 수반하므로 신중하게 접근하시기 바랍니다.

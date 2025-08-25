@@ -3,6 +3,7 @@ MCP Client for communicating with Ethereum Trading and Market Data servers
 """
 
 import aiohttp
+import os
 import json
 import logging
 from typing import Dict, List, Optional, Any
@@ -12,10 +13,10 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 class MCPClient:
-    def __init__(self, ethereum_trading_url: str, market_data_url: str):
+    def __init__(self, ethereum_trading_url: str = None, market_data_url: str = None):
         """Initialize MCP client"""
-        self.ethereum_trading_url = ethereum_trading_url
-        self.market_data_url = market_data_url
+        self.ethereum_trading_url = ethereum_trading_url or os.getenv("MCP_ETHEREUM_TRADING_URL", "http://localhost:3005")
+        self.market_data_url = market_data_url or os.getenv("MCP_MARKET_DATA_URL", "http://localhost:3006")
         self.session = None
     
     async def __aenter__(self):
@@ -25,6 +26,25 @@ class MCPClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
+    
+    async def connect(self):
+        """Connect to MCP servers"""
+        try:
+            self.session = aiohttp.ClientSession()
+            logger.info("MCP client connected successfully")
+        except Exception as e:
+            logger.error(f"Failed to connect MCP client: {e}")
+            raise
+    
+    async def close(self):
+        """Close MCP client connection"""
+        try:
+            if self.session:
+                await self.session.close()
+                self.session = None
+                logger.info("MCP client connection closed")
+        except Exception as e:
+            logger.error(f"Error closing MCP client: {e}")
     
     async def get_ethereum_balance(self, address: str) -> Dict[str, Any]:
         """Get Ethereum balance via MCP"""

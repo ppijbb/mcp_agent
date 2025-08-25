@@ -30,6 +30,7 @@ from .agents.multi_agent_orchestrator import MultiAgentOrchestrator
 from .agents.trading_agent import TradingAgent
 from .agents.langchain_agent import TradingAgentChain
 from .agents.gemini_agent import GeminiAgent
+from .agents.trading_report_agent import TradingReportAgent
 from .chains.trading_chain import TradingChain
 from .chains.analysis_chain import AnalysisChain
 from .memory.trading_memory import TradingMemory
@@ -38,6 +39,8 @@ from .utils.config import Config
 from .utils.database import TradingDatabase
 from .utils.mcp_client import MCPClient
 from .utils.cron_scheduler import CronScheduler
+from .utils.email_service import EmailService
+from .utils.trading_monitor import TradingMonitor
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +66,9 @@ class EthereumTradingSystem:
         self.agents = {}
         self.chains = {}
         self.orchestrator = None
+        self.email_service = None
+        self.trading_monitor = None
+        self.trading_report_agent = None
         
     async def initialize_system(self):
         """Initialize all system components"""
@@ -79,6 +85,12 @@ class EthereumTradingSystem:
             await self.mcp_client.connect()
             logger.info("MCP client initialized successfully")
             
+            # Initialize data collector
+            from .utils.data_collector import DataCollector
+            self.data_collector = DataCollector()
+            await self.data_collector.connect()
+            logger.info("Data collector initialized successfully")
+            
             # Initialize cron scheduler
             self.cron_scheduler = CronScheduler()
             logger.info("Cron scheduler initialized successfully")
@@ -86,6 +98,27 @@ class EthereumTradingSystem:
             # Initialize trading memory
             self.trading_memory = TradingMemory()
             logger.info("Trading memory initialized successfully")
+            
+            # Initialize email service
+            self.email_service = EmailService()
+            logger.info("Email service initialized successfully")
+            
+            # Initialize trading report agent
+            self.trading_report_agent = TradingReportAgent(
+                self.mcp_client, 
+                self.data_collector, 
+                self.email_service
+            )
+            logger.info("Trading report agent initialized successfully")
+            
+            # Initialize trading monitor
+            self.trading_monitor = TradingMonitor(
+                self.mcp_client,
+                self.data_collector,
+                self.email_service,
+                self.trading_report_agent
+            )
+            logger.info("Trading monitor initialized successfully")
             
             # Initialize agents
             await self._initialize_agents()
@@ -98,6 +131,10 @@ class EthereumTradingSystem:
             # Initialize orchestrator
             await self._initialize_orchestrator()
             logger.info("Orchestrator initialized successfully")
+            
+            # Start trading monitor
+            await self.trading_monitor.start_monitoring()
+            logger.info("Trading monitor started successfully")
             
             # Setup cron jobs
             await self._setup_cron_jobs()
@@ -378,7 +415,10 @@ class EthereumTradingSystem:
                     "cron_scheduler": "running" if self.cron_scheduler else "stopped",
                     "agents": len(self.agents),
                     "chains": len(self.chains),
-                    "orchestrator": "initialized" if self.orchestrator else "not_initialized"
+                    "orchestrator": "initialized" if self.orchestrator else "not_initialized",
+                    "email_service": "initialized" if self.email_service else "not_initialized",
+                    "trading_monitor": "running" if self.trading_monitor and self.trading_monitor.monitoring_active else "stopped",
+                    "trading_report_agent": "initialized" if self.trading_report_agent else "not_initialized"
                 },
                 "memory_stats": self.trading_memory.get_memory_stats() if self.trading_memory else {},
                 "available_prompts": list_available_prompts()
@@ -400,6 +440,10 @@ class EthereumTradingSystem:
         try:
             logger.info("Shutting down Ethereum Trading System...")
             
+            # Stop trading monitor
+            if self.trading_monitor:
+                await self.trading_monitor.stop_monitoring()
+            
             # Stop cron scheduler
             if self.cron_scheduler:
                 await self.cron_scheduler.shutdown()
@@ -411,6 +455,10 @@ class EthereumTradingSystem:
             # Close MCP client
             if self.mcp_client:
                 await self.mcp_client.close()
+            
+            # Close data collector
+            if self.data_collector:
+                await self.data_collector.close()
             
             logger.info("System shutdown completed")
             
