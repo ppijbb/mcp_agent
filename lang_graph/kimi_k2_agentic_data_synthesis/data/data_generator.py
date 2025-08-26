@@ -13,6 +13,8 @@ from datetime import datetime
 import json
 import csv
 import os
+import random
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,12 @@ class DataGenerator:
         # Create output directory if it doesn't exist
         os.makedirs(output_directory, exist_ok=True)
     
-    def create_training_batch(self, name: str, description: str,
-                            training_data: List[TrainingData],
-                            quality_threshold: float = 0.7) -> DataBatch:
+    def create_training_batch(
+            self, name: str,
+            description: str,
+            training_data: List[TrainingData],
+            quality_threshold: float = 0.7
+        ) -> DataBatch:
         """Create a new training data batch"""
         batch = DataBatch(
             name=name,
@@ -64,10 +69,14 @@ class DataGenerator:
         logger.info(f"Created training batch: {name} with {len(training_data)} items")
         return batch
     
-    def generate_batch_from_simulations(self, name: str, description: str,
-                                      simulation_sessions: List[SimulationSession],
-                                      evaluation_results: List[EvaluationResult],
-                                      quality_threshold: float = 0.7) -> Optional[DataBatch]:
+    def generate_batch_from_simulations(
+            self,
+            name: str,
+            description: str,
+            simulation_sessions: List[SimulationSession],
+            evaluation_results: List[EvaluationResult],
+            quality_threshold: float = 0.7
+        ) -> Optional[DataBatch]:
         """Generate training batch from simulation sessions and evaluations"""
         if len(simulation_sessions) != len(evaluation_results):
             logger.error("Number of simulation sessions and evaluation results must match")
@@ -87,8 +96,11 @@ class DataGenerator:
         
         return self.create_training_batch(name, description, training_data_list, quality_threshold)
     
-    def _create_training_data_from_simulation(self, session: SimulationSession,
-                                            evaluation: EvaluationResult) -> Optional[TrainingData]:
+    def _create_training_data_from_simulation(
+            self,
+            session: SimulationSession,
+            evaluation: EvaluationResult
+        ) -> Optional[TrainingData]:
         """Create training data from a simulation session and evaluation"""
         try:
             # Create metadata
@@ -173,8 +185,12 @@ class DataGenerator:
             logger.error(f"Failed to create training data from simulation: {e}")
             return None
     
-    def export_batch(self, batch_id: str, format: DataFormat = DataFormat.JSON,
-                    output_path: Optional[str] = None) -> Optional[str]:
+    def export_batch(
+            self,
+            batch_id: str,
+            format: DataFormat = DataFormat.JSON,
+            output_path: Optional[str] = None
+        ) -> Optional[str]:
         """Export a batch to specified format"""
         batch = self.generated_batches.get(batch_id)
         if not batch:
@@ -403,8 +419,13 @@ class DataGenerator:
         logger.info(f"Merged {len(batch_ids)} batches into {name}")
         return merged_batch
     
-    def split_batch(self, batch_id: str, split_ratio: float = 0.8,
-                   train_name: str = None, test_name: str = None) -> Optional[Dict[str, DataBatch]]:
+    def split_batch(
+            self,
+            batch_id: str,
+            split_ratio: float = 0.8,
+            train_name: str = None,
+            test_name: str = None
+        ) -> Optional[Dict[str, DataBatch]]:
         """Split a batch into training and test sets"""
         batch = self.get_batch(batch_id)
         if not batch:
@@ -451,4 +472,302 @@ class DataGenerator:
         return {
             "train": train_batch,
             "test": test_batch
-        } 
+        }
+
+    def generate_mcp_training_data(
+        self,
+        agent_factory: Any,
+        num_samples: int,
+        quality_threshold: float = 0.7,
+        min_confidence: float = 0.6
+    ) -> List[TrainingData]:
+        """Generate MCP-focused training data for tool selection learning"""
+        
+        training_data = []
+        generated_count = 0
+        skipped_count = 0
+        
+        logger.info(f"Generating {num_samples} MCP training samples...")
+        
+        # Sample user requests for different scenarios
+        user_requests = [
+            "Create a new Python script for data analysis",
+            "Read and analyze the CSV file in the data folder",
+            "Set up a new React project with TypeScript",
+            "Check the system logs for any errors",
+            "Make an API call to fetch user data",
+            "Backup the database to a file",
+            "Navigate to the website and take a screenshot",
+            "Install and configure Docker on the system"
+        ]
+        
+        # Sample contexts
+        contexts = [
+            {
+                "workspace_type": "development",
+                "has_database": True,
+                "system_access": True,
+                "available_tools": ["code_editor", "terminal", "file_server", "database", "web_browser", "api_client"]
+            },
+            {
+                "workspace_type": "data_analysis",
+                "has_database": True,
+                "system_access": False,
+                "available_tools": ["file_server", "database", "terminal", "code_editor"]
+            },
+            {
+                "workspace_type": "system_admin",
+                "has_database": False,
+                "system_access": True,
+                "available_tools": ["terminal", "file_server", "web_browser"]
+            }
+        ]
+        
+        while len(training_data) < num_samples and generated_count < num_samples * 2:
+            try:
+                # Select random request and context
+                user_request = random.choice(user_requests)
+                context = random.choice(contexts)
+                
+                # Get available agents
+                available_agents = list(agent_factory.agents.keys())
+                if not available_agents:
+                    logger.warning("No agents available for MCP data generation")
+                    break
+                
+                agent_id = random.choice(available_agents)
+                
+                # Simulate tool selection
+                tool_selection_result = agent_factory.simulate_mcp_tool_selection(
+                    agent_id, user_request, context["available_tools"], context
+                )
+                
+                if "error" in tool_selection_result:
+                    skipped_count += 1
+                    generated_count += 1
+                    continue
+                
+                # Check quality thresholds
+                if (tool_selection_result["confidence_score"] >= min_confidence and
+                    self._calculate_mcp_quality_score(tool_selection_result) >= quality_threshold):
+                    
+                    # Generate function call data
+                    function_call_data = self._generate_function_call_data(
+                        tool_selection_result["selected_tool"], user_request
+                    )
+                    
+                    # Generate MCP communication result
+                    mcp_result = self._simulate_mcp_communication(
+                        tool_selection_result["selected_tool"], function_call_data
+                    )
+                    
+                    # Create training data
+                    training_data_entry = self._create_mcp_training_data(
+                        user_request, tool_selection_result, function_call_data, mcp_result, context
+                    )
+                    
+                    if training_data_entry and training_data_entry.validate_data():
+                        training_data.append(training_data_entry)
+                        logger.debug(f"Generated MCP training data: {training_data_entry.id}")
+                    else:
+                        skipped_count += 1
+                else:
+                    skipped_count += 1
+                    logger.debug(f"Skipped low-quality MCP data")
+                
+                generated_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error generating MCP training data: {e}")
+                skipped_count += 1
+                generated_count += 1
+                continue
+        
+        logger.info(f"Generated {len(training_data)} MCP training samples, skipped {skipped_count}")
+        return training_data
+    
+    def _calculate_mcp_quality_score(self, tool_selection_result: Dict[str, Any]) -> float:
+        """Calculate quality score for MCP tool selection data"""
+        
+        # Base quality from confidence score
+        base_quality = tool_selection_result["confidence_score"]
+        
+        # Bonus for having alternatives considered
+        if tool_selection_result.get("alternative_tools"):
+            base_quality += 0.1
+        
+        # Bonus for detailed reasoning
+        reasoning = tool_selection_result.get("selection_reasoning", "")
+        if len(reasoning.split(".")) > 2:
+            base_quality += 0.1
+        
+        return min(1.0, base_quality)
+    
+    def _generate_function_call_data(
+        self,
+        selected_tool: str,
+        user_request: str
+    ) -> Dict[str, Any]:
+        """Generate realistic function call data for the selected tool"""
+        
+        # Tool-specific function call generation
+        if selected_tool == "code_editor":
+            function_name = "create_file"
+            parameters = {
+                "file_path": f"/workspace/script.py",
+                "content": "# Generated script",
+                "language": "python"
+            }
+        elif selected_tool == "terminal":
+            function_name = "execute_command"
+            parameters = {
+                "command": "ls -la",
+                "working_directory": "/workspace",
+                "timeout": 30
+            }
+        elif selected_tool == "file_server":
+            function_name = "read_file"
+            parameters = {
+                "file_path": "/data/input.csv",
+                "encoding": "utf-8"
+            }
+        elif selected_tool == "database":
+            function_name = "execute_query"
+            parameters = {
+                "query": "SELECT * FROM users LIMIT 10",
+                "timeout": 60
+            }
+        elif selected_tool == "web_browser":
+            function_name = "navigate"
+            parameters = {
+                "url": "https://example.com",
+                "wait_for_load": True
+            }
+        elif selected_tool == "api_client":
+            function_name = "get"
+            parameters = {
+                "url": "https://api.example.com/data",
+                "headers": {"Authorization": "Bearer token"},
+                "timeout": 30
+            }
+        else:
+            function_name = "execute"
+            parameters = {"action": "default_action"}
+        
+        return {
+            "function_name": function_name,
+            "parameters": parameters,
+            "parameter_source": "intent_analysis",
+            "validation_status": "valid",
+            "transformation_applied": []
+        }
+    
+    def _simulate_mcp_communication(
+        self,
+        selected_tool: str,
+        function_call_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Simulate MCP communication result"""
+        
+        # Simulate success/failure based on tool type
+        success_rate = 0.95  # 95% success rate
+        success = random.random() < success_rate
+        
+        # Simulate execution time
+        execution_time = random.uniform(0.1, 3.0)
+        
+        if success:
+            response_data = {
+                "status": "success",
+                "result": f"Operation {function_call_data['function_name']} completed successfully",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            error_message = None
+            error_type = None
+        else:
+            response_data = None
+            error_message = "Simulated error occurred"
+            error_type = "simulation_error"
+        
+        return {
+            "success": success,
+            "response_data": response_data,
+            "execution_time": execution_time,
+            "error_message": error_message,
+            "error_type": error_type,
+            "retry_count": 0
+        }
+    
+    def _create_mcp_training_data(
+        self,
+        user_request: str,
+        tool_selection_result: Dict[str, Any],
+        function_call_data: Dict[str, Any],
+        mcp_result: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[TrainingData]:
+        """Create MCP training data entry"""
+        
+        try:
+            # Create metadata
+            metadata = Metadata(
+                domain_id="mcp_tool_selection",
+                scenario_id="tool_selection_learning",
+                agent_ids=[tool_selection_result["agent_id"]],
+                simulation_id=str(uuid.uuid4()),
+                quality_score=tool_selection_result["confidence_score"],
+                data_format=DataFormat.JSON,
+                version="1.0.0",
+                tags=["mcp", "tool_selection", "function_call"],
+                description=f"MCP tool selection training data for: {user_request}"
+            )
+            
+            # Create conversation history
+            conversation_history = [
+                {"role": "user", "content": user_request},
+                {"role": "assistant", "content": f"I'll use {tool_selection_result['selected_tool']} for this task."}
+            ]
+            
+            # Create tool usage log
+            tool_usage_log = [{
+                "tool": tool_selection_result["selected_tool"],
+                "parameters": function_call_data["parameters"],
+                "result": mcp_result.get("response_data", {}),
+                "timestamp": datetime.utcnow().isoformat(),
+                "duration": mcp_result["execution_time"]
+            }]
+            
+            # Create final outcome
+            final_outcome = {
+                "status": "completed" if mcp_result["success"] else "failed",
+                "selected_tool": tool_selection_result["selected_tool"],
+                "confidence_score": tool_selection_result["confidence_score"],
+                "execution_success": mcp_result["success"]
+            }
+            
+            # Create quality metrics
+            quality_metrics = {
+                "overall": tool_selection_result["confidence_score"],
+                "tool_selection_accuracy": 1.0 if mcp_result["success"] else 0.5,
+                "function_call_success_rate": 1.0 if mcp_result["success"] else 0.0,
+                "parameter_accuracy": 0.9,
+                "mcp_communication_reliability": 1.0 if mcp_result["success"] else 0.3
+            }
+            
+            # Create training data
+            training_data = TrainingData(
+                metadata=metadata,
+                conversation_history=conversation_history,
+                tool_usage_log=tool_usage_log,
+                final_outcome=final_outcome,
+                quality_metrics=quality_metrics,
+                mcp_tool_selection=tool_selection_result,
+                mcp_function_call=function_call_data,
+                mcp_communication_result=mcp_result
+            )
+            
+            return training_data
+            
+        except Exception as e:
+            logger.error(f"Error creating MCP training data: {e}")
+            return None 

@@ -454,3 +454,331 @@ class AgentFactory:
             logger.warning(f"Agent {agent_id} validation completed with issues: {validation_result}")
 
         return validation_result 
+    
+    def _analyze_user_intent(self, user_request: str) -> Dict[str, Any]:
+        """Analyze user intent from request"""
+        
+        request_lower = user_request.lower()
+        
+        # Intent patterns
+        intent_patterns = {
+            "file_operation": ["read", "write", "create", "delete", "edit", "save", "open"],
+            "code_development": ["code", "program", "debug", "compile", "test", "deploy"],
+            "data_analysis": ["analyze", "process", "query", "visualize", "report", "export"],
+            "system_administration": ["install", "configure", "monitor", "backup", "restart"],
+            "web_interaction": ["browse", "navigate", "click", "input", "submit", "download"],
+            "api_integration": ["api", "endpoint", "request", "response", "authentication"]
+        }
+        
+        # Identify primary intent
+        primary_intent = "general"
+        intent_confidence = 0.0
+        
+        for intent, patterns in intent_patterns.items():
+            pattern_matches = sum(1 for pattern in patterns if pattern in request_lower)
+            if pattern_matches > 0:
+                confidence = pattern_matches / len(patterns)
+                if confidence > intent_confidence:
+                    primary_intent = intent
+                    intent_confidence = confidence
+        
+        return {
+            "primary_intent": primary_intent,
+            "intent_confidence": intent_confidence,
+            "keywords_found": [word for word in request_lower.split() if len(word) > 3]
+        }
+    
+    def _map_intent_to_tools(self, intent_analysis: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Map user intent to tool requirements"""
+        
+        intent = intent_analysis["primary_intent"]
+        
+        # Tool requirement mapping
+        tool_mappings = {
+            "file_operation": {
+                "required_tools": ["file_server"],
+                "optional_tools": ["code_editor"],
+                "complexity_multiplier": 1.0
+            },
+            "code_development": {
+                "required_tools": ["code_editor", "terminal"],
+                "optional_tools": ["file_server", "database"],
+                "complexity_multiplier": 1.5
+            },
+            "data_analysis": {
+                "required_tools": ["database", "terminal"],
+                "optional_tools": ["file_server", "code_editor"],
+                "complexity_multiplier": 1.3
+            },
+            "system_administration": {
+                "required_tools": ["terminal"],
+                "optional_tools": ["database", "file_server"],
+                "complexity_multiplier": 1.2
+            },
+            "web_interaction": {
+                "required_tools": ["web_browser"],
+                "optional_tools": ["api_client"],
+                "complexity_multiplier": 1.0
+            },
+            "api_integration": {
+                "required_tools": ["api_client"],
+                "optional_tools": ["terminal", "file_server"],
+                "complexity_multiplier": 1.4
+            }
+        }
+        
+        base_requirements = tool_mappings.get(intent, {
+            "required_tools": [],
+            "optional_tools": [],
+            "complexity_multiplier": 1.0
+        })
+        
+        return {
+            "required_tools": base_requirements["required_tools"].copy(),
+            "optional_tools": base_requirements["optional_tools"].copy(),
+            "complexity_multiplier": base_requirements["complexity_multiplier"]
+        }
+    
+    def _evaluate_tool_fitness(
+        self,
+        available_tools: List[str],
+        tool_requirements: Dict[str, Any],
+        agent_config: Any
+    ) -> Dict[str, float]:
+        """Evaluate fitness of available tools for the requirements"""
+        
+        tool_fitness = {}
+        
+        for tool in available_tools:
+            fitness_score = 0.0
+            
+            # Base fitness based on requirements
+            if tool in tool_requirements.get("required_tools", []):
+                fitness_score += 0.8
+            elif tool in tool_requirements.get("optional_tools", []):
+                fitness_score += 0.6
+            else:
+                fitness_score += 0.2
+            
+            # Agent preference bonus
+            if agent_config and hasattr(agent_config, 'tool_preferences') and tool in agent_config.tool_preferences:
+                fitness_score += 0.2
+            
+            # Domain expertise bonus
+            if agent_config and hasattr(agent_config, 'expertise_domains'):
+                if any(domain in tool for domain in agent_config.expertise_domains):
+                    fitness_score += 0.1
+            
+            # Normalize fitness score
+            tool_fitness[tool] = min(1.0, fitness_score)
+        
+        return tool_fitness
+    
+    def _select_optimal_tool(self, tool_fitness: Dict[str, float], tool_requirements: Dict[str, Any]) -> str:
+        """Select the optimal tool based on fitness scores"""
+        
+        if not tool_fitness:
+            return "unknown"
+        
+        # Sort tools by fitness score
+        sorted_tools = sorted(
+            tool_fitness.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        
+        # Get top candidate
+        return sorted_tools[0][0]
+    
+    def _generate_tool_selection_reasoning(
+        self,
+        selected_tool: str,
+        intent_analysis: Dict[str, Any],
+        tool_requirements: Dict[str, Any],
+        tool_fitness: Dict[str, float]
+    ) -> str:
+        """Generate reasoning for tool selection"""
+        
+        reasoning_parts = []
+        
+        # Intent-based reasoning
+        primary_intent = intent_analysis["primary_intent"]
+        reasoning_parts.append(f"Selected {selected_tool} based on primary intent: {primary_intent}")
+        
+        # Requirement-based reasoning
+        if selected_tool in tool_requirements.get("required_tools", []):
+            reasoning_parts.append(f"{selected_tool} is a required tool for this task")
+        elif selected_tool in tool_requirements.get("optional_tools", []):
+            reasoning_parts.append(f"{selected_tool} is an optional but suitable tool")
+        
+        # Fitness-based reasoning
+        fitness_score = tool_fitness.get(selected_tool, 0.0)
+        reasoning_parts.append(f"Tool fitness score: {fitness_score:.2f}")
+        
+        return ". ".join(reasoning_parts)
+ 
+    def simulate_mcp_tool_selection(
+        self,
+        agent_id: str,
+        user_request: str,
+        available_tools: List[str],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Simulate MCP tool selection for an agent with fallback handling"""
+
+        agent = self.agents.get(agent_id)
+        if not agent:
+            return {"error": "Agent not found"}
+
+        # Analyze user intent
+        intent_analysis = self._analyze_user_intent(user_request)
+
+        # Map intent to tool requirements
+        tool_requirements = self._map_intent_to_tools(intent_analysis, context)
+
+        # Evaluate tool fitness
+        tool_fitness = self._evaluate_tool_fitness(
+            available_tools, tool_requirements, agent.agent_config
+        )
+
+        # Select optimal tool
+        selected_tool = self._select_optimal_tool(tool_fitness, tool_requirements)
+
+        # Generate selection reasoning
+        reasoning = self._generate_tool_selection_reasoning(
+            selected_tool, intent_analysis, tool_requirements, tool_fitness
+        )
+
+        # Check if fallback is needed
+        fallback_info = self._check_fallback_needed(
+            selected_tool, tool_fitness, tool_requirements, context
+        )
+
+        # Apply fallback strategy if needed
+        if fallback_info["fallback_needed"]:
+            fallback_result = self._apply_fallback_strategy(
+                fallback_info, available_tools, tool_requirements, context
+            )
+            selected_tool = fallback_result["selected_tool"]
+            reasoning = fallback_result["reasoning"]
+            tool_fitness = fallback_result["updated_fitness"]
+
+        return {
+            "agent_id": agent_id,
+            "selected_tool": selected_tool,
+            "selection_reasoning": reasoning,
+            "confidence_score": tool_fitness.get(selected_tool, 0.0),
+            "intent_analysis": intent_analysis,
+            "tool_requirements": tool_requirements,
+            "tool_fitness_scores": tool_fitness,
+            "alternative_tools": [tool for tool, score in tool_fitness.items() if score > 0.5 and tool != selected_tool],
+            "fallback_info": fallback_info,
+            "fallback_applied": fallback_info["fallback_needed"],
+            "selection_context": {
+                "user_expertise_level": context.get("user_expertise_level", "intermediate"),
+                "task_complexity": context.get("task_complexity", "medium"),
+                "available_resources": context.get("available_resources", []),
+                "time_constraints": context.get("time_constraints", "moderate"),
+                "workspace_type": context.get("workspace_type", "general")
+            }
+        }
+
+    def _check_fallback_needed(
+        self,
+        selected_tool: str,
+        tool_fitness: Dict[str, float],
+        tool_requirements: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Check if fallback strategy is needed"""
+        
+        confidence_threshold = context.get("confidence_threshold", 0.6)
+        selected_tool_confidence = tool_fitness.get(selected_tool, 0.0)
+        
+        # Check if selected tool meets confidence threshold
+        if selected_tool_confidence < confidence_threshold:
+            return {
+                "fallback_needed": True,
+                "reason": "low_confidence",
+                "confidence_gap": confidence_threshold - selected_tool_confidence,
+                "strategy": "skip"  # User requested skip strategy for data generation
+            }
+        
+        # Check if required tools are available
+        required_tools = tool_requirements.get("required_tools", [])
+        available_required = [tool for tool in required_tools if tool in tool_fitness]
+        
+        if len(available_required) < len(required_tools):
+            return {
+                "fallback_needed": True,
+                "reason": "missing_required_tools",
+                "missing_tools": [tool for tool in required_tools if tool not in tool_fitness],
+                "strategy": "skip"
+            }
+        
+        # Check context constraints
+        if context.get("strict_quality", False) and selected_tool_confidence < 0.8:
+            return {
+                "fallback_needed": True,
+                "reason": "strict_quality_requirement",
+                "quality_gap": 0.8 - selected_tool_confidence,
+                "strategy": "skip"
+            }
+        
+        return {
+            "fallback_needed": False,
+            "reason": "no_fallback_needed",
+            "strategy": None
+        }
+
+    def _apply_fallback_strategy(
+        self,
+        fallback_info: Dict[str, Any],
+        available_tools: List[str],
+        tool_requirements: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Apply fallback strategy based on fallback info"""
+        
+        strategy = fallback_info.get("strategy", "skip")
+        
+        if strategy == "skip":
+            # User requested skip strategy - return unknown tool to mark data as unsuitable
+            return {
+                "selected_tool": "unknown",
+                "reasoning": f"Fallback applied: {fallback_info.get('reason', 'unknown')}. Data quality insufficient for training.",
+                "updated_fitness": {"unknown": 0.0}
+            }
+        
+        elif strategy == "alternative_tool":
+            # Find alternative tool with highest fitness
+            alternative_tools = [tool for tool in available_tools if tool != "unknown"]
+            if alternative_tools:
+                # Create a simple fitness mapping for alternative tools
+                alt_fitness = {tool: 0.5 for tool in alternative_tools}
+                best_alternative = max(alternative_tools, key=lambda t: alt_fitness.get(t, 0.0))
+                return {
+                    "selected_tool": best_alternative,
+                    "reasoning": f"Fallback to alternative tool: {best_alternative}",
+                    "updated_fitness": alt_fitness
+                }
+        
+        elif strategy == "degraded_mode":
+            # Use selected tool but with degraded confidence
+            selected_tool = fallback_info.get("selected_tool", "unknown")
+            # Create degraded fitness scores
+            degraded_fitness = {tool: 0.3 for tool in available_tools if tool != "unknown"}
+            if selected_tool != "unknown":
+                degraded_fitness[selected_tool] = 0.4  # Slightly higher for selected tool
+            return {
+                "selected_tool": selected_tool,
+                "reasoning": f"Fallback to degraded mode for tool: {selected_tool}",
+                "updated_fitness": degraded_fitness
+            }
+        
+        # Default fallback to skip
+        return {
+            "selected_tool": "unknown",
+            "reasoning": "Fallback strategy failed, skipping data generation",
+            "updated_fitness": {"unknown": 0.0}
+        }

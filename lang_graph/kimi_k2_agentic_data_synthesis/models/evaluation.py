@@ -18,6 +18,11 @@ class EvaluationType(str, Enum):
     USER_SATISFACTION = "user_satisfaction"
     TOOL_USAGE = "tool_usage"
     OVERALL = "overall"
+    # MCP-specific evaluation types
+    TOOL_SELECTION_ACCURACY = "tool_selection_accuracy"
+    FUNCTION_CALL_SUCCESS_RATE = "function_call_success_rate"
+    PARAMETER_ACCURACY = "parameter_accuracy"
+    MCP_COMMUNICATION_RELIABILITY = "mcp_communication_reliability"
 
 
 class Rubric(BaseModel):

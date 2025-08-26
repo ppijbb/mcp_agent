@@ -16,6 +16,26 @@ The Kimi-K2 system is designed to generate comprehensive training data for AI ag
 - **Data Generation**: Exports high-quality training data in multiple formats (JSON, JSONL, CSV)
 - **Scalable Architecture**: Supports concurrent simulations and batch processing
 
+## NEW: MCP-Based Tool Selection Learning System
+
+The system now includes a specialized MCP (Model Context Protocol) training data generation system focused on **tool selection and function calling patterns**:
+
+### MCP Communication Simulator
+- **Realistic MCP Server Simulation**: Simulates various MCP servers (file system, database, terminal, API client, etc.)
+- **Function Call Patterns**: Generates realistic function calls with proper parameters and error handling
+- **Communication Statistics**: Tracks success rates, response times, and error patterns
+
+### Intelligent Tool Selection
+- **Intent Analysis**: Analyzes user requests to understand intent and domain context
+- **Tool Requirement Mapping**: Maps intents to required and optional tools
+- **Fitness Evaluation**: Evaluates tool fitness based on capabilities and context
+- **Decision Reasoning**: Generates detailed reasoning for tool selection decisions
+
+### High-Quality Training Data
+- **No Fallback Policy**: Strict quality filtering - failed data generation is skipped, not stored
+- **Multi-Dimensional Quality Metrics**: Evaluates tool selection accuracy, function call success, parameter accuracy, and more
+- **Context-Aware Generation**: Creates realistic scenarios with proper workspace context and tool availability
+
 ## Architecture
 
 ```
@@ -26,19 +46,23 @@ Kimi-K2 System
 │   ├── AgentFactory - Creates diverse agents
 │   ├── SimulationEngine - Runs multi-agent simulations
 │   ├── EnvironmentManager - Manages virtual environments
-│   └── UserAgentManager - Manages user agent interactions
+│   ├── UserAgentManager - Manages user agent interactions
+│   ├── MCPCommunicationSimulator - Simulates MCP server communication
+│   └── ToolSelectionDecisionSimulator - Simulates intelligent tool selection
 ├── Evaluation
 │   ├── LLMJudgeSystem - Evaluates simulation quality
 │   └── QualityFilter - Filters high-quality data
 ├── Data
-│   └── DataGenerator - Generates and exports training data
+│   ├── DataGenerator - Generates and exports training data
+│   └── MCPDataGenerator - Generates MCP-focused training data
 └── Models
     ├── Domain Models - Domain and scenario definitions
     ├── Tool Models - Tool configurations and usage
     ├── Agent Models - Agent profiles and behaviors
     ├── Simulation Models - Simulation configurations and results
     ├── Evaluation Models - Evaluation rubrics and results
-    └── Data Models - Training data structures
+    ├── Data Models - Training data structures
+    └── MCP Training Data Models - Tool selection and function call learning data
 ```
 
 ## Installation
@@ -80,11 +104,45 @@ async def main():
 asyncio.run(main())
 ```
 
-### Running the Example
+### NEW: MCP-Based Data Generation
+
+```python
+import asyncio
+from lang_graph.kimi_k2_agentic_data_synthesis.data import MCPDataGenerator
+
+async def main():
+    # Initialize MCP data generator
+    generator = MCPDataGenerator(output_directory="mcp_training_data")
+    
+    # Generate high-quality training data for tool selection learning
+    batch = await generator.generate_training_batch(
+        name="tool_selection_batch",
+        description="Training data for MCP tool selection learning",
+        num_tool_selection_samples=100,
+        quality_threshold=0.8  # Strict quality filtering
+    )
+    
+    if batch:
+        print(f"Generated {batch.get_batch_size()} high-quality samples")
+        print(f"Average quality: {batch.average_quality_score:.3f}")
+        
+        # Export the batch
+        export_path = generator.export_batch(batch.id, format="json")
+        print(f"Exported to: {export_path}")
+
+asyncio.run(main())
+```
+
+### Running the Examples
 
 ```bash
 cd lang_graph/kimi_k2_agentic_data_synthesis
+
+# Run the original example
 python -m example_usage
+
+# Run the new MCP example
+python -m example_mcp_usage
 ```
 
 ## Configuration
@@ -118,7 +176,7 @@ tool_config = ToolConfig(
     tool_id="code_editor",
     name="Code Editor",
     description="Multi-language code editor with syntax highlighting",
-    tool_type=ToolType.MCP,
+    tool_type=ToolType.MCP.value, # Use .value for string representation
     mcp_server="code_editor_server",
     parameters={
         "language": "string",
@@ -175,6 +233,47 @@ simulation_config = SimulationConfig(
 )
 ```
 
+## NEW: MCP Tool Selection Learning
+
+### Tool Selection Context
+
+```python
+from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import ToolSelectionContext
+
+context = ToolSelectionContext(
+    user_request="Create a new Python script for data analysis",
+    current_workspace={
+        "workspace_type": "development",
+        "has_database": True,
+        "system_access": True
+    },
+    available_tools=["code_editor", "terminal", "file_server", "database"],
+    recent_tool_usage=["code_editor", "terminal"],
+    domain_context="data_science",
+    task_complexity="moderate",
+    user_expertise_level="intermediate"
+)
+```
+
+### Tool Selection Decision
+
+```python
+from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import ToolSelectionDecision
+
+decision = ToolSelectionDecision(
+    selected_tool="code_editor",
+    selection_reasoning="Selected code_editor based on primary intent: code_development",
+    alternative_tools_considered=["terminal", "file_server"],
+    confidence_score=0.85,
+    decision_time=0.5,
+    context_factors={
+        "intent_analysis": {...},
+        "tool_requirements": {...},
+        "tool_fitness_scores": {...}
+    }
+)
+```
+
 ## Evaluation
 
 The system uses LLM judges to evaluate simulation quality across multiple dimensions:
@@ -183,6 +282,14 @@ The system uses LLM judges to evaluate simulation quality across multiple dimens
 - **Problem Solving Quality**: Quality of the problem-solving approach and solution
 - **Collaboration Effectiveness**: Effectiveness of multi-agent collaboration
 - **Code Quality**: Quality of generated code and documentation
+
+### NEW: MCP-Specific Quality Metrics
+
+- **Tool Selection Accuracy**: How accurately the right tool is selected for the task
+- **Function Call Success Rate**: Success rate of MCP function calls
+- **Parameter Accuracy**: Accuracy of function parameter generation
+- **Communication Reliability**: Reliability of MCP server communication
+- **User Satisfaction**: User satisfaction with tool selection and execution
 
 ## Data Export
 
@@ -197,6 +304,48 @@ Data can be split into train/validation/test sets and includes:
 - Problem scenarios and solutions
 - Evaluation scores and feedback
 - Metadata and timestamps
+
+### NEW: MCP Training Data Structure
+
+```json
+{
+  "id": "uuid",
+  "user_request": "Create a new Python script for data analysis",
+  "selection_context": {
+    "user_request": "...",
+    "current_workspace": {...},
+    "available_tools": [...],
+    "domain_context": "data_science",
+    "task_complexity": "moderate"
+  },
+  "decision": {
+    "selected_tool": "code_editor",
+    "selection_reasoning": "...",
+    "confidence_score": 0.85,
+    "alternative_tools_considered": [...]
+  },
+  "function_call": {
+    "function_name": "create_file",
+    "parameters": {...},
+    "validation_status": "valid"
+  },
+  "mcp_result": {
+    "success": true,
+    "response_data": {...},
+    "execution_time": 1.2,
+    "error_message": null
+  },
+  "success_metrics": {
+    "overall": 0.88,
+    "tool_selection_accuracy": 1.0,
+    "function_call_success_rate": 1.0
+  },
+  "user_satisfaction": 0.9,
+  "learning_objective": "Learn tool selection for code_development tasks",
+  "common_mistakes": [...],
+  "best_practices": [...]
+}
+```
 
 ## Advanced Usage
 
@@ -238,6 +387,22 @@ custom_tool = ToolConfig(
 system.tool_registry.register_tool(custom_tool)
 ```
 
+### NEW: Custom MCP Servers
+
+```python
+from lang_graph.kimi_k2_agentic_data_synthesis.core import MCPCommunicationSimulator
+from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import MCPToolType
+
+mcp_simulator = MCPCommunicationSimulator()
+
+# Register custom MCP server
+mcp_simulator.register_server(
+    name="custom_api_server",
+    server_type=MCPToolType.API_CLIENT,
+    capabilities=["custom_endpoint", "data_processing", "validation"]
+)
+```
+
 ### Batch Processing
 
 Run multiple simulations concurrently:
@@ -273,6 +438,20 @@ print(f"Simulation status: {simulation_result.status}")
 print(f"Turns completed: {len(simulation_result.turns)}")
 ```
 
+### NEW: MCP System Monitoring
+
+```python
+# Get MCP communication statistics
+mcp_stats = mcp_simulator.get_communication_statistics()
+print(f"Total MCP calls: {mcp_stats['total_communications']}")
+print(f"Success rate: {mcp_stats['overall_success_rate']:.2%}")
+
+# Get tool selection statistics
+tool_stats = tool_selection_simulator.get_decision_statistics()
+print(f"Total decisions: {tool_stats['total_decisions']}")
+print(f"Average confidence: {tool_stats['average_confidence']:.2f}")
+```
+
 ## Error Handling
 
 The system includes robust error handling:
@@ -287,12 +466,40 @@ finally:
     system.cleanup()
 ```
 
+### NEW: Strict Quality Filtering
+
+The MCP data generation system implements strict quality filtering with **no fallback**:
+
+```python
+# Failed data generation is skipped, not stored
+data_generator = MCPDataGenerator()
+data_generator.min_quality_threshold = 0.8  # Strict threshold
+data_generator.min_confidence_threshold = 0.7  # Minimum confidence
+
+# Only high-quality data passes through
+batch = await data_generator.generate_training_batch(
+    name="high_quality_batch",
+    num_tool_selection_samples=100,
+    quality_threshold=0.8
+)
+
+# Failed or low-quality samples are automatically skipped
+print(f"Generated {batch.get_batch_size()} samples (failed samples were skipped)")
+```
+
 ## Performance Optimization
 
 - Use appropriate `max_concurrent_simulations` based on your system resources
 - Set reasonable `timeout` values for simulations
 - Use `quality_threshold` to filter only high-quality data
 - Consider using compression for large datasets
+
+### NEW: MCP Performance Optimization
+
+- **Quality Thresholds**: Set strict quality thresholds to avoid storing low-quality data
+- **Batch Processing**: Generate data in batches for efficient processing
+- **Parallel Generation**: Use async/await for concurrent data generation
+- **Memory Management**: Automatically skip invalid data to conserve memory
 
 ## Contributing
 
@@ -312,6 +519,7 @@ This project is part of the lang_graph package and follows the same licensing te
 For issues and questions:
 
 1. Check the example usage in `example_usage.py`
-2. Review the model definitions in the `models/` directory
-3. Examine the core component implementations
-4. Check the system logs for detailed error information 
+2. Check the new MCP example in `example_mcp_usage.py`
+3. Review the model definitions in the `models/` directory
+4. Examine the core component implementations
+5. Check the system logs for detailed error information 

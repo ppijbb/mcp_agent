@@ -70,6 +70,29 @@ class TrainingData(BaseModel):
     validation_errors: List[str] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
+    # MCP-specific fields for tool selection learning
+    mcp_tool_selection: Optional[Dict[str, Any]] = None  # Tool selection decision data
+    mcp_function_call: Optional[Dict[str, Any]] = None   # Function call parameters and results
+    mcp_communication_result: Optional[Dict[str, Any]] = None  # MCP server response
+    
+    # Fallback handling fields
+    fallback_attempted: bool = False
+    fallback_strategy: Optional[str] = None  # "skip", "alternative_tool", "degraded_mode"
+    fallback_result: Optional[Dict[str, Any]] = None
+    fallback_quality_score: Optional[float] = None
+    
+    # Tool selection learning specific fields
+    tool_selection_context: Optional[Dict[str, Any]] = None  # Context when tool was selected
+    tool_alternatives_considered: List[str] = []
+    tool_selection_reasoning: Optional[str] = None
+    tool_selection_confidence: Optional[float] = None
+    
+    # Function call learning specific fields
+    function_call_validation: Optional[Dict[str, Any]] = None
+    function_call_errors: List[str] = []
+    function_call_retry_count: int = 0
+    function_call_optimization_applied: List[str] = []
+    
     class Config:
         json_schema_extra = {
             "example": {
@@ -82,7 +105,55 @@ class TrainingData(BaseModel):
                     {"tool": "network_diagnostics", "parameters": {}, "result": "DNS issue detected"}
                 ],
                 "final_outcome": {"status": "resolved", "solution": "Changed DNS settings"},
-                "quality_metrics": {"accuracy": 0.9, "completeness": 0.8}
+                "quality_metrics": {"accuracy": 0.9, "completeness": 0.8},
+                "mcp_tool_selection": {
+                    "selected_tool": "network_diagnostics",
+                    "selection_reasoning": "Network issue requires diagnostic tools",
+                    "confidence_score": 0.85,
+                    "alternative_tools_considered": ["ping", "traceroute"],
+                    "selection_context": {
+                        "user_intent": "network_troubleshooting",
+                        "available_tools": ["network_diagnostics", "ping", "traceroute"],
+                        "workspace_context": "development_environment"
+                    }
+                },
+                "mcp_function_call": {
+                    "function_name": "run_diagnostics",
+                    "parameters": {"target": "network", "timeout": 30},
+                    "validation_status": "valid",
+                    "parameter_validation": {
+                        "target": {"valid": True, "type": "string"},
+                        "timeout": {"valid": True, "type": "integer", "range": [1, 300]}
+                    }
+                },
+                "mcp_communication_result": {
+                    "success": True,
+                    "response_data": {"diagnostic_result": "DNS issue detected"},
+                    "execution_time": 1.2,
+                    "error_message": None,
+                    "server_response_time": 0.8,
+                    "connection_quality": "excellent"
+                },
+                "fallback_attempted": False,
+                "fallback_strategy": "skip",
+                "tool_selection_context": {
+                    "user_expertise_level": "intermediate",
+                    "task_complexity": "medium",
+                    "available_resources": ["network_access", "system_permissions"],
+                    "time_constraints": "moderate"
+                },
+                "tool_alternatives_considered": ["ping", "traceroute", "network_diagnostics"],
+                "tool_selection_reasoning": "Selected network_diagnostics as it provides comprehensive network analysis",
+                "tool_selection_confidence": 0.85,
+                "function_call_validation": {
+                    "parameter_types": "valid",
+                    "parameter_ranges": "valid",
+                    "required_parameters": "complete",
+                    "parameter_constraints": "satisfied"
+                },
+                "function_call_errors": [],
+                "function_call_retry_count": 0,
+                "function_call_optimization_applied": ["parameter_validation", "timeout_optimization"]
             }
         }
     

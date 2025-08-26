@@ -11,8 +11,8 @@ from .user_agent_manager import UserAgentManager
 
 __all__ = [
     "DomainManager",
-    "ToolRegistry",
-    "AgentFactory", 
+    "ToolRegistry", 
+    "AgentFactory",
     "SimulationEngine",
     "EnvironmentManager",
     "UserAgentManager"

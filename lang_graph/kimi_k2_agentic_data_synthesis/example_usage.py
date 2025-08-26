@@ -433,9 +433,74 @@ async def run_example_pipeline():
         system.cleanup()
 
 
+async def demonstrate_mcp_data_generation():
+    """Demonstrate MCP-focused training data generation."""
+    
+    print("\n🔧 MCP Tool Selection Data Generation Demo")
+    print("=" * 50)
+    
+    try:
+        # Initialize system for MCP demo
+        system = AgenticDataSynthesisSystem(
+            output_dir="mcp_example_output",
+            log_level="INFO"
+        )
+        
+        # Create some agents for MCP data generation
+        domains, tools, agents = await create_example_configs()
+        system.setup_domains(domains)
+        system.setup_tools(tools)
+        system.setup_agents(agents)
+        
+        # Generate MCP training data
+        print("📊 Generating MCP training data...")
+        mcp_data = system.data_generator.generate_mcp_training_data(
+            agent_factory=system.agent_factory,
+            num_samples=20,
+            quality_threshold=0.7,
+            min_confidence=0.6
+        )
+        
+        if mcp_data:
+            print(f"✅ Generated {len(mcp_data)} MCP training samples")
+            
+            # Create batch and export
+            batch = system.data_generator.create_training_batch(
+                name="mcp_tool_selection_batch",
+                description="MCP tool selection learning data",
+                training_data=mcp_data,
+                quality_threshold=0.7
+            )
+            
+            # Export the batch
+            export_path = system.data_generator.export_batch(batch.id, format="json")
+            if export_path:
+                print(f"📁 Exported MCP data to: {export_path}")
+            
+            # Show sample data structure
+            if mcp_data:
+                sample = mcp_data[0]
+                print(f"\n📋 Sample MCP Data Structure:")
+                print(f"  - User Request: {sample.conversation_history[0]['content']}")
+                print(f"  - Selected Tool: {sample.mcp_tool_selection['selected_tool']}")
+                print(f"  - Confidence: {sample.mcp_tool_selection['confidence_score']:.2f}")
+                print(f"  - Function: {sample.mcp_function_call['function_name']}")
+                print(f"  - Success: {sample.mcp_communication_result['success']}")
+        else:
+            print("⚠️  No MCP training data generated")
+            
+    except Exception as e:
+        print(f"❌ Error in MCP demo: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 async def main():
     """Main function to run the example."""
     await run_example_pipeline()
+    
+    # Run MCP demo
+    await demonstrate_mcp_data_generation()
 
 
 if __name__ == "__main__":

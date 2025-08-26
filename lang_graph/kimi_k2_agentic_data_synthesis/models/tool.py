@@ -110,37 +110,64 @@ class ToolConfig(BaseModel):
 
 
 class Tool(BaseModel):
-    """Tool definition for the synthesis system"""
+    """Tool definition for the system"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    type: ToolType
     description: str
+    tool_type: ToolType
+    mcp_server: Optional[str] = None
+    mcp_function_name: Optional[str] = None
+    mcp_parameters: Optional[Dict[str, Any]] = None
+    synthetic_behavior: Optional[Dict[str, Any]] = None
     parameters: List[ToolParameter] = []
-    return_type: str
-    domain_compatibility: List[str] = []
-    usage_examples: List[ToolExample] = []
+    examples: List[ToolExample] = []
+    tags: List[str] = []
     version: str = "1.0.0"
-    author: str = ""
-    documentation_url: Optional[str] = None
     is_active: bool = True
-    usage_count: int = 0
-    success_rate: float = 0.0
-    average_response_time: float = 0.0
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # MCP-specific fields for tool selection learning
+    mcp_connection_required: bool = False
+    mcp_timeout: Optional[float] = 30.0
+    mcp_retry_count: int = 3
+    mcp_fallback_strategy: Optional[str] = None  # "skip", "alternative_tool", "degraded_mode"
+    
+    # Tool selection learning fields
+    selection_confidence_threshold: float = 0.7
+    alternative_tools: List[str] = []
+    usage_contexts: List[str] = []
+    complexity_level: str = "medium"
     
     class Config:
         json_schema_extra = {
             "example": {
-                "name": "web_search",
-                "type": "mcp",
-                "description": "Search the web for information",
-                "parameters": [],
-                "return_type": "search_results",
-                "domain_compatibility": ["general", "research", "information"],
-                "usage_examples": [],
-                "version": "1.0.0",
-                "author": "Kimi-K2 Team"
+                "name": "Code Editor",
+                "description": "Multi-language code editor with syntax highlighting",
+                "tool_type": "MCP",
+                "mcp_server": "code_editor_server",
+                "mcp_function_name": "edit_file",
+                "mcp_parameters": {
+                    "file_path": "string",
+                    "content": "string",
+                    "language": "string"
+                },
+                "parameters": [
+                    {
+                        "name": "file_path",
+                        "type": "string",
+                        "description": "Path to the file to edit",
+                        "required": True
+                    }
+                ],
+                "mcp_connection_required": True,
+                "mcp_timeout": 30.0,
+                "mcp_retry_count": 3,
+                "mcp_fallback_strategy": "skip",
+                "selection_confidence_threshold": 0.8,
+                "alternative_tools": ["file_editor", "text_processor"],
+                "usage_contexts": ["code_development", "file_editing"],
+                "complexity_level": "medium"
             }
         }
     
