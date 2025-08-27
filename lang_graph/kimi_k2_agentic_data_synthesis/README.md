@@ -16,25 +16,26 @@ The Kimi-K2 system is designed to generate comprehensive training data for AI ag
 - **Data Generation**: Exports high-quality training data in multiple formats (JSON, JSONL, CSV)
 - **Scalable Architecture**: Supports concurrent simulations and batch processing
 
-## NEW: MCP-Based Tool Selection Learning System
+## NEW: API-Key-Free Deterministic Tool Selection System
 
-The system now includes a specialized MCP (Model Context Protocol) training data generation system focused on **tool selection and function calling patterns**:
+The system now includes a **completely independent tool selection system** that works without any external API keys or LLM services:
 
-### MCP Communication Simulator
-- **Realistic MCP Server Simulation**: Simulates various MCP servers (file system, database, terminal, API client, etc.)
-- **Function Call Patterns**: Generates realistic function calls with proper parameters and error handling
-- **Communication Statistics**: Tracks success rates, response times, and error patterns
+### Deterministic Intent Analysis
+- **Keyword-Based Pattern Matching**: Uses comprehensive keyword patterns to analyze user intent
+- **No External Dependencies**: Works entirely offline with deterministic logic
+- **Consistent Results**: Same input always produces the same output
+- **Supported Intents**: file_operation, code_development, data_analysis, system_administration, web_interaction, api_integration, data_generation, data_validation, data_transformation, data_cleaning
 
 ### Intelligent Tool Selection
-- **Intent Analysis**: Analyzes user requests to understand intent and domain context
-- **Tool Requirement Mapping**: Maps intents to required and optional tools
-- **Fitness Evaluation**: Evaluates tool fitness based on capabilities and context
-- **Decision Reasoning**: Generates detailed reasoning for tool selection decisions
+- **Deterministic Fitness Scoring**: Tool fitness calculated using hash-based deterministic variation
+- **No Random Elements**: All selections are predictable and reproducible
+- **Context-Aware Validation**: Validates tool selection against requirements and constraints
+- **Enhancement Suggestions**: Provides guidance for improving tool selection
 
 ### High-Quality Training Data
-- **No Fallback Policy**: Strict quality filtering - failed data generation is skipped, not stored
-- **Multi-Dimensional Quality Metrics**: Evaluates tool selection accuracy, function call success, parameter accuracy, and more
-- **Context-Aware Generation**: Creates realistic scenarios with proper workspace context and tool availability
+- **No Fallback Strategies**: System either succeeds or provides clear guidance
+- **Validation-Based Quality**: Uses deterministic validation instead of fallback mechanisms
+- **Consistent Behavior**: Predictable tool selection patterns for reliable training data
 
 ## Architecture
 
@@ -104,24 +105,49 @@ async def main():
 asyncio.run(main())
 ```
 
-### NEW: MCP-Based Data Generation
+### NEW: Deterministic Tool Selection (No API Keys)
 
 ```python
 import asyncio
-from lang_graph.kimi_k2_agentic_data_synthesis.data import MCPDataGenerator
+from lang_graph.kimi_k2_agentic_data_synthesis import AgenticDataSynthesisSystem
 
 async def main():
-    # Initialize MCP data generator
-    generator = MCPDataGenerator(output_directory="mcp_training_data")
-    
-    # Generate high-quality training data for tool selection learning
-    batch = await generator.generate_training_batch(
-        name="tool_selection_batch",
-        description="Training data for MCP tool selection learning",
-        num_tool_selection_samples=100,
-        quality_threshold=0.8  # Strict quality filtering
+    # Initialize system without any API keys
+    system = AgenticDataSynthesisSystem(
+        output_dir="deterministic_data",
+        log_level="INFO"
     )
     
+    # Setup domains, tools, and agents
+    domains, tools, agents = await create_example_configs()
+    system.setup_domains(domains)
+    system.setup_tools(tools)
+    system.setup_agents(agents)
+    
+    # Test deterministic tool selection
+    result = system.agent_factory.simulate_mcp_tool_selection(
+        agent_id="senior_developer",
+        user_request="Create a React component for user authentication",
+        available_tools=["code_editor", "terminal", "git"],
+        context={"confidence_threshold": 0.6}
+    )
+    
+    print(f"Selected Tool: {result['selected_tool']}")
+    print(f"Confidence: {result['confidence_score']:.3f}")
+    print(f"Reasoning: {result['selection_reasoning']}")
+    
+    # Run the complete pipeline without external dependencies
+    results = await system.run_full_pipeline(
+        simulation_configs=simulations,
+        evaluation_config=evaluation_config,
+        export_config=export_config,
+        quality_threshold=0.7
+    )
+    
+    print(f"Generated {results['high_quality_samples']} training samples")
+
+asyncio.run(main())
+```
     if batch:
         print(f"Generated {batch.get_batch_size()} high-quality samples")
         print(f"Average quality: {batch.average_quality_score:.3f}")

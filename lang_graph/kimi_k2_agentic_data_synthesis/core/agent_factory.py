@@ -3,12 +3,11 @@ Agent Factory for the Kimi-K2 Agentic Data Synthesis System
 
 Creates and manages diverse agents with different tool sets and behavior patterns.
 """
-
+import random
 from typing import List, Dict, Any, Optional
 from ..models.agent import Agent, AgentConfig, AgentProfile, BehaviorPattern, Rule, AgentRole, PersonalityType, CommunicationStyle
 from ..models.tool import Tool
 from ..agents.kimi_k2_agent import KimiK2ConversableAgent # Import the new conversable agent
-import random
 import logging
 from datetime import datetime
 
@@ -649,31 +648,22 @@ class AgentFactory:
             selected_tool, intent_analysis, tool_requirements, tool_fitness
         )
 
-        # Check if fallback is needed
-        fallback_info = self._check_fallback_needed(
+        # Enhance tool selection with additional context and recommendations
+        enhanced_selection = self._enhance_tool_selection(
             selected_tool, tool_fitness, tool_requirements, context
         )
 
-        # Apply fallback strategy if needed
-        if fallback_info["fallback_needed"]:
-            fallback_result = self._apply_fallback_strategy(
-                fallback_info, available_tools, tool_requirements, context
-            )
-            selected_tool = fallback_result["selected_tool"]
-            reasoning = fallback_result["reasoning"]
-            tool_fitness = fallback_result["updated_fitness"]
-
         return {
             "agent_id": agent_id,
-            "selected_tool": selected_tool,
+            "selected_tool": enhanced_selection["selected_tool"],
             "selection_reasoning": reasoning,
-            "confidence_score": tool_fitness.get(selected_tool, 0.0),
+            "confidence_score": enhanced_selection["confidence_boost"],
             "intent_analysis": intent_analysis,
             "tool_requirements": tool_requirements,
             "tool_fitness_scores": tool_fitness,
-            "alternative_tools": [tool for tool, score in tool_fitness.items() if score > 0.5 and tool != selected_tool],
-            "fallback_info": fallback_info,
-            "fallback_applied": fallback_info["fallback_needed"],
+            "alternative_tools": enhanced_selection["alternative_tools"],
+            "enhancement_suggestions": enhanced_selection["enhancement_suggestions"],
+            "validation_result": enhanced_selection["validation_result"],
             "selection_context": {
                 "user_expertise_level": context.get("user_expertise_level", "intermediate"),
                 "task_complexity": context.get("task_complexity", "medium"),
@@ -683,14 +673,14 @@ class AgentFactory:
             }
         }
 
-    def _check_fallback_needed(
+    def _validate_tool_selection(
         self,
         selected_tool: str,
         tool_fitness: Dict[str, float],
         tool_requirements: Dict[str, Any],
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Check if fallback strategy is needed"""
+        """Validate tool selection without fallback strategies"""
         
         confidence_threshold = context.get("confidence_threshold", 0.6)
         selected_tool_confidence = tool_fitness.get(selected_tool, 0.0)
@@ -698,10 +688,10 @@ class AgentFactory:
         # Check if selected tool meets confidence threshold
         if selected_tool_confidence < confidence_threshold:
             return {
-                "fallback_needed": True,
+                "validation_passed": False,
                 "reason": "low_confidence",
                 "confidence_gap": confidence_threshold - selected_tool_confidence,
-                "strategy": "skip"  # User requested skip strategy for data generation
+                "suggestion": "Tool confidence below threshold, consider refining requirements"
             }
         
         # Check if required tools are available
@@ -710,75 +700,65 @@ class AgentFactory:
         
         if len(available_required) < len(required_tools):
             return {
-                "fallback_needed": True,
+                "validation_passed": False,
                 "reason": "missing_required_tools",
                 "missing_tools": [tool for tool in required_tools if tool not in tool_fitness],
-                "strategy": "skip"
+                "suggestion": "Required tools not available in current environment"
             }
         
         # Check context constraints
         if context.get("strict_quality", False) and selected_tool_confidence < 0.8:
             return {
-                "fallback_needed": True,
+                "validation_passed": False,
                 "reason": "strict_quality_requirement",
                 "quality_gap": 0.8 - selected_tool_confidence,
-                "strategy": "skip"
+                "suggestion": "Tool quality insufficient for strict requirements"
             }
         
         return {
-            "fallback_needed": False,
-            "reason": "no_fallback_needed",
-            "strategy": None
+            "validation_passed": True,
+            "reason": "validation_successful",
+            "confidence_score": selected_tool_confidence
         }
 
-    def _apply_fallback_strategy(
+    def _enhance_tool_selection(
         self,
-        fallback_info: Dict[str, Any],
-        available_tools: List[str],
+        selected_tool: str,
+        tool_fitness: Dict[str, float],
         tool_requirements: Dict[str, Any],
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Apply fallback strategy based on fallback info"""
+        """Enhance tool selection with additional context and recommendations"""
         
-        strategy = fallback_info.get("strategy", "skip")
+        # Get validation result
+        validation_result = self._validate_tool_selection(
+            selected_tool, tool_fitness, tool_requirements, context
+        )
         
-        if strategy == "skip":
-            # User requested skip strategy - return unknown tool to mark data as unsuitable
-            return {
-                "selected_tool": "unknown",
-                "reasoning": f"Fallback applied: {fallback_info.get('reason', 'unknown')}. Data quality insufficient for training.",
-                "updated_fitness": {"unknown": 0.0}
-            }
+        # Generate enhancement suggestions
+        enhancement_suggestions = []
         
-        elif strategy == "alternative_tool":
-            # Find alternative tool with highest fitness
-            alternative_tools = [tool for tool in available_tools if tool != "unknown"]
-            if alternative_tools:
-                # Create a simple fitness mapping for alternative tools
-                alt_fitness = {tool: 0.5 for tool in alternative_tools}
-                best_alternative = max(alternative_tools, key=lambda t: alt_fitness.get(t, 0.0))
-                return {
-                    "selected_tool": best_alternative,
-                    "reasoning": f"Fallback to alternative tool: {best_alternative}",
-                    "updated_fitness": alt_fitness
-                }
+        if validation_result["validation_passed"]:
+            # Tool selection is valid, suggest optimizations
+            fitness_score = tool_fitness.get(selected_tool, 0.0)
+            if fitness_score < 0.8:
+                enhancement_suggestions.append("Consider refining tool requirements for better fit")
+            if fitness_score > 0.9:
+                enhancement_suggestions.append("Excellent tool fit for current requirements")
+        else:
+            # Tool selection failed, provide guidance
+            enhancement_suggestions.append(validation_result.get("suggestion", "Review tool selection criteria"))
         
-        elif strategy == "degraded_mode":
-            # Use selected tool but with degraded confidence
-            selected_tool = fallback_info.get("selected_tool", "unknown")
-            # Create degraded fitness scores
-            degraded_fitness = {tool: 0.3 for tool in available_tools if tool != "unknown"}
-            if selected_tool != "unknown":
-                degraded_fitness[selected_tool] = 0.4  # Slightly higher for selected tool
-            return {
-                "selected_tool": selected_tool,
-                "reasoning": f"Fallback to degraded mode for tool: {selected_tool}",
-                "updated_fitness": degraded_fitness
-            }
+        # Find alternative tools with high fitness
+        alternative_tools = [
+            tool for tool, score in tool_fitness.items() 
+            if score > 0.7 and tool != selected_tool
+        ]
         
-        # Default fallback to skip
         return {
-            "selected_tool": "unknown",
-            "reasoning": "Fallback strategy failed, skipping data generation",
-            "updated_fitness": {"unknown": 0.0}
+            "selected_tool": selected_tool,
+            "validation_result": validation_result,
+            "enhancement_suggestions": enhancement_suggestions,
+            "alternative_tools": alternative_tools,
+            "confidence_boost": tool_fitness.get(selected_tool, 0.0)
         }

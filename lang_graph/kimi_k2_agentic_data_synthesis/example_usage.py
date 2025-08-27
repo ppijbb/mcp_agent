@@ -495,12 +495,84 @@ async def demonstrate_mcp_data_generation():
         traceback.print_exc()
 
 
+async def demonstrate_deterministic_tool_selection():
+    """Demonstrate the deterministic tool selection system without API keys."""
+    
+    print("\n🔧 Deterministic Tool Selection Demo (No API Keys)")
+    print("=" * 60)
+    
+    try:
+        # Initialize system without LLM config
+        system = AgenticDataSynthesisSystem(
+            output_dir="deterministic_example_output",
+            log_level="INFO"
+        )
+        
+        # Create some agents for tool selection demo
+        domains, tools, agents = await create_example_configs()
+        system.setup_domains(domains)
+        system.setup_tools(tools)
+        system.setup_agents(agents)
+        
+        # Test deterministic tool selection
+        print("📊 Testing deterministic tool selection...")
+        
+        # Sample user requests
+        test_requests = [
+            "Create a React component for user authentication",
+            "Analyze this CSV dataset and create visualizations",
+            "Debug the JavaScript code in the login function",
+            "Set up a Node.js server with Express",
+            "Generate a report from the sales data"
+        ]
+        
+        available_tools = ["code_editor", "terminal", "python", "pandas", "matplotlib", "git"]
+        
+        for i, request in enumerate(test_requests, 1):
+            print(f"\n🔍 Test {i}: {request}")
+            print("-" * 50)
+            
+            # Use the agent factory to simulate tool selection
+            result = system.agent_factory.simulate_mcp_tool_selection(
+                agent_id="senior_developer",
+                user_request=request,
+                available_tools=available_tools,
+                context={
+                    "user_expertise_level": "intermediate",
+                    "task_complexity": "medium",
+                    "confidence_threshold": 0.6
+                }
+            )
+            
+            print(f"  Selected Tool: {result['selected_tool']}")
+            print(f"  Confidence: {result['confidence_score']:.3f}")
+            print(f"  Reasoning: {result['selection_reasoning']}")
+            print(f"  Validation: {result['validation_result']['reason']}")
+            
+            if result['enhancement_suggestions']:
+                print(f"  Suggestions: {', '.join(result['enhancement_suggestions'])}")
+            
+            if result['alternative_tools']:
+                print(f"  Alternatives: {', '.join(result['alternative_tools'])}")
+        
+        print(f"\n✅ Deterministic tool selection demo completed!")
+        print("   All selections were made without external API calls.")
+        
+    except Exception as e:
+        print(f"❌ Error in deterministic demo: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 async def main():
     """Main function to run the example."""
     await run_example_pipeline()
     
     # Run MCP demo
     await demonstrate_mcp_data_generation()
+    
+    # Run deterministic tool selection demo
+    await demonstrate_deterministic_tool_selection()
 
 
 if __name__ == "__main__":
