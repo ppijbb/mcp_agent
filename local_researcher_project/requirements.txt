@@ -1,11 +1,11 @@
 # Core dependencies
-langchain>=0.1.0
-langgraph>=0.2.0
+langchain>=0.2.0
+langgraph>=0.1.0
 langchain-community>=0.0.20
 langchain-core>=0.2.0
 
 # Open Deep Research dependencies
-open-deep-research>=0.1.0
+# open-deep-research>=0.1.0  # Package not available yet
 
 # AI/ML dependencies
 openai>=1.0.0
@@ -34,7 +34,7 @@ rich>=13.7.0
 typer>=0.9.0
 
 # Async and concurrency
-asyncio>=3.11.0
+# asyncio>=3.11.0  # Built-in module, no need to install
 aiohttp>=3.9.0
 httpx>=0.25.0
 
