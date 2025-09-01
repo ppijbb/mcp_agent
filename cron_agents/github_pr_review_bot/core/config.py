@@ -24,12 +24,19 @@ class LLMConfig(BaseSettings):
     max_tokens: int = Field(4000, env="MAX_TOKENS")
     temperature: float = Field(0.1, env="TEMPERATURE")
     timeout: int = Field(30, env="LLM_TIMEOUT")
+    # Fallback 방지 설정 - 오류 발생 시 즉시 종료
+    fail_on_llm_error: bool = Field(True, env="LLM_FAIL_ON_ERROR")
+    require_valid_response: bool = Field(True, env="LLM_REQUIRE_VALID_RESPONSE")
     
     @validator("default_provider")
     def validate_provider(cls, v):
         if v not in ["openai", "anthropic", "google"]:
             raise ValueError("default_provider must be one of: openai, anthropic, google")
         return v
+    
+    # Fallback 방지 설정
+    fail_on_llm_error: bool = Field(True, env="LLM_FAIL_ON_ERROR")
+    require_valid_response: bool = Field(True, env="LLM_REQUIRE_VALID_RESPONSE")
 
 class GitHubConfig(BaseSettings):
     """GitHub 설정"""
@@ -38,6 +45,12 @@ class GitHubConfig(BaseSettings):
     app_id: Optional[str] = Field(None, env="GITHUB_APP_ID")
     private_key_path: Optional[str] = Field(None, env="GITHUB_PRIVATE_KEY_PATH")
     rate_limit: int = Field(5000, env="GITHUB_RATE_LIMIT")
+    # PR 리뷰 기본 설정 - 명시적 요청이 있을 때만 활성화
+    auto_review_enabled: bool = Field(False, env="GITHUB_AUTO_REVIEW_ENABLED")
+    require_explicit_review_request: bool = Field(True, env="GITHUB_REQUIRE_EXPLICIT_REVIEW_REQUEST")
+    # 오류 처리 설정 - fallback 없이 즉시 종료
+    fail_fast_on_error: bool = Field(True, env="GITHUB_FAIL_FAST_ON_ERROR")
+    max_retry_attempts: int = Field(0, env="GITHUB_MAX_RETRY_ATTEMPTS")  # 0 = 재시도 없음
     
     @validator("token")
     def validate_token(cls, v):
