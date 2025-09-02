@@ -1,8 +1,8 @@
 """
-GitHub PR Review Bot - 메인 실행 파일
+GitHub PR Review Bot - Modular Architecture
 
 이 모듈은 GitHub PR 리뷰 봇의 메인 진입점입니다.
-Fallback 없이 오류 발생 시 즉시 종료됩니다.
+모듈화된 아키텍처를 사용하여 관리하기 쉽고 확장 가능한 구조를 제공합니다.
 """
 
 import os
@@ -11,7 +11,6 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 
-from .core.pr_review_server import GitHubPRReviewServer
 from .core.config import config
 
 # 환경 변수 로드
@@ -24,44 +23,56 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def validate_environment():
+    """환경 변수 검증"""
+    required_vars = [
+        'GITHUB_TOKEN',
+        'OPENAI_API_KEY'
+    ]
+    
+    missing_vars = []
+    for var in required_vars:
+        if not getattr(config, var.lower(), None):
+            missing_vars.append(var)
+    
+    if missing_vars:
+        logger.error(f"필수 환경 변수가 설정되지 않았습니다: {', '.join(missing_vars)}")
+        sys.exit(1)
+    
+    logger.info("환경 변수 검증 완료")
+
 async def main():
-    """
-    메인 함수 - 모든 오류는 즉시 종료됩니다 (NO FALLBACK)
-    """
+    """메인 함수"""
     try:
-        # 필수 환경 변수 확인 - 없으면 즉시 종료
-        if not config.github.token:
-            logger.error("GITHUB_TOKEN 환경 변수가 설정되지 않았습니다.")
-            sys.exit(1)
+        logger.info("GitHub PR Review Bot 시작 - Modular Architecture")
         
-        # LLM API 키 확인 - 없으면 즉시 종료
-        if not any([
-            config.llm.openai_api_key,
-            config.llm.anthropic_api_key,
-            config.llm.google_api_key
-        ]):
-            logger.error("LLM API 키가 설정되지 않았습니다. (OpenAI, Anthropic, Google 중 하나 필요)")
-            sys.exit(1)
+        # 환경 변수 검증
+        validate_environment()
         
-        # 기본 PR 리뷰 비활성화 확인
-        if config.github.auto_review_enabled:
-            logger.warning("자동 PR 리뷰가 활성화되어 있습니다. 보안을 위해 비활성화를 권장합니다.")
+        # 설정 정보 로그
+        logger.info(f"GitHub 자동 리뷰: {'활성화' if config.github.auto_review_enabled else '비활성화'}")
+        logger.info(f"명시적 리뷰 요청 필요: {'예' if config.github.require_explicit_review_request else '아니오'}")
+        logger.info(f"즉시 실패 모드: {'활성화' if config.github.fail_fast_on_error else '비활성화'}")
         
-        logger.info("GitHub PR Review Bot 시작 - NO FALLBACK MODE")
-        logger.info(f"Auto Review Enabled: {config.github.auto_review_enabled}")
-        logger.info(f"Fail Fast on Error: {config.github.fail_fast_on_error}")
+        # 웹훅 서버 시작
+        from .webhook_server import app
+        import uvicorn
         
-        # MCP 서버 시작 - 오류 발생 시 즉시 종료
-        server = GitHubPRReviewServer()
-        await server.run()
+        logger.info("웹훅 서버 시작 중...")
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=8000,
+            reload=False,
+            log_level="info"
+        )
         
     except KeyboardInterrupt:
-        logger.info("사용자에 의해 중단되었습니다.")
+        logger.info("사용자에 의해 중단됨")
         sys.exit(0)
     except Exception as e:
-        logger.error(f"치명적 오류 발생: {e}")
-        logger.error("Fallback 없이 즉시 종료됩니다.")
+        logger.error(f"애플리케이션 실행 실패: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

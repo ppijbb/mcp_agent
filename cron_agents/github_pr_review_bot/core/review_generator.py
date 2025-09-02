@@ -35,8 +35,10 @@ class ReviewGenerator:
                 sys.exit(1)
             raise
     
-    async def generate_review(self, diff_content: str, 
-                             pr_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def generate_review(
+        self,
+        diff_content: str, 
+        pr_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         MCP 통합을 통해 종합적인 코드 리뷰를 생성합니다 - NO FALLBACK
         
@@ -54,11 +56,11 @@ class ReviewGenerator:
         if not diff_content:
             raise ValueError("diff_content가 비어있습니다.")
         
-        # PR 메타데이터 준비
+            # PR 메타데이터 준비
         metadata = pr_metadata or {}
         pr_title = metadata.get("title", "")
         pr_description = metadata.get("description", "")
-        
+            
         logger.info(f"MCP 통합 리뷰 생성 시작: PR 제목={pr_title[:50]}...")
         
         # 파일 확장자 추출하여 언어 감지
@@ -66,7 +68,7 @@ class ReviewGenerator:
         
         # MCP 통합을 통한 종합 리뷰 생성
         context = {
-            "pr_title": pr_title,
+                    "pr_title": pr_title,
             "pr_description": pr_description,
             "diff_content": diff_content
         }
@@ -122,7 +124,7 @@ class ReviewGenerator:
         if not file_path:
             raise ValueError("file_path가 비어있습니다.")
         
-        # 파일 확장자 추출
+            # 파일 확장자 추출
         file_extension = file_path.split(".")[-1] if "." in file_path else ""
         language = self._get_language_from_extension(file_extension)
         
@@ -173,7 +175,7 @@ class ReviewGenerator:
         if not file_path:
             raise ValueError("file_path가 비어있습니다.")
         
-        # 파일 확장자 추출
+            # 파일 확장자 추출
         file_extension = file_path.split(".")[-1] if "." in file_path else ""
         language = self._get_language_from_extension(file_extension)
         
@@ -237,7 +239,7 @@ class ReviewGenerator:
         metadata = pr_metadata or {}
         pr_title = metadata.get("title", "")
         pr_description = metadata.get("description", "")
-        
+            
         logger.info(f"MCP 통합 요약 리뷰 생성 시작: 파일 수={len(pr_files)}")
         
         # 모든 파일의 변경사항을 하나의 코드로 결합
@@ -248,7 +250,7 @@ class ReviewGenerator:
             code=combined_code,
             language="mixed",  # 여러 언어가 섞여있을 수 있음
             context={
-                "pr_title": pr_title,
+                    "pr_title": pr_title,
                 "pr_description": pr_description,
                 "file_count": len(pr_files),
                 "total_changes": sum(f.get("changes", 0) for f in pr_files)
