@@ -36,21 +36,36 @@ class GitHubClient:
             if not self.token:
                 raise ValueError("GitHub 토큰이 필요합니다. 환경 변수 GITHUB_TOKEN을 설정하거나 직접 제공해주세요.")
             
+            # GitHub 클라이언트 초기화 (재시도 없음)
             self.client = Github(self.token)
             if not self.client:
                 raise ValueError("GitHub 클라이언트 초기화에 실패했습니다.")
             
-            # 토큰 유효성 검증
-            try:
-                user = self.client.get_user()
-                if not user:
-                    raise ValueError("GitHub 토큰이 유효하지 않습니다.")
-                logger.info(f"GitHub 클라이언트가 초기화되었습니다. 사용자: {user.login} (NO FALLBACK MODE)")
-            except GithubException as e:
-                if e.status == 401:
-                    raise ValueError("GitHub 토큰이 유효하지 않습니다.")
-                else:
-                    raise ValueError(f"GitHub API 연결 테스트 실패: {e}")
+            # 토큰 유효성 검증 (즉시 실패)
+            user = self.client.get_user()
+            if not user:
+                raise ValueError("GitHub 토큰이 유효하지 않습니다.")
+            
+            # 사용자 권한 검증
+            if not user.login:
+                raise ValueError("GitHub 사용자 정보를 가져올 수 없습니다.")
+            
+            # API 레이트 리미트 확인
+            rate_limit = self.client.get_rate_limit()
+            if rate_limit.core.remaining <= 0:
+                raise ValueError(f"GitHub API 레이트 리미트 초과. 리셋 시간: {rate_limit.core.reset}")
+            
+            logger.info(f"GitHub 클라이언트가 초기화되었습니다. 사용자: {user.login}, 남은 API 호출: {rate_limit.core.remaining} (NO FALLBACK MODE)")
+            
+        except GithubException as e:
+            if e.status == 401:
+                raise ValueError("GitHub 토큰이 유효하지 않습니다.")
+            elif e.status == 403:
+                raise ValueError(f"GitHub API 접근 권한이 없습니다: {e}")
+            elif e.status == 429:
+                raise ValueError(f"GitHub API 레이트 리미트 초과: {e}")
+            else:
+                raise ValueError(f"GitHub API 연결 실패: {e}")
         except Exception as e:
             logger.error(f"GitHub 클라이언트 초기화 중 치명적 오류 발생: {e}")
             if config.github.fail_fast_on_error:
@@ -76,16 +91,39 @@ class GitHubClient:
         if "/" not in repo_full_name:
             raise ValueError("저장소 이름은 'owner/repo' 형식이어야 합니다.")
         
+        # 저장소 이름 형식 검증
+        parts = repo_full_name.split("/")
+        if len(parts) != 2:
+            raise ValueError("저장소 이름은 'owner/repo' 형식이어야 합니다.")
+        
+        owner, repo_name = parts
+        if not owner or not repo_name:
+            raise ValueError("저장소 이름의 owner와 repo 부분이 모두 필요합니다.")
+        
+        # API 레이트 리미트 재확인
+        rate_limit = self.client.get_rate_limit()
+        if rate_limit.core.remaining <= 0:
+            raise ValueError(f"GitHub API 레이트 리미트 초과. 리셋 시간: {rate_limit.core.reset}")
+        
         try:
             repo = self.client.get_repo(repo_full_name)
             if not repo:
                 raise ValueError(f"저장소를 찾을 수 없습니다: {repo_full_name}")
+            
+            # 저장소 접근 권한 확인
+            if repo.private and not hasattr(repo, 'permissions'):
+                raise ValueError(f"비공개 저장소에 접근할 권한이 없습니다: {repo_full_name}")
+            
+            logger.info(f"저장소 연결 성공: {repo_full_name}, 남은 API 호출: {rate_limit.core.remaining}")
             return repo
+            
         except GithubException as e:
             if e.status == 404:
                 raise ValueError(f"저장소를 찾을 수 없습니다: {repo_full_name}")
             elif e.status == 403:
                 raise ValueError(f"저장소에 접근할 권한이 없습니다: {repo_full_name}")
+            elif e.status == 429:
+                raise ValueError(f"GitHub API 레이트 리미트 초과: {e}")
             else:
                 raise ValueError(f"저장소를 가져오는 중 오류 발생: {e}")
     

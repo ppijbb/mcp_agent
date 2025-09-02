@@ -1,8 +1,7 @@
 """
-MCP Integration - 공식 Python MCP SDK 사용
+MCP Integration - 실제 MCP 서버와 LangChain/LangGraph 통합
 
-이 모듈은 공식 Python MCP SDK를 사용하여 코드 리뷰를 강화합니다.
-웹 검색 결과에서 확인된 공식 SDK를 활용합니다.
+이 모듈은 실제 구현된 MCP 서버들과 LangChain/LangGraph를 통합합니다.
 """
 
 import logging
@@ -10,18 +9,17 @@ import asyncio
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import json
+import os
 
-# 공식 Python MCP SDK 사용
+# LangChain과 LangGraph MCP 통합
 try:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client import Client
-    from mcp.server import Server
-    from mcp.server.fastmcp import FastMCP
-    from mcp.server.fastmcp.tools import tool
-    from mcp.server.fastmcp.resources import resource
-    from mcp.server.fastmcp.prompts import prompt
+    from langchain_mcp_adapters.client import MultiServerMCPClient
+    from langchain_openai import ChatOpenAI
+    from langchain.agents import initialize_agent, AgentType
+    from langgraph.graph import StateGraph, END
+    from langchain.schema import BaseMessage, HumanMessage, AIMessage
 except ImportError:
-    logging.error("공식 MCP SDK가 설치되지 않았습니다. 'pip install mcp'를 실행하세요.")
+    logging.error("LangChain MCP 어댑터가 설치되지 않았습니다. 'pip install langchain-mcp-adapters'를 실행하세요.")
     raise
 
 from .config import config
@@ -29,199 +27,230 @@ from .config import config
 logger = logging.getLogger(__name__)
 
 class MCPIntegrationManager:
-    """공식 Python MCP SDK를 사용한 통합 관리자"""
+    """실제 MCP 서버와 LangChain/LangGraph 통합 관리자"""
     
     def __init__(self):
-        # 공식 MCP SDK 클라이언트 초기화
-        self.client = None
-        self.servers = {}
+        # LangChain MCP 클라이언트 초기화
+        self.mcp_client = None
+        self.agent = None
+        self.langgraph_app = None
+        self.tools = []
         
-        # 사용 가능한 MCP 서버들 (공식 SDK 기반)
-        self.available_servers = {
-            'code-analysis': {
-                'name': 'Code Analysis',
-                'description': 'Neo4j 기반 코드 분석 및 구조적 인사이트',
-                'command': ['python', '-m', 'mcp.servers.code_analysis'],
-                'port': 8001
+        # 실제 존재하는 MCP 서버 설정 (LangChain 방식)
+        self.server_configs = {
+            "github": {
+                "command": "npx",
+                "args": ["@modelcontextprotocol/server-github"],
+                "transport": "stdio",
             },
-            'code-expert-review': {
-                'name': 'Code Expert Review', 
-                'description': 'Martin Fowler, Uncle Bob 등 전문가 시뮬레이션',
-                'command': ['python', '-m', 'mcp.servers.code_expert_review'],
-                'port': 8002
+            "filesystem": {
+                "command": "npx",
+                "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+                "transport": "stdio",
             },
-            'language-server': {
-                'name': 'Language Server',
-                'description': '다중 언어 코드 분석 및 조작',
-                'command': ['python', '-m', 'mcp.servers.language_server'],
-                'port': 8003
+            "brave_search": {
+                "command": "npx",
+                "args": ["@modelcontextprotocol/server-brave-search"],
+                "transport": "stdio",
             },
-            'tree-sitter': {
-                'name': 'Tree-sitter',
-                'description': '구조적 코드 이해 및 조작',
-                'command': ['python', '-m', 'mcp.servers.tree_sitter'],
-                'port': 8004
-            },
-            'sonarcloud': {
-                'name': 'SonarCloud',
-                'description': '코드 품질 및 보안 분석',
-                'command': ['python', '-m', 'mcp.servers.sonarcloud'],
-                'port': 8005
-            },
-            'codeql': {
-                'name': 'CodeQL',
-                'description': '정적 보안 분석 엔진',
-                'command': ['python', '-m', 'mcp.servers.codeql'],
-                'port': 8006
+            "fetch": {
+                "command": "npx",
+                "args": ["@modelcontextprotocol/server-fetch"],
+                "transport": "stdio",
             }
         }
         
-        logger.info(f"MCP Integration Manager initialized with {len(self.available_servers)} available servers")
+        # LLM 초기화
+        self.llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.1,
+            api_key=config.llm.openai_api_key
+        )
+        
+        self._initialize_mcp_client()
+        self._initialize_agent()
+        self._initialize_langgraph()
+        
+        logger.info(f"MCP Integration Manager initialized with real MCP servers")
+    
+    def _initialize_mcp_client(self):
+        """MCP 클라이언트 초기화 (LangChain 방식)"""
+        try:
+            self.mcp_client = MultiServerMCPClient(self.server_configs)
+            self.tools = self.mcp_client.get_tools()
+            logger.info(f"MCP 클라이언트 초기화 완료: {len(self.tools)}개 도구 로드")
+        except Exception as e:
+            logger.error(f"MCP 클라이언트 초기화 실패: {e}")
+            raise ValueError(f"MCP 클라이언트 초기화 실패: {e}")
+    
+    def _initialize_agent(self):
+        """LangChain 에이전트 초기화"""
+        try:
+            self.agent = initialize_agent(
+                tools=self.tools,
+                llm=self.llm,
+                agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                verbose=True,
+                handle_parsing_errors=True
+            )
+            logger.info("LangChain 에이전트 초기화 완료")
+        except Exception as e:
+            logger.error(f"LangChain 에이전트 초기화 실패: {e}")
+            raise ValueError(f"LangChain 에이전트 초기화 실패: {e}")
+    
+    def _initialize_langgraph(self):
+        """LangGraph 워크플로우 초기화"""
+        try:
+            # LangGraph 상태 정의
+            from typing import TypedDict
+            
+            class ReviewState(TypedDict):
+                code: str
+                language: str
+                context: Dict[str, Any]
+                analysis_results: Dict[str, Any]
+                final_review: str
+            
+            # 그래프 구성
+            workflow = StateGraph(ReviewState)
+            
+            # 노드 추가
+            workflow.add_node("analyze_code", self._analyze_code_node)
+            workflow.add_node("generate_review", self._generate_review_node)
+            
+            # 엣지 추가
+            workflow.set_entry_point("analyze_code")
+            workflow.add_edge("analyze_code", "generate_review")
+            workflow.add_edge("generate_review", END)
+            
+            self.langgraph_app = workflow.compile()
+            logger.info("LangGraph 워크플로우 초기화 완료")
+        except Exception as e:
+            logger.error(f"LangGraph 초기화 실패: {e}")
+            raise ValueError(f"LangGraph 초기화 실패: {e}")
+    
+    def _analyze_code_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """코드 분석 노드 (실제 MCP 서버 사용)"""
+        try:
+            # GitHub 서버로 PR 정보 분석
+            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            if github_tool:
+                result = github_tool.invoke({
+                    "action": "analyze_pr",
+                    "code": state["code"],
+                    "language": state["language"]
+                })
+                state["analysis_results"]["github_analysis"] = result
+            
+            # 파일 시스템으로 코드베이스 분석
+            filesystem_tool = next((t for t in self.tools if "filesystem" in t.name.lower()), None)
+            if filesystem_tool:
+                result = filesystem_tool.invoke({
+                    "action": "analyze_codebase",
+                    "path": "."
+                })
+                state["analysis_results"]["filesystem_analysis"] = result
+            
+            return state
+        except Exception as e:
+            raise ValueError(f"코드 분석 실패: {e}")
+    
+    def _generate_review_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """리뷰 생성 노드 (실제 MCP 서버 사용)"""
+        try:
+            # 웹 검색으로 모범 사례 찾기
+            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+            if search_tool:
+                search_result = search_tool.invoke({
+                    "query": f"{state['language']} code review best practices"
+                })
+                state["analysis_results"]["best_practices"] = search_result
+            
+            # LangChain 에이전트로 종합 리뷰 생성
+            prompt = f"""
+            다음 코드를 분석하고 리뷰를 생성해주세요:
+            
+            언어: {state['language']}
+            코드: {state['code']}
+            분석 결과: {state['analysis_results']}
+            
+            GitHub PR 리뷰 관점에서 코드 품질, 보안, 성능, 스타일을 종합적으로 검토하고 리뷰를 작성해주세요.
+            """
+            
+            result = self.agent.run(prompt)
+            state["final_review"] = result
+            
+            return state
+        except Exception as e:
+            raise ValueError(f"리뷰 생성 실패: {e}")
     
     async def connect_to_server(self, server_name: str) -> bool:
-        """
-        MCP 서버에 연결 (공식 SDK 사용)
+        """MCP 서버에 연결 (LangChain 방식)"""
+        if server_name not in self.server_configs:
+            raise ValueError(f"Unknown MCP server: {server_name}")
         
-        Args:
-            server_name (str): 서버 이름
-            
-        Returns:
-            bool: 연결 성공 여부
-        """
-        if server_name not in self.available_servers:
-            logger.error(f"Unknown MCP server: {server_name}")
-            return False
+        # LangChain MCP 클라이언트는 이미 초기화 시 모든 서버에 연결됨
+        server_tools = [tool for tool in self.tools if server_name in tool.name.lower()]
         
-        server_info = self.available_servers[server_name]
-        
-        try:
-            # 공식 MCP SDK를 사용한 연결
-            server_params = StdioServerParameters(
-                command=server_info['command']
-            )
-            
-            async with ClientSession(server_params) as session:
-                # 서버 정보 확인
-                server_info_result = await session.list_tools()
-                if server_info_result:
-                    self.servers[server_name] = {
-                        'session': session,
-                        'info': server_info,
-                        'tools': server_info_result
-                    }
-                    logger.info(f"Connected to MCP server: {server_name}")
-                    return True
-                else:
-                    logger.warning(f"Failed to connect to {server_name}: No tools available")
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"Error connecting to {server_name}: {e}")
-            return False
+        if server_tools:
+            logger.info(f"MCP 서버 {server_name}에 연결됨: {len(server_tools)}개 도구")
+            return True
+        else:
+            raise ValueError(f"MCP 서버 {server_name}에 연결할 수 없습니다.")
     
     async def call_mcp_tool(self, server_name: str, tool_name: str, **kwargs) -> Dict[str, Any]:
-        """
-        MCP 서버의 도구 호출 (공식 SDK 사용)
+        """MCP 서버의 도구 호출 (LangChain 방식)"""
+        # LangChain 도구에서 해당 도구 찾기
+        target_tool = None
+        for tool in self.tools:
+            if server_name in tool.name.lower() and tool_name in tool.name.lower():
+                target_tool = tool
+                break
         
-        Args:
-            server_name (str): 서버 이름
-            tool_name (str): 도구 이름
-            **kwargs: 도구 매개변수
-            
-        Returns:
-            Dict[str, Any]: 도구 실행 결과
-        """
-        if server_name not in self.servers:
-            if not await self.connect_to_server(server_name):
-                return {"error": f"Failed to connect to {server_name}"}
+        if not target_tool:
+            raise ValueError(f"도구를 찾을 수 없습니다: {server_name}.{tool_name}")
         
-        server_data = self.servers[server_name]
-        session = server_data['session']
+        # LangChain 도구 호출
+        result = target_tool.invoke(kwargs)
+        if not result:
+            raise ValueError(f"No result from MCP tool {tool_name} on {server_name}")
         
-        try:
-            # 공식 SDK를 사용한 도구 호출
-            result = await session.call_tool(tool_name, kwargs)
-            return result
-        except Exception as e:
-            logger.error(f"Error calling tool {tool_name} on {server_name}: {e}")
-            return {"error": str(e)}
+        return {"result": result}
     
     async def get_comprehensive_review(self, code: str, language: str, 
                                      context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        종합적인 코드 리뷰 (공식 MCP SDK 활용)
-        
-        Args:
-            code (str): 분석할 코드
-            language (str): 프로그래밍 언어
-            context (Dict[str, Any], optional): 추가 컨텍스트
-            
-        Returns:
-            Dict[str, Any]: 종합 리뷰 결과
-        """
-        results = {
-            'timestamp': datetime.now().isoformat(),
-            'language': language,
-            'mcp_analyses': {},
-            'summary': {}
+        """종합적인 코드 리뷰 (LangGraph 워크플로우 활용)"""
+        # LangGraph 워크플로우 실행
+        initial_state = {
+            "code": code,
+            "language": language,
+            "context": context or {},
+            "analysis_results": {},
+            "final_review": ""
         }
         
-        # 1. 기본 코드 분석
-        if await self.connect_to_server('code-analysis'):
-            analysis_result = await self.call_mcp_tool(
-                'code-analysis', 'analyze_codebase',
-                code=code, language=language
-            )
-            results['mcp_analyses']['code_analysis'] = analysis_result
-        
-        # 2. 언어별 분석
-        if await self.connect_to_server('language-server'):
-            language_result = await self.call_mcp_tool(
-                'language-server', 'code_completion',
-                code=code, language=language
-            )
-            results['mcp_analyses']['language_analysis'] = language_result
-        
-        # 3. 보안 분석
-        if await self.connect_to_server('codeql'):
-            security_result = await self.call_mcp_tool(
-                'codeql', 'security_scan',
-                code=code, language=language
-            )
-            results['mcp_analyses']['security_analysis'] = security_result
-        
-        # 4. 성능 분석
-        if await self.connect_to_server('sonarcloud'):
-            performance_result = await self.call_mcp_tool(
-                'sonarcloud', 'quality_analysis',
-                code=code, language=language
-            )
-            results['mcp_analyses']['performance_analysis'] = performance_result
-        
-        # 5. 전문가 리뷰
-        if await self.connect_to_server('code-expert-review'):
-            expert_result = await self.call_mcp_tool(
-                'code-expert-review', 'expert_review',
-                code=code, language=language,
-                expert='martin_fowler'  # 또는 'uncle_bob'
-            )
-            results['mcp_analyses']['expert_review'] = expert_result
-        
-        # 6. 구조적 분석
-        if await self.connect_to_server('tree-sitter'):
-            structure_result = await self.call_mcp_tool(
-                'tree-sitter', 'parse_code',
-                code=code, language=language
-            )
-            results['mcp_analyses']['structural_analysis'] = structure_result
-        
-        # 7. 종합 요약 생성
-        results['summary'] = self._generate_comprehensive_summary(results['mcp_analyses'])
-        
-        return results
+        try:
+            # LangGraph 앱 실행
+            final_state = self.langgraph_app.invoke(initial_state)
+            
+            results = {
+                'timestamp': datetime.now().isoformat(),
+                'language': language,
+                'mcp_analyses': final_state.get('analysis_results', {}),
+                'summary': {
+                    'total_analyses': len(final_state.get('analysis_results', {})),
+                    'final_review': final_state.get('final_review', ''),
+                    'recommendations': [final_state.get('final_review', '')]
+                }
+            }
+            
+            return results
+            
+        except Exception as e:
+            raise ValueError(f"LangGraph 워크플로우 실행 실패: {e}")
     
     def _generate_comprehensive_summary(self, analyses: Dict[str, Any]) -> Dict[str, Any]:
-        """종합 분석 요약 생성"""
+        """종합 분석 요약 생성 (LangChain 방식)"""
         summary = {
             'total_analyses': len(analyses),
             'critical_issues': 0,
@@ -269,62 +298,97 @@ class MCPIntegrationManager:
     
     async def get_specialized_analysis(self, analysis_type: str, code: str, 
                                      language: str, **kwargs) -> Dict[str, Any]:
-        """
-        특화된 분석 수행 (공식 SDK 사용)
-        
-        Args:
-            analysis_type (str): 분석 유형
-            code (str): 분석할 코드
-            language (str): 프로그래밍 언어
-            **kwargs: 추가 매개변수
+        """특화된 분석 수행 (실제 MCP 서버 사용)"""
+        try:
+            if analysis_type == "github":
+                # GitHub 서버로 PR 분석
+                github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+                if github_tool:
+                    result = github_tool.invoke({
+                        "action": "analyze_pr",
+                        "code": code,
+                        "language": language,
+                        **kwargs
+                    })
+                    return {"result": result, "analysis_type": "github"}
             
-        Returns:
-            Dict[str, Any]: 분석 결과
-        """
-        analysis_mapping = {
-            'security': ('codeql', 'security_scan'),
-            'performance': ('sonarcloud', 'quality_analysis'),
-            'quality': ('code-analysis', 'analyze_codebase'),
-            'expert': ('code-expert-review', 'expert_review'),
-            'structure': ('tree-sitter', 'parse_code'),
-            'language': ('language-server', 'code_completion')
-        }
-        
-        if analysis_type not in analysis_mapping:
-            return {"error": f"Unknown analysis type: {analysis_type}"}
-        
-        server_name, tool_name = analysis_mapping[analysis_type]
-        
-        return await self.call_mcp_tool(
-            server_name, tool_name,
-            code=code, language=language, **kwargs
-        )
+            elif analysis_type == "filesystem":
+                # 파일 시스템 서버로 코드베이스 분석
+                filesystem_tool = next((t for t in self.tools if "filesystem" in t.name.lower()), None)
+                if filesystem_tool:
+                    result = filesystem_tool.invoke({
+                        "action": "analyze_codebase",
+                        "path": kwargs.get("path", "."),
+                        "code": code
+                    })
+                    return {"result": result, "analysis_type": "filesystem"}
+            
+            elif analysis_type == "search":
+                # Brave Search 서버로 웹 검색
+                search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+                if search_tool:
+                    query = kwargs.get("query", f"{language} code review best practices")
+                    result = search_tool.invoke({"query": query})
+                    return {"result": result, "analysis_type": "search"}
+            
+            elif analysis_type == "fetch":
+                # Fetch 서버로 API 호출
+                fetch_tool = next((t for t in self.tools if "fetch" in t.name.lower()), None)
+                if fetch_tool:
+                    url = kwargs.get("url", "https://api.github.com/repos/microsoft/vscode")
+                    result = fetch_tool.invoke({"url": url})
+                    return {"result": result, "analysis_type": "fetch"}
+            
+            else:
+                # LangChain 에이전트로 일반 분석
+                prompt = f"""
+                다음 {analysis_type} 분석을 수행해주세요:
+                
+                분석 유형: {analysis_type}
+                언어: {language}
+                코드: {code}
+                추가 매개변수: {kwargs}
+                
+                GitHub PR 리뷰 관점에서 분석을 수행하고 결과를 반환해주세요.
+                """
+                
+                result = self.agent.run(prompt)
+                return {"result": result, "analysis_type": analysis_type}
+                
+        except Exception as e:
+            raise ValueError(f"특화 분석 실패 ({analysis_type}): {e}")
     
     def get_available_servers(self) -> List[Dict[str, Any]]:
-        """사용 가능한 MCP 서버 목록 반환"""
+        """사용 가능한 MCP 서버 목록 반환 (LangChain 방식)"""
         return [
             {
                 'name': name,
-                'info': info,
-                'connected': name in self.servers
+                'info': config,
+                'connected': any(name in tool.name.lower() for tool in self.tools)
             }
-            for name, info in self.available_servers.items()
+            for name, config in self.server_configs.items()
         ]
     
     def get_server_status(self) -> Dict[str, Any]:
-        """서버 상태 정보 반환"""
+        """서버 상태 정보 반환 (LangChain 방식)"""
+        connected_servers = []
+        for server_name in self.server_configs.keys():
+            if any(server_name in tool.name.lower() for tool in self.tools):
+                connected_servers.append(server_name)
+        
         return {
-            'total_servers': len(self.available_servers),
-            'connected_servers': len(self.servers),
-            'available_servers': list(self.available_servers.keys()),
-            'active_connections': list(self.servers.keys())
+            'total_servers': len(self.server_configs),
+            'connected_servers': len(connected_servers),
+            'available_servers': list(self.server_configs.keys()),
+            'active_connections': connected_servers,
+            'total_tools': len(self.tools)
         }
     
     async def health_check_all_servers(self) -> Dict[str, Any]:
-        """모든 MCP 서버 상태 확인"""
+        """모든 MCP 서버 상태 확인 (LangChain 방식)"""
         health_results = {}
         
-        for server_name in self.available_servers.keys():
+        for server_name in self.server_configs.keys():
             try:
                 is_connected = await self.connect_to_server(server_name)
                 health_results[server_name] = {
