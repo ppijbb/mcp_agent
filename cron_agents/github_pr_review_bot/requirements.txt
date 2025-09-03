@@ -28,6 +28,12 @@ black>=25.1.0
 # 시스템 모니터링 (최소)
 psutil>=7.0.0
 
+# MCP (Model Context Protocol) 서버들
+# 실제 MCP 서버들은 npm으로 설치됨:
+# npm install @modelcontextprotocol/server-filesystem
+# npm install @modelcontextprotocol/server-memory  
+# npm install @modelcontextprotocol/server-sequential-thinking
+
 # 무료 AI 리뷰를 위한 로컬 분석 도구
 # ast는 Python 내장 모듈이므로 별도 설치 불필요
 # gemini-cli는 npm으로 별도 설치 필요: npm install -g @google/gemini-cli
