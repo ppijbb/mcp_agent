@@ -83,11 +83,61 @@ async def get_info():
             "application": "GitHub PR Review Bot",
             "version": "3.0.0",
             "architecture": "modular",
+            "cost_optimized": True,
             "services": service_info
         }
     except Exception as e:
         logger.error(f"서비스 정보 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"서비스 정보 조회 실패: {e}")
+
+@app.get("/mcp")
+async def get_mcp_info():
+    """MCP 사용량 정보 조회"""
+    if not pr_review_app:
+        raise HTTPException(status_code=503, detail="애플리케이션이 초기화되지 않음")
+    
+    try:
+        usage_stats = pr_review_app.get_mcp_usage_stats()
+        available_tools = pr_review_app.get_available_tools()
+        
+        return {
+            "usage_stats": usage_stats,
+            "available_tools": available_tools,
+            "free_ai_review": True,
+            "cost": "$0.00 (완전 무료)",
+            "mcp_integration": True
+        }
+    except Exception as e:
+        logger.error(f"MCP 정보 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"MCP 정보 조회 실패: {e}")
+
+@app.get("/optimization")
+async def get_optimization_status():
+    """최적화 상태 조회"""
+    try:
+        from .core.config import config
+        
+        return {
+            "gemini_model": config.gemini.gemini_model,
+            "gemini_cli_path": config.gemini.gemini_cli_path,
+            "vllm_base_url": config.vllm.base_url,
+            "vllm_model": config.vllm.model_name,
+            "aggressive_caching": config.optimization.enable_aggressive_caching,
+            "batch_processing": config.optimization.enable_batch_processing,
+            "max_requests_per_day": config.gemini.max_requests_per_day,
+            "pr_size_thresholds": {
+                "min": config.github.min_pr_size_threshold,
+                "max": config.github.max_pr_size_threshold
+            },
+            "skip_draft_prs": config.github.skip_draft_prs,
+            "skip_auto_merge_prs": config.github.skip_auto_merge_prs,
+            "free_ai_review": True,
+            "mcp_integration": True,
+            "cost": "$0.00 (완전 무료)"
+        }
+    except Exception as e:
+        logger.error(f"최적화 상태 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"최적화 상태 조회 실패: {e}")
 
 @app.post("/webhook")
 async def github_webhook(request: Request, background_tasks: BackgroundTasks):

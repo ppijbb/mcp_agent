@@ -23,7 +23,7 @@ class PRReviewApp:
         logger.info("PR 리뷰 애플리케이션 초기화 완료")
     
     def _initialize_services(self) -> None:
-        """서비스들 초기화"""
+        """서비스들 초기화 - MCP 통합 (Gemini CLI + vLLM)"""
         try:
             # 핵심 서비스들 초기화
             self.github_service = GitHubService()
@@ -38,7 +38,7 @@ class PRReviewApp:
                 review_service=self.review_service
             )
             
-            logger.info("모든 서비스 초기화 완료")
+            logger.info("모든 서비스 초기화 완료 (MCP 통합 - Gemini CLI + vLLM)")
             
         except Exception as e:
             logger.error(f"서비스 초기화 실패: {e}")
@@ -91,7 +91,7 @@ class PRReviewApp:
             }
             
             # MCP 서비스 상태
-            mcp_status = self.mcp_service.get_server_status()
+            mcp_status = self.review_service.get_mcp_health()
             
             # 전체 상태
             overall_status = {
@@ -103,7 +103,9 @@ class PRReviewApp:
                 "config": {
                     "auto_review_enabled": config.github.auto_review_enabled,
                     "require_explicit_request": config.github.require_explicit_review_request,
-                    "fail_fast_enabled": config.github.fail_fast_on_error
+                    "fail_fast_enabled": config.github.fail_fast_on_error,
+                    "free_ai_review": True,
+                    "mcp_integration": True
                 }
             }
             
@@ -126,14 +128,32 @@ class PRReviewApp:
             "mcp_service": {
                 "class": self.mcp_service.__class__.__name__,
                 "initialized": True,
-                "tools_count": len(self.mcp_service.tools)
+                "available_tools": len(self.mcp_service.get_available_tools())
             },
             "review_service": {
                 "class": self.review_service.__class__.__name__,
-                "initialized": True
+                "initialized": True,
+                "free_ai_review": True,
+                "mcp_integration": True
             },
             "webhook_service": {
                 "class": self.webhook_service.__class__.__name__,
                 "initialized": True
             }
         }
+    
+    def get_mcp_usage_stats(self) -> Dict[str, Any]:
+        """MCP 사용량 통계 조회"""
+        try:
+            return self.review_service.get_mcp_usage_stats()
+        except Exception as e:
+            logger.error(f"MCP 사용량 조회 실패: {e}")
+            return {"error": str(e)}
+    
+    def get_available_tools(self) -> List[Dict[str, Any]]:
+        """사용 가능한 도구 목록 조회"""
+        try:
+            return self.review_service.get_available_tools()
+        except Exception as e:
+            logger.error(f"도구 목록 조회 실패: {e}")
+            return []

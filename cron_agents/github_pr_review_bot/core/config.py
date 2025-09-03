@@ -15,31 +15,40 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-class LLMConfig(BaseSettings):
-    """LLM 설정"""
-    openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(None, env="ANTHROPIC_API_KEY")
-    google_api_key: Optional[str] = Field(None, env="GOOGLE_API_KEY")
-    default_provider: str = Field("openai", env="DEFAULT_LLM_PROVIDER")
-    max_tokens: int = Field(4000, env="MAX_TOKENS")
-    temperature: float = Field(0.1, env="TEMPERATURE")
-    timeout: int = Field(30, env="LLM_TIMEOUT")
+class GeminiConfig(BaseSettings):
+    """Gemini CLI 설정 - 무료 로컬 AI"""
+    gemini_cli_path: str = Field("gemini", env="GEMINI_CLI_PATH")
+    gemini_model: str = Field("gemini-pro", env="GEMINI_MODEL")
+    max_requests_per_day: int = Field(1000, env="GEMINI_MAX_REQUESTS_PER_DAY")
+    timeout: int = Field(60, env="GEMINI_TIMEOUT")
     # Fallback 방지 설정 - 오류 발생 시 즉시 종료
-    fail_on_llm_error: bool = Field(True, env="LLM_FAIL_ON_ERROR")
-    require_valid_response: bool = Field(True, env="LLM_REQUIRE_VALID_RESPONSE")
-    
-    @validator("default_provider")
-    def validate_provider(cls, v):
-        if v not in ["openai", "anthropic", "google"]:
-            raise ValueError("default_provider must be one of: openai, anthropic, google")
-        return v
-    
+    fail_on_gemini_error: bool = Field(True, env="GEMINI_FAIL_ON_ERROR")
+    require_valid_response: bool = Field(True, env="GEMINI_REQUIRE_VALID_RESPONSE")
+    # 프롬프트 템플릿 설정
+    review_prompt_template: str = Field(
+        "다음 코드를 GitHub PR 리뷰 관점에서 분석해주세요:\n\n{code}\n\n언어: {language}\n파일: {file_path}\n\n코드 품질, 보안, 성능, 스타일을 종합적으로 검토하고 구체적인 개선사항을 제안해주세요.",
+        env="GEMINI_REVIEW_PROMPT_TEMPLATE"
+    )
+
+class VLLMConfig(BaseSettings):
+    """vLLM 설정 - OpenAI 형식 API"""
+    base_url: Optional[str] = Field(None, env="VLLM_BASE_URL")
+    model_name: str = Field("Qwen/Qwen2.5-1.5B-Instruct", env="VLLM_MODEL_NAME")
+    max_tokens: int = Field(2000, env="VLLM_MAX_TOKENS")
+    temperature: float = Field(0.1, env="VLLM_TEMPERATURE")
+    timeout: int = Field(60, env="VLLM_TIMEOUT")
     # Fallback 방지 설정
-    fail_on_llm_error: bool = Field(True, env="LLM_FAIL_ON_ERROR")
-    require_valid_response: bool = Field(True, env="LLM_REQUIRE_VALID_RESPONSE")
+    fail_on_vllm_error: bool = Field(True, env="VLLM_FAIL_ON_ERROR")
+    require_valid_response: bool = Field(True, env="VLLM_REQUIRE_VALID_RESPONSE")
+    
+    @validator("gemini_cli_path")
+    def validate_gemini_path(cls, v):
+        if not v:
+            raise ValueError("gemini_cli_path is required")
+        return v
 
 class GitHubConfig(BaseSettings):
-    """GitHub 설정"""
+    """GitHub 설정 - 비용 최적화"""
     token: str = Field(..., env="GITHUB_TOKEN")
     webhook_secret: Optional[str] = Field(None, env="GITHUB_WEBHOOK_SECRET")
     app_id: Optional[str] = Field(None, env="GITHUB_APP_ID")
@@ -48,6 +57,11 @@ class GitHubConfig(BaseSettings):
     # PR 리뷰 기본 설정 - 명시적 요청이 있을 때만 활성화
     auto_review_enabled: bool = Field(False, env="GITHUB_AUTO_REVIEW_ENABLED")
     require_explicit_review_request: bool = Field(True, env="GITHUB_REQUIRE_EXPLICIT_REVIEW_REQUEST")
+    # 비용 최적화: 중요한 PR만 리뷰
+    min_pr_size_threshold: int = Field(50, env="MIN_PR_SIZE_THRESHOLD")  # 최소 변경 라인 수
+    max_pr_size_threshold: int = Field(1000, env="MAX_PR_SIZE_THRESHOLD")  # 최대 변경 라인 수
+    skip_draft_prs: bool = Field(True, env="SKIP_DRAFT_PRS")  # 드래프트 PR 스킵
+    skip_auto_merge_prs: bool = Field(True, env="SKIP_AUTO_MERGE_PRS")  # 자동 머지 PR 스킵
     # 오류 처리 설정 - fallback 없이 즉시 종료
     fail_fast_on_error: bool = Field(True, env="GITHUB_FAIL_FAST_ON_ERROR")
     max_retry_attempts: int = Field(0, env="GITHUB_MAX_RETRY_ATTEMPTS")  # 0 = 재시도 없음
@@ -104,6 +118,22 @@ class SecurityConfig(BaseSettings):
     allowed_origins: List[str] = Field(["*"], env="ALLOWED_ORIGINS")
     jwt_secret: Optional[str] = Field(None, env="JWT_SECRET")
 
+class OptimizationConfig(BaseSettings):
+    """최적화 설정 - MCP 통합 (Gemini CLI + vLLM)"""
+    # 캐시 설정
+    enable_aggressive_caching: bool = Field(True, env="ENABLE_AGGRESSIVE_CACHING")
+    cache_review_results: bool = Field(True, env="CACHE_REVIEW_RESULTS")
+    cache_ttl_hours: int = Field(24, env="CACHE_TTL_HOURS")
+    
+    # 배치 처리
+    enable_batch_processing: bool = Field(True, env="ENABLE_BATCH_PROCESSING")
+    batch_size: int = Field(5, env="BATCH_SIZE")
+    
+    # MCP 모니터링
+    enable_mcp_monitoring: bool = Field(True, env="ENABLE_MCP_MONITORING")
+    gemini_usage_tracking: bool = Field(True, env="GEMINI_USAGE_TRACKING")
+    vllm_usage_tracking: bool = Field(True, env="VLLM_USAGE_TRACKING")
+
 class Config(BaseSettings):
     """메인 설정 클래스"""
     
@@ -117,13 +147,15 @@ class Config(BaseSettings):
     webhook_port: int = Field(8080, env="WEBHOOK_PORT")
     
     # 서브 설정들
-    llm: LLMConfig = LLMConfig()
+    gemini: GeminiConfig = GeminiConfig()
+    vllm: VLLMConfig = VLLMConfig()
     github: GitHubConfig = GitHubConfig()
     database: DatabaseConfig = DatabaseConfig()
     cache: CacheConfig = CacheConfig()
     queue: QueueConfig = QueueConfig()
     monitoring: MonitoringConfig = MonitoringConfig()
     security: SecurityConfig = SecurityConfig()
+    optimization: OptimizationConfig = OptimizationConfig()
     
     # 동적 설정 저장소
     _dynamic_settings: Dict[str, Any] = {}
@@ -148,13 +180,14 @@ class Config(BaseSettings):
         if self.environment not in ["development", "staging", "production"]:
             raise ValueError("Environment must be one of: development, staging, production")
         
-        # LLM API 키 검증
-        if self.llm.default_provider == "openai" and not self.llm.openai_api_key:
-            raise ValueError("OpenAI API key is required when using OpenAI as default provider")
-        elif self.llm.default_provider == "anthropic" and not self.llm.anthropic_api_key:
-            raise ValueError("Anthropic API key is required when using Anthropic as default provider")
-        elif self.llm.default_provider == "google" and not self.llm.google_api_key:
-            raise ValueError("Google API key is required when using Google as default provider")
+        # Gemini CLI 검증
+        import shutil
+        if not shutil.which(self.gemini.gemini_cli_path):
+            raise ValueError(f"Gemini CLI not found at: {self.gemini.gemini_cli_path}. Please install gemini-cli first.")
+        
+        # vLLM 설정 검증 (선택적)
+        if self.vllm.base_url and not self.vllm.base_url.startswith(('http://', 'https://')):
+            raise ValueError("vLLM base_url must start with http:// or https://")
     
     def get(self, key: str, default: Any = None) -> Any:
         """설정값 가져오기 (동적 설정 우선)"""
@@ -198,12 +231,21 @@ class Config(BaseSettings):
             "webhook_port": self.webhook_port,
         })
         
-        # LLM 설정 (API 키 제외)
-        config_dict["llm"] = {
-            "default_provider": self.llm.default_provider,
-            "max_tokens": self.llm.max_tokens,
-            "temperature": self.llm.temperature,
-            "timeout": self.llm.timeout,
+        # Gemini 설정
+        config_dict["gemini"] = {
+            "gemini_cli_path": self.gemini.gemini_cli_path,
+            "gemini_model": self.gemini.gemini_model,
+            "max_requests_per_day": self.gemini.max_requests_per_day,
+            "timeout": self.gemini.timeout,
+        }
+        
+        # vLLM 설정
+        config_dict["vllm"] = {
+            "base_url": self.vllm.base_url,
+            "model_name": self.vllm.model_name,
+            "max_tokens": self.vllm.max_tokens,
+            "temperature": self.vllm.temperature,
+            "timeout": self.vllm.timeout,
         }
         
         # GitHub 설정 (토큰 제외)
@@ -218,6 +260,7 @@ class Config(BaseSettings):
             "queue": self.queue.dict(),
             "monitoring": self.monitoring.dict(),
             "security": self.security.dict(),
+            "optimization": self.optimization.dict(),
         })
         
         return config_dict
