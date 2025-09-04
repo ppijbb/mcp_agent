@@ -257,11 +257,11 @@ class MCPService:
         )
         
         # 프롬프트 구성
-        prompt = f"""다음 {language} 코드를 GitHub PR 리뷰 관점에서 분석해주세요:
-
-{code}
-
-코드 품질, 보안, 성능, 스타일을 종합적으로 검토하고 구체적인 개선사항을 제안해주세요."""
+        prompt = (f"다음 {language} 코드를 GitHub PR 리뷰 관점에서 분석해주세요:"
+                   "\n\n"
+                  f"{code}"
+                   "\n\n"
+                   "코드 품질, 보안, 성능, 스타일을 종합적으로 검토하고 구체적인 개선사항을 제안해주세요.")
 
         try:
             # OpenAI API 형식으로 vLLM 호출
