@@ -40,7 +40,7 @@ class MCPService:
             },
             "memory": {
                 "enabled": True,
-                "command": "npx", 
+                "command": "npx",
                 "args": ["@modelcontextprotocol/server-memory"],
                 "transport": "stdio"
             },
@@ -99,22 +99,39 @@ class MCPService:
         """
         코드 분석 - 실제 MCP 서버들 사용
         
+        GitHub 레포지토리의 실제 코드를 프롬프트에 포함하여 분석합니다.
+        PR diff, 파일 내용, 변경사항 등을 종합적으로 검토합니다.
+        
         Args:
-            code (str): 분석할 코드
+            code (str): 분석할 코드 (GitHub PR diff 또는 파일 내용)
             language (str): 프로그래밍 언어
             context (Dict[str, Any], optional): 추가 컨텍스트
+                - pr_number: PR 번호
+                - repository: 저장소 이름
+                - files: 변경된 파일 목록
+                - file_path: 파일 경로
             
         Returns:
             Dict[str, Any]: 분석 결과
         """
         try:
+            # 코드 크기 확인 및 청킹
+            code_chunks = self._chunk_code_if_needed(code, language, context)
+            
             # 1. Sequential Thinking을 통한 분석 (우선순위)
             if self.mcp_servers["sequential-thinking"]["enabled"]:
                 try:
-                    thinking_result = self._analyze_with_sequential_thinking(code, language, context)
+                    if len(code_chunks) == 1:
+                        # 단일 청크 분석
+                        thinking_result = self._analyze_with_sequential_thinking(code_chunks[0], language, context)
+                    else:
+                        # 다중 청크 분석
+                        thinking_result = self._analyze_multiple_chunks_with_sequential_thinking(code_chunks, language, context)
+                    
                     return {
                         "analysis_type": "sequential_thinking",
                         "result": thinking_result,
+                        "chunks_analyzed": len(code_chunks),
                         "timestamp": datetime.now().isoformat(),
                         "free": True
                     }
@@ -168,7 +185,7 @@ class MCPService:
             raise ValueError(f"코드 분석 실패: {e}")
     
     def _analyze_with_sequential_thinking(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Sequential Thinking MCP 서버를 통한 코드 분석"""
+        """Sequential Thinking MCP 서버를 통한 코드 분석 - GitHub 앱 정보 활용"""
         try:
             # 임시 파일에 코드 저장
             with tempfile.NamedTemporaryFile(mode='w', suffix=f'.{language}', delete=False) as f:
@@ -176,18 +193,25 @@ class MCPService:
                 temp_file = f.name
             
             try:
+                # GitHub 앱에서 제공하는 풍부한 컨텍스트 정보 활용
+                context_info = self._build_github_context(context)
+                
                 # Sequential Thinking MCP 서버 호출
-                prompt = f"""다음 {language} 코드를 GitHub PR 리뷰 관점에서 단계별로 분석해주세요:
-
-1. 코드 구조 분석
-2. 잠재적 문제점 식별
-3. 보안 취약점 검사
-4. 성능 최적화 제안
-5. 코드 스타일 검토
-6. 개선사항 제안
-
-코드:
-{code}"""
+                prompt = (f"다음 {language} 코드를 GitHub PR 리뷰 관점에서 단계별로 분석해주세요:"
+                  "\n\n"
+                  f"## 📋 PR 컨텍스트 정보\n"
+                  f"{context_info}\n\n"
+                  "## 🔍 분석 요청사항\n"
+                  "1. 코드 구조 분석\n"
+                  "2. 잠재적 문제점 식별\n"
+                  "3. 보안 취약점 검사\n"
+                  "4. 성능 최적화 제안\n"
+                  "5. 코드 스타일 검토\n"
+                  "6. 개선사항 제안\n"
+                  "7. 저장소 컨텍스트 고려\n"
+                  "8. 작성자 경험 수준 고려\n\n"
+                  "## 📄 분석할 코드:\n"
+                  f"{code}")
 
                 # MCP 서버와 통신 (stdio 방식)
                 process = subprocess.Popen(
@@ -253,7 +277,7 @@ class MCPService:
         # OpenAI 클라이언트 초기화 (vLLM 서버용)
         client = OpenAI(
             api_key="EMPTY",  # vLLM은 API 키가 필요 없음
-            base_url=f"{self.vllm_base_url}/v1"  # vLLM 서버의 OpenAI 호환 엔드포인트
+            base_url=f"{self.vllm_base_url}/v1" if self.vllm_base_url else None  # vLLM 서버의 OpenAI 호환 엔드포인트
         )
         
         # 프롬프트 구성
@@ -505,3 +529,209 @@ class MCPService:
             }
         
         return stats
+    
+    def _chunk_code_if_needed(self, code: str, language: str, context: Dict[str, Any] = None) -> List[str]:
+        """
+        코드 크기에 따라 청킹 수행
+        
+        GitHub PR의 큰 변경사항을 여러 청크로 나누어 분석합니다.
+        """
+        # 토큰 제한 설정 (대략적인 추정)
+        MAX_TOKENS_PER_CHUNK = 4000  # 안전한 크기
+        MAX_CHARS_PER_CHUNK = MAX_TOKENS_PER_CHUNK * 4  # 대략 4자 = 1토큰
+        
+        if len(code) <= MAX_CHARS_PER_CHUNK:
+            return [code]
+        
+        logger.info(f"코드가 너무 큼 ({len(code)}자), 청킹 수행")
+        
+        # 파일별로 청킹 (PR diff의 경우)
+        if context and context.get('files'):
+            return self._chunk_by_files(code, context['files'], MAX_CHARS_PER_CHUNK)
+        else:
+            return self._chunk_by_size(code, MAX_CHARS_PER_CHUNK)
+    
+    def _chunk_by_files(self, code: str, files: List[str], max_chars: int) -> List[str]:
+        """파일별로 청킹"""
+        chunks = []
+        current_chunk = ""
+        
+        lines = code.split('\n')
+        current_file = None
+        
+        for line in lines:
+            # 파일 헤더 감지 (diff 형식)
+            if line.startswith('diff --git') or line.startswith('+++') or line.startswith('---'):
+                if current_chunk and len(current_chunk) > max_chars:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+                current_file = line
+                current_chunk += line + '\n'
+            else:
+                current_chunk += line + '\n'
+                
+                # 청크 크기 초과 시 분할
+                if len(current_chunk) > max_chars:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        return chunks if chunks else [code]
+    
+    def _chunk_by_size(self, code: str, max_chars: int) -> List[str]:
+        """크기별로 청킹"""
+        chunks = []
+        lines = code.split('\n')
+        current_chunk = ""
+        
+        for line in lines:
+            if len(current_chunk) + len(line) + 1 > max_chars:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = line + '\n'
+                else:
+                    # 단일 라인이 너무 긴 경우 강제로 분할
+                    chunks.append(line)
+            else:
+                current_chunk += line + '\n'
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        return chunks if chunks else [code]
+    
+    def _analyze_multiple_chunks_with_sequential_thinking(self, code_chunks: List[str], language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """다중 청크를 Sequential Thinking으로 분석"""
+        try:
+            all_results = []
+            
+            for i, chunk in enumerate(code_chunks):
+                logger.info(f"청크 {i+1}/{len(code_chunks)} 분석 중...")
+                
+                chunk_context = context.copy() if context else {}
+                chunk_context['chunk_index'] = i + 1
+                chunk_context['total_chunks'] = len(code_chunks)
+                
+                result = self._analyze_with_sequential_thinking(chunk, language, chunk_context)
+                all_results.append({
+                    "chunk": i + 1,
+                    "analysis": result
+                })
+            
+            # 전체 결과 통합
+            combined_review = self._combine_chunk_analyses(all_results, language)
+            
+            return {
+                "review": combined_review,
+                "language": language,
+                "model": "sequential-thinking",
+                "chunks_analyzed": len(code_chunks),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            raise ValueError(f"다중 청크 Sequential Thinking 분석 실패: {e}")
+    
+    def _combine_chunk_analyses(self, chunk_results: List[Dict[str, Any]], language: str) -> str:
+        """청크 분석 결과들을 통합"""
+        combined = f"## 🔍 {language} 코드 종합 분석 결과\n\n"
+        combined += f"**총 {len(chunk_results)}개 청크 분석 완료**\n\n"
+        
+        for result in chunk_results:
+            chunk_num = result["chunk"]
+            analysis = result["analysis"]
+            
+            combined += f"### 📄 청크 {chunk_num} 분석\n"
+            combined += analysis.get("review", "분석 결과 없음") + "\n\n"
+        
+        combined += "### 🎯 종합 권장사항\n"
+        combined += "- 모든 청크의 분석 결과를 종합하여 코드 품질을 개선하세요\n"
+        combined += "- 각 청크별로 식별된 문제점들을 우선순위에 따라 해결하세요\n"
+        combined += "- 전체적인 코드 일관성을 유지하세요\n"
+        
+        return combined
+    
+    def _build_github_context(self, context: Dict[str, Any] = None) -> str:
+        """GitHub 앱에서 제공하는 정보를 활용한 컨텍스트 구축"""
+        if not context:
+            return "컨텍스트 정보 없음"
+        
+        context_parts = []
+        
+        # PR 기본 정보
+        if context.get('pr_number'):
+            context_parts.append(f"**PR 번호**: #{context['pr_number']}")
+        
+        if context.get('pr_title'):
+            context_parts.append(f"**PR 제목**: {context['pr_title']}")
+        
+        if context.get('pr_body'):
+            context_parts.append(f"**PR 설명**: {context['pr_body'][:200]}...")
+        
+        # 저장소 정보
+        if context.get('repository'):
+            repo_info = context['repository']
+            context_parts.append(f"**저장소**: {repo_info.get('full_name', 'unknown')}")
+            context_parts.append(f"**언어**: {repo_info.get('language', 'unknown')}")
+            context_parts.append(f"**설명**: {repo_info.get('description', 'N/A')}")
+            context_parts.append(f"**토픽**: {', '.join(repo_info.get('topics', []))}")
+            context_parts.append(f"**크기**: {repo_info.get('size', 0)} KB")
+            context_parts.append(f"**스타**: {repo_info.get('stargazers_count', 0)}")
+            context_parts.append(f"**포크**: {repo_info.get('forks_count', 0)}")
+        
+        # 작성자 정보
+        if context.get('author'):
+            author_info = context['author']
+            context_parts.append(f"**작성자**: @{author_info.get('login', 'unknown')}")
+            context_parts.append(f"**작성자 타입**: {author_info.get('type', 'unknown')}")
+        
+        # 브랜치 정보
+        if context.get('branches'):
+            branches = context['branches']
+            if branches.get('head'):
+                context_parts.append(f"**소스 브랜치**: {branches['head'].get('ref', 'unknown')}")
+            if branches.get('base'):
+                context_parts.append(f"**타겟 브랜치**: {branches['base'].get('ref', 'unknown')}")
+        
+        # 통계 정보
+        if context.get('stats'):
+            stats = context['stats']
+            context_parts.append(f"**변경 통계**: +{stats.get('additions', 0)}/-{stats.get('deletions', 0)} ({stats.get('changed_files', 0)}개 파일)")
+            context_parts.append(f"**커밋 수**: {stats.get('commits', 0)}")
+            context_parts.append(f"**댓글 수**: {stats.get('comments', 0)}")
+        
+        # 라벨 정보
+        if context.get('labels'):
+            labels = context['labels']
+            if labels:
+                context_parts.append(f"**라벨**: {', '.join(labels)}")
+        
+        # 마일스톤 정보
+        if context.get('milestone'):
+            context_parts.append(f"**마일스톤**: {context['milestone']}")
+        
+        # 리뷰어 정보
+        if context.get('reviewers'):
+            reviewers = context['reviewers']
+            if reviewers.get('requested'):
+                context_parts.append(f"**요청된 리뷰어**: {', '.join(reviewers['requested'])}")
+            if reviewers.get('teams'):
+                context_parts.append(f"**요청된 팀**: {', '.join(reviewers['teams'])}")
+        
+        # PR 상세 정보
+        if context.get('pr_details'):
+            pr_details = context['pr_details']
+            if pr_details.get('mergeable_state'):
+                context_parts.append(f"**머지 상태**: {pr_details['mergeable_state']}")
+            if pr_details.get('draft'):
+                context_parts.append("**상태**: Draft PR")
+            if pr_details.get('locked'):
+                context_parts.append("**상태**: Locked")
+        
+        # 청크 정보 (다중 청크 분석 시)
+        if context.get('chunk_index') and context.get('total_chunks'):
+            context_parts.append(f"**분석 청크**: {context['chunk_index']}/{context['total_chunks']}")
+        
+        return "\n".join(context_parts) if context_parts else "컨텍스트 정보 없음"

@@ -61,8 +61,8 @@ class ReviewService:
         review_keywords = ["@review-bot", "[REVIEW]", "[리뷰요청]"]
         return any(keyword in pr_body for keyword in review_keywords)
     
-    def generate_comprehensive_review(self, repo_full_name: str, pr_number: int) -> Dict[str, Any]:
-        """종합적인 PR 리뷰 생성 - Gemini CLI 기반"""
+    def generate_comprehensive_review(self, repo_full_name: str, pr_number: int, github_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """종합적인 PR 리뷰 생성 - GitHub 앱 정보 활용"""
         try:
             # PR 정보 조회
             pr = self.github_service.get_pull_request(repo_full_name, pr_number)
@@ -72,17 +72,20 @@ class ReviewService:
             # 언어 감지
             language = self._detect_language(pr_files)
             
-            # MCP 서비스를 통한 AI 분석 (Gemini CLI + vLLM)
+            # GitHub 앱에서 제공하는 풍부한 컨텍스트 정보 활용
+            enhanced_context = self._build_enhanced_context(
+                pr_number=pr_number,
+                repo_full_name=repo_full_name,
+                pr_files=pr_files,
+                github_context=github_context
+            )
+            
+            # MCP 서비스를 통한 AI 분석 (GitHub 앱 정보 활용)
             try:
                 mcp_result = self.mcp_service.analyze_code(
                     code=pr_diff,
                     language=language,
-                    context={
-                        "pr_number": pr_number,
-                        "repository": repo_full_name,
-                        "files": [f.filename for f in pr_files],
-                        "file_path": f"{repo_full_name}#{pr_number}"
-                    }
+                    context=enhanced_context
                 )
                 
                 analysis_result = {
@@ -163,6 +166,58 @@ class ReviewService:
             return language_map.get(most_common_ext, most_common_ext)
         
         return "unknown"
+    
+    def _build_enhanced_context(self, pr_number: int, repo_full_name: str, pr_files: List[Any], github_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """GitHub 앱 정보를 활용한 향상된 컨텍스트 구축"""
+        context = {
+            "pr_number": pr_number,
+            "repo_full_name": repo_full_name,
+            "files": [f.filename for f in pr_files],
+            "file_path": f"{repo_full_name}#{pr_number}"
+        }
+        
+        # GitHub 앱에서 제공하는 풍부한 정보 추가
+        if github_context:
+            # PR 기본 정보
+            context.update({
+                "pr_title": github_context.get("pr_title"),
+                "pr_body": github_context.get("pr_body"),
+                "pr_state": github_context.get("pr_state"),
+                "pr_draft": github_context.get("pr_draft"),
+                "head_ref": github_context.get("head_ref"),
+                "base_ref": github_context.get("base_ref"),
+                "action": github_context.get("action")
+            })
+            
+            # GitHub 앱에서 제공하는 상세 정보들
+            if github_context.get("author"):
+                context["author"] = github_context["author"]
+            
+            if github_context.get("sender"):
+                context["sender"] = github_context["sender"]
+            
+            if github_context.get("repository"):
+                context["repository"] = github_context["repository"]
+            
+            if github_context.get("pr_details"):
+                context["pr_details"] = github_context["pr_details"]
+            
+            if github_context.get("branches"):
+                context["branches"] = github_context["branches"]
+            
+            if github_context.get("labels"):
+                context["labels"] = github_context["labels"]
+            
+            if github_context.get("milestone"):
+                context["milestone"] = github_context["milestone"]
+            
+            if github_context.get("reviewers"):
+                context["reviewers"] = github_context["reviewers"]
+            
+            if github_context.get("stats"):
+                context["stats"] = github_context["stats"]
+        
+        return context
     
     def _format_review(self, analysis_result: Dict[str, Any], pr: Any, pr_files: List[Any]) -> str:
         """리뷰 내용 포맷팅 - MCP 통합 (Gemini CLI + vLLM)"""
@@ -257,8 +312,8 @@ class ReviewService:
                 sys.exit(1)
             raise ValueError(f"리뷰 게시 실패: {e}")
     
-    def process_pr_review(self, repo_full_name: str, pr_number: int) -> Dict[str, Any]:
-        """PR 리뷰 처리 (전체 프로세스) - Gemini CLI 기반"""
+    def process_pr_review(self, repo_full_name: str, pr_number: int, github_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """PR 리뷰 처리 (전체 프로세스) - GitHub 앱 정보 활용"""
         try:
             # PR 정보 조회
             pr = self.github_service.get_pull_request(repo_full_name, pr_number)
@@ -276,8 +331,8 @@ class ReviewService:
                 logger.info(f"PR #{pr_number} 리뷰 스킵: 필터링 조건에 해당")
                 return {"status": "skipped", "reason": "filtered_out"}
             
-            # 종합 리뷰 생성
-            review_data = self.generate_comprehensive_review(repo_full_name, pr_number)
+            # 종합 리뷰 생성 (GitHub 앱 정보 활용)
+            review_data = self.generate_comprehensive_review(repo_full_name, pr_number, github_context)
             
             # 리뷰 게시
             posted_review = self.post_review(
