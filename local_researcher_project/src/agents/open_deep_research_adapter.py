@@ -34,7 +34,7 @@ class ResearchAgent(BaseModel):
     name: str
     role: str
     capabilities: List[str]
-    model_config: Dict[str, Any]
+    agent_config: Dict[str, Any]
     tools: List[str] = Field(default_factory=list)
 
 

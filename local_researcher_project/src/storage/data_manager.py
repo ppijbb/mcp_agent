@@ -120,10 +120,11 @@ class DataManager:
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
     
-    def save_research_project(self, project_data: Dict[str, Any]) -> str:
+    def save_research_project(self, project_id: str, project_data: Dict[str, Any]) -> str:
         """Save a new research project.
         
         Args:
+            project_id: Project ID
             project_data: Project data dictionary
             
         Returns:
@@ -133,7 +134,6 @@ class DataManager:
             conn = sqlite3.connect(self.data_path)
             cursor = conn.cursor()
             
-            project_id = project_data.get("id", self._generate_id())
             now = datetime.now().isoformat()
             
             cursor.execute('''

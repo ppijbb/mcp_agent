@@ -17,6 +17,8 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 selenium>=4.15.0
 scrapy>=2.11.0
+aiohttp>=3.9.0
+httpx>=0.25.0
 
 # Data processing
 pandas>=2.1.0
@@ -33,15 +35,15 @@ click>=8.1.0
 rich>=13.7.0
 typer>=0.9.0
 
-# Async and concurrency
-# asyncio>=3.11.0  # Built-in module, no need to install
-aiohttp>=3.9.0
-httpx>=0.25.0
-
 # File handling and utilities
 python-dotenv>=1.0.0
 pyyaml>=6.0.0
 jinja2>=3.1.0
+
+# Document generation
+reportlab>=4.0.0
+weasyprint>=60.0
+markdown>=3.5.0
 
 # Testing
 pytest>=7.4.0
