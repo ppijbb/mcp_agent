@@ -28,7 +28,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-class RealTimeDataCallbackHandler(BaseCallbackHandler):
+class DataCallbackHandler(BaseCallbackHandler):
     """Callback handler for real-time data processing"""
     
     def __init__(self, data_collector):
@@ -87,22 +87,37 @@ class DataCollector:
         )
         
         # Initialize callback handler
-        self.callback_handler = RealTimeDataCallbackHandler(self)
+        self.callback_handler = DataCallbackHandler(self)
         self.structured_logger = structlog.get_logger()
         
     def _load_api_keys(self) -> Dict[str, str]:
-        """Load API keys from environment variables"""
-        return {
-            "newsapi": os.getenv("NEWS_API_KEY"),
-            "alphavantage": os.getenv("ALPHA_VANTAGE_API_KEY"),
-            "cryptocompare": os.getenv("CRYPTOCOMPARE_API_KEY"),
-            "coingecko": os.getenv("COINGECKO_API_KEY"),
-            "etherscan": os.getenv("ETHERSCAN_API_KEY"),
-            "glassnode": os.getenv("GLASSNODE_API_KEY"),
-            "twitter": os.getenv("TWITTER_BEARER_TOKEN"),
-            "reddit": os.getenv("REDDIT_CLIENT_ID"),
-            "telegram": os.getenv("TELEGRAM_BOT_TOKEN")
+        """Load API keys from environment variables - NO FALLBACKS"""
+        required_keys = {
+            "newsapi": "NEWS_API_KEY",
+            "alphavantage": "ALPHA_VANTAGE_API_KEY", 
+            "cryptocompare": "CRYPTOCOMPARE_API_KEY",
+            "coingecko": "COINGECKO_API_KEY",
+            "etherscan": "ETHERSCAN_API_KEY",
+            "glassnode": "GLASSNODE_API_KEY",
+            "twitter": "TWITTER_BEARER_TOKEN",
+            "reddit": "REDDIT_CLIENT_ID",
+            "telegram": "TELEGRAM_BOT_TOKEN"
         }
+        
+        api_keys = {}
+        missing_keys = []
+        
+        for key_name, env_var in required_keys.items():
+            value = os.getenv(env_var)
+            if not value:
+                missing_keys.append(env_var)
+            else:
+                api_keys[key_name] = value
+        
+        if missing_keys:
+            raise ValueError(f"Missing required API keys: {', '.join(missing_keys)}")
+        
+        return api_keys
     
     async def __aenter__(self):
         """Async context manager entry"""

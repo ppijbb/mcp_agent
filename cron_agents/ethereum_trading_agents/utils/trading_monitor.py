@@ -34,16 +34,30 @@ class TradingCallbackHandler(BaseCallbackHandler):
         self.structured_logger = structlog.get_logger()
         
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
-        """Called when LLM starts running"""
+        """Called when LLM starts running - NO FALLBACKS"""
+        if not serialized:
+            raise ValueError("LLM serialized data is required")
+        if not prompts:
+            raise ValueError("LLM prompts are required")
+        
+        llm_type = serialized.get("name")
+        if not llm_type:
+            raise ValueError("LLM type is required in serialized data")
+        
         self.structured_logger.info(
             "LLM started",
-            llm_type=serialized.get("name", "unknown"),
+            llm_type=llm_type,
             prompt_count=len(prompts),
             timestamp=datetime.now().isoformat()
         )
         
     def on_llm_end(self, response: LLMResult, **kwargs) -> None:
-        """Called when LLM ends running"""
+        """Called when LLM ends running - NO FALLBACKS"""
+        if not response:
+            raise ValueError("LLM response is required")
+        if not hasattr(response, 'generations'):
+            raise ValueError("LLM response must have generations attribute")
+        
         self.structured_logger.info(
             "LLM completed",
             generation_count=len(response.generations),
@@ -118,7 +132,7 @@ class TradingCallbackHandler(BaseCallbackHandler):
             timestamp=datetime.now().isoformat()
         )
 
-class EnhancedTradingMonitor:
+class TradingMonitor:
     """Enhanced trading monitor with LangChain callback integration"""
     
     def __init__(self, mcp_client, data_collector, email_service, trading_report_agent):
@@ -210,15 +224,22 @@ class EnhancedTradingMonitor:
             self.performance_metrics[metric] = value
         self.performance_metrics["last_health_check"] = datetime.now()
 
-# Alias for backward compatibility
-TradingMonitor = EnhancedTradingMonitor
+# Original TradingMonitor class removed - using the enhanced version directly
         
     def _load_monitoring_addresses(self) -> List[str]:
-        """Load addresses to monitor from environment"""
-        addresses_str = os.getenv("MONITORING_ADDRESSES", "")
-        if addresses_str:
-            return [addr.strip() for addr in addresses_str.split(",")]
-        return []
+        """Load addresses to monitor from environment - NO FALLBACKS"""
+        addresses_str = os.getenv("MONITORING_ADDRESSES")
+        if not addresses_str:
+            raise ValueError("MONITORING_ADDRESSES environment variable is required")
+        
+        if not addresses_str.strip():
+            raise ValueError("MONITORING_ADDRESSES cannot be empty")
+        
+        addresses = [addr.strip() for addr in addresses_str.split(",") if addr.strip()]
+        if not addresses:
+            raise ValueError("MONITORING_ADDRESSES must contain at least one valid address")
+        
+        return addresses
     
     async def start_monitoring(self):
         """Start the trading monitoring system"""

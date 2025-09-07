@@ -10,7 +10,8 @@ Enhanced trading workflow using LangGraph for complex state management:
 6. Real-time Monitoring
 """
 
-from typing import Dict, Any, List, TypedDict, Annotated
+import datetime
+from typing import Dict, Any, List, Annotated, Optional, Union, Literal
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema import BaseOutputParser
@@ -19,24 +20,98 @@ from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.runnable.config import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolExecutor
+# Using MemorySaver instead of SqliteSaver for now
 from langgraph.checkpoint.memory import MemorySaver
 import asyncio
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# Strict type definitions for LangGraph - dict-based only
+from typing import TypedDict
+
+class MarketData(TypedDict):
+    price: float
+    volume: float
+    volatility: float
+    change_24h: float
+    timestamp: str
+    source: str
+
+class RiskMetrics(TypedDict):
+    position_risk: float
+    market_risk: float
+    liquidity_risk: float
+    concentration_risk: float
+    overall_risk_score: float
+
+class TradingSignal(TypedDict):
+    type: Literal["entry", "exit", "hold"]
+    action: Literal["buy", "sell", "hold"]
+    confidence: float
+    reasoning: str
+    timestamp: str
+
+class PositionSizing(TypedDict):
+    suggested_size: float
+    max_size: float
+    risk_adjustment: float
+    kelly_ratio: float
+
+class ExecutionDecision(TypedDict):
+    execute: bool
+    action: Optional[Literal["buy", "sell"]]
+    size: Optional[float]
+    reasoning: str
+    risk_score: float
+
+class MonitoringAlert(TypedDict):
+    type: str
+    message: str
+    severity: Literal["info", "warning", "critical"]
+    timestamp: str
+
+class PortfolioPosition(TypedDict):
+    asset: str
+    amount: float
+    value: float
+    entry_price: float
+    current_price: float
+    pnl: float
+
+class PortfolioStatus(TypedDict):
+    total_value: float
+    cash_balance: float
+    positions: List[PortfolioPosition]
+    daily_pnl: float
+    total_pnl: float
+    last_updated: str
+
+class WorkflowStep(Enum):
+    MARKET_ANALYSIS = "market_analysis"
+    RISK_ASSESSMENT = "risk_assessment"
+    SIGNAL_GENERATION = "signal_generation"
+    POSITION_SIZING = "position_sizing"
+    EXECUTION_DECISION = "execution_decision"
+    MONITORING = "monitoring"
+    ERROR_RECOVERY = "error_recovery"
+
 class TradingState(TypedDict):
-    """State definition for LangGraph trading workflow"""
-    market_data: Dict[str, Any]
-    historical_data: Dict[str, Any]
-    portfolio_status: Dict[str, Any]
-    risk_metrics: Dict[str, Any]
-    trading_signals: List[Dict[str, Any]]
-    position_sizing: Dict[str, Any]
-    execution_decision: Dict[str, Any]
-    monitoring_alerts: List[Dict[str, Any]]
-    current_step: str
+    """Strict state definition for LangGraph trading workflow - NO Dict[str, Any]"""
+    market_data: MarketData
+    historical_data: List[MarketData]
+    portfolio_status: PortfolioStatus
+    risk_metrics: RiskMetrics
+    trading_signals: List[TradingSignal]
+    position_sizing: PositionSizing
+    execution_decision: ExecutionDecision
+    monitoring_alerts: List[MonitoringAlert]
+    current_step: WorkflowStep
     error_messages: List[str]
+    retry_count: int
+    max_retries: int
 
 class RiskManager:
     """Advanced risk management using LangGraph state management"""
@@ -127,7 +202,7 @@ class TradingChain:
         self._setup_langgraph_workflow()
     
     def _setup_langgraph_workflow(self):
-        """Setup LangGraph-based trading workflow"""
+        """Setup LangGraph-based trading workflow with conditional edges and error recovery"""
         # Create the state graph
         workflow = StateGraph(TradingState)
         
@@ -138,21 +213,149 @@ class TradingChain:
         workflow.add_node("position_sizing", self._position_sizing_node)
         workflow.add_node("execution_decision", self._execution_decision_node)
         workflow.add_node("monitoring", self._monitoring_node)
+        workflow.add_node("error_recovery", self._error_recovery_node)
         
-        # Define the workflow edges
+        # Define the workflow edges with conditional logic
         workflow.set_entry_point("market_analysis")
-        workflow.add_edge("market_analysis", "risk_assessment")
-        workflow.add_edge("risk_assessment", "signal_generation")
-        workflow.add_edge("signal_generation", "position_sizing")
-        workflow.add_edge("position_sizing", "execution_decision")
-        workflow.add_edge("execution_decision", "monitoring")
+        
+        # Conditional edges based on success/failure
+        workflow.add_conditional_edges(
+            "market_analysis",
+            self._should_proceed_to_risk,
+            {
+                "proceed": "risk_assessment",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "risk_assessment",
+            self._should_proceed_to_signals,
+            {
+                "proceed": "signal_generation",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "signal_generation",
+            self._should_proceed_to_sizing,
+            {
+                "proceed": "position_sizing",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "position_sizing",
+            self._should_proceed_to_execution,
+            {
+                "proceed": "execution_decision",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "execution_decision",
+            self._should_proceed_to_monitoring,
+            {
+                "proceed": "monitoring",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
         workflow.add_edge("monitoring", END)
         
-        # Compile the workflow
-        self.workflow = workflow.compile(checkpointer=self.memory)
+        # Error recovery can retry or fail
+        workflow.add_conditional_edges(
+            "error_recovery",
+            self._should_retry_or_fail,
+            {
+                "retry": "market_analysis",
+                "fail": END
+            }
+        )
+        
+        # Compile the workflow with memory checkpointing - NO FALLBACKS
+        try:
+            self.workflow = workflow.compile(
+                checkpointer=MemorySaver()
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to initialize memory checkpointing: {str(e)}")
+    
+    def _should_proceed_to_risk(self, state: TradingState) -> str:
+        """Determine if market analysis was successful"""
+        if state["error_messages"]:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
+    def _should_proceed_to_signals(self, state: TradingState) -> str:
+        """Determine if risk assessment was successful"""
+        if state["error_messages"] or state["risk_metrics"]["overall_risk_score"] > 0.9:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
+    def _should_proceed_to_sizing(self, state: TradingState) -> str:
+        """Determine if signal generation was successful"""
+        if state["error_messages"] or not state["trading_signals"]:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
+    def _should_proceed_to_execution(self, state: TradingState) -> str:
+        """Determine if position sizing was successful"""
+        if state["error_messages"] or state["position_sizing"]["suggested_size"] <= 0:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
+    def _should_proceed_to_monitoring(self, state: TradingState) -> str:
+        """Determine if execution decision was successful"""
+        if state["error_messages"]:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
+    def _should_retry_or_fail(self, state: TradingState) -> str:
+        """Determine if error recovery should retry or fail"""
+        if state["retry_count"] >= state["max_retries"]:
+            return "fail"
+        return "retry"
+    
+    async def _error_recovery_node(self, state: TradingState) -> TradingState:
+        """Error recovery node with retry logic"""
+        try:
+            logger.warning(f"Error recovery triggered. Retry count: {state['retry_count']}")
+            
+            # Clear previous errors
+            state["error_messages"] = []
+            state["retry_count"] += 1
+            
+            # Add recovery alert (TypedDict is dict-based)
+            recovery_alert: MonitoringAlert = {
+                "type": "error_recovery",
+                "message": f"Attempting recovery (attempt {state['retry_count']})",
+                "severity": "warning",
+                "timestamp": datetime.now().isoformat()
+            }
+            state["monitoring_alerts"].append(recovery_alert)
+            
+            # Reset current step to beginning
+            state["current_step"] = WorkflowStep.MARKET_ANALYSIS
+            
+            logger.info("Error recovery completed, retrying from market analysis")
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error recovery failed: {e}")
+            state["error_messages"].append(f"Error recovery failed: {str(e)}")
+            return state
     
     async def _market_analysis_node(self, state: TradingState) -> TradingState:
-        """Market analysis node using LangChain"""
+        """Market analysis node using LangChain with strict typing"""
         try:
             logger.info("Executing market analysis...")
             
@@ -180,12 +383,14 @@ class TradingChain:
             # Execute market analysis
             analysis_chain = market_analysis_prompt | self.llm | StrOutputParser()
             analysis_result = await analysis_chain.ainvoke({
-                "market_data": state["market_data"],
-                "historical_data": state["historical_data"]
+                "market_data": str(state["market_data"]),
+                "historical_data": str(state["historical_data"])
             })
             
-            # Update state
-            state["current_step"] = "market_analysis"
+            # Update state with proper typing
+            state["current_step"] = WorkflowStep.MARKET_ANALYSIS
+            
+            # Update market data with analysis (TypedDict is dict-based)
             state["market_data"]["analysis"] = analysis_result
             
             logger.info("Market analysis completed")
@@ -386,39 +591,58 @@ class TradingChain:
             return state
     
     async def execute_trading_workflow(
-        self,
-        market_data: Dict[str, Any],
-        historical_data: Dict[str, Any],
-        portfolio_status: Dict[str, Any]
+        self, 
+        market_data: MarketData,
+        historical_data: List[MarketData],
+        portfolio_status: PortfolioStatus
     ) -> Dict[str, Any]:
-        """Execute the complete LangGraph-based trading workflow"""
+        """Execute the complete LangGraph-based trading workflow with strict typing"""
         try:
-            # Initialize state
-            initial_state = TradingState(
-                market_data=market_data,
-                historical_data=historical_data,
-                portfolio_status=portfolio_status,
-                risk_metrics={},
-                trading_signals=[],
-                position_sizing={},
-                execution_decision={},
-                monitoring_alerts=[],
-                current_step="",
-                error_messages=[]
-            )
+            # Initialize state with proper types (TypedDict is dict-based)
+            initial_state: TradingState = {
+                "market_data": market_data,
+                "historical_data": historical_data,
+                "portfolio_status": portfolio_status,
+                "risk_metrics": {
+                    "position_risk": 0.0,
+                    "market_risk": 0.0,
+                    "liquidity_risk": 0.0,
+                    "concentration_risk": 0.0,
+                    "overall_risk_score": 0.0
+                },
+                "trading_signals": [],
+                "position_sizing": {
+                    "suggested_size": 0.0,
+                    "max_size": 0.0,
+                    "risk_adjustment": 0.0,
+                    "kelly_ratio": 0.0
+                },
+                "execution_decision": {
+                    "execute": False,
+                    "action": None,
+                    "size": None,
+                    "reasoning": "",
+                    "risk_score": 0.0
+                },
+                "monitoring_alerts": [],
+                "current_step": WorkflowStep.MARKET_ANALYSIS,
+                "error_messages": [],
+                "retry_count": 0,
+                "max_retries": 3
+            }
             
             # Execute the workflow
             config = {"configurable": {"thread_id": "trading_workflow"}}
             final_state = await self.workflow.ainvoke(initial_state, config=config)
             
-            # Return results
+            # Return results with proper typing
             return {
                 "success": True,
                 "final_state": final_state,
-                "execution_decision": final_state.get("execution_decision", {}),
-                "risk_metrics": final_state.get("risk_metrics", {}),
-                "monitoring_alerts": final_state.get("monitoring_alerts", []),
-                "error_messages": final_state.get("error_messages", [])
+                "execution_decision": final_state["execution_decision"],
+                "risk_metrics": final_state["risk_metrics"],
+                "monitoring_alerts": final_state["monitoring_alerts"],
+                "error_messages": final_state["error_messages"]
             }
             
         except Exception as e:
@@ -426,7 +650,13 @@ class TradingChain:
             return {
                 "success": False,
                 "error": str(e),
-                "execution_decision": {"execute": False, "reason": f"Workflow error: {str(e)}"}
+                "execution_decision": {
+                    "execute": False,
+                    "action": None,
+                    "size": None,
+                    "reasoning": f"Workflow error: {str(e)}",
+                    "risk_score": 1.0
+                }
             }
     
     def get_chain_info(self) -> Dict[str, Any]:
@@ -450,7 +680,7 @@ class TradingChain:
             ],
             "input_variables": [
                 "market_data",
-                "historical_data",
+                "historical_data", 
                 "portfolio_status"
             ],
             "output_format": "structured_trading_decision_with_risk_metrics"

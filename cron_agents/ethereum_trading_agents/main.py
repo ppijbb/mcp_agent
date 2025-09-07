@@ -335,40 +335,46 @@ class EthereumTradingSystem:
             logger.error(f"Performance analysis failed: {e}")
     
     async def _get_market_data(self) -> Dict[str, Any]:
-        """Get current market data"""
-        # This would typically fetch from external APIs
-        return {
-            "price_data": {},
-            "volume_data": {},
-            "indicators": {},
-            "token_metrics": {},
-            "network_stats": {},
-            "ecosystem_data": {},
-            "social_media": {},
-            "news_data": {},
-            "community_sentiment": {},
-            "historical_patterns": {},
-            "current_market": {},
-            "timeframe": "1h"
-        }
+        """Get current market data - NO FALLBACKS"""
+        if not hasattr(self, 'data_collector') or not self.data_collector:
+            raise ValueError("Data collector not initialized - cannot fetch market data")
+        
+        try:
+            # Fetch real market data from data collector
+            market_data = await self.data_collector.collect_comprehensive_data("ETH")
+            if not market_data:
+                raise ValueError("Failed to collect market data from data collector")
+            return market_data
+        except Exception as e:
+            raise ValueError(f"Market data collection failed: {str(e)}")
     
     async def _get_portfolio_data(self) -> Dict[str, Any]:
-        """Get current portfolio data"""
-        # This would fetch from database
-        return {
-            "portfolio_positions": {},
-            "performance_metrics": {},
-            "market_outlook": {}
-        }
+        """Get current portfolio data - NO FALLBACKS"""
+        if not hasattr(self, 'database') or not self.database:
+            raise ValueError("Database not initialized - cannot fetch portfolio data")
+        
+        try:
+            # Fetch real portfolio data from database
+            portfolio_data = await self.database.get_portfolio_status()
+            if not portfolio_data:
+                raise ValueError("Failed to fetch portfolio data from database")
+            return portfolio_data
+        except Exception as e:
+            raise ValueError(f"Portfolio data fetch failed: {str(e)}")
     
     async def _get_performance_data(self) -> Dict[str, Any]:
-        """Get performance data"""
-        # This would fetch from database
-        return {
-            "trading_history": {},
-            "performance_metrics": {},
-            "benchmark_data": {}
-        }
+        """Get performance data - NO FALLBACKS"""
+        if not hasattr(self, 'database') or not self.database:
+            raise ValueError("Database not initialized - cannot fetch performance data")
+        
+        try:
+            # Fetch real performance data from database
+            performance_data = await self.database.get_performance_metrics()
+            if not performance_data:
+                raise ValueError("Failed to fetch performance data from database")
+            return performance_data
+        except Exception as e:
+            raise ValueError(f"Performance data fetch failed: {str(e)}")
     
     async def execute_trading_workflow(
         self,
