@@ -8,6 +8,9 @@ langchain-core>=0.3.74
 langchain-openai>=0.3.31
 langchain-google-genai>=2.1.9
 
+# LangGraph for advanced workflow management
+langgraph>=0.2.0
+
 # LLM providers
 openai>=1.101.0
 google-generativeai>=0.8.5
@@ -123,6 +126,9 @@ tzdata>=2025.2
 websockets>=15.0
 aiofiles>=24.1.0
 pathlib2>=2.3.7
+
+# Real-time data processing
+structlog>=25.4.0
 
 # Monitoring and observability
 opentelemetry-api>=1.36.0

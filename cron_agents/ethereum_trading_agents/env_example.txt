@@ -18,11 +18,20 @@ OPENAI_API_KEY=your_openai_api_key_here
 # Ethereum RPC URL
 ETHEREUM_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
 
-# Ethereum Private Key (WARNING: Keep this secure!)
-ETHEREUM_PRIVATE_KEY=your_private_key_here
-
 # Ethereum Address
 ETHEREUM_ADDRESS=your_ethereum_address_here
+
+# Security Configuration
+# Option 1: Hardware Wallet (Recommended)
+HARDWARE_WALLET_ENABLED=false
+HARDWARE_WALLET_PATH=/dev/hidraw0
+
+# Option 2: Encrypted Private Key
+ETHEREUM_PRIVATE_KEY_ENCRYPTED=your_encrypted_private_key_here
+ENCRYPTION_KEY=your_encryption_key_here
+
+# WARNING: Never use plain text private keys in production!
+# ETHEREUM_PRIVATE_KEY=your_private_key_here  # DEPRECATED - Use encrypted version
 
 # ============================================================================
 # TRADING CONFIGURATION

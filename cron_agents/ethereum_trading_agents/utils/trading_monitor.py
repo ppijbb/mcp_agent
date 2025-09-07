@@ -1,8 +1,8 @@
 """
-Trading Monitor for Ethereum Trading System
+Trading Monitor for Ethereum Trading System with LangChain Callbacks
 
-This module provides comprehensive monitoring of Ethereum transactions,
-automatic report generation, and email notifications for trading activities.
+Enhanced monitoring system using LangChain callbacks for comprehensive
+monitoring, alerting, and real-time analysis of trading activities.
 """
 
 import asyncio
@@ -14,20 +14,140 @@ import os
 from dotenv import load_dotenv
 import aiohttp
 import time
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.schema import AgentAction, AgentFinish, LLMResult
+from langchain.callbacks.manager import CallbackManager
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.callbacks.file import FileCallbackHandler
+import structlog
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-class TradingMonitor:
-    """Comprehensive trading monitoring system"""
+class TradingCallbackHandler(BaseCallbackHandler):
+    """Custom LangChain callback handler for trading system monitoring"""
+    
+    def __init__(self, trading_monitor):
+        self.trading_monitor = trading_monitor
+        self.structured_logger = structlog.get_logger()
+        
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
+        """Called when LLM starts running"""
+        self.structured_logger.info(
+            "LLM started",
+            llm_type=serialized.get("name", "unknown"),
+            prompt_count=len(prompts),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_llm_end(self, response: LLMResult, **kwargs) -> None:
+        """Called when LLM ends running"""
+        self.structured_logger.info(
+            "LLM completed",
+            generation_count=len(response.generations),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_llm_error(self, error: Exception, **kwargs) -> None:
+        """Called when LLM encounters an error"""
+        self.structured_logger.error(
+            "LLM error occurred",
+            error=str(error),
+            timestamp=datetime.now().isoformat()
+        )
+        
+        # Send alert to trading monitor
+        asyncio.create_task(self.trading_monitor._send_alert({
+            "type": "llm_error",
+            "message": f"LLM error: {str(error)}",
+            "severity": "critical",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+    def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs) -> None:
+        """Called when chain starts running"""
+        self.structured_logger.info(
+            "Chain started",
+            chain_type=serialized.get("name", "unknown"),
+            input_keys=list(inputs.keys()),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_chain_end(self, outputs: Dict[str, Any], **kwargs) -> None:
+        """Called when chain ends running"""
+        self.structured_logger.info(
+            "Chain completed",
+            output_keys=list(outputs.keys()),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_chain_error(self, error: Exception, **kwargs) -> None:
+        """Called when chain encounters an error"""
+        self.structured_logger.error(
+            "Chain error occurred",
+            error=str(error),
+            timestamp=datetime.now().isoformat()
+        )
+        
+        # Send alert to trading monitor
+        asyncio.create_task(self.trading_monitor._send_alert({
+            "type": "chain_error",
+            "message": f"Chain error: {str(error)}",
+            "severity": "critical",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+    def on_agent_action(self, action: AgentAction, **kwargs) -> None:
+        """Called when agent takes an action"""
+        self.structured_logger.info(
+            "Agent action",
+            tool=action.tool,
+            tool_input=action.tool_input,
+            log=action.log,
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_agent_finish(self, finish: AgentFinish, **kwargs) -> None:
+        """Called when agent finishes"""
+        self.structured_logger.info(
+            "Agent finished",
+            return_values=finish.return_values,
+            log=finish.log,
+            timestamp=datetime.now().isoformat()
+        )
+
+class EnhancedTradingMonitor:
+    """Enhanced trading monitor with LangChain callback integration"""
     
     def __init__(self, mcp_client, data_collector, email_service, trading_report_agent):
         self.mcp_client = mcp_client
         self.data_collector = data_collector
         self.email_service = email_service
         self.trading_report_agent = trading_report_agent
+        
+        # Setup structured logging
+        structlog.configure(
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.UnicodeDecoder(),
+                structlog.processors.JSONRenderer()
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+        
+        # Initialize callback handler
+        self.callback_handler = TradingCallbackHandler(self)
         
         # Monitoring configuration
         self.monitoring_addresses = self._load_monitoring_addresses()
@@ -43,6 +163,55 @@ class TradingMonitor:
         # Callbacks
         self.transaction_callbacks = []
         self.report_callbacks = []
+        
+        # Performance metrics
+        self.performance_metrics = {
+            "total_transactions_processed": 0,
+            "successful_reports_generated": 0,
+            "failed_reports": 0,
+            "average_processing_time": 0.0,
+            "last_health_check": datetime.now()
+        }
+
+    def get_callback_manager(self) -> CallbackManager:
+        """Get callback manager for LangChain integration"""
+        return CallbackManager([
+            self.callback_handler,
+            StreamingStdOutCallbackHandler(),
+            FileCallbackHandler("trading_callbacks.log")
+        ])
+    
+    async def _send_alert(self, alert: Dict[str, Any]) -> None:
+        """Send alert through multiple channels"""
+        try:
+            # Log the alert
+            self.structured_logger.warning(
+                "Trading alert",
+                alert_type=alert.get("type"),
+                message=alert.get("message"),
+                severity=alert.get("severity"),
+                timestamp=alert.get("timestamp")
+            )
+            
+            # Send email alert for critical issues
+            if alert.get("severity") == "critical":
+                await self.email_service.send_alert_email(alert)
+                
+        except Exception as e:
+            logger.error(f"Failed to send alert: {e}")
+    
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get current performance metrics"""
+        return self.performance_metrics.copy()
+    
+    def update_performance_metrics(self, metric: str, value: Any) -> None:
+        """Update performance metrics"""
+        if metric in self.performance_metrics:
+            self.performance_metrics[metric] = value
+        self.performance_metrics["last_health_check"] = datetime.now()
+
+# Alias for backward compatibility
+TradingMonitor = EnhancedTradingMonitor
         
     def _load_monitoring_addresses(self) -> List[str]:
         """Load addresses to monitor from environment"""

@@ -1,36 +1,94 @@
 """
-Enhanced Data Collector for Ethereum Trading Agents
+Enhanced Data Collector for Ethereum Trading Agents with Real-time WebSocket Support
 
 This module provides comprehensive data collection from multiple sources:
-1. News APIs for real-time market news
-2. Social media monitoring for sentiment analysis
-3. Technical data from various exchanges
-4. On-chain data for blockchain metrics
-5. Expert opinions and analysis
+1. Real-time WebSocket data streams
+2. News APIs for real-time market news
+3. Social media monitoring for sentiment analysis
+4. Technical data from various exchanges
+5. On-chain data for blockchain metrics
+6. Expert opinions and analysis
 """
 
 import asyncio
 import aiohttp
 import json
 import logging
-from typing import Dict, Any, List, Optional
+import websockets
+from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.schema import LLMResult
+import structlog
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+class RealTimeDataCallbackHandler(BaseCallbackHandler):
+    """Callback handler for real-time data processing"""
+    
+    def __init__(self, data_collector):
+        self.data_collector = data_collector
+        self.structured_logger = structlog.get_logger()
+        
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> None:
+        """Called when LLM starts processing data"""
+        self.structured_logger.info(
+            "Real-time data processing started",
+            llm_type=serialized.get("name", "unknown"),
+            prompt_count=len(prompts),
+            timestamp=datetime.now().isoformat()
+        )
+        
+    def on_llm_end(self, response: LLMResult, **kwargs) -> None:
+        """Called when LLM finishes processing data"""
+        self.structured_logger.info(
+            "Real-time data processing completed",
+            generation_count=len(response.generations),
+            timestamp=datetime.now().isoformat()
+        )
+
 class DataCollector:
-    """Comprehensive data collector for trading agents"""
+    """Enhanced data collector with real-time WebSocket support"""
     
     def __init__(self):
         self.session = None
         self.api_keys = self._load_api_keys()
         self.data_cache = {}
         self.cache_ttl = 300  # 5 minutes cache
+        
+        # Real-time data streams
+        self.websocket_connections = {}
+        self.real_time_data = {}
+        self.data_callbacks = []
+        self.streaming_active = False
+        
+        # Setup structured logging
+        structlog.configure(
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.UnicodeDecoder(),
+                structlog.processors.JSONRenderer()
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+        
+        # Initialize callback handler
+        self.callback_handler = RealTimeDataCallbackHandler(self)
+        self.structured_logger = structlog.get_logger()
         
     def _load_api_keys(self) -> Dict[str, str]:
         """Load API keys from environment variables"""
@@ -57,23 +115,291 @@ class DataCollector:
             await self.session.close()
     
     async def connect(self):
-        """Connect to data sources"""
+        """Connect to data sources and start real-time streams"""
         try:
             self.session = aiohttp.ClientSession()
             logger.info("Data collector connected successfully")
+            
+            # Start real-time data streams
+            await self.start_real_time_streams()
+            
         except Exception as e:
             logger.error(f"Failed to connect data collector: {e}")
             raise
     
     async def close(self):
-        """Close data collector connection"""
+        """Close data collector connection and stop real-time streams"""
         try:
+            # Stop real-time streams
+            await self.stop_real_time_streams()
+            
             if self.session:
                 await self.session.close()
                 self.session = None
                 logger.info("Data collector connection closed")
         except Exception as e:
             logger.error(f"Error closing data collector: {e}")
+    
+    async def start_real_time_streams(self):
+        """Start real-time WebSocket data streams"""
+        try:
+            self.streaming_active = True
+            
+            # Start multiple data streams concurrently
+            tasks = [
+                self._binance_websocket_stream(),
+                self._coinbase_websocket_stream(),
+                self._news_stream(),
+                self._social_sentiment_stream()
+            ]
+            
+            # Run streams in background
+            for task in tasks:
+                asyncio.create_task(task)
+            
+            self.structured_logger.info(
+                "Real-time data streams started",
+                stream_count=len(tasks),
+                timestamp=datetime.now().isoformat()
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to start real-time streams: {e}")
+            self.structured_logger.error(
+                "Real-time stream startup failed",
+                error=str(e),
+                timestamp=datetime.now().isoformat()
+            )
+    
+    async def stop_real_time_streams(self):
+        """Stop all real-time data streams"""
+        self.streaming_active = False
+        
+        # Close all WebSocket connections
+        for connection in self.websocket_connections.values():
+            if connection and not connection.closed:
+                await connection.close()
+        
+        self.websocket_connections.clear()
+        self.structured_logger.info(
+            "Real-time data streams stopped",
+            timestamp=datetime.now().isoformat()
+        )
+    
+    async def _binance_websocket_stream(self):
+        """Binance WebSocket stream for real-time price data"""
+        try:
+            uri = "wss://stream.binance.com:9443/ws/ethusdt@ticker"
+            
+            async with websockets.connect(uri) as websocket:
+                self.websocket_connections['binance'] = websocket
+                
+                async for message in websocket:
+                    if not self.streaming_active:
+                        break
+                    
+                    try:
+                        data = json.loads(message)
+                        await self._process_price_data('binance', data)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse Binance data: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Binance WebSocket stream error: {e}")
+    
+    async def _coinbase_websocket_stream(self):
+        """Coinbase WebSocket stream for real-time price data"""
+        try:
+            uri = "wss://ws-feed.exchange.coinbase.com"
+            subscribe_message = {
+                "type": "subscribe",
+                "product_ids": ["ETH-USD"],
+                "channels": ["ticker"]
+            }
+            
+            async with websockets.connect(uri) as websocket:
+                self.websocket_connections['coinbase'] = websocket
+                await websocket.send(json.dumps(subscribe_message))
+                
+                async for message in websocket:
+                    if not self.streaming_active:
+                        break
+                    
+                    try:
+                        data = json.loads(message)
+                        await self._process_price_data('coinbase', data)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse Coinbase data: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Coinbase WebSocket stream error: {e}")
+    
+    async def _news_stream(self):
+        """Real-time news stream using polling"""
+        try:
+            while self.streaming_active:
+                try:
+                    news_data = await self.get_latest_news()
+                    if news_data:
+                        await self._process_news_data(news_data)
+                except Exception as e:
+                    logger.warning(f"News stream error: {e}")
+                
+                await asyncio.sleep(60)  # Poll every minute
+                
+        except Exception as e:
+            logger.error(f"News stream error: {e}")
+    
+    async def _social_sentiment_stream(self):
+        """Real-time social sentiment stream"""
+        try:
+            while self.streaming_active:
+                try:
+                    sentiment_data = await self.get_social_sentiment()
+                    if sentiment_data:
+                        await self._process_sentiment_data(sentiment_data)
+                except Exception as e:
+                    logger.warning(f"Social sentiment stream error: {e}")
+                
+                await asyncio.sleep(120)  # Poll every 2 minutes
+                
+        except Exception as e:
+            logger.error(f"Social sentiment stream error: {e}")
+    
+    async def _process_price_data(self, source: str, data: Dict[str, Any]):
+        """Process real-time price data"""
+        try:
+            processed_data = {
+                "source": source,
+                "symbol": data.get("symbol", "ETH-USD"),
+                "price": float(data.get("price", 0)),
+                "volume": float(data.get("volume", 0)),
+                "timestamp": datetime.now().isoformat(),
+                "change_24h": float(data.get("priceChangePercent", 0))
+            }
+            
+            # Update real-time data cache
+            self.real_time_data[f"{source}_price"] = processed_data
+            
+            # Notify callbacks
+            await self._notify_callbacks("price_update", processed_data)
+            
+            self.structured_logger.info(
+                "Price data processed",
+                source=source,
+                price=processed_data["price"],
+                timestamp=processed_data["timestamp"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to process price data from {source}: {e}")
+    
+    async def _process_news_data(self, news_data: List[Dict[str, Any]]):
+        """Process real-time news data"""
+        try:
+            processed_news = []
+            for article in news_data:
+                processed_article = {
+                    "title": article.get("title", ""),
+                    "description": article.get("description", ""),
+                    "url": article.get("url", ""),
+                    "published_at": article.get("publishedAt", ""),
+                    "source": article.get("source", {}).get("name", ""),
+                    "sentiment": await self._analyze_news_sentiment(article),
+                    "timestamp": datetime.now().isoformat()
+                }
+                processed_news.append(processed_article)
+            
+            # Update real-time data cache
+            self.real_time_data["news"] = processed_news
+            
+            # Notify callbacks
+            await self._notify_callbacks("news_update", processed_news)
+            
+            self.structured_logger.info(
+                "News data processed",
+                article_count=len(processed_news),
+                timestamp=datetime.now().isoformat()
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to process news data: {e}")
+    
+    async def _process_sentiment_data(self, sentiment_data: Dict[str, Any]):
+        """Process real-time sentiment data"""
+        try:
+            processed_sentiment = {
+                "overall_sentiment": sentiment_data.get("overall_sentiment", "neutral"),
+                "sentiment_score": sentiment_data.get("sentiment_score", 0.0),
+                "social_volume": sentiment_data.get("social_volume", 0),
+                "fear_greed_index": sentiment_data.get("fear_greed_index", 50),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Update real-time data cache
+            self.real_time_data["sentiment"] = processed_sentiment
+            
+            # Notify callbacks
+            await self._notify_callbacks("sentiment_update", processed_sentiment)
+            
+            self.structured_logger.info(
+                "Sentiment data processed",
+                sentiment=processed_sentiment["overall_sentiment"],
+                score=processed_sentiment["sentiment_score"],
+                timestamp=processed_sentiment["timestamp"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to process sentiment data: {e}")
+    
+    async def _analyze_news_sentiment(self, article: Dict[str, Any]) -> str:
+        """Analyze news article sentiment using LLM"""
+        try:
+            # This would use an LLM to analyze sentiment
+            # For now, return a simple heuristic
+            title = article.get("title", "").lower()
+            description = article.get("description", "").lower()
+            
+            positive_words = ["bullish", "surge", "rise", "gain", "positive", "optimistic"]
+            negative_words = ["bearish", "fall", "drop", "decline", "negative", "pessimistic"]
+            
+            text = f"{title} {description}"
+            
+            positive_count = sum(1 for word in positive_words if word in text)
+            negative_count = sum(1 for word in negative_words if word in text)
+            
+            if positive_count > negative_count:
+                return "positive"
+            elif negative_count > positive_count:
+                return "negative"
+            else:
+                return "neutral"
+                
+        except Exception as e:
+            logger.error(f"Failed to analyze news sentiment: {e}")
+            return "neutral"
+    
+    async def _notify_callbacks(self, event_type: str, data: Any):
+        """Notify registered callbacks of data updates"""
+        for callback in self.data_callbacks:
+            try:
+                await callback(event_type, data)
+            except Exception as e:
+                logger.error(f"Callback notification failed: {e}")
+    
+    def add_data_callback(self, callback: Callable):
+        """Add a callback for real-time data updates"""
+        self.data_callbacks.append(callback)
+    
+    def get_real_time_data(self, data_type: str = None) -> Dict[str, Any]:
+        """Get current real-time data"""
+        if data_type:
+            return self.real_time_data.get(data_type, {})
+        return self.real_time_data.copy()
+    
+    def get_callback_handler(self):
+        """Get callback handler for LangChain integration"""
+        return self.callback_handler
     
     async def collect_comprehensive_data(self, asset: str = "ETH") -> Dict[str, Any]:
         """Collect comprehensive data from all sources"""

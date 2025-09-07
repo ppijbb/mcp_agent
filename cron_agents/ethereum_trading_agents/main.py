@@ -178,11 +178,12 @@ class EthereumTradingSystem:
             # Get LLM from LangChain agent
             llm = self.agents['langchain_conservative'].get_llm()
             
-            # Initialize trading chain
+            # Initialize trading chain with config
             self.chains['trading'] = TradingChain(
                 llm=llm,
                 trading_agent=self.agents['conservative_trader'],
-                analysis_agent=self.agents['gemini']
+                analysis_agent=self.agents['gemini'],
+                config=self.config
             )
             
             # Initialize analysis chain
