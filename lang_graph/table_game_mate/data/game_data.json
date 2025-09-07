@@ -1,0 +1,88 @@
+{
+  "games": {
+    "chess": {
+      "name": "체스",
+      "type": "strategy",
+      "min_players": 2,
+      "max_players": 2,
+      "estimated_duration": 30,
+      "complexity": "high",
+      "description": "전략적 사고가 필요한 고전 보드게임",
+      "rules": {
+        "board_size": "8x8",
+        "pieces": ["king", "queen", "rook", "bishop", "knight", "pawn"],
+        "objective": "상대방의 킹을 체크메이트하라"
+      }
+    },
+    "checkers": {
+      "name": "체커",
+      "type": "strategy",
+      "min_players": 2,
+      "max_players": 2,
+      "estimated_duration": 20,
+      "complexity": "medium",
+      "description": "간단하지만 전략적인 보드게임",
+      "rules": {
+        "board_size": "8x8",
+        "pieces": ["checker"],
+        "objective": "상대방의 모든 말을 잡거나 움직일 수 없게 하라"
+      }
+    },
+    "go": {
+      "name": "바둑",
+      "type": "strategy",
+      "min_players": 2,
+      "max_players": 2,
+      "estimated_duration": 60,
+      "complexity": "expert",
+      "description": "동양의 고전 전략 게임",
+      "rules": {
+        "board_size": "19x19",
+        "pieces": ["stone"],
+        "objective": "더 많은 영역을 차지하라"
+      }
+    },
+    "poker": {
+      "name": "포커",
+      "type": "card",
+      "min_players": 2,
+      "max_players": 8,
+      "estimated_duration": 45,
+      "complexity": "medium",
+      "description": "카드 조합과 심리전이 중요한 게임",
+      "rules": {
+        "deck": "52 cards",
+        "objective": "최고의 카드 조합을 만들어라"
+      }
+    }
+  },
+  "ai_personas": {
+    "aggressive": {
+      "name": "공격적",
+      "description": "적극적으로 공격하는 플레이어",
+      "characteristics": ["빠른 결정", "위험 감수", "공격적 전략"]
+    },
+    "defensive": {
+      "name": "수비적",
+      "description": "안전을 우선하는 플레이어",
+      "characteristics": ["신중한 플레이", "안전 우선", "수비적 전략"]
+    },
+    "strategic": {
+      "name": "전략적",
+      "description": "장기적 관점에서 플레이하는 플레이어",
+      "characteristics": ["계획적 사고", "장기 전략", "분석적 접근"]
+    },
+    "random": {
+      "name": "무작위",
+      "description": "예측하기 어려운 플레이어",
+      "characteristics": ["무작위 선택", "예측 불가", "변화무쌍"]
+    }
+  },
+  "system_config": {
+    "max_concurrent_games": 10,
+    "default_timeout": 300,
+    "monitoring_interval": 30,
+    "error_threshold": 5,
+    "performance_threshold": 80
+  }
+}

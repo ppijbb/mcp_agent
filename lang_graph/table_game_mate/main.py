@@ -1,308 +1,195 @@
-#!/usr/bin/env python3
 """
-Table Game Mate - 메인 실행 파일
+Table Game Mate - 메인 진입점
 
-완전한 멀티 에이전트 보드게임 플랫폼의 메인 실행 파일
-LangGraph 기반으로 6개 전문 에이전트를 오케스트레이션하여
-동적으로 모든 보드게임을 플레이할 수 있는 시스템
+LangGraph 패턴을 따르는 멀티 에이전트 보드게임 플랫폼
 """
 
 import asyncio
 import sys
-import os
-from pathlib import Path
-from typing import Dict, TypedDict
+from typing import Dict, List, Any
 from datetime import datetime
 
-# 프로젝트 루트를 Python 경로에 추가
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from lang_graph.table_game_mate.core.game_master import GameMasterGraph
-from lang_graph.table_game_mate.models.game_state import GameConfig, GamePhase
-from lang_graph.table_game_mate.core.llm_client import LLMClient
-from lang_graph.table_game_mate.utils.mcp_client import MCPClient
+from agents import GameAgent, AnalysisAgent, MonitoringAgent
+from core import GameConfig, Player, SystemState, ErrorHandler, ErrorSeverity, ErrorCategory
 
 
-class MockLLMClient:
-    """테스트용 Mock LLM 클라이언트"""
+class TableGameMate:
+    """Table Game Mate 메인 시스템"""
     
     def __init__(self):
-        self.call_count = 0
-    
-    async def complete(self, prompt: str) -> str:
-        self.call_count += 1
+        self.error_handler = ErrorHandler()
+        self.system_state = SystemState()
         
-        # 간단한 응답 시뮬레이션
-        if "analyze" in prompt.lower():
-            return """
-            {
-                "game_name": "Azul",
-                "complexity": "medium",
-                "game_type": "strategy",
-                "estimated_duration": 45,
-                "min_players": 2,
-                "max_players": 4,
-                "description": "A tile-placement game"
-            }
-            """
-        elif "persona" in prompt.lower():
-            return """
-            {
-                "persona_profiles": [
-                    {
-                        "persona_id": "strategic_player",
-                        "name": "Strategic Alice",
-                        "persona_type": "strategic",
-                        "traits": {
-                            "risk_tolerance": "low",
-                            "planning_horizon": "long",
-                            "social_interaction": "minimal"
-                        },
-                        "communication_style": {
-                            "verbosity": "concise",
-                            "formality": "formal",
-                            "emotion": "reserved"
-                        }
-                    },
-                    {
-                        "persona_id": "social_player", 
-                        "name": "Social Bob",
-                        "persona_type": "social",
-                        "traits": {
-                            "risk_tolerance": "medium",
-                            "planning_horizon": "short",
-                            "social_interaction": "high"
-                        },
-                        "communication_style": {
-                            "verbosity": "verbose",
-                            "formality": "casual",
-                            "emotion": "expressive"
-                        }
-                    }
-                ]
-            }
-            """
-        elif "rules" in prompt.lower():
-            return """
-            {
-                "game_rules": {
-                    "objective": "Score the most points by placing tiles",
-                    "setup": "Each player gets a board and tiles are drawn",
-                    "turn_structure": "Draw tiles, place them, score points",
-                    "scoring": "Complete rows and columns for points"
-                }
-            }
-            """
-        elif "referee" in prompt.lower() or "validation" in prompt.lower():
-            return """
-            {
-                "is_valid": true,
-                "message": "Action is valid",
-                "score_adjustment": 0
-            }
-            """
-        else:
-            return '{"action": "pass", "reason": "No specific action needed"}'
-
-
-class MockMCPClient:
-    """테스트용 Mock MCP 클라이언트"""
-    
-    def __init__(self):
-        self.call_count = 0
-    
-    async def call(self, server: str, method: str, params: Dict) -> Dict:
-        self.call_count += 1
+        # 에이전트 초기화
+        self.game_agent = GameAgent()
+        self.analysis_agent = AnalysisAgent()
+        self.monitoring_agent = MonitoringAgent()
         
-        # BGG API 시뮬레이션
-        if server == "bgg" and method == "search":
-            return {
-                "success": True,
-                "result": {
-                    "games": [{
-                        "name": "Azul",
-                        "id": 230802,
-                        "year": 2017,
-                        "rating": 7.8
-                    }]
-                }
-            }
-        elif server == "bgg" and method == "get_game":
-            return {
-                "success": True,
-                "result": {
-                    "name": "Azul",
-                    "description": "A tile-placement game",
-                    "min_players": 2,
-                    "max_players": 4,
-                    "playing_time": 45,
-                    "complexity": 1.8
-                }
-            }
-        else:
-            return {"success": True, "result": "Mock response"}
-
-
-async def run_game_session(game_name: str = "Azul", player_count: int = 2):
-    """게임 세션 실행"""
-    
-    print(f"🎮 {game_name} 게임 세션 시작")
-    print("=" * 50)
-    
-    try:
-        # Mock 클라이언트들 생성
-        llm_client = MockLLMClient()
-        mcp_client = MockMCPClient()
-        
-        # GameMasterGraph 초기화
-        print("📋 GameMasterGraph 초기화 중...")
-        game_master = GameMasterGraph(llm_client, mcp_client)
-        
-        init_result = await game_master.initialize()
-        if not init_result:
-            print("❌ GameMasterGraph 초기화 실패")
-            return False
-        
-        print("✅ GameMasterGraph 초기화 성공")
-        
-        # 게임 설정
-        game_config: GameConfig = {
-            "target_game_name": game_name,
-            "desired_player_count": player_count,
-            "difficulty_level": "medium",
-            "ai_creativity": 0.7,
-            "ai_aggression": 0.5,
-            "enable_persona_chat": True,
-            "auto_progress": True,
-            "turn_timeout_seconds": 30,
-            "enable_hints": False,
-            "verbose_logging": True,
-            "save_game_history": True
+        # 에이전트 등록
+        self.agents = {
+            "game_agent": self.game_agent,
+            "analysis_agent": self.analysis_agent,
+            "monitoring_agent": self.monitoring_agent
         }
         
-        print(f"🎯 게임 설정:")
-        print(f"   게임: {game_config['target_game_name']}")
-        print(f"   플레이어 수: {game_config['desired_player_count']}명")
-        print(f"   난이도: {game_config['difficulty_level']}")
-        
-        # 게임 세션 시작
-        print(f"\n🚀 게임 워크플로우 실행 시작...")
-        result = await game_master.start_game_session(game_config)
-        
-        if result["success"]:
-            session_id = result["session_id"]
-            print(f"\n🎉 게임 세션 완료!")
-            print(f"   세션 ID: {session_id}")
+        print("🎮 Table Game Mate 시스템이 초기화되었습니다")
+    
+    async def start_system(self) -> bool:
+        """시스템 시작"""
+        try:
+            print("🚀 시스템 시작 중...")
             
-            # 세션 상태 확인
-            status = await game_master.get_session_status(session_id)
-            print(f"\n📊 최종 게임 결과:")
-            print(f"   게임 이름: {status['game_name']}")
-            print(f"   현재 페이즈: {status['phase']}")
-            print(f"   총 턴 수: {status['turn_count']}")
-            print(f"   게임 종료: {status['game_ended']}")
+            # 시스템 상태 업데이트
+            self.system_state.status = "running"
+            self.system_state.updated_at = datetime.now()
             
-            if status["players"]:
-                print(f"\n👥 플레이어 결과:")
-                for i, player in enumerate(status["players"], 1):
-                    print(f"   {i}. {player['name']}: {player['score']}점 ({player['persona']})")
+            # 모니터링 에이전트 시작
+            monitoring_result = await self.monitoring_agent.monitor_system()
+            if not monitoring_result["success"]:
+                raise Exception(f"모니터링 에이전트 시작 실패: {monitoring_result['error']}")
             
-            if status["winners"]:
-                print(f"\n🏆 승자: {', '.join(status['winners'])}")
-            
-            if status["errors"]:
-                print(f"\n⚠️  발생한 오류들:")
-                for error in status["errors"]:
-                    print(f"   - {error['agent']}: {error['error']}")
-            
+            print("✅ 시스템이 성공적으로 시작되었습니다")
             return True
             
-        else:
-            print(f"❌ 게임 세션 실패: {result['error']}")
+        except Exception as e:
+            await self.error_handler.handle_error(e, "main_system", ErrorSeverity.CRITICAL, ErrorCategory.SYSTEM_ERROR)
+            print(f"❌ 시스템 시작 실패: {str(e)}")
             return False
+    
+    async def play_game(self, game_name: str, player_names: List[str]) -> Dict[str, Any]:
+        """게임 실행"""
+        try:
+            print(f"🎯 게임 '{game_name}' 시작 - 플레이어: {', '.join(player_names)}")
             
-    except Exception as e:
-        print(f"❌ 게임 실행 중 예외 발생: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def print_system_info():
-    """시스템 정보 출력"""
+            # 게임 설정 생성
+            game_config = GameConfig(
+                name=game_name,
+                type="chess",  # 기본값
+                min_players=2,
+                max_players=4,
+                estimated_duration=60
+            )
+            
+            # 플레이어 생성
+            players = []
+            for i, name in enumerate(player_names):
+                player = Player(
+                    id=f"player_{i+1}",
+                    name=name,
+                    type="human" if i == 0 else "ai"
+                )
+                players.append(player)
+            
+            # 게임 실행
+            game_result = await self.game_agent.play_game(game_config.model_dump(), [p.model_dump() for p in players])
+            
+            if game_result["success"]:
+                print("🎉 게임이 성공적으로 완료되었습니다")
+                
+                # 게임 분석
+                analysis_result = await self.analysis_agent.analyze_game(game_result["final_state"])
+                if analysis_result["success"]:
+                    print("📊 게임 분석이 완료되었습니다")
+                else:
+                    print(f"⚠️ 게임 분석 실패: {analysis_result['error']}")
+                
+                return {
+                    "success": True,
+                    "game_result": game_result,
+                    "analysis_result": analysis_result
+                }
+            else:
+                raise Exception(f"게임 실행 실패: {game_result['error']}")
+                
+        except Exception as e:
+            await self.error_handler.handle_error(e, "main_system", ErrorSeverity.HIGH, ErrorCategory.GAME_ERROR)
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
-    print("🎯 Table Game Mate - 멀티 에이전트 보드게임 플랫폼")
-    print("=" * 60)
-    print("📋 시스템 구성:")
-    print("   🎯 GameMasterGraph - 완전한 멀티 에이전트 오케스트레이터")
-    print("   🔍 GameAnalyzerAgent - 게임 정보 분석")
-    print("   📜 RuleParserAgent - 게임 규칙 구조화")
-    print("   🎭 PersonaGeneratorAgent - AI 플레이어 페르소나 생성")
-    print("   👥 PlayerManagerAgent - 플레이어 생성 및 관리")
-    print("   🤖 PlayerAgent - 개별 AI 플레이어 의사결정")
-    print("   🎯 GameRefereeAgent - 게임 규칙 검증")
-    print("   🏆 ScoreCalculatorAgent - 점수 계산")
-    print("   🔧 ActionExecutor - 액션 실행 엔진")
-    print("   📡 MessageHub - 에이전트 간 통신")
-    print("   📝 Logger - 종합 로깅 시스템")
+    async def get_system_status(self) -> Dict[str, Any]:
+        """시스템 상태 조회"""
+        try:
+            # 에러 요약
+            error_summary = self.error_handler.get_error_summary()
+            
+            # 시스템 메트릭
+            monitoring_result = await self.monitoring_agent.monitor_system()
+            
+            return {
+                "system_status": self.system_state.status,
+                "active_games": len(self.system_state.active_games),
+                "error_summary": error_summary,
+                "monitoring_status": monitoring_result.get("success", False),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            await self.error_handler.handle_error(e, "main_system", ErrorSeverity.MEDIUM, ErrorCategory.SYSTEM_ERROR)
+            return {
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
     
-    print("\n🔧 기술 스택:")
-    print("   🐍 Python 3.8+")
-    print("   🌐 LangGraph - 워크플로우 오케스트레이션")
-    print("   🤖 MCP (Model Context Protocol) - 외부 서비스 통합")
-    print("   🧠 LLM - AI 추론")
-    print("   📊 TypedDict - 타입 안전성")
-    print("   ⚡ asyncio - 비동기 처리")
-    
-    print("\n🎮 지원 게임:")
-    print("   🎯 Azul (타일 배치 게임)")
-    print("   🏰 Catan (자원 관리 게임)")
-    print("   🃏 UNO (카드 게임)")
-    print("   🎲 기타 보드게임 (확장 가능)")
+    async def shutdown_system(self) -> bool:
+        """시스템 종료"""
+        try:
+            print("🛑 시스템 종료 중...")
+            
+            # 시스템 상태 업데이트
+            self.system_state.status = "maintenance"
+            self.system_state.updated_at = datetime.now()
+            
+            # 활성 게임 정리
+            for game_id in self.system_state.active_games:
+                print(f"게임 {game_id} 정리 중...")
+            
+            self.system_state.active_games.clear()
+            
+            print("✅ 시스템이 안전하게 종료되었습니다")
+            return True
+            
+        except Exception as e:
+            await self.error_handler.handle_error(e, "main_system", ErrorSeverity.HIGH, ErrorCategory.SYSTEM_ERROR)
+            print(f"❌ 시스템 종료 중 오류: {str(e)}")
+            return False
 
 
 async def main():
-    """메인 실행 함수"""
-    
-    print_system_info()
-    
-    print("\n" + "=" * 60)
-    print("🚀 게임 세션 시작")
-    print("=" * 60)
-    
-    # 기본 게임 세션 실행
-    success = await run_game_session("Azul", 2)
-    
-    if success:
-        print("\n🎉 모든 테스트 성공! Table Game Mate 시스템이 정상적으로 작동합니다!")
-        print("✅ LangGraph 워크플로우가 완벽하게 구현되었습니다.")
-        print("✅ 멀티 에이전트 시스템이 성공적으로 오케스트레이션됩니다.")
-        print("✅ 모든 핵심 컴포넌트가 통합되어 작동합니다.")
+    """메인 함수"""
+    try:
+        # Table Game Mate 시스템 생성
+        system = TableGameMate()
         
-        print("\n🚀 향후 개발 계획:")
-        print("   🎮 실제 게임 로직 구현 (Azul, Catan 등)")
-        print("   🎭 더 정교한 페르소나 시스템")
-        print("   🧠 향상된 AI 의사결정 로직")
-        print("   🎯 실시간 게임 진행 모니터링")
-        print("   🌐 웹 UI 인터페이스")
-        print("   📱 모바일 앱 지원")
+        # 시스템 시작
+        if not await system.start_system():
+            print("시스템 시작에 실패했습니다")
+            return
         
-        return True
-    else:
-        print("\n⚠️  게임 세션 실행 중 문제가 발생했습니다.")
-        print("   - GameReferee LLM 응답 파싱 개선 필요")
-        print("   - PlayerAgent 생성 시 PersonaTraits 처리 개선 필요")
-        return False
+        # 시스템 상태 확인
+        status = await system.get_system_status()
+        print(f"시스템 상태: {status}")
+        
+        # 데모 게임 실행
+        print("\n🎮 데모 게임을 시작합니다...")
+        game_result = await system.play_game("체스", ["Alice", "Bob"])
+        
+        if game_result["success"]:
+            print("✅ 데모 게임이 성공적으로 완료되었습니다")
+        else:
+            print(f"❌ 데모 게임 실패: {game_result['error']}")
+        
+        # 시스템 종료
+        await system.shutdown_system()
+        
+    except KeyboardInterrupt:
+        print("\n👋 사용자에 의해 프로그램이 종료되었습니다")
+    except Exception as e:
+        print(f"❌ 예상치 못한 오류: {str(e)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    print("🎮 Table Game Mate 시작...")
-    success = asyncio.run(main())
-    
-    if success:
-        print("\n🎉 프로그램이 성공적으로 완료되었습니다!")
-        sys.exit(0)
-    else:
-        print("\n❌ 프로그램 실행 중 오류가 발생했습니다.")
-        sys.exit(1) 
+    # 이벤트 루프 실행
+    asyncio.run(main())
