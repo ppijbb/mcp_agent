@@ -27,6 +27,13 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 
+# Import advanced algorithms
+from ..algorithms.integrated_trading import IntegratedTradingAlgorithm, IntegratedTradingConfig
+from ..algorithms.amm_algorithm import AMMAlgorithm, AMMConfig
+from ..algorithms.ai_prediction import PracticalPredictionAlgorithm, PredictionConfig
+from ..algorithms.parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig
+from ..algorithms.advanced_risk import AdvancedRiskAlgorithm, RiskConfig
+
 logger = logging.getLogger(__name__)
 
 # Strict type definitions for LangGraph - dict-based only
@@ -199,6 +206,14 @@ class TradingChain:
         self.config = config
         self.risk_manager = RiskManager(config)
         self.memory = MemorySaver()
+        
+        # Initialize advanced algorithms
+        self.integrated_trading = IntegratedTradingAlgorithm(IntegratedTradingConfig())
+        self.amm_algorithm = AMMAlgorithm(AMMConfig())
+        self.ai_prediction = PracticalPredictionAlgorithm(PredictionConfig())
+        self.parallel_evm = ParallelEVMAlgorithm(ParallelEVMConfig())
+        self.advanced_risk = AdvancedRiskAlgorithm(RiskConfig())
+        
         self._setup_langgraph_workflow()
     
     def _setup_langgraph_workflow(self):
@@ -208,6 +223,7 @@ class TradingChain:
         
         # Add nodes for each step in the trading process
         workflow.add_node("market_analysis", self._market_analysis_node)
+        workflow.add_node("advanced_analysis", self._advanced_analysis_node)
         workflow.add_node("risk_assessment", self._risk_assessment_node)
         workflow.add_node("signal_generation", self._signal_generation_node)
         workflow.add_node("position_sizing", self._position_sizing_node)
@@ -221,6 +237,16 @@ class TradingChain:
         # Conditional edges based on success/failure
         workflow.add_conditional_edges(
             "market_analysis",
+            self._should_proceed_to_advanced,
+            {
+                "proceed": "advanced_analysis",
+                "retry": "error_recovery",
+                "fail": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "advanced_analysis",
             self._should_proceed_to_risk,
             {
                 "proceed": "risk_assessment",
@@ -289,8 +315,14 @@ class TradingChain:
         except Exception as e:
             raise ValueError(f"Failed to initialize memory checkpointing: {str(e)}")
     
+    def _should_proceed_to_advanced(self, state: TradingState) -> str:
+        """Determine if we should proceed to advanced analysis"""
+        if state["error_messages"]:
+            return "retry" if state["retry_count"] < state["max_retries"] else "fail"
+        return "proceed"
+    
     def _should_proceed_to_risk(self, state: TradingState) -> str:
-        """Determine if market analysis was successful"""
+        """Determine if advanced analysis was successful"""
         if state["error_messages"]:
             return "retry" if state["retry_count"] < state["max_retries"] else "fail"
         return "proceed"
@@ -400,6 +432,53 @@ class TradingChain:
             logger.error(f"Market analysis failed: {e}")
             state["error_messages"].append(f"Market analysis error: {str(e)}")
             return state
+    
+    def _advanced_analysis_node(self, state: TradingState) -> TradingState:
+        """Advanced analysis using integrated trading algorithms"""
+        try:
+            logger.info("Starting advanced analysis with integrated algorithms")
+            
+            # Prepare data for advanced algorithms
+            market_data = state["market_data"]
+            portfolio_data = {
+                "returns": [d.get("price_change", 0) for d in state["historical_data"]],
+                "values": [d.get("price", 0) for d in state["historical_data"]],
+                "position_returns": {},
+                "position_weights": {},
+                "position_sizes": {},
+                "market_volumes": {"ETH": market_data.get("volume", 0)},
+                "historical_data": state["historical_data"]
+            }
+            
+            # Run integrated trading analysis
+            trading_result = asyncio.run(
+                self.integrated_trading.run_integrated_trading_cycle(market_data, portfolio_data)
+            )
+            
+            # Update state with advanced analysis results
+            state["current_step"] = "advanced_analysis"
+            
+            # Add advanced analysis results to market data
+            if "advanced_analysis" not in state["market_data"]:
+                state["market_data"]["advanced_analysis"] = {}
+            
+            state["market_data"]["advanced_analysis"].update({
+                "strategy_used": trading_result["strategy_used"],
+                "market_condition": trading_result["market_condition"],
+                "ai_prediction": trading_result.get("ai_prediction", {}),
+                "amm_analysis": trading_result.get("amm_analysis", {}),
+                "risk_metrics": trading_result.get("risk_metrics", {}),
+                "confidence_score": trading_result.get("confidence_score", 0.5)
+            })
+            
+            logger.info(f"Advanced analysis completed: {trading_result['strategy_used']}")
+            
+        except Exception as e:
+            logger.error(f"Advanced analysis failed: {e}")
+            state["error_messages"].append(f"Advanced analysis error: {str(e)}")
+            state["current_step"] = "advanced_analysis"
+        
+        return state
     
     async def _risk_assessment_node(self, state: TradingState) -> TradingState:
         """Risk assessment node using RiskManager"""
