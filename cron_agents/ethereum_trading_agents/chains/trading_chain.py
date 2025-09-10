@@ -30,7 +30,7 @@ from enum import Enum
 # Import advanced algorithms
 from ..algorithms.integrated_trading import IntegratedTradingAlgorithm, IntegratedTradingConfig
 from ..algorithms.amm_algorithm import AMMAlgorithm, AMMConfig
-from ..algorithms.ai_prediction import PracticalPredictionAlgorithm, PredictionConfig
+from ..algorithms.technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig
 from ..algorithms.parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig
 from ..algorithms.advanced_risk import AdvancedRiskAlgorithm, RiskConfig
 
@@ -210,7 +210,7 @@ class TradingChain:
         # Initialize advanced algorithms
         self.integrated_trading = IntegratedTradingAlgorithm(IntegratedTradingConfig())
         self.amm_algorithm = AMMAlgorithm(AMMConfig())
-        self.ai_prediction = PracticalPredictionAlgorithm(PredictionConfig())
+        self.technical_analysis = TechnicalAnalysisAlgorithm(TechnicalAnalysisConfig())
         self.parallel_evm = ParallelEVMAlgorithm(ParallelEVMConfig())
         self.advanced_risk = AdvancedRiskAlgorithm(RiskConfig())
         

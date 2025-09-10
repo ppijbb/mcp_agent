@@ -1,11 +1,11 @@
 """
-Practical Prediction Algorithm for Ethereum Trading
+Technical Analysis Algorithm for Ethereum Trading
 
-This module implements practical prediction methods:
-1. Technical analysis-based predictions
+This module implements technical analysis methods:
+1. Technical indicator-based predictions
 2. Statistical trend analysis
 3. Market sentiment indicators
-4. Simple moving average strategies
+4. Moving average strategies
 """
 
 import asyncio
@@ -36,8 +36,8 @@ class AnalysisMethod(Enum):
     MOMENTUM = "momentum"
 
 @dataclass
-class PredictionConfig:
-    """Prediction configuration"""
+class TechnicalAnalysisConfig:
+    """Technical analysis configuration"""
     lookback_period: int = 20  # 20 periods for analysis
     prediction_horizon: int = 5  # 5 periods ahead
     confidence_threshold: float = 0.7
@@ -45,8 +45,8 @@ class PredictionConfig:
     sentiment_analysis: bool = True
     momentum_analysis: bool = True
 
-class PredictionResult(TypedDict):
-    """Prediction result structure"""
+class AnalysisResult(TypedDict):
+    """Technical analysis result structure"""
     prediction: float
     confidence: float
     method: str
@@ -54,12 +54,12 @@ class PredictionResult(TypedDict):
     indicators_used: List[str]
     prediction_horizon: int
 
-class PracticalPredictionAlgorithm:
-    """Practical prediction algorithm for Ethereum trading"""
+class TechnicalAnalysisAlgorithm:
+    """Technical analysis algorithm for Ethereum trading"""
     
-    def __init__(self, config: PredictionConfig):
+    def __init__(self, config: TechnicalAnalysisConfig):
         self.config = config
-        self.prediction_history: List[PredictionResult] = []
+        self.analysis_history: List[AnalysisResult] = []
         self.performance_metrics: Dict[str, float] = {}
         self.price_history: List[float] = []
         self.volume_history: List[float] = []
@@ -247,26 +247,26 @@ class PracticalPredictionAlgorithm:
             logger.error(f"Volatility calculation failed: {e}")
             return 0.0
     
-    async def predict_price(
+    async def analyze_price(
         self, 
         market_data: Dict[str, any], 
         historical_data: List[Dict[str, any]]
-    ) -> PredictionResult:
-        """Predict future price using technical analysis"""
+    ) -> AnalysisResult:
+        """Analyze future price using technical analysis"""
         try:
             # Get technical indicators
             indicators = await self.prepare_technical_indicators(market_data, historical_data)
             
             if not indicators:
-                raise ValueError("Insufficient data for prediction")
+                raise ValueError("Insufficient data for analysis")
             
             current_price = market_data.get("price", 0)
             
             # Technical analysis prediction
             prediction, confidence = self._technical_analysis_prediction(current_price, indicators)
             
-            # Create prediction result
-            result: PredictionResult = {
+            # Create analysis result
+            result: AnalysisResult = {
                 "prediction": prediction,
                 "confidence": confidence,
                 "method": "technical_analysis",
@@ -275,8 +275,8 @@ class PracticalPredictionAlgorithm:
                 "prediction_horizon": self.config.prediction_horizon
             }
             
-            # Store prediction history
-            self.prediction_history.append(result)
+            # Store analysis history
+            self.analysis_history.append(result)
             
             # Update performance metrics
             await self._update_performance_metrics(confidence)
@@ -284,8 +284,8 @@ class PracticalPredictionAlgorithm:
             return result
             
         except Exception as e:
-            logger.error(f"Price prediction failed: {e}")
-            raise ValueError(f"Prediction failed: {str(e)}")
+            logger.error(f"Price analysis failed: {e}")
+            raise ValueError(f"Analysis failed: {str(e)}")
     
     def _technical_analysis_prediction(
         self, 

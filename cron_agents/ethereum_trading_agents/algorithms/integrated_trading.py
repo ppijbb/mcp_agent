@@ -18,7 +18,7 @@ import logging
 from datetime import datetime, timedelta
 
 from .amm_algorithm import AMMAlgorithm, AMMConfig, AMMPosition
-from .ai_prediction import PracticalPredictionAlgorithm, PredictionConfig, PredictionResult, AnalysisMethod
+from .technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig, AnalysisResult, AnalysisMethod
 from .parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig, Transaction, TransactionPriority
 from .advanced_risk import AdvancedRiskAlgorithm, RiskConfig, RiskMetrics, RiskLevel
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class TradingStrategy(Enum):
     """Trading strategy types"""
     AMM = "amm"
-    AI_PREDICTION = "ai_prediction"
+    TECHNICAL_ANALYSIS = "technical_analysis"
     MOMENTUM = "momentum"
     MEAN_REVERSION = "mean_reversion"
     ARBITRAGE = "arbitrage"
@@ -48,8 +48,8 @@ class IntegratedTradingConfig:
     amm_enabled: bool = True
     amm_liquidity_threshold: float = 10000.0
     
-    # AI prediction settings
-    ai_prediction_enabled: bool = True
+    # Technical analysis settings
+    technical_analysis_enabled: bool = True
     prediction_confidence_threshold: float = 0.7
     
     # Parallel EVM settings
@@ -61,7 +61,7 @@ class IntegratedTradingConfig:
     max_portfolio_risk: float = 0.05
     
     # Strategy selection
-    primary_strategy: TradingStrategy = TradingStrategy.AI_PREDICTION
+    primary_strategy: TradingStrategy = TradingStrategy.TECHNICAL_ANALYSIS
     fallback_strategy: TradingStrategy = TradingStrategy.AMM
     
     # Market adaptation
@@ -90,7 +90,7 @@ class IntegratedTradingAlgorithm:
         
         # Initialize sub-algorithms
         self.amm_algorithm = AMMAlgorithm(AMMConfig())
-        self.ai_prediction = PracticalPredictionAlgorithm(PredictionConfig())
+        self.technical_analysis = TechnicalAnalysisAlgorithm(TechnicalAnalysisConfig())
         self.parallel_evm = ParallelEVMAlgorithm(ParallelEVMConfig())
         self.risk_management = AdvancedRiskAlgorithm(RiskConfig())
         
@@ -159,9 +159,9 @@ class IntegratedTradingAlgorithm:
                     selected_strategy = TradingStrategy.HEDGE
                     
             elif market_condition in [MarketCondition.BULL, MarketCondition.BEAR]:
-                # Trending market - use AI prediction
-                if self.config.ai_prediction_enabled:
-                    selected_strategy = TradingStrategy.AI_PREDICTION
+                # Trending market - use technical analysis
+                if self.config.technical_analysis_enabled:
+                    selected_strategy = TradingStrategy.TECHNICAL_ANALYSIS
                 else:
                     selected_strategy = TradingStrategy.MOMENTUM
                     
@@ -225,21 +225,21 @@ class IntegratedTradingAlgorithm:
             logger.error(f"AMM strategy execution failed: {e}")
             raise ValueError(f"AMM strategy failed: {str(e)}")
     
-    async def execute_ai_prediction_strategy(
+    async def execute_technical_analysis_strategy(
         self, 
         market_data: Dict[str, any], 
         portfolio_data: Dict[str, any]
     ) -> TradingDecision:
-        """Execute AI prediction strategy"""
+        """Execute technical analysis strategy"""
         try:
-            # Get price prediction using technical analysis
+            # Get price analysis using technical analysis
             historical_data = portfolio_data.get("historical_data", [])
-            prediction_result = await self.ai_prediction.predict_price(market_data, historical_data)
+            analysis_result = await self.technical_analysis.analyze_price(market_data, historical_data)
             
-            # Determine action based on prediction
+            # Determine action based on analysis
             current_price = market_data.get("price", 0)
-            predicted_price = prediction_result["prediction"]
-            confidence = prediction_result["confidence"]
+            predicted_price = analysis_result["prediction"]
+            confidence = analysis_result["confidence"]
             
             if confidence < self.config.prediction_confidence_threshold:
                 action = "HOLD"
@@ -263,7 +263,7 @@ class IntegratedTradingAlgorithm:
                 "action": action,
                 "amount": amount,
                 "price": current_price,
-                "strategy": TradingStrategy.AI_PREDICTION,
+                "strategy": TradingStrategy.TECHNICAL_ANALYSIS,
                 "confidence": confidence,
                 "risk_score": risk_score,
                 "expected_return": expected_return,
@@ -508,15 +508,15 @@ class IntegratedTradingAlgorithm:
             # Execute strategy
             if strategy == TradingStrategy.AMM:
                 decision = await self.execute_amm_strategy(market_data, portfolio_data)
-            elif strategy == TradingStrategy.AI_PREDICTION:
-                decision = await self.execute_ai_prediction_strategy(market_data, portfolio_data)
+            elif strategy == TradingStrategy.TECHNICAL_ANALYSIS:
+                decision = await self.execute_technical_analysis_strategy(market_data, portfolio_data)
             elif strategy == TradingStrategy.MOMENTUM:
                 decision = await self.execute_momentum_strategy(market_data, portfolio_data)
             elif strategy == TradingStrategy.MEAN_REVERSION:
                 decision = await self.execute_mean_reversion_strategy(market_data, portfolio_data)
             else:
                 # Fallback to primary strategy
-                decision = await self.execute_ai_prediction_strategy(market_data, portfolio_data)
+                decision = await self.execute_technical_analysis_strategy(market_data, portfolio_data)
             
             # Execute trading decision
             execution_result = await self.execute_trading_decision(decision, portfolio_data)
@@ -578,7 +578,7 @@ class IntegratedTradingAlgorithm:
                 "performance_metrics": self.performance_metrics,
                 "config": {
                     "amm_enabled": self.config.amm_enabled,
-                    "ai_prediction_enabled": self.config.ai_prediction_enabled,
+                    "technical_analysis_enabled": self.config.technical_analysis_enabled,
                     "parallel_execution_enabled": self.config.parallel_execution_enabled,
                     "risk_management_enabled": self.config.risk_management_enabled
                 }
