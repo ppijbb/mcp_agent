@@ -10,6 +10,9 @@ from .sentiment_analysis_tools import AdvancedSentimentAnalyzer, SentimentAnalys
 from .risk_management_tools import AdvancedRiskManager, RiskManagementConfig, RiskType
 from .portfolio_management_tools import AdvancedPortfolioManager, PortfolioConfig, PortfolioAction
 from .execution_tools import AdvancedExecutionManager, ExecutionConfig, OrderType, OrderSide, OrderStatus
+from .external_api_tools import ExternalAPIManager, ExternalAPIConfig, APISource
+from .mcp_integration_tools import MCPIntegrationManager, MCPConfig, MCPServerType
+from .enhanced_trading_agent import EnhancedTradingAgent, EnhancedTradingAgentConfig
 
 __all__ = [
     # Market Data Tools
@@ -47,7 +50,21 @@ __all__ = [
     "ExecutionConfig",
     "OrderType",
     "OrderSide",
-    "OrderStatus"
+    "OrderStatus",
+    
+    # External API Tools
+    "ExternalAPIManager",
+    "ExternalAPIConfig",
+    "APISource",
+    
+    # MCP Integration Tools
+    "MCPIntegrationManager",
+    "MCPConfig",
+    "MCPServerType",
+    
+    # Enhanced Trading Agent
+    "EnhancedTradingAgent",
+    "EnhancedTradingAgentConfig"
 ]
 
 # Tool categories for easy access
@@ -95,6 +112,23 @@ EXECUTION_TOOLS = {
     "order_status": OrderStatus
 }
 
+EXTERNAL_API_TOOLS = {
+    "manager": ExternalAPIManager,
+    "config": ExternalAPIConfig,
+    "sources": APISource
+}
+
+MCP_INTEGRATION_TOOLS = {
+    "manager": MCPIntegrationManager,
+    "config": MCPConfig,
+    "server_types": MCPServerType
+}
+
+ENHANCED_TRADING_AGENT = {
+    "agent": EnhancedTradingAgent,
+    "config": EnhancedTradingAgentConfig
+}
+
 # All tool categories
 TOOL_CATEGORIES = {
     "market_data": MARKET_DATA_TOOLS,
@@ -103,7 +137,10 @@ TOOL_CATEGORIES = {
     "sentiment_analysis": SENTIMENT_ANALYSIS_TOOLS,
     "risk_management": RISK_MANAGEMENT_TOOLS,
     "portfolio_management": PORTFOLIO_MANAGEMENT_TOOLS,
-    "execution": EXECUTION_TOOLS
+    "execution": EXECUTION_TOOLS,
+    "external_api": EXTERNAL_API_TOOLS,
+    "mcp_integration": MCP_INTEGRATION_TOOLS,
+    "enhanced_trading_agent": ENHANCED_TRADING_AGENT
 }
 
 def get_tool_category(category: str):
