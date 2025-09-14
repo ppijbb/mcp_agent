@@ -6,35 +6,89 @@ containing shared functionality like logging, metrics, and common utilities.
 """
 
 import asyncio
-import structlog
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
 
-import numpy as np
-import pandas as pd
-import networkx as nx
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from rich.console import Console
-from rich.progress import Progress, TaskID
+# Optional imports with fallbacks
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
-from langchain_core.language_models import BaseLanguageModel
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
-from langchain_community.vectorstores import Chroma, FAISS
-from langchain_core.cache import BaseCache
-from langchain_community.cache import RedisCache, SQLiteCache
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
+try:
+    import networkx as nx
+except ImportError:
+    nx = None
+
+try:
+    from pydantic import BaseModel, Field, field_validator, ConfigDict
+except ImportError:
+    BaseModel = object
+    Field = None
+    field_validator = None
+    ConfigDict = None
+
+try:
+    from rich.console import Console
+    from rich.progress import Progress, TaskID
+except ImportError:
+    Console = None
+    Progress = None
+    TaskID = None
+
+# LangChain imports are optional for basic functionality
+try:
+    from langchain_core.language_models import BaseLanguageModel
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain_core.documents import Document
+    from langchain_core.vectorstores import VectorStore
+    from langchain_community.vectorstores import Chroma, FAISS
+    from langchain_core.cache import BaseCache
+    from langchain_community.cache import RedisCache, SQLiteCache
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    BaseLanguageModel = None
+    ChatOpenAI = None
+    OpenAIEmbeddings = None
+    Document = None
+    VectorStore = None
+    Chroma = None
+    FAISS = None
+    BaseCache = None
+    RedisCache = None
+    SQLiteCache = None
+    LANGCHAIN_AVAILABLE = False
 
 
-class BaseAgentConfig(BaseModel):
+class BaseAgentConfig:
     """Base configuration for all agents"""
-    
-    model_config = ConfigDict(extra='forbid', validate_assignment=True)
-    
-    # Core model settings
-    model_name: str = Field(default="gpt-4o-mini", description="LLM model name")
+    def __init__(self, **kwargs):
+        # Default values
+        self.model_name = kwargs.get("model_name", "gpt-4o-mini")
+        self.openai_api_key = kwargs.get("openai_api_key", "")
+        self.temperature = kwargs.get("temperature", 0.7)
+        self.max_tokens = kwargs.get("max_tokens", 1000)
+        self.timeout = kwargs.get("timeout", 30)
+        self.retry_attempts = kwargs.get("retry_attempts", 3)
+        self.enable_caching = kwargs.get("enable_caching", True)
+        self.cache_ttl = kwargs.get("cache_ttl", 3600)
+        self.enable_metrics = kwargs.get("enable_metrics", True)
+        self.metrics_retention_days = kwargs.get("metrics_retention_days", 30)
+        self.log_level = kwargs.get("log_level", "INFO")
+        self.enable_rich_logging = kwargs.get("enable_rich_logging", True)
+        
+        # Set any additional kwargs
+        for key, value in kwargs.items():
+            if not hasattr(self, key):
+                setattr(self, key, value)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0, description="Model temperature")
     max_tokens: int = Field(default=4000, ge=100, le=8000, description="Maximum tokens")
     

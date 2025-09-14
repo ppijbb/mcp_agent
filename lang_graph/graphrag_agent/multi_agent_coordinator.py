@@ -11,10 +11,8 @@ import pandas as pd
 import logging
 from pathlib import Path
 
-from .agents.graph_generator_agent import GraphGeneratorAgent, GraphGeneratorConfig
-from .agents.rag_agent import RAGAgent, RAGAgentConfig
-from .agents.graph_visualization_agent import GraphVisualizationAgent, GraphVisualizationConfig
-from .agents.graph_optimization_agent import GraphOptimizationAgent, GraphOptimizationConfig
+from .agents.enhanced_graph_generator_agent import EnhancedGraphGeneratorAgent, EnhancedGraphGeneratorConfig, DomainType, DataClassification
+from .agents.simple_rag_agent import SimpleRAGAgent, SimpleRAGConfig
 from pydantic import BaseModel, Field, validator
 
 
@@ -29,6 +27,13 @@ class MultiAgentConfig(BaseModel):
     enable_optimization: bool = Field(default=True, description="Enable graph optimization")
     visualization_output_dir: str = Field(default="./graph_visualizations", description="Visualization output directory")
     optimization_quality_threshold: float = Field(default=0.8, description="Graph quality threshold for optimization")
+    
+    # 향상된 기능 설정
+    enable_domain_specialization: bool = Field(default=True, description="Enable domain specialization")
+    domain_type: DomainType = Field(default=DomainType.GENERAL, description="Domain type for specialization")
+    enable_security_privacy: bool = Field(default=True, description="Enable security and privacy protection")
+    enable_query_optimization: bool = Field(default=True, description="Enable query optimization")
+    default_data_classification: DataClassification = Field(default=DataClassification.INTERNAL, description="Default data classification")
     
     @validator('max_search_results')
     def validate_max_search_results(cls, v):
@@ -79,23 +84,28 @@ class MultiAgentCoordinator:
     def _initialize_agents(self):
         """Initialize the specialized agents"""
         try:
-            # Initialize Graph Generator Agent
-            graph_config = GraphGeneratorConfig(
+            # Initialize Enhanced Graph Generator Agent (통합된 기능 포함)
+            graph_config = EnhancedGraphGeneratorConfig(
                 openai_api_key=self.config.openai_api_key,
                 model_name=self.config.graph_model_name,
+                enable_domain_specialization=self.config.enable_domain_specialization,
+                domain_type=self.config.domain_type,
+                enable_security_privacy=self.config.enable_security_privacy,
+                enable_query_optimization=self.config.enable_query_optimization,
+                default_data_classification=self.config.default_data_classification
             )
-            self.graph_generator = GraphGeneratorAgent(graph_config)
-            self.logger.info("GraphGeneratorAgent initialized successfully")
+            self.graph_generator = EnhancedGraphGeneratorAgent(graph_config)
+            self.logger.info("Enhanced GraphGeneratorAgent initialized successfully")
             
-            # Initialize RAG Agent
-            rag_config = RAGAgentConfig(
+            # Initialize Simple RAG Agent
+            rag_config = SimpleRAGConfig(
                 openai_api_key=self.config.openai_api_key,
                 model_name=self.config.rag_model_name,
                 max_search_results=self.config.max_search_results,
                 context_window_size=self.config.context_window_size
             )
-            self.rag_agent = RAGAgent(rag_config)
-            self.logger.info("RAGAgent initialized successfully")
+            self.rag_agent = SimpleRAGAgent(rag_config)
+            self.logger.info("SimpleRAGAgent initialized successfully")
             
             # Initialize Graph Visualization Agent (if enabled)
             if self.config.enable_visualization:
@@ -261,13 +271,15 @@ class MultiAgentCoordinator:
             "visualization": visualization_result
         }
 
-    async def query_knowledge_graph(self, user_query: str, graph_path: str) -> Dict[str, Any]:
+    async def query_knowledge_graph(self, user_query: str, graph_path: str, 
+                                  user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Loads a knowledge graph and queries it using the RAG agent.
+        Loads a knowledge graph and queries it using enhanced RAG with security and optimization.
         
         Args:
             user_query: The user's question
             graph_path: Path to the knowledge graph file
+            user_context: Optional user context for security and personalization
             
         Returns:
             Dict containing status and response

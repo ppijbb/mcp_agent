@@ -28,6 +28,8 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
+import json
 
 from multi_agent_coordinator import MultiAgentCoordinator, MultiAgentConfig
 
@@ -121,6 +123,14 @@ Examples:
 
     # --- `status` command ---
     parser_status = subparsers.add_parser("status", help="Check system status and agent health")
+    
+    # --- `create-graph` command (enhanced) ---
+    parser_create.add_argument("--domain-type", choices=["general", "biomedical", "finance", "technical"], 
+                              default="general", help="Domain type for specialization")
+    parser_create.add_argument("--enable-security", action="store_true", 
+                              help="Enable security and privacy protection")
+    parser_create.add_argument("--data-classification", choices=["public", "internal", "confidential", "restricted"],
+                              default="internal", help="Data classification level")
 
     args = parser.parse_args()
     
@@ -134,7 +144,10 @@ Examples:
     config = MultiAgentConfig(
         openai_api_key=openai_api_key,
         graph_model_name="gemini-2.5-flash-lite-preview-06-07",
-        rag_model_name="gemini-2.5-flash-lite-preview-06-07"
+        rag_model_name="gemini-2.5-flash-lite-preview-06-07",
+        enable_domain_specialization=True,
+        enable_security_privacy=True,
+        enable_query_optimization=True
     )
     coordinator = MultiAgentCoordinator(config)
 
@@ -361,6 +374,8 @@ async def handle_status(args, coordinator):
         config = health["agents"]["config"]
         for key, value in config.items():
             print(f"   - {key}: {value}")
+
+
 
 
 if __name__ == "__main__":

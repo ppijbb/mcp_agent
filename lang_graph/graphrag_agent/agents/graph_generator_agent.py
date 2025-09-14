@@ -27,7 +27,7 @@ import networkx as nx
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
-from .base_agent import BaseAgent, BaseAgentConfig
+from .base_agent_simple import BaseAgent, BaseAgentConfig
 
 
 # Custom implementations for missing langchain_graphrag components

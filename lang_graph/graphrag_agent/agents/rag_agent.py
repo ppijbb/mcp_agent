@@ -27,7 +27,7 @@ import numpy as np
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
-from .base_agent import BaseAgent, BaseAgentConfig
+from .base_agent_simple import BaseAgent, BaseAgentConfig
 
 
 class RAGAgentConfig(BaseAgentConfig):
