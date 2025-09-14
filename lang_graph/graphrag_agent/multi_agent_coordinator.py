@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .agents.enhanced_graph_generator_agent import EnhancedGraphGeneratorAgent, EnhancedGraphGeneratorConfig, DomainType, DataClassification
 from .agents.simple_rag_agent import SimpleRAGAgent, SimpleRAGConfig
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class MultiAgentConfig(BaseModel):
@@ -35,19 +35,19 @@ class MultiAgentConfig(BaseModel):
     enable_query_optimization: bool = Field(default=True, description="Enable query optimization")
     default_data_classification: DataClassification = Field(default=DataClassification.INTERNAL, description="Default data classification")
     
-    @validator('max_search_results')
+    @field_validator('max_search_results')
     def validate_max_search_results(cls, v):
         if v < 1 or v > 20:
             raise ValueError('max_search_results must be between 1 and 20')
         return v
     
-    @validator('context_window_size')
+    @field_validator('context_window_size')
     def validate_context_window_size(cls, v):
         if v < 1000 or v > 32000:
             raise ValueError('context_window_size must be between 1000 and 32000')
         return v
     
-    @validator('optimization_quality_threshold')
+    @field_validator('optimization_quality_threshold')
     def validate_optimization_quality_threshold(cls, v):
         if v < 0.0 or v > 1.0:
             raise ValueError('optimization_quality_threshold must be between 0.0 and 1.0')
@@ -109,22 +109,18 @@ class MultiAgentCoordinator:
             
             # Initialize Graph Visualization Agent (if enabled)
             if self.config.enable_visualization:
-                viz_config = GraphVisualizationConfig(
-                    output_directory=self.config.visualization_output_dir
-                )
-                self.graph_visualizer = GraphVisualizationAgent(viz_config)
-                self.logger.info("GraphVisualizationAgent initialized successfully")
+                # Placeholder for visualization agent - to be implemented
+                self.graph_visualizer = None
+                self.logger.info("Graph visualization enabled (agent to be implemented)")
             else:
                 self.graph_visualizer = None
                 self.logger.info("Graph visualization disabled")
             
             # Initialize Graph Optimization Agent (if enabled)
             if self.config.enable_optimization:
-                opt_config = GraphOptimizationConfig(
-                    quality_threshold=self.config.optimization_quality_threshold
-                )
-                self.graph_optimizer = GraphOptimizationAgent(opt_config)
-                self.logger.info("GraphOptimizationAgent initialized successfully")
+                # Placeholder for optimization agent - to be implemented
+                self.graph_optimizer = None
+                self.logger.info("Graph optimization enabled (agent to be implemented)")
             else:
                 self.graph_optimizer = None
                 self.logger.info("Graph optimization disabled")

@@ -1,0 +1,46 @@
+# GraphRAG Agent Configuration
+# This file contains default configuration settings for the GraphRAG Agent
+
+agent:
+  # OpenAI API configuration
+  openai_api_key: ""  # Set via OPENAI_API_KEY environment variable
+  model_name: "gemini-2.5-flash-lite-preview-06-07"
+  max_search_results: 5
+  context_window_size: 4000
+
+graph:
+  # Graph generation settings
+  enable_domain_specialization: true
+  domain_type: "general"  # Options: general, biomedical, finance, technical
+  enable_security_privacy: true
+  enable_query_optimization: true
+  default_data_classification: "internal"  # Options: public, internal, confidential, restricted
+
+visualization:
+  # Graph visualization settings
+  enabled: true
+  output_directory: "./graph_visualizations"
+  formats: ["png", "svg", "html"]
+  max_nodes: 1000
+
+optimization:
+  # Graph optimization settings
+  enabled: true
+  quality_threshold: 0.8
+  max_iterations: 10
+
+logging:
+  # Logging configuration
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_path: null  # Set to enable file logging
+  max_file_size: 10485760  # 10MB
+  backup_count: 5
+
+# Runtime settings (can be overridden by environment variables)
+data_file: null
+output_path: null
+query: null
+graph_path: null
+mode: "create"  # Options: create, query, visualize, optimize, export
+verbose: false
