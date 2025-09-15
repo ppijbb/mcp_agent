@@ -1,20 +1,17 @@
 """
-Multi-Agent System for Graph RAG
+GraphRAG Agents
 
-This package contains specialized agents for knowledge graph generation and RAG operations.
+This module contains the core agent implementations and workflows for the GraphRAG system.
 """
 
-from .base_agent_simple import BaseAgent, BaseAgentConfig
-from .enhanced_graph_generator_agent import EnhancedGraphGeneratorAgent, EnhancedGraphGeneratorConfig, DomainType, DataClassification
-from .simple_rag_agent import SimpleRAGAgent, SimpleRAGConfig
+from .graph_generator import GraphGeneratorNode
+from .rag_agent import RAGAgentNode
+from .workflow import GraphRAGWorkflow
+from .graphrag_agent import GraphRAGAgent
 
 __all__ = [
-    "BaseAgent",
-    "BaseAgentConfig",
-    "EnhancedGraphGeneratorAgent",
-    "EnhancedGraphGeneratorConfig",
-    "DomainType",
-    "DataClassification",
-    "SimpleRAGAgent",
-    "SimpleRAGConfig"
+    "GraphGeneratorNode",
+    "RAGAgentNode",
+    "GraphRAGWorkflow",
+    "GraphRAGAgent"
 ]

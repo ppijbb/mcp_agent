@@ -1,0 +1,6 @@
+id,document_id,text_unit
+1,doc_1,"Apple Inc. is a technology company based in Cupertino, California. It was founded by Steve Jobs, Steve Wozniak, and Ronald Wayne in 1976."
+2,doc_1,"The company is known for innovative products like the iPhone, iPad, and Mac computers. Tim Cook is the current CEO of Apple."
+3,doc_2,"Microsoft Corporation is an American multinational technology corporation headquartered in Redmond, Washington. It was founded by Bill Gates and Paul Allen in 1975."
+4,doc_2,"Microsoft is best known for its Windows operating systems, Office productivity suite, and Azure cloud computing platform. Satya Nadella is the current CEO."
+5,doc_3,Google LLC is an American multinational technology company that specializes in Internet-related services and products. It was founded by Larry Page and Sergey Brin while they were PhD students at Stanford University.

@@ -8,7 +8,7 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 import logging
 
@@ -31,18 +31,21 @@ class DataClassification(str, Enum):
 
 class AgentConfig(BaseModel):
     """Base configuration for agents"""
-    openai_api_key: str = Field(..., description="OpenAI API key")
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    gemini_api_key: str = Field(default="", description="Gemini API key")
     model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="Model name")
     max_search_results: int = Field(default=5, description="Max search results for RAG")
     context_window_size: int = Field(default=4000, description="Context window size")
+    temperature: float = Field(default=0.0, description="Temperature")
+    max_tokens: int = Field(default=1000, description="Max tokens")
     
-    @validator('max_search_results')
+    @field_validator('max_search_results')
     def validate_max_search_results(cls, v):
         if v < 1 or v > 20:
             raise ValueError('max_search_results must be between 1 and 20')
         return v
     
-    @validator('context_window_size')
+    @field_validator('context_window_size')
     def validate_context_window_size(cls, v):
         if v < 1000 or v > 32000:
             raise ValueError('context_window_size must be between 1000 and 32000')
@@ -65,7 +68,7 @@ class VisualizationConfig(BaseModel):
     formats: list = Field(default=["png", "svg", "html"], description="Output formats")
     max_nodes: int = Field(default=1000, description="Maximum nodes to visualize")
     
-    @validator('max_nodes')
+    @field_validator('max_nodes')
     def validate_max_nodes(cls, v):
         if v < 10 or v > 10000:
             raise ValueError('max_nodes must be between 10 and 10000')
@@ -78,13 +81,13 @@ class OptimizationConfig(BaseModel):
     quality_threshold: float = Field(default=0.8, description="Quality threshold")
     max_iterations: int = Field(default=10, description="Maximum optimization iterations")
     
-    @validator('quality_threshold')
+    @field_validator('quality_threshold')
     def validate_quality_threshold(cls, v):
         if v < 0.0 or v > 1.0:
             raise ValueError('quality_threshold must be between 0.0 and 1.0')
         return v
     
-    @validator('max_iterations')
+    @field_validator('max_iterations')
     def validate_max_iterations(cls, v):
         if v < 1 or v > 100:
             raise ValueError('max_iterations must be between 1 and 100')
@@ -99,7 +102,7 @@ class LoggingConfig(BaseModel):
     max_file_size: int = Field(default=10485760, description="Max log file size in bytes")  # 10MB
     backup_count: int = Field(default=5, description="Number of backup files")
     
-    @validator('level')
+    @field_validator('level')
     def validate_level(cls, v):
         valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
         if v.upper() not in valid_levels:
@@ -379,12 +382,13 @@ class ConfigManager:
                 self.logger.error("OpenAI API key is required")
                 return False
             
-            # Check file paths if provided
-            if config.data_file and not os.path.exists(config.data_file):
+            # Check file paths if provided (only for modes that require them)
+            if config.data_file and config.mode in ["create"] and not os.path.exists(config.data_file):
                 self.logger.error(f"Data file not found: {config.data_file}")
                 return False
             
-            if config.graph_path and not os.path.exists(config.graph_path):
+            # Only check graph_path if mode requires it
+            if config.graph_path and config.mode in ["query", "visualize", "optimize"] and not os.path.exists(config.graph_path):
                 self.logger.error(f"Graph file not found: {config.graph_path}")
                 return False
             
