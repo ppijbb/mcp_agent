@@ -1,160 +1,327 @@
 #!/usr/bin/env python3
 """
-Local Researcher - Main Entry Point
+Autonomous Multi-Agent Research System
 
-This is the main entry point for the Local Researcher system that integrates
-Gemini CLI with Open Deep Research for local research automation.
+This is a fully autonomous multi-agent research system that:
+1. Self-analyzes user requests and objectives
+2. Dynamically decomposes tasks and assigns them to specialized agents
+3. Orchestrates multi-agent collaboration with MCP integration
+4. Performs critical evaluation and recursive execution
+5. Validates results against original objectives
+6. Generates comprehensive final deliverables
+
+No fallback or dummy code - production-level autonomous operation only.
 """
 
 import asyncio
 import sys
 import logging
+import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime
+from enum import Enum
+import json
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.core.research_orchestrator import ResearchOrchestrator, ResearchRequest
-from src.cli.gemini_integration import GeminiCLIIntegration
+from src.core.autonomous_orchestrator import AutonomousOrchestrator
+from src.agents.task_analyzer import TaskAnalyzerAgent
+from src.agents.task_decomposer import TaskDecomposerAgent
+from src.agents.research_agent import ResearchAgent
+from src.agents.evaluation_agent import EvaluationAgent
+from src.agents.validation_agent import ValidationAgent
+from src.agents.synthesis_agent import SynthesisAgent
+from src.core.mcp_integration import MCPIntegrationManager
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
 
 # Set up logging
-logger = setup_logger("main", log_level="INFO")
+logger = setup_logger("autonomous_research", log_level="INFO")
 
 
-class LocalResearcher:
-    """Main Local Researcher application class."""
+class ResearchObjective:
+    """Represents a research objective with autonomous analysis capabilities."""
+    
+    def __init__(self, user_request: str, context: Optional[Dict[str, Any]] = None):
+        self.objective_id = str(uuid.uuid4())
+        self.user_request = user_request
+        self.context = context or {}
+        self.analyzed_objectives = []
+        self.decomposed_tasks = []
+        self.assigned_agents = []
+        self.execution_results = []
+        self.evaluation_results = []
+        self.validation_results = []
+        self.final_synthesis = None
+        self.created_at = datetime.now()
+        self.status = "initialized"
+        
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "objective_id": self.objective_id,
+            "user_request": self.user_request,
+            "context": self.context,
+            "analyzed_objectives": self.analyzed_objectives,
+            "decomposed_tasks": self.decomposed_tasks,
+            "assigned_agents": self.assigned_agents,
+            "execution_results": self.execution_results,
+            "evaluation_results": self.evaluation_results,
+            "validation_results": self.validation_results,
+            "final_synthesis": self.final_synthesis,
+            "created_at": self.created_at.isoformat(),
+            "status": self.status
+        }
+
+
+class AutonomousResearchSystem:
+    """Fully autonomous multi-agent research system."""
     
     def __init__(self, config_path: Optional[str] = None):
-        """Initialize Local Researcher.
+        """Initialize the autonomous research system.
         
         Args:
             config_path: Path to configuration file
         """
         self.config_path = config_path
         self.config_manager = ConfigManager(config_path)
-        self.orchestrator = ResearchOrchestrator(config_path)
-        self.gemini_integration = GeminiCLIIntegration(config_path)
+        self.mcp_manager = MCPIntegrationManager(config_path)
         
-        logger.info("Local Researcher initialized")
+        # Initialize specialized agents
+        self.task_analyzer = TaskAnalyzerAgent(config_path)
+        self.task_decomposer = TaskDecomposerAgent(config_path)
+        self.research_agent = ResearchAgent(config_path)
+        self.evaluation_agent = EvaluationAgent(config_path)
+        self.validation_agent = ValidationAgent(config_path)
+        self.synthesis_agent = SynthesisAgent(config_path)
+        
+        # Initialize orchestrator
+        self.orchestrator = AutonomousOrchestrator(
+            config_path=config_path,
+            agents={
+                'analyzer': self.task_analyzer,
+                'decomposer': self.task_decomposer,
+                'researcher': self.research_agent,
+                'evaluator': self.evaluation_agent,
+                'validator': self.validation_agent,
+                'synthesizer': self.synthesis_agent
+            },
+            mcp_manager=self.mcp_manager
+        )
+        
+        # Active research objectives
+        self.active_objectives: Dict[str, ResearchObjective] = {}
+        
+        logger.info("Autonomous Research System initialized with full agent orchestration")
     
-    async def start_research(self, topic: str, **kwargs) -> str:
-        """Start a new research project.
+    async def start_autonomous_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """Start fully autonomous research with multi-agent orchestration.
+        
+        This method implements the complete autonomous workflow:
+        1. Self-analysis of user request and objectives
+        2. Dynamic task decomposition and agent assignment
+        3. Multi-agent execution with MCP integration
+        4. Critical evaluation and recursive execution
+        5. Result validation against original objectives
+        6. Final synthesis and deliverable generation
         
         Args:
-            topic: Research topic
-            **kwargs: Additional research parameters
+            user_request: The user's research request
+            context: Additional context for the research
             
         Returns:
-            Research ID
+            Research objective ID
         """
         try:
-            # Create research request
-            request = ResearchRequest(
-                topic=topic,
-                domain=kwargs.get('domain'),
-                depth=kwargs.get('depth', 'standard'),
-                sources=kwargs.get('sources', []),
-                output_format=kwargs.get('format', 'markdown')
-            )
+            # Create research objective
+            objective = ResearchObjective(user_request, context)
+            self.active_objectives[objective.objective_id] = objective
             
-            # Start research
-            research_id = await self.orchestrator.start_research(request)
+            logger.info(f"Starting autonomous research for objective: {objective.objective_id}")
+            logger.info(f"User request: {user_request}")
             
-            logger.info(f"Research started: {research_id}")
-            return research_id
+            # Phase 1: Autonomous Analysis
+            objective.status = "analyzing"
+            analysis_result = await self.orchestrator.analyze_objective(objective)
+            objective.analyzed_objectives = analysis_result
+            logger.info(f"Analysis completed: {len(analysis_result)} objectives identified")
+            
+            # Phase 2: Task Decomposition and Agent Assignment
+            objective.status = "decomposing"
+            decomposition_result = await self.orchestrator.decompose_tasks(objective)
+            objective.decomposed_tasks = decomposition_result['tasks']
+            objective.assigned_agents = decomposition_result['assignments']
+            logger.info(f"Task decomposition completed: {len(objective.decomposed_tasks)} tasks assigned to {len(objective.assigned_agents)} agents")
+            
+            # Phase 3: Multi-Agent Execution with MCP Integration
+            objective.status = "executing"
+            execution_result = await self.orchestrator.execute_tasks(objective)
+            objective.execution_results = execution_result
+            logger.info(f"Multi-agent execution completed: {len(execution_result)} results generated")
+            
+            # Phase 4: Critical Evaluation and Recursive Execution
+            objective.status = "evaluating"
+            evaluation_result = await self.orchestrator.evaluate_results(objective)
+            objective.evaluation_results = evaluation_result
+            
+            # Check if recursive execution is needed
+            if evaluation_result.get('needs_recursion', False):
+                logger.info("Recursive execution required - restarting with refined objectives")
+                objective.status = "recursive_execution"
+                recursive_result = await self.orchestrator.execute_recursive_refinement(objective)
+                objective.execution_results.extend(recursive_result)
+                logger.info("Recursive execution completed")
+            
+            # Phase 5: Result Validation Against Original Objectives
+            objective.status = "validating"
+            validation_result = await self.orchestrator.validate_results(objective)
+            objective.validation_results = validation_result
+            logger.info(f"Validation completed: {validation_result.get('validation_score', 0):.2f}% match with original objectives")
+            
+            # Phase 6: Final Synthesis and Deliverable Generation
+            objective.status = "synthesizing"
+            synthesis_result = await self.orchestrator.synthesize_final_deliverable(objective)
+            objective.final_synthesis = synthesis_result
+            objective.status = "completed"
+            
+            logger.info(f"Autonomous research completed successfully: {objective.objective_id}")
+            logger.info(f"Final deliverable: {synthesis_result.get('deliverable_path', 'N/A')}")
+            
+            return objective.objective_id
             
         except Exception as e:
-            logger.error(f"Failed to start research: {e}")
+            logger.error(f"Autonomous research failed: {e}")
+            if objective.objective_id in self.active_objectives:
+                self.active_objectives[objective.objective_id].status = "failed"
             raise
     
-    async def get_research_status(self, research_id: str) -> Optional[Dict[str, Any]]:
-        """Get research status.
+    async def get_research_status(self, objective_id: str) -> Optional[Dict[str, Any]]:
+        """Get autonomous research status with full orchestration details.
         
         Args:
-            research_id: Research ID
+            objective_id: Research objective ID
             
         Returns:
-            Research status or None if not found
+            Complete research status or None if not found
         """
         try:
-            status = self.orchestrator.get_research_status(research_id)
-            if status:
-                return {
-                    'research_id': research_id,
-                    'topic': status.topic,
-                    'status': status.status,
-                    'progress': status.progress,
-                    'report_path': status.report_path,
-                    'created_at': status.created_at.isoformat() if status.created_at else None,
-                    'completed_at': status.completed_at.isoformat() if status.completed_at else None,
-                    'error_message': status.error_message
-                }
-            return None
+            if objective_id not in self.active_objectives:
+                return None
+                
+            objective = self.active_objectives[objective_id]
+            return objective.to_dict()
             
         except Exception as e:
             logger.error(f"Failed to get research status: {e}")
             return None
     
     async def list_research(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List research projects.
+        """List all autonomous research objectives.
         
         Args:
             status_filter: Filter by status (optional)
             
         Returns:
-            List of research projects
+            List of research objectives with full orchestration details
         """
         try:
-            research_list = self.orchestrator.list_active_research()
+            objectives = list(self.active_objectives.values())
             
             if status_filter:
-                research_list = [r for r in research_list if r.status == status_filter]
+                objectives = [obj for obj in objectives if obj.status == status_filter]
             
-            return [
-                {
-                    'research_id': r.request_id,
-                    'topic': r.topic,
-                    'status': r.status,
-                    'progress': r.progress,
-                    'report_path': r.report_path,
-                    'created_at': r.created_at.isoformat() if r.created_at else None,
-                    'completed_at': r.completed_at.isoformat() if r.completed_at else None
-                }
-                for r in research_list
-            ]
+            return [objective.to_dict() for objective in objectives]
             
         except Exception as e:
             logger.error(f"Failed to list research: {e}")
             return []
     
-    async def cancel_research(self, research_id: str) -> bool:
-        """Cancel a research project.
+    async def cancel_research(self, objective_id: str) -> bool:
+        """Cancel an autonomous research objective.
         
         Args:
-            research_id: Research ID to cancel
+            objective_id: Research objective ID to cancel
             
         Returns:
             True if cancelled successfully, False otherwise
         """
         try:
-            success = self.orchestrator.cancel_research(research_id)
-            if success:
-                logger.info(f"Research cancelled: {research_id}")
-            else:
-                logger.warning(f"Failed to cancel research: {research_id}")
-            return success
+            if objective_id not in self.active_objectives:
+                logger.warning(f"Research objective not found: {objective_id}")
+                return False
+                
+            # Cancel all active agent tasks
+            await self.orchestrator.cancel_objective(objective_id)
+            
+            # Mark objective as cancelled
+            self.active_objectives[objective_id].status = "cancelled"
+            
+            logger.info(f"Research objective cancelled: {objective_id}")
+            return True
             
         except Exception as e:
             logger.error(f"Failed to cancel research: {e}")
             return False
     
     async def run_interactive_mode(self):
-        """Run in interactive mode."""
+        """Run in interactive autonomous mode."""
         try:
-            await self.gemini_integration.run_interactive_mode()
+            print("🤖 Autonomous Multi-Agent Research System")
+            print("=" * 50)
+            print("This system will autonomously analyze your request,")
+            print("decompose tasks, assign agents, execute research,")
+            print("evaluate results, and generate comprehensive deliverables.")
+            print("=" * 50)
+            
+            while True:
+                try:
+                    user_input = input("\n🔍 Enter your research request (or 'quit' to exit): ").strip()
+                    
+                    if user_input.lower() in ['quit', 'exit', 'q']:
+                        print("👋 Goodbye!")
+                        break
+                    
+                    if not user_input:
+                        print("❌ Please enter a research request.")
+                        continue
+                    
+                    print(f"\n🚀 Starting autonomous research for: {user_input}")
+                    print("⏳ This may take several minutes...")
+                    
+                    # Start autonomous research
+                    objective_id = await self.start_autonomous_research(user_input)
+                    
+                    print(f"✅ Research objective created: {objective_id}")
+                    print("📊 Monitoring progress...")
+                    
+                    # Monitor progress
+                    while True:
+                        status = await self.get_research_status(objective_id)
+                        if not status:
+                            print("❌ Research objective not found")
+                            break
+                        
+                        print(f"📈 Status: {status['status']}")
+                        
+                        if status['status'] in ['completed', 'failed', 'cancelled']:
+                            if status['status'] == 'completed':
+                                print("🎉 Research completed successfully!")
+                                if status.get('final_synthesis', {}).get('deliverable_path'):
+                                    print(f"📄 Deliverable: {status['final_synthesis']['deliverable_path']}")
+                            else:
+                                print(f"❌ Research {status['status']}")
+                            break
+                        
+                        await asyncio.sleep(2)
+                    
+                except KeyboardInterrupt:
+                    print("\n⏹️  Operation cancelled by user")
+                    break
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+                    logger.error(f"Interactive mode error: {e}")
+                    
         except Exception as e:
             logger.error(f"Interactive mode failed: {e}")
             raise
@@ -163,80 +330,114 @@ class LocalResearcher:
         """Cleanup resources."""
         try:
             await self.orchestrator.cleanup()
-            await self.gemini_integration.cleanup()
+            await self.mcp_manager.cleanup()
             logger.info("Cleanup completed")
         except Exception as e:
             logger.error(f"Cleanup failed: {e}")
 
 
 async def main():
-    """Main function."""
+    """Main function for Autonomous Multi-Agent Research System."""
     try:
-        # Initialize Local Researcher
-        researcher = LocalResearcher()
+        # Initialize Autonomous Research System
+        system = AutonomousResearchSystem()
         
         # Check command line arguments
         if len(sys.argv) < 2:
+            print("🤖 Autonomous Multi-Agent Research System")
+            print("=" * 50)
             print("Usage: python main.py <command> [args...]")
+            print("")
             print("Commands:")
-            print("  research <topic> [options]  - Start a new research project")
-            print("  status [research_id]        - Check research status")
-            print("  list [--status=STATUS]      - List research projects")
-            print("  cancel <research_id>        - Cancel a research project")
-            print("  interactive                 - Run in interactive mode")
-            print("  help                        - Show this help")
+            print("  research <request> [options]  - Start autonomous research")
+            print("  status [objective_id]         - Check research status")
+            print("  list [--status=STATUS]        - List research objectives")
+            print("  cancel <objective_id>         - Cancel research objective")
+            print("  interactive                   - Run in interactive mode")
+            print("  help                          - Show this help")
+            print("")
+            print("This system autonomously:")
+            print("  • Analyzes your request and objectives")
+            print("  • Decomposes tasks and assigns specialized agents")
+            print("  • Executes multi-agent research with MCP integration")
+            print("  • Evaluates results and performs recursive refinement")
+            print("  • Validates results against original objectives")
+            print("  • Generates comprehensive final deliverables")
             return
         
         command = sys.argv[1]
         
         if command == "research":
             if len(sys.argv) < 3:
-                print("Error: Research topic is required")
+                print("❌ Error: Research request is required")
+                print("Example: python main.py research 'Analyze AI trends in healthcare'")
                 return
             
-            topic = sys.argv[2]
-            options = {}
+            user_request = " ".join(sys.argv[2:])
+            context = {}
             
-            # Parse options
-            for i in range(3, len(sys.argv)):
-                arg = sys.argv[i]
+            # Parse any options (for future extensibility)
+            for i, arg in enumerate(sys.argv[2:], 2):
                 if arg.startswith("--"):
                     if "=" in arg:
                         key, value = arg[2:].split("=", 1)
-                        options[key] = value
+                        context[key] = value
                     else:
-                        options[arg[2:]] = True
+                        context[arg[2:]] = True
+                    # Remove from user_request
+                    user_request = user_request.replace(arg, "").strip()
             
-            # Start research
-            research_id = await researcher.start_research(topic, **options)
-            print(f"Research started: {research_id}")
-            print(f"Topic: {topic}")
-            print(f"Use 'python main.py status {research_id}' to check progress")
+            print(f"🚀 Starting autonomous research for: {user_request}")
+            print("⏳ This may take several minutes...")
+            
+            # Start autonomous research
+            objective_id = await system.start_autonomous_research(user_request, context)
+            print(f"✅ Research objective created: {objective_id}")
+            print(f"📊 Use 'python main.py status {objective_id}' to check progress")
             
         elif command == "status":
             if len(sys.argv) >= 3:
-                research_id = sys.argv[2]
-                status = await researcher.get_research_status(research_id)
+                objective_id = sys.argv[2]
+                status = await system.get_research_status(objective_id)
                 if status:
-                    print(f"Research Status: {research_id}")
-                    print(f"Topic: {status['topic']}")
-                    print(f"Status: {status['status']}")
-                    print(f"Progress: {status['progress']:.1f}%")
-                    if status['report_path']:
-                        print(f"Report: {status['report_path']}")
-                    if status['error_message']:
-                        print(f"Error: {status['error_message']}")
+                    print(f"📊 Research Objective Status: {objective_id}")
+                    print(f"🔍 Request: {status['user_request']}")
+                    print(f"📈 Status: {status['status']}")
+                    print(f"🕒 Created: {status['created_at']}")
+                    
+                    if status['analyzed_objectives']:
+                        print(f"🎯 Analyzed Objectives: {len(status['analyzed_objectives'])}")
+                    
+                    if status['decomposed_tasks']:
+                        print(f"📋 Decomposed Tasks: {len(status['decomposed_tasks'])}")
+                    
+                    if status['assigned_agents']:
+                        print(f"🤖 Assigned Agents: {len(status['assigned_agents'])}")
+                    
+                    if status['execution_results']:
+                        print(f"⚡ Execution Results: {len(status['execution_results'])}")
+                    
+                    if status['evaluation_results']:
+                        eval_score = status['evaluation_results'].get('overall_score', 0)
+                        print(f"📊 Evaluation Score: {eval_score:.2f}")
+                    
+                    if status['validation_results']:
+                        val_score = status['validation_results'].get('validation_score', 0)
+                        print(f"✅ Validation Score: {val_score:.2f}%")
+                    
+                    if status['final_synthesis']:
+                        print(f"📄 Final Deliverable: {status['final_synthesis'].get('deliverable_path', 'N/A')}")
                 else:
-                    print(f"Research not found: {research_id}")
+                    print(f"❌ Research objective not found: {objective_id}")
             else:
-                # List all research
-                research_list = await researcher.list_research()
-                if research_list:
-                    print("Active Research Projects:")
-                    for research in research_list:
-                        print(f"  {research['research_id']}: {research['topic']} ({research['status']}, {research['progress']:.1f}%)")
+                # List all research objectives
+                objectives = await system.list_research()
+                if objectives:
+                    print("📋 Active Research Objectives:")
+                    for obj in objectives:
+                        print(f"  {obj['objective_id']}: {obj['user_request'][:50]}... ({obj['status']})")
                 else:
-                    print("No active research projects")
+                    print("📭 No active research objectives")
                     
         elif command == "list":
             status_filter = None
@@ -244,66 +445,71 @@ async def main():
                 if arg.startswith("--status="):
                     status_filter = arg.split("=", 1)[1]
             
-            research_list = await researcher.list_research(status_filter)
-            if research_list:
-                print("Research Projects:")
-                for research in research_list:
-                    print(f"  {research['research_id']}: {research['topic']} ({research['status']}, {research['progress']:.1f}%)")
+            objectives = await system.list_research(status_filter)
+            if objectives:
+                print("📋 Research Objectives:")
+                for obj in objectives:
+                    print(f"  {obj['objective_id']}: {obj['user_request'][:50]}... ({obj['status']})")
             else:
-                print("No research projects found")
+                print("📭 No research objectives found")
                 
         elif command == "cancel":
             if len(sys.argv) < 3:
-                print("Error: Research ID is required")
+                print("❌ Error: Objective ID is required")
                 return
             
-            research_id = sys.argv[2]
-            success = await researcher.cancel_research(research_id)
+            objective_id = sys.argv[2]
+            success = await system.cancel_research(objective_id)
             if success:
-                print(f"Research cancelled: {research_id}")
+                print(f"✅ Research objective cancelled: {objective_id}")
             else:
-                print(f"Failed to cancel research: {research_id}")
+                print(f"❌ Failed to cancel research objective: {objective_id}")
                 
         elif command == "interactive":
-            await researcher.run_interactive_mode()
+            await system.run_interactive_mode()
             
         elif command == "help":
-            print("Local Researcher - Available Commands:")
+            print("🤖 Autonomous Multi-Agent Research System")
+            print("=" * 50)
+            print("This system provides fully autonomous research capabilities with:")
             print("")
-            print("  research <topic> [options]  - Start a new research project")
-            print("    Options:")
-            print("      --domain=DOMAIN         - Research domain (technology, science, business, general)")
-            print("      --depth=DEPTH           - Research depth (basic, standard, comprehensive)")
-            print("      --sources=SOURCES       - Comma-separated list of sources")
-            print("      --format=FORMAT         - Output format (markdown, pdf, html)")
+            print("🧠 Self-Analysis: Automatically analyzes user requests and objectives")
+            print("🔧 Task Decomposition: Dynamically breaks down complex tasks")
+            print("🤖 Multi-Agent Orchestration: Assigns specialized agents to tasks")
+            print("🔗 MCP Integration: Leverages Model Context Protocol for enhanced capabilities")
+            print("📊 Critical Evaluation: Performs recursive evaluation and refinement")
+            print("✅ Result Validation: Ensures results match original objectives")
+            print("📄 Final Synthesis: Generates comprehensive deliverables")
             print("")
-            print("  status [research_id]        - Check research status")
-            print("  list [--status=STATUS]      - List research projects")
-            print("  cancel <research_id>        - Cancel a research project")
-            print("  interactive                 - Run in interactive mode")
-            print("  help                        - Show this help")
+            print("Commands:")
+            print("  research <request> [options]  - Start autonomous research")
+            print("  status [objective_id]         - Check research status")
+            print("  list [--status=STATUS]        - List research objectives")
+            print("  cancel <objective_id>         - Cancel research objective")
+            print("  interactive                   - Run in interactive mode")
+            print("  help                          - Show this help")
             print("")
             print("Examples:")
-            print("  python main.py research 'Artificial Intelligence trends'")
-            print("  python main.py research 'Climate change' --domain=science --depth=comprehensive")
-            print("  python main.py status research_20240101_1234_5678")
+            print("  python main.py research 'Analyze AI trends in healthcare'")
+            print("  python main.py research 'Compare renewable energy technologies'")
+            print("  python main.py status obj_12345")
             print("  python main.py list --status=completed")
             print("  python main.py interactive")
             
         else:
-            print(f"Unknown command: {command}")
+            print(f"❌ Unknown command: {command}")
             print("Use 'python main.py help' for available commands")
             
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user")
+        print("\n⏹️  Operation cancelled by user")
     except Exception as e:
         logger.error(f"Application error: {e}")
-        print(f"Error: {e}")
+        print(f"❌ Error: {e}")
     finally:
         # Cleanup
         try:
-            if 'researcher' in locals():
-                await researcher.cleanup()
+            if 'system' in locals():
+                await system.cleanup()
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
 

@@ -13,7 +13,7 @@ import logging
 
 # Import MCP server functions
 from mcp_server import (
-    mcp_start_research,
+    mcp_start_autonomous_research,
     mcp_get_research_status,
     mcp_list_research,
     mcp_cancel_research,
@@ -32,41 +32,49 @@ async def list_tools() -> List[types.Tool]:
     """List available tools."""
     return [
         types.Tool(
-            name="start_research",
-            description="Start a new research project on a given topic",
+            name="start_autonomous_research",
+            description="Start autonomous research with multi-agent orchestration",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "topic": {
+                    "user_request": {
                         "type": "string",
-                        "description": "The research topic to investigate"
+                        "description": "The research request to investigate autonomously"
                     },
-                    "domain": {
-                        "type": "string",
-                        "description": "The domain of research (e.g., technology, science, business)",
-                        "default": "general"
-                    },
-                    "depth": {
-                        "type": "string",
-                        "description": "The depth of research (basic, comprehensive)",
-                        "default": "basic"
+                    "context": {
+                        "type": "object",
+                        "description": "Additional context for the research",
+                        "properties": {
+                            "domain": {
+                                "type": "string",
+                                "description": "Research domain hint"
+                            },
+                            "priority": {
+                                "type": "string",
+                                "description": "Research priority level"
+                            },
+                            "deadline": {
+                                "type": "string",
+                                "description": "Research deadline"
+                            }
+                        }
                     }
                 },
-                "required": ["topic"]
+                "required": ["user_request"]
             }
         ),
         types.Tool(
             name="get_research_status",
-            description="Get the current status of a research project",
+            description="Get the current status of an autonomous research objective",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "research_id": {
+                    "objective_id": {
                         "type": "string",
-                        "description": "The ID of the research project"
+                        "description": "The ID of the research objective"
                     }
                 },
-                "required": ["research_id"]
+                "required": ["objective_id"]
             }
         ),
         types.Tool(
@@ -79,30 +87,30 @@ async def list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="cancel_research",
-            description="Cancel a running research project",
+            description="Cancel a running autonomous research objective",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "research_id": {
+                    "objective_id": {
                         "type": "string",
-                        "description": "The ID of the research project to cancel"
+                        "description": "The ID of the research objective to cancel"
                     }
                 },
-                "required": ["research_id"]
+                "required": ["objective_id"]
             }
         ),
         types.Tool(
             name="get_report_content",
-            description="Get the content of a completed research report",
+            description="Get the content of a completed autonomous research deliverable",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "research_id": {
+                    "objective_id": {
                         "type": "string",
-                        "description": "The ID of the research project"
+                        "description": "The ID of the research objective"
                     }
                 },
-                "required": ["research_id"]
+                "required": ["objective_id"]
             }
         ),
         types.Tool(
@@ -153,20 +161,19 @@ async def list_tools() -> List[types.Tool]:
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
     """Handle tool calls."""
     try:
-        if name == "start_research":
-            topic = arguments.get("topic")
-            domain = arguments.get("domain", "general")
-            depth = arguments.get("depth", "basic")
+        if name == "start_autonomous_research":
+            user_request = arguments.get("user_request")
+            context = arguments.get("context", {})
             
-            result = await mcp_start_research(topic, domain, depth)
+            result = await mcp_start_autonomous_research(user_request, context)
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2, ensure_ascii=False)
             )]
         
         elif name == "get_research_status":
-            research_id = arguments.get("research_id")
-            result = await mcp_get_research_status(research_id)
+            objective_id = arguments.get("objective_id")
+            result = await mcp_get_research_status(objective_id)
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2, ensure_ascii=False)
@@ -180,16 +187,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextCont
             )]
         
         elif name == "cancel_research":
-            research_id = arguments.get("research_id")
-            result = await mcp_cancel_research(research_id)
+            objective_id = arguments.get("objective_id")
+            result = await mcp_cancel_research(objective_id)
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2, ensure_ascii=False)
             )]
         
         elif name == "get_report_content":
-            research_id = arguments.get("research_id")
-            result = await mcp_get_report_content(research_id)
+            objective_id = arguments.get("objective_id")
+            result = await mcp_get_report_content(objective_id)
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2, ensure_ascii=False)

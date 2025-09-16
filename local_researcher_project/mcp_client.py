@@ -13,7 +13,14 @@ import sys
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.core.research_orchestrator import ResearchOrchestrator, ResearchRequest
+from src.core.autonomous_orchestrator import AutonomousOrchestrator
+from src.agents.task_analyzer import TaskAnalyzerAgent
+from src.agents.task_decomposer import TaskDecomposerAgent
+from src.agents.research_agent import ResearchAgent
+from src.agents.evaluation_agent import EvaluationAgent
+from src.agents.validation_agent import ValidationAgent
+from src.agents.synthesis_agent import SynthesisAgent
+from src.core.mcp_integration import MCPIntegrationManager
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_default_logging
 
@@ -22,37 +29,52 @@ setup_default_logging()
 logger = logging.getLogger(__name__)
 
 class LocalResearcherMCPClient:
-    """MCP Client for Local Researcher functionality."""
+    """MCP Client for Autonomous Research System functionality."""
     
     def __init__(self):
         """Initialize the MCP client."""
         self.config_manager = ConfigManager()
-        self.orchestrator = ResearchOrchestrator(self.config_manager)
-        logger.info("Local Researcher MCP Client initialized")
+        self.mcp_manager = MCPIntegrationManager()
+        
+        # Initialize specialized agents
+        self.task_analyzer = TaskAnalyzerAgent()
+        self.task_decomposer = TaskDecomposerAgent()
+        self.research_agent = ResearchAgent()
+        self.evaluation_agent = EvaluationAgent()
+        self.validation_agent = ValidationAgent()
+        self.synthesis_agent = SynthesisAgent()
+        
+        # Initialize orchestrator
+        self.orchestrator = AutonomousOrchestrator(
+            config_path=None,
+            agents={
+                'analyzer': self.task_analyzer,
+                'decomposer': self.task_decomposer,
+                'researcher': self.research_agent,
+                'evaluator': self.evaluation_agent,
+                'validator': self.validation_agent,
+                'synthesizer': self.synthesis_agent
+            },
+            mcp_manager=self.mcp_manager
+        )
+        
+        logger.info("Autonomous Research System MCP Client initialized")
     
-    async def start_research(self, topic: str, domain: str = "general", depth: str = "basic") -> Dict[str, Any]:
-        """Start a new research project."""
+    async def start_autonomous_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Start autonomous research with multi-agent orchestration."""
         try:
-            request = ResearchRequest(
-                topic=topic,
-                domain=domain,
-                depth=depth,
-                sources=["web"],
-                output_format="markdown"
-            )
-            
-            research_id = self.orchestrator.start_research(request)
+            # Start autonomous research
+            objective_id = await self.orchestrator.start_autonomous_research(user_request, context)
             
             return {
                 "success": True,
-                "research_id": research_id,
-                "message": f"Research started for topic: {topic}",
-                "topic": topic,
-                "domain": domain,
-                "depth": depth
+                "objective_id": objective_id,
+                "message": f"Autonomous research started for: {user_request}",
+                "user_request": user_request,
+                "context": context or {}
             }
         except Exception as e:
-            logger.error(f"Failed to start research: {e}")
+            logger.error(f"Failed to start autonomous research: {e}")
             return {
                 "success": False,
                 "error": str(e)
