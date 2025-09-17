@@ -51,7 +51,12 @@ class GraphRAGAgent:
             max_search_results=self.config.agent.max_search_results,
             context_window_size=self.config.agent.context_window_size,
             enable_visualization=self.config.visualization.enabled,
-            enable_optimization=self.config.optimization.enabled
+            enable_optimization=self.config.optimization.enabled,
+            quality_threshold=self.config.optimization.quality_threshold,
+            max_iterations=self.config.optimization.max_iterations,
+            output_directory=self.config.visualization.output_directory,
+            formats=self.config.visualization.formats,
+            max_nodes=self.config.visualization.max_nodes
         )
         
         self.coordinator = GraphRAGWorkflow(agent_config)

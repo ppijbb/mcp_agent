@@ -41,6 +41,15 @@ class AgentConfig(BaseModel):
     enable_visualization: bool = Field(default=True, description="Enable visualization")
     enable_optimization: bool = Field(default=True, description="Enable optimization")
     
+    # Optimization settings
+    quality_threshold: float = Field(default=0.8, description="Quality threshold for optimization")
+    max_iterations: int = Field(default=10, description="Maximum optimization iterations")
+    
+    # Visualization settings
+    output_directory: str = Field(default="./graph_visualizations", description="Output directory for visualizations")
+    formats: list = Field(default=["png", "svg", "html"], description="Output formats for visualizations")
+    max_nodes: int = Field(default=1000, description="Maximum nodes to visualize")
+    
     @field_validator('max_search_results')
     def validate_max_search_results(cls, v):
         if v < 1 or v > 20:
@@ -51,6 +60,24 @@ class AgentConfig(BaseModel):
     def validate_context_window_size(cls, v):
         if v < 1000 or v > 32000:
             raise ValueError('context_window_size must be between 1000 and 32000')
+        return v
+    
+    @field_validator('quality_threshold')
+    def validate_quality_threshold(cls, v):
+        if v < 0.0 or v > 1.0:
+            raise ValueError('quality_threshold must be between 0.0 and 1.0')
+        return v
+    
+    @field_validator('max_iterations')
+    def validate_max_iterations(cls, v):
+        if v < 1 or v > 100:
+            raise ValueError('max_iterations must be between 1 and 100')
+        return v
+    
+    @field_validator('max_nodes')
+    def validate_max_nodes(cls, v):
+        if v < 10 or v > 10000:
+            raise ValueError('max_nodes must be between 10 and 10000')
         return v
 
 
@@ -141,11 +168,16 @@ class ConfigManager:
         Args:
             config_path: Path to YAML configuration file (optional)
         """
-        self.config_path = config_path or self._find_config_file()
         self.logger = logging.getLogger(__name__)
+        self.config_path = config_path or self._find_config_file()
         
     def _find_config_file(self) -> Optional[str]:
         """Find configuration file in common locations"""
+        # Get the directory containing this file (config/)
+        current_dir = os.path.dirname(__file__)
+        # Get the parent directory (graphrag_agent/)
+        parent_dir = os.path.dirname(current_dir)
+        
         possible_paths = [
             "config.yaml",
             "config.yml", 
@@ -153,13 +185,20 @@ class ConfigManager:
             "graphrag_config.yml",
             os.path.join(os.getcwd(), "config.yaml"),
             os.path.join(os.getcwd(), "config.yml"),
-            os.path.join(os.path.dirname(__file__), "config.yaml"),
-            os.path.join(os.path.dirname(__file__), "config.yml"),
+            os.path.join(current_dir, "config.yaml"),
+            os.path.join(current_dir, "config.yml"),
+            os.path.join(parent_dir, "config.yaml"),  # graphrag_agent/config.yaml
+            os.path.join(parent_dir, "config.yml"),   # graphrag_agent/config.yml
         ]
         
         for path in possible_paths:
             if os.path.exists(path):
+                self.logger.info(f"Found config file: {path}")
                 return path
+        
+        self.logger.warning("No config file found in any of the expected locations:")
+        for path in possible_paths:
+            self.logger.warning(f"  - {path}")
         return None
     
     def load_config(self) -> GraphRAGConfig:
