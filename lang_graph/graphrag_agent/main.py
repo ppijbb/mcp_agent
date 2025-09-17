@@ -29,6 +29,11 @@ async def main():
             print("❌ Failed to load configuration")
             return
         
+        # Validate configuration
+        if not config_manager.validate_config(config):
+            print("❌ Configuration validation failed")
+            return
+        
         # Initialize agent
         agent = GraphRAGAgent(config)
         
@@ -48,6 +53,7 @@ async def main():
             print("✅ GraphRAG Agent completed successfully")
         else:
             print("❌ GraphRAG Agent failed")
+            sys.exit(1)
             
     except Exception as e:
         print(f"❌ Failed to initialize GraphRAG Agent: {e}")

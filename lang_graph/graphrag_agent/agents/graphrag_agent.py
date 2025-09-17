@@ -49,7 +49,9 @@ class GraphRAGAgent:
             openai_api_key=self.config.agent.openai_api_key,
             model_name=self.config.agent.model_name,
             max_search_results=self.config.agent.max_search_results,
-            context_window_size=self.config.agent.context_window_size
+            context_window_size=self.config.agent.context_window_size,
+            enable_visualization=self.config.visualization.enabled,
+            enable_optimization=self.config.optimization.enabled
         )
         
         self.coordinator = GraphRAGWorkflow(agent_config)
@@ -79,15 +81,25 @@ class GraphRAGAgent:
             # Run the workflow
             result = await self.coordinator.run(initial_state)
             
-            if result:
-                self.logger.info("✅ Operation completed successfully")
-                return True
+            # Check result status
+            if isinstance(result, dict):
+                status = result.get("status", "unknown")
+                if status == "completed":
+                    self.logger.info("✅ Operation completed successfully")
+                    return True
+                elif status == "error":
+                    error_msg = result.get("error", "Unknown error")
+                    self.logger.error(f"❌ Operation failed: {error_msg}")
+                    return False
+                else:
+                    self.logger.warning(f"⚠️ Operation completed with status: {status}")
+                    return False
             else:
-                self.logger.error("❌ Operation failed")
+                self.logger.error("❌ Invalid result format from workflow")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ Operation failed: {e}")
+            self.logger.error(f"❌ Operation failed with exception: {e}")
             return False
     
     def get_status(self) -> dict:

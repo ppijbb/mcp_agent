@@ -38,6 +38,8 @@ class AgentConfig(BaseModel):
     context_window_size: int = Field(default=4000, description="Context window size")
     temperature: float = Field(default=0.0, description="Temperature")
     max_tokens: int = Field(default=1000, description="Max tokens")
+    enable_visualization: bool = Field(default=True, description="Enable visualization")
+    enable_optimization: bool = Field(default=True, description="Enable optimization")
     
     @field_validator('max_search_results')
     def validate_max_search_results(cls, v):
@@ -378,8 +380,13 @@ class ConfigManager:
         """Validate configuration"""
         try:
             # Check required fields
-            if not config.agent.openai_api_key:
-                self.logger.error("OpenAI API key is required")
+            if not config.agent.openai_api_key or config.agent.openai_api_key.strip() == "":
+                self.logger.error("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+                return False
+            
+            # Validate API key format (basic check)
+            if len(config.agent.openai_api_key) < 20:
+                self.logger.error("OpenAI API key appears to be invalid (too short)")
                 return False
             
             # Check file paths if provided (only for modes that require them)
@@ -392,6 +399,13 @@ class ConfigManager:
                 self.logger.error(f"Graph file not found: {config.graph_path}")
                 return False
             
+            # Validate mode
+            valid_modes = ["create", "query", "visualize", "optimize", "export", "status"]
+            if config.mode not in valid_modes:
+                self.logger.error(f"Invalid mode: {config.mode}. Valid modes: {valid_modes}")
+                return False
+            
+            self.logger.info("Configuration validation passed")
             return True
             
         except Exception as e:

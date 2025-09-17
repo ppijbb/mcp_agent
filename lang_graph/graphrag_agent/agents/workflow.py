@@ -48,10 +48,17 @@ class GraphRAGWorkflow:
                 # Visualize if enabled
                 if self.config.enable_visualization:
                     state = self.visualizer(state)
+                    if state.get("status") != "completed":
+                        return dict(state)
                 
                 # Optimize if enabled
                 if self.config.enable_optimization:
                     state = self.optimizer(state)
+                    if state.get("status") != "completed":
+                        return dict(state)
+                
+                # Mark as completed if all steps succeeded
+                state["status"] = "completed"
                 
             elif mode == "query":
                 # Load existing graph and query
@@ -61,7 +68,9 @@ class GraphRAGWorkflow:
                         state["knowledge_graph"] = pickle.load(f)
                 
                 state = self.rag_agent(state)
-            
+                if state.get("status") != "completed":
+                    return dict(state)
+                
             elif mode == "visualize":
                 # Load existing graph and visualize
                 if state.get("graph_path"):
@@ -70,7 +79,9 @@ class GraphRAGWorkflow:
                         state["knowledge_graph"] = pickle.load(f)
                 
                 state = self.visualizer(state)
-            
+                if state.get("status") != "completed":
+                    return dict(state)
+                
             elif mode == "optimize":
                 # Load existing graph and optimize
                 if state.get("graph_path"):
@@ -79,7 +90,9 @@ class GraphRAGWorkflow:
                         state["knowledge_graph"] = pickle.load(f)
                 
                 state = self.optimizer(state)
-            
+                if state.get("status") != "completed":
+                    return dict(state)
+                
             elif mode == "status":
                 # Return status information
                 state["status"] = "completed"
