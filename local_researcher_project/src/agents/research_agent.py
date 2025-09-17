@@ -900,12 +900,284 @@ class ResearchAgent:
         return validation_result.get('overall_score', 0.5)
     
     async def _perform_general_research(self, task: Dict[str, Any], objective_id: str) -> Dict[str, Any]:
-        """Perform general research."""
-        return {'research': 'Simulated general research result'}
+        """Perform general research with real data collection."""
+        try:
+            task_description = task.get('description', '')
+            research_query = task_description.replace('Research task for objective: ', '')
+            
+            # 1. Perform web search
+            search_results = await self.web_search_tool.arun(research_query)
+            
+            # 2. Collect additional data from URLs
+            collected_data = []
+            if search_results.get('success') and search_results.get('results'):
+                for result in search_results['results'][:3]:  # Limit to top 3 results
+                    try:
+                        url = result.get('url', '')
+                        if url:
+                            content = await self._fetch_web_content(url)
+                            if content:
+                                collected_data.append({
+                                    'url': url,
+                                    'title': result.get('title', ''),
+                                    'content': content,
+                                    'source': result.get('source', 'unknown')
+                                })
+                    except Exception as e:
+                        self.logger.warning(f"Failed to fetch content from {url}: {e}")
+                        continue
+            
+            # 3. Perform additional research using different methods
+            additional_research = await self._perform_additional_research(research_query)
+            
+            # 4. Compile research results
+            research_result = {
+                'query': research_query,
+                'search_results': search_results,
+                'collected_data': collected_data,
+                'additional_research': additional_research,
+                'research_timestamp': datetime.now().isoformat(),
+                'total_sources': len(collected_data) + len(additional_research.get('sources', [])),
+                'research_quality': self._calculate_research_quality_from_data(collected_data, additional_research)
+            }
+            
+            return research_result
+            
+        except Exception as e:
+            self.logger.error(f"General research failed: {e}")
+            return {'research': f'Research failed: {str(e)}', 'error': str(e)}
     
+    async def _fetch_web_content(self, url: str) -> str:
+        """Fetch content from a web URL."""
+        try:
+            import requests
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            
+            # Simple text extraction without BeautifulSoup
+            text = response.text
+            
+            # Basic HTML tag removal
+            import re
+            text = re.sub(r'<[^>]+>', '', text)
+            text = re.sub(r'\s+', ' ', text)
+            
+            # Clean up text
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            # Limit content length
+            return text[:5000] if len(text) > 5000 else text
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch content from {url}: {e}")
+            return ""
+    
+    async def _perform_additional_research(self, query: str) -> Dict[str, Any]:
+        """Perform additional research using different methods."""
+        try:
+            additional_sources = []
+            
+            # 1. Try academic sources
+            try:
+                academic_results = await self._search_academic_sources(query)
+                additional_sources.extend(academic_results)
+            except Exception as e:
+                self.logger.warning(f"Academic search failed: {e}")
+            
+            # 2. Try news sources
+            try:
+                news_results = await self._search_news_sources(query)
+                additional_sources.extend(news_results)
+            except Exception as e:
+                self.logger.warning(f"News search failed: {e}")
+            
+            # 3. Try social media sources
+            try:
+                social_results = await self._search_social_sources(query)
+                additional_sources.extend(social_results)
+            except Exception as e:
+                self.logger.warning(f"Social media search failed: {e}")
+            
+            return {
+                'sources': additional_sources,
+                'total_additional_sources': len(additional_sources),
+                'research_methods': ['academic', 'news', 'social_media']
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Additional research failed: {e}")
+            return {'sources': [], 'total_additional_sources': 0, 'research_methods': []}
+    
+    async def _search_academic_sources(self, query: str) -> List[Dict[str, Any]]:
+        """Search academic sources."""
+        try:
+            # Try Google Scholar
+            scholar_query = f"site:scholar.google.com {query}"
+            search_results = await self.web_search_tool.arun(scholar_query)
+            
+            academic_sources = []
+            if search_results.get('success') and search_results.get('results'):
+                for result in search_results['results'][:2]:
+                    academic_sources.append({
+                        'title': result.get('title', ''),
+                        'url': result.get('url', ''),
+                        'snippet': result.get('snippet', ''),
+                        'source_type': 'academic',
+                        'search_engine': 'google_scholar'
+                    })
+            
+            return academic_sources
+            
+        except Exception as e:
+            self.logger.error(f"Academic search failed: {e}")
+            return []
+    
+    async def _search_news_sources(self, query: str) -> List[Dict[str, Any]]:
+        """Search news sources."""
+        try:
+            # Try news-specific search
+            news_query = f"{query} news"
+            search_results = await self.web_search_tool.arun(news_query)
+            
+            news_sources = []
+            if search_results.get('success') and search_results.get('results'):
+                for result in search_results['results'][:2]:
+                    news_sources.append({
+                        'title': result.get('title', ''),
+                        'url': result.get('url', ''),
+                        'snippet': result.get('snippet', ''),
+                        'source_type': 'news',
+                        'search_engine': 'general'
+                    })
+            
+            return news_sources
+            
+        except Exception as e:
+            self.logger.error(f"News search failed: {e}")
+            return []
+    
+    async def _search_social_sources(self, query: str) -> List[Dict[str, Any]]:
+        """Search social media sources."""
+        try:
+            # Try social media search
+            social_query = f"{query} site:twitter.com OR site:reddit.com OR site:linkedin.com"
+            search_results = await self.web_search_tool.arun(social_query)
+            
+            social_sources = []
+            if search_results.get('success') and search_results.get('results'):
+                for result in search_results['results'][:2]:
+                    social_sources.append({
+                        'title': result.get('title', ''),
+                        'url': result.get('url', ''),
+                        'snippet': result.get('snippet', ''),
+                        'source_type': 'social_media',
+                        'search_engine': 'general'
+                    })
+            
+            return social_sources
+            
+        except Exception as e:
+            self.logger.error(f"Social media search failed: {e}")
+            return []
+    
+    def _calculate_research_quality_from_data(self, collected_data: List[Dict[str, Any]], additional_research: Dict[str, Any]) -> float:
+        """Calculate research quality based on collected data."""
+        try:
+            quality_score = 0.0
+            
+            # Base score for collected data
+            if collected_data:
+                quality_score += 0.4
+                
+                # Bonus for content length
+                total_content_length = sum(len(item.get('content', '')) for item in collected_data)
+                if total_content_length > 1000:
+                    quality_score += 0.2
+                elif total_content_length > 500:
+                    quality_score += 0.1
+            
+            # Bonus for additional sources
+            additional_sources = additional_research.get('sources', [])
+            if additional_sources:
+                quality_score += 0.2
+                
+                # Bonus for diverse source types
+                source_types = set(source.get('source_type', '') for source in additional_sources)
+                if len(source_types) > 1:
+                    quality_score += 0.1
+            
+            # Bonus for total sources
+            total_sources = len(collected_data) + len(additional_sources)
+            if total_sources > 5:
+                quality_score += 0.1
+            elif total_sources > 3:
+                quality_score += 0.05
+            
+            return min(quality_score, 1.0)
+            
+        except Exception as e:
+            self.logger.error(f"Quality calculation failed: {e}")
+            return 0.5
+
     async def _generate_research_summary(self, research_result: Dict[str, Any], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate research summary."""
-        return {'summary': 'Simulated research summary'}
+        """Generate research summary from actual data."""
+        try:
+            # Extract key information from research results
+            query = research_result.get('query', '')
+            collected_data = research_result.get('collected_data', [])
+            additional_research = research_result.get('additional_research', {})
+            
+            # Generate summary based on collected data
+            summary_parts = []
+            
+            if collected_data:
+                summary_parts.append(f"Found {len(collected_data)} primary sources with detailed content.")
+                
+                # Extract key insights from collected data
+                key_insights = []
+                for item in collected_data[:2]:  # Top 2 sources
+                    title = item.get('title', '')
+                    content = item.get('content', '')
+                    if title and content:
+                        # Extract first 200 characters as insight
+                        insight = content[:200] + "..." if len(content) > 200 else content
+                        key_insights.append(f"• {title}: {insight}")
+                
+                if key_insights:
+                    summary_parts.append("Key insights:")
+                    summary_parts.extend(key_insights)
+            
+            additional_sources = additional_research.get('sources', [])
+            if additional_sources:
+                summary_parts.append(f"Found {len(additional_sources)} additional sources from academic, news, and social media.")
+            
+            # Calculate research metrics
+            total_sources = len(collected_data) + len(additional_sources)
+            research_quality = research_result.get('research_quality', 0.5)
+            
+            summary_parts.append(f"Research quality: {research_quality:.1%}")
+            summary_parts.append(f"Total sources: {total_sources}")
+            
+            summary_text = "\n".join(summary_parts)
+            
+            return {
+                'summary': summary_text,
+                'key_insights': key_insights if 'key_insights' in locals() else [],
+                'total_sources': total_sources,
+                'research_quality': research_quality,
+                'summary_timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Research summary generation failed: {e}")
+            return {'summary': f'Summary generation failed: {str(e)}', 'error': str(e)}
     
     def _calculate_research_quality(self, research_result: Dict[str, Any]) -> float:
         """Calculate research quality score."""

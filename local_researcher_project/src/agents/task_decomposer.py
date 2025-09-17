@@ -597,7 +597,14 @@ class TaskDecomposerAgent:
             template['description'] = template['description'].format(
                 topic=objective.get('description', 'research topic'),
                 domain=objective.get('domain', 'general'),
-                intent=objective.get('intent', 'analysis')
+                intent=objective.get('intent', 'analysis'),
+                synthesis_type=objective.get('synthesis_type', 'findings'),
+                validation_type=objective.get('validation_type', 'results'),
+                data_type=objective.get('data_type', 'research data'),
+                items=objective.get('items', 'research items'),
+                timeframe=objective.get('timeframe', 'current period'),
+                sources=objective.get('sources', 'research sources'),
+                criteria=objective.get('criteria', 'quality standards')
             )
             
             # Add objective-specific information

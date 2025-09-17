@@ -12,30 +12,35 @@ from pathlib import Path
 import json
 import yaml
 
-from pydantic import BaseModel, Field
+# from pydantic import BaseModel, Field
 from rich.console import Console
 
 from ..utils.config_manager import ConfigManager
 from ..utils.logger import setup_logger
 
 
-class OpenDeepResearchConfig(BaseModel):
+class OpenDeepResearchConfig:
     """Configuration for Open Deep Research integration."""
-    workflow_mode: str = Field(default="multi_agent", description="Workflow mode: multi_agent or workflow")
-    model_provider: str = Field(default="openai", description="Model provider")
-    model_name: str = Field(default="gpt-4", description="Model name")
-    search_tools: List[str] = Field(default_factory=list, description="Search tools to use")
-    max_iterations: int = Field(default=10, description="Maximum iterations")
-    timeout: int = Field(default=300, description="Timeout in seconds")
+    def __init__(self, workflow_mode: str = "multi_agent", model_provider: str = "openai", 
+                 model_name: str = "gpt-4", search_tools: List[str] = None, 
+                 max_iterations: int = 10, timeout: int = 300):
+        self.workflow_mode = workflow_mode
+        self.model_provider = model_provider
+        self.model_name = model_name
+        self.search_tools = search_tools or []
+        self.max_iterations = max_iterations
+        self.timeout = timeout
 
 
-class ResearchAgent(BaseModel):
+class ResearchAgent:
     """Research agent configuration."""
-    name: str
-    role: str
-    capabilities: List[str]
-    agent_config: Dict[str, Any]
-    tools: List[str] = Field(default_factory=list)
+    def __init__(self, name: str, role: str, capabilities: List[str], 
+                 agent_config: Dict[str, Any], tools: List[str] = None):
+        self.name = name
+        self.role = role
+        self.capabilities = capabilities
+        self.agent_config = agent_config
+        self.tools = tools or []
 
 
 class OpenDeepResearchAdapter:

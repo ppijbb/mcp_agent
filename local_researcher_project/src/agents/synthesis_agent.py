@@ -544,7 +544,7 @@ class SynthesisAgent:
                 sections.append(section_design)
             
             # Determine format
-            format_type = await self._select_format_type(user_request, context)
+            format_type = await self._select_format_type(user_request, context or {})
             
             return {
                 'template_type': template_type,
@@ -734,7 +734,7 @@ class SynthesisAgent:
                                  deliverable_structure: Dict[str, Any], 
                                  user_request: str, 
                                  objective_id: str) -> Dict[str, Any]:
-        """Generate the final deliverable file.
+        """Generate the final deliverable file with real file generation.
         
         Args:
             enhanced_content: Enhanced content
@@ -746,7 +746,302 @@ class SynthesisAgent:
             Generated deliverable information
         """
         try:
-            # Generate file content
+            # Generate file content in multiple formats
+            deliverables = {}
+            
+            # 1. Generate Markdown file
+            markdown_content = await self._generate_markdown_content(enhanced_content, user_request)
+            markdown_path = await self._save_markdown_file(markdown_content, objective_id, user_request)
+            deliverables['markdown'] = {
+                'path': markdown_path,
+                'format': 'markdown',
+                'size': len(markdown_content)
+            }
+            
+            # 2. Generate HTML file
+            html_content = await self._generate_html_content(enhanced_content, user_request)
+            html_path = await self._save_html_file(html_content, objective_id, user_request)
+            deliverables['html'] = {
+                'path': html_path,
+                'format': 'html',
+                'size': len(html_content)
+            }
+            
+            # 3. Generate PDF file
+            pdf_path = await self._generate_pdf_file(enhanced_content, objective_id, user_request)
+            deliverables['pdf'] = {
+                'path': pdf_path,
+                'format': 'pdf',
+                'size': self._get_file_size(pdf_path)
+            }
+            
+            # 4. Generate Word document
+            docx_path = await self._generate_docx_file(enhanced_content, objective_id, user_request)
+            deliverables['docx'] = {
+                'path': docx_path,
+                'format': 'docx',
+                'size': self._get_file_size(docx_path)
+            }
+            
+            # 5. Generate JSON data file
+            json_path = await self._save_json_file(enhanced_content, objective_id, user_request)
+            deliverables['json'] = {
+                'path': json_path,
+                'format': 'json',
+                'size': self._get_file_size(json_path)
+            }
+            
+            return {
+                'deliverables': deliverables,
+                'primary_deliverable': pdf_path,  # PDF as primary
+                'total_files': len(deliverables),
+                'generation_timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Deliverable generation failed: {e}")
+            return {'error': str(e), 'deliverables': {}}
+    
+    async def _save_markdown_file(self, content: str, objective_id: str, user_request: str) -> str:
+        """Save Markdown file."""
+        try:
+            import os
+            
+            # Create output directory
+            output_dir = f"output/{objective_id}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            filename = f"{safe_title}_report.md"
+            file_path = os.path.join(output_dir, filename)
+            
+            # Write file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"Markdown file saved: {file_path}")
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"Markdown file save failed: {e}")
+            return ""
+    
+    async def _save_html_file(self, content: str, objective_id: str, user_request: str) -> str:
+        """Save HTML file."""
+        try:
+            import os
+            
+            # Create output directory
+            output_dir = f"output/{objective_id}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            filename = f"{safe_title}_report.html"
+            file_path = os.path.join(output_dir, filename)
+            
+            # Write file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"HTML file saved: {file_path}")
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"HTML file save failed: {e}")
+            return ""
+    
+    async def _generate_pdf_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+        """Generate PDF file."""
+        try:
+            import os
+            
+            # Create output directory
+            output_dir = f"output/{objective_id}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            filename = f"{safe_title}_report.pdf"
+            file_path = os.path.join(output_dir, filename)
+            
+            # Simple PDF generation (fallback to text file if PDF libraries not available)
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet
+                
+                doc = SimpleDocTemplate(file_path, pagesize=letter)
+                styles = getSampleStyleSheet()
+                story = []
+                
+                # Add title
+                title = enhanced_content.get('title', f"Research Report: {user_request}")
+                story.append(Paragraph(title, styles['Title']))
+                story.append(Spacer(1, 12))
+                
+                # Add content
+                sections = enhanced_content.get('sections', [])
+                for section in sections:
+                    section_name = section.get('name', 'Untitled Section')
+                    section_content = section.get('content', '')
+                    
+                    story.append(Paragraph(section_name, styles['Heading2']))
+                    story.append(Paragraph(section_content, styles['Normal']))
+                    story.append(Spacer(1, 12))
+                
+                doc.build(story)
+                logger.info(f"PDF file generated: {file_path}")
+                
+            except ImportError:
+                # Fallback to text file
+                content = f"Research Report: {user_request}\n\n"
+                for section in enhanced_content.get('sections', []):
+                    content += f"{section.get('name', '')}\n{section.get('content', '')}\n\n"
+                
+                with open(file_path.replace('.pdf', '.txt'), 'w', encoding='utf-8') as f:
+                    f.write(content)
+                file_path = file_path.replace('.pdf', '.txt')
+                logger.info(f"Text file saved (PDF not available): {file_path}")
+            
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+            return ""
+    
+    async def _generate_docx_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+        """Generate Word document."""
+        try:
+            import os
+            
+            # Create output directory
+            output_dir = f"output/{objective_id}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            filename = f"{safe_title}_report.docx"
+            file_path = os.path.join(output_dir, filename)
+            
+            try:
+                from docx import Document
+                
+                doc = Document()
+                
+                # Add title
+                title = enhanced_content.get('title', f"Research Report: {user_request}")
+                doc.add_heading(title, 0)
+                
+                # Add content
+                sections = enhanced_content.get('sections', [])
+                for section in sections:
+                    section_name = section.get('name', 'Untitled Section')
+                    section_content = section.get('content', '')
+                    
+                    doc.add_heading(section_name, level=1)
+                    doc.add_paragraph(section_content)
+                
+                doc.save(file_path)
+                logger.info(f"Word document generated: {file_path}")
+                
+            except ImportError:
+                # Fallback to text file
+                content = f"Research Report: {user_request}\n\n"
+                for section in enhanced_content.get('sections', []):
+                    content += f"{section.get('name', '')}\n{section.get('content', '')}\n\n"
+                
+                with open(file_path.replace('.docx', '.txt'), 'w', encoding='utf-8') as f:
+                    f.write(content)
+                file_path = file_path.replace('.docx', '.txt')
+                logger.info(f"Text file saved (Word not available): {file_path}")
+            
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"Word document generation failed: {e}")
+            return ""
+    
+    async def _save_json_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+        """Save JSON data file."""
+        try:
+            import json
+            import os
+            
+            # Create output directory
+            output_dir = f"output/{objective_id}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename
+            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            filename = f"{safe_title}_data.json"
+            file_path = os.path.join(output_dir, filename)
+            
+            # Prepare data
+            json_data = {
+                'title': enhanced_content.get('title', f"Research Report: {user_request}"),
+                'user_request': user_request,
+                'generated_on': datetime.now().isoformat(),
+                'sections': enhanced_content.get('sections', []),
+                'metadata': enhanced_content.get('metadata', {}),
+                'objective_id': objective_id
+            }
+            
+            # Write file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"JSON file saved: {file_path}")
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"JSON file save failed: {e}")
+            return ""
+    
+    def _get_file_size(self, file_path: str) -> int:
+        """Get file size in bytes."""
+        try:
+            import os
+            return os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        except Exception:
+            return 0
+    
+    async def _generate_markdown_content(self, enhanced_content: Dict[str, Any], user_request: str) -> str:
+        """Generate Markdown content."""
+        try:
+            title = enhanced_content.get('title', f"Research Report: {user_request}")
+            sections = enhanced_content.get('sections', [])
+            
+            markdown_content = f"# {title}\n\n"
+            markdown_content += f"**Generated on:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            markdown_content += f"**Research Topic:** {user_request}\n\n"
+            
+            for section in sections:
+                section_name = section.get('name', 'Untitled Section')
+                section_content = section.get('content', '')
+                
+                markdown_content += f"## {section_name}\n\n"
+                markdown_content += f"{section_content}\n\n"
+            
+            # Add metadata
+            metadata = enhanced_content.get('metadata', {})
+            if metadata:
+                markdown_content += "---\n\n"
+                markdown_content += "## Metadata\n\n"
+                for key, value in metadata.items():
+                    markdown_content += f"- **{key}:** {value}\n"
+            
+            return markdown_content
+            
+        except Exception as e:
+            logger.error(f"Markdown content generation failed: {e}")
+            return f"# Error generating Markdown content: {str(e)}"
             format_type = deliverable_structure['format_type']
             content = await self._format_content(enhanced_content, format_type)
             
