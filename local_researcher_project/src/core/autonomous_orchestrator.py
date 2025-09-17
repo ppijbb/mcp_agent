@@ -45,7 +45,490 @@ class AutonomousOrchestrator:
         self.active_objectives: Dict[str, Any] = {}
         self.execution_history: List[Dict[str, Any]] = []
         
-        logger.info("Autonomous Orchestrator initialized with full agent coordination")
+        # Enhanced autonomy settings
+        self.max_iterations = 10  # Maximum iterations for recursive improvement
+        self.quality_threshold = 0.8  # Quality threshold for stopping iterations
+        self.learning_enabled = True  # Enable learning from previous executions
+        self.adaptive_strategy = True  # Enable adaptive strategy selection
+        
+        logger.info("Autonomous Orchestrator initialized with enhanced autonomy and iterative improvement")
+    
+    async def start_autonomous_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """Start fully autonomous research with enhanced iterative improvement.
+        
+        Args:
+            user_request: The user's research request
+            context: Additional context for the research
+            
+        Returns:
+            Research objective ID
+        """
+        try:
+            # Create research objective using existing structure
+            objective = type('ResearchObjective', (), {
+                'objective_id': f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}",
+                'user_request': user_request,
+                'context': context or {},
+                'status': 'pending',
+                'created_at': datetime.now(),
+                'analyzed_objectives': [],
+                'decomposed_tasks': [],
+                'assigned_agents': [],
+                'execution_results': [],
+                'evaluation_results': {},
+                'validation_results': {},
+                'final_synthesis': {},
+                'learning_data': []
+            })()
+            self.active_objectives[objective.objective_id] = objective
+            
+            logger.info(f"Starting enhanced autonomous research for objective: {objective.objective_id}")
+            logger.info(f"User request: {user_request}")
+            
+            # Enhanced autonomous workflow with multiple iterations
+            iteration = 0
+            best_quality = 0.0
+            best_results = None
+            
+            while iteration < self.max_iterations:
+                iteration += 1
+                logger.info(f"Starting iteration {iteration}/{self.max_iterations}")
+                
+                # Phase 1: Enhanced Analysis with Learning
+                objective.status = "analyzing"
+                analysis_result = await self._enhanced_analyze_objective(objective, iteration)
+                objective.analyzed_objectives = analysis_result
+                
+                # Phase 2: Adaptive Task Decomposition
+                objective.status = "decomposing"
+                decomposition_result = await self._adaptive_decompose_tasks(objective, iteration)
+                objective.decomposed_tasks = decomposition_result['tasks']
+                objective.assigned_agents = decomposition_result['assignments']
+                
+                # Phase 3: Multi-Agent Execution with MCP Integration
+                objective.status = "executing"
+                execution_result = await self._enhanced_execute_tasks(objective, iteration)
+                objective.execution_results = execution_result
+                
+                # Phase 4: Critical Evaluation with Learning
+                objective.status = "evaluating"
+                evaluation_result = await self._enhanced_evaluate_results(objective, iteration)
+                objective.evaluation_results = evaluation_result
+                
+                # Check if this iteration improved quality
+                current_quality = evaluation_result.get('overall_score', 0.0)
+                if current_quality > best_quality:
+                    best_quality = current_quality
+                    best_results = {
+                        'analysis': analysis_result,
+                        'decomposition': decomposition_result,
+                        'execution': execution_result,
+                        'evaluation': evaluation_result,
+                        'iteration': iteration
+                    }
+                    logger.info(f"New best quality achieved: {best_quality:.2f} at iteration {iteration}")
+                
+                # Check if we should continue iterating
+                if self._should_continue_iteration(evaluation_result, iteration, best_quality):
+                    logger.info(f"Continuing to iteration {iteration + 1}")
+                    # Learn from this iteration for next one
+                    if self.learning_enabled:
+                        await self._learn_from_iteration(objective, evaluation_result, iteration)
+                else:
+                    logger.info(f"Stopping iterations at iteration {iteration} (quality: {current_quality:.2f})")
+                    break
+            
+            # Use best results if available
+            if best_results:
+                objective.analyzed_objectives = best_results['analysis']
+                objective.decomposed_tasks = best_results['decomposition']['tasks']
+                objective.assigned_agents = best_results['decomposition']['assignments']
+                objective.execution_results = best_results['execution']
+                objective.evaluation_results = best_results['evaluation']
+                objective.final_iteration = best_results['iteration']
+            
+            # Phase 5: Result Validation Against Original Objectives
+            objective.status = "validating"
+            validation_result = await self._enhanced_validate_results(objective)
+            objective.validation_results = validation_result
+            
+            # Phase 6: Final Synthesis and Deliverable Generation
+            objective.status = "synthesizing"
+            synthesis_result = await self._enhanced_synthesize_deliverable(objective)
+            objective.final_synthesis = synthesis_result
+            objective.status = "completed"
+            
+            # Store execution history for learning
+            if self.learning_enabled:
+                self.execution_history.append({
+                    'objective_id': objective.objective_id,
+                    'user_request': user_request,
+                    'iterations': iteration,
+                    'final_quality': best_quality,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            logger.info(f"Enhanced autonomous research completed: {objective.objective_id}")
+            logger.info(f"Final quality: {best_quality:.2f} after {iteration} iterations")
+            logger.info(f"Final deliverable: {synthesis_result.get('deliverable_path', 'N/A')}")
+            
+            return objective.objective_id
+            
+        except Exception as e:
+            logger.error(f"Enhanced autonomous research failed: {e}")
+            if objective.objective_id in self.active_objectives:
+                self.active_objectives[objective.objective_id].status = "failed"
+            raise
+    
+    def _should_continue_iteration(self, evaluation_result: Dict[str, Any], 
+                                 iteration: int, best_quality: float) -> bool:
+        """Determine if we should continue iterating.
+        
+        Args:
+            evaluation_result: Current evaluation results
+            iteration: Current iteration number
+            best_quality: Best quality achieved so far
+            
+        Returns:
+            True if should continue iterating
+        """
+        current_quality = evaluation_result.get('overall_score', 0.0)
+        needs_recursion = evaluation_result.get('needs_recursion', False)
+        
+        # Stop if we've reached max iterations
+        if iteration >= self.max_iterations:
+            return False
+        
+        # Stop if quality is above threshold
+        if current_quality >= self.quality_threshold:
+            return False
+        
+        # Stop if no improvement in last 2 iterations
+        if iteration > 2 and current_quality <= best_quality:
+            return False
+        
+        # Continue if evaluation suggests recursion is needed
+        if needs_recursion:
+            return True
+        
+        # Continue if quality is still improving
+        if current_quality > best_quality * 0.9:  # At least 90% of best quality
+            return True
+        
+        return False
+    
+    async def _learn_from_iteration(self, objective: Any, evaluation_result: Dict[str, Any], 
+                                  iteration: int) -> None:
+        """Learn from current iteration to improve next one.
+        
+        Args:
+            objective: Current research objective
+            evaluation_result: Evaluation results from current iteration
+            iteration: Current iteration number
+        """
+        try:
+            # Extract learning insights
+            feedback = evaluation_result.get('feedback', [])
+            quality_metrics = evaluation_result.get('quality_metrics', {})
+            
+            # Update agent capabilities based on performance
+            for agent_name, agent in self.agents.items():
+                if hasattr(agent, 'update_capabilities'):
+                    await agent.update_capabilities(evaluation_result, iteration)
+            
+            # Store learning data
+            learning_data = {
+                'iteration': iteration,
+                'feedback': feedback,
+                'quality_metrics': quality_metrics,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            if not hasattr(objective, 'learning_data'):
+                objective.learning_data = []
+            objective.learning_data.append(learning_data)
+            
+            logger.info(f"Learning data stored for iteration {iteration}")
+            
+        except Exception as e:
+            logger.error(f"Learning from iteration failed: {e}")
+    
+    async def _enhanced_analyze_objective(self, objective: Any, iteration: int) -> List[Dict[str, Any]]:
+        """Enhanced analysis with learning from previous iterations."""
+        try:
+            analyzer_agent = self.agents.get('analyzer')
+            if not analyzer_agent:
+                raise ValueError("TaskAnalyzerAgent not initialized")
+            
+            # Include learning data from previous iterations
+            context = objective.context or {}
+            if hasattr(objective, 'learning_data') and objective.learning_data:
+                context['learning_data'] = objective.learning_data
+                context['iteration'] = iteration
+            
+            analysis_result = await analyzer_agent.analyze(objective.user_request, context)
+            
+            # Enhance analysis based on iteration
+            if iteration > 1:
+                analysis_result = await self._enhance_analysis_with_learning(analysis_result, objective, iteration)
+            
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"Enhanced analysis failed: {e}")
+            return []
+    
+    async def _enhance_analysis_with_learning(self, analysis_result: List[Dict[str, Any]], 
+                                            objective: Any, iteration: int) -> List[Dict[str, Any]]:
+        """Enhance analysis using learning from previous iterations."""
+        try:
+            enhanced_result = []
+            
+            for objective_data in analysis_result:
+                enhanced_objective = objective_data.copy()
+                
+                # Add iteration-specific enhancements
+                enhanced_objective['iteration'] = iteration
+                enhanced_objective['learning_applied'] = True
+                
+                # Refine based on previous feedback
+                if hasattr(objective, 'learning_data') and objective.learning_data:
+                    latest_feedback = objective.learning_data[-1].get('feedback', [])
+                    if 'insufficient_depth' in str(latest_feedback):
+                        enhanced_objective['depth_requirement'] = 'high'
+                    if 'missing_scope' in str(latest_feedback):
+                        enhanced_objective['scope'] = 'comprehensive'
+                
+                enhanced_result.append(enhanced_objective)
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.error(f"Analysis enhancement failed: {e}")
+            return analysis_result
+    
+    async def _adaptive_decompose_tasks(self, objective: Any, iteration: int) -> Dict[str, Any]:
+        """Adaptive task decomposition that learns from previous iterations."""
+        try:
+            decomposer_agent = self.agents.get('decomposer')
+            if not decomposer_agent:
+                raise ValueError("TaskDecomposerAgent not initialized")
+            
+            # Include learning data for adaptive decomposition
+            context = objective.context or {}
+            if hasattr(objective, 'learning_data') and objective.learning_data:
+                context['learning_data'] = objective.learning_data
+                context['iteration'] = iteration
+                context['adaptive_strategy'] = self.adaptive_strategy
+            
+            decomposition_result = await decomposer_agent.decompose_and_assign(
+                objective.analyzed_objectives, context, objective.objective_id
+            )
+            
+            # Enhance decomposition based on iteration
+            if iteration > 1:
+                decomposition_result = await self._enhance_decomposition_with_learning(
+                    decomposition_result, objective, iteration
+                )
+            
+            return decomposition_result
+            
+        except Exception as e:
+            logger.error(f"Adaptive decomposition failed: {e}")
+            return {'tasks': [], 'assignments': []}
+    
+    async def _enhance_decomposition_with_learning(self, decomposition_result: Dict[str, Any], 
+                                                 objective: Any, iteration: int) -> Dict[str, Any]:
+        """Enhance task decomposition using learning from previous iterations."""
+        try:
+            enhanced_tasks = []
+            
+            for task in decomposition_result.get('tasks', []):
+                enhanced_task = task.copy()
+                
+                # Add iteration-specific enhancements
+                enhanced_task['iteration'] = iteration
+                enhanced_task['learning_applied'] = True
+                
+                # Refine task based on previous feedback
+                if hasattr(objective, 'learning_data') and objective.learning_data:
+                    latest_feedback = objective.learning_data[-1].get('feedback', [])
+                    if 'task_complexity' in str(latest_feedback):
+                        enhanced_task['complexity'] = 'high'
+                    if 'insufficient_parallelism' in str(latest_feedback):
+                        enhanced_task['parallel_execution'] = True
+                
+                enhanced_tasks.append(enhanced_task)
+            
+            return {
+                'tasks': enhanced_tasks,
+                'assignments': decomposition_result.get('assignments', [])
+            }
+            
+        except Exception as e:
+            logger.error(f"Decomposition enhancement failed: {e}")
+            return decomposition_result
+    
+    async def _enhanced_execute_tasks(self, objective: Any, iteration: int) -> List[Dict[str, Any]]:
+        """Enhanced task execution with learning and adaptation."""
+        try:
+            execution_results = []
+            
+            # Execute tasks with enhanced coordination
+            for task in objective.decomposed_tasks:
+                agent_name = task.get('assigned_to')
+                if agent_name and agent_name in self.agents:
+                    agent = self.agents[agent_name]
+                    
+                    # Include learning context
+                    task_context = task.get('context', {})
+                    task_context['iteration'] = iteration
+                    task_context['learning_enabled'] = self.learning_enabled
+                    
+                    if hasattr(objective, 'learning_data') and objective.learning_data:
+                        task_context['learning_data'] = objective.learning_data
+                    
+                    # Execute task with enhanced context
+                    if hasattr(agent, 'execute_task'):
+                        result = await agent.execute_task(task, task_context, objective.objective_id)
+                    else:
+                        result = await agent.conduct_research(task, task_context, objective.objective_id)
+                    
+                    execution_results.append(result)
+            
+            # Enhance results based on iteration
+            if iteration > 1:
+                execution_results = await self._enhance_execution_with_learning(
+                    execution_results, objective, iteration
+                )
+            
+            return execution_results
+            
+        except Exception as e:
+            logger.error(f"Enhanced execution failed: {e}")
+            return []
+    
+    async def _enhance_execution_with_learning(self, execution_results: List[Dict[str, Any]], 
+                                             objective: Any, iteration: int) -> List[Dict[str, Any]]:
+        """Enhance execution results using learning from previous iterations."""
+        try:
+            enhanced_results = []
+            
+            for result in execution_results:
+                enhanced_result = result.copy()
+                
+                # Add iteration-specific enhancements
+                enhanced_result['iteration'] = iteration
+                enhanced_result['learning_applied'] = True
+                
+                # Refine based on previous feedback
+                if hasattr(objective, 'learning_data') and objective.learning_data:
+                    latest_feedback = objective.learning_data[-1].get('feedback', [])
+                    if 'insufficient_data' in str(latest_feedback):
+                        enhanced_result['data_enhanced'] = True
+                    if 'quality_issues' in str(latest_feedback):
+                        enhanced_result['quality_enhanced'] = True
+                
+                enhanced_results.append(enhanced_result)
+            
+            return enhanced_results
+            
+        except Exception as e:
+            logger.error(f"Execution enhancement failed: {e}")
+            return execution_results
+    
+    async def _enhanced_evaluate_results(self, objective: Any, iteration: int) -> Dict[str, Any]:
+        """Enhanced evaluation with learning and adaptive criteria."""
+        try:
+            evaluator_agent = self.agents.get('evaluator')
+            if not evaluator_agent:
+                raise ValueError("EvaluationAgent not initialized")
+            
+            # Include learning context for evaluation
+            context = objective.context or {}
+            context['iteration'] = iteration
+            context['learning_enabled'] = self.learning_enabled
+            
+            if hasattr(objective, 'learning_data') and objective.learning_data:
+                context['learning_data'] = objective.learning_data
+            
+            evaluation_result = await evaluator_agent.evaluate(
+                objective.execution_results, objective.analyzed_objectives, context
+            )
+            
+            # Enhance evaluation based on iteration
+            if iteration > 1:
+                evaluation_result = await self._enhance_evaluation_with_learning(
+                    evaluation_result, objective, iteration
+                )
+            
+            return evaluation_result
+            
+        except Exception as e:
+            logger.error(f"Enhanced evaluation failed: {e}")
+            return {'overall_score': 0.0, 'needs_recursion': True, 'feedback': ['Evaluation failed']}
+    
+    async def _enhance_evaluation_with_learning(self, evaluation_result: Dict[str, Any], 
+                                              objective: Any, iteration: int) -> Dict[str, Any]:
+        """Enhance evaluation using learning from previous iterations."""
+        try:
+            enhanced_result = evaluation_result.copy()
+            
+            # Add iteration-specific enhancements
+            enhanced_result['iteration'] = iteration
+            enhanced_result['learning_applied'] = True
+            
+            # Refine evaluation criteria based on previous feedback
+            if hasattr(objective, 'learning_data') and objective.learning_data:
+                latest_feedback = objective.learning_data[-1].get('feedback', [])
+                
+                # Adjust quality thresholds based on learning
+                if 'quality_threshold_too_high' in str(latest_feedback):
+                    enhanced_result['quality_threshold'] = 0.7
+                elif 'quality_threshold_too_low' in str(latest_feedback):
+                    enhanced_result['quality_threshold'] = 0.9
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.error(f"Evaluation enhancement failed: {e}")
+            return evaluation_result
+    
+    async def _enhanced_validate_results(self, objective: Any) -> Dict[str, Any]:
+        """Enhanced validation with learning and adaptive criteria."""
+        try:
+            validator_agent = self.agents.get('validator')
+            if not validator_agent:
+                raise ValueError("ValidationAgent not initialized")
+            
+            validation_result = await validator_agent.validate(
+                objective.user_request, objective.analyzed_objectives, 
+                objective.execution_results, objective.context
+            )
+            
+            return validation_result
+            
+        except Exception as e:
+            logger.error(f"Enhanced validation failed: {e}")
+            return {'validation_score': 0.0, 'is_valid': False, 'validation_feedback': ['Validation failed']}
+    
+    async def _enhanced_synthesize_deliverable(self, objective: Any) -> Dict[str, Any]:
+        """Enhanced synthesis with learning and adaptive formatting."""
+        try:
+            synthesizer_agent = self.agents.get('synthesizer')
+            if not synthesizer_agent:
+                raise ValueError("SynthesisAgent not initialized")
+            
+            synthesis_result = await synthesizer_agent.synthesize(
+                objective.user_request, objective.execution_results, 
+                objective.context, objective.objective_id
+            )
+            
+            return synthesis_result
+            
+        except Exception as e:
+            logger.error(f"Enhanced synthesis failed: {e}")
+            return {'deliverable_path': None, 'error': str(e)}
     
     async def analyze_objective(self, objective: Any) -> List[Dict[str, Any]]:
         """Phase 1: Autonomous analysis of research objectives.

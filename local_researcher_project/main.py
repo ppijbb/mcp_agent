@@ -289,8 +289,8 @@ class AutonomousResearchSystem:
                     print(f"\n🚀 Starting autonomous research for: {user_input}")
                     print("⏳ This may take several minutes...")
                     
-                    # Start autonomous research
-                    objective_id = await self.start_autonomous_research(user_input)
+                    # Start enhanced autonomous research with iterative improvement
+                    objective_id = await self.orchestrator.start_autonomous_research(user_input)
                     
                     print(f"✅ Research objective created: {objective_id}")
                     print("📊 Monitoring progress...")
@@ -391,7 +391,7 @@ async def main():
             print("⏳ This may take several minutes...")
             
             # Start autonomous research
-            objective_id = await system.start_autonomous_research(user_request, context)
+            objective_id = await system.orchestrator.start_autonomous_research(user_request, context)
             print(f"✅ Research objective created: {objective_id}")
             print(f"📊 Use 'python main.py status {objective_id}' to check progress")
             

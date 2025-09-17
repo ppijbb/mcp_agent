@@ -43,6 +43,16 @@ class ResearchAgent:
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
         
         logger.info("Research Agent initialized with autonomous research capabilities")
+        
+        # Learning capabilities
+        self.learning_data = []
+        self.research_patterns = {}
+        self.quality_metrics = {}
+        self.adaptive_strategies = {
+            'search_depth': 3,
+            'content_length': 5000,
+            'source_diversity': 0.8
+        }
     
     def _load_research_tools(self) -> Dict[str, Any]:
         """Load available research tools.
@@ -1251,3 +1261,124 @@ class ResearchAgent:
             
         except Exception as e:
             logger.error(f"Research Agent cleanup failed: {e}")
+    
+    async def update_capabilities(self, evaluation_result: Dict[str, Any], iteration: int) -> None:
+        """Update agent capabilities based on evaluation feedback.
+        
+        Args:
+            evaluation_result: Evaluation results from current iteration
+            iteration: Current iteration number
+        """
+        try:
+            feedback = evaluation_result.get('feedback', [])
+            quality_metrics = evaluation_result.get('quality_metrics', {})
+            
+            # Store learning data
+            learning_entry = {
+                'iteration': iteration,
+                'feedback': feedback,
+                'quality_metrics': quality_metrics,
+                'timestamp': datetime.now().isoformat()
+            }
+            self.learning_data.append(learning_entry)
+            
+            # Update adaptive strategies based on feedback
+            if 'insufficient_data' in str(feedback):
+                self.adaptive_strategies['search_depth'] = min(5, self.adaptive_strategies['search_depth'] + 1)
+                self.adaptive_strategies['content_length'] = min(10000, self.adaptive_strategies['content_length'] + 1000)
+            elif 'excessive_data' in str(feedback):
+                self.adaptive_strategies['search_depth'] = max(1, self.adaptive_strategies['search_depth'] - 1)
+                self.adaptive_strategies['content_length'] = max(2000, self.adaptive_strategies['content_length'] - 1000)
+            
+            if 'insufficient_diversity' in str(feedback):
+                self.adaptive_strategies['source_diversity'] = min(1.0, self.adaptive_strategies['source_diversity'] + 0.1)
+            elif 'excessive_diversity' in str(feedback):
+                self.adaptive_strategies['source_diversity'] = max(0.5, self.adaptive_strategies['source_diversity'] - 0.1)
+            
+            # Update research patterns based on successful patterns
+            if quality_metrics.get('overall_score', 0) > 0.8:
+                await self._update_successful_research_patterns(evaluation_result)
+            
+            logger.info(f"ResearchAgent capabilities updated for iteration {iteration}")
+            
+        except Exception as e:
+            logger.error(f"Research capability update failed: {e}")
+    
+    async def _update_successful_research_patterns(self, evaluation_result: Dict[str, Any]) -> None:
+        """Update research patterns based on successful evaluations."""
+        try:
+            # Extract successful patterns from evaluation
+            quality_metrics = evaluation_result.get('quality_metrics', {})
+            
+            # Update research method weights based on success
+            for method_name in self.analysis_methods:
+                if quality_metrics.get(f'{method_name}_score', 0) > 0.8:
+                    if 'weight' not in self.analysis_methods[method_name]:
+                        self.analysis_methods[method_name]['weight'] = 1.0
+                    self.analysis_methods[method_name]['weight'] = min(2.0, 
+                        self.analysis_methods[method_name]['weight'] + 0.1)
+            
+            logger.info("Successful research patterns updated")
+            
+        except Exception as e:
+            logger.error(f"Research pattern update failed: {e}")
+    
+    async def _enhanced_research_with_learning(self, task: Dict[str, Any], 
+                                             context: Dict[str, Any], 
+                                             objective_id: str) -> Dict[str, Any]:
+        """Enhanced research using learning from previous iterations."""
+        try:
+            # Get learning data from context
+            learning_data = context.get('learning_data', [])
+            iteration = context.get('iteration', 1)
+            
+            # Start with base research
+            result = await self.conduct_research(task, context, objective_id)
+            
+            # Apply learning enhancements
+            if learning_data and iteration > 1:
+                result = await self._apply_research_learning_enhancements(result, learning_data, iteration)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Enhanced research failed: {e}")
+            return await self.conduct_research(task, context, objective_id)
+    
+    async def _apply_research_learning_enhancements(self, result: Dict[str, Any], 
+                                                  learning_data: List[Dict[str, Any]], 
+                                                  iteration: int) -> Dict[str, Any]:
+        """Apply learning enhancements to research results."""
+        try:
+            enhanced_result = result.copy()
+            
+            # Apply learning-based enhancements
+            if iteration > 1:
+                latest_feedback = learning_data[-1].get('feedback', [])
+                
+                # Enhance data collection if insufficient
+                if 'insufficient_data' in str(latest_feedback):
+                    enhanced_result['data_enhanced'] = True
+                    enhanced_result['search_depth'] = self.adaptive_strategies['search_depth']
+                    enhanced_result['content_length'] = self.adaptive_strategies['content_length']
+                
+                # Enhance source diversity if needed
+                if 'insufficient_diversity' in str(latest_feedback):
+                    enhanced_result['diversity_enhanced'] = True
+                    enhanced_result['source_diversity'] = self.adaptive_strategies['source_diversity']
+                
+                # Enhance quality if needed
+                if 'quality_issues' in str(latest_feedback):
+                    enhanced_result['quality_enhanced'] = True
+                    enhanced_result['quality_threshold'] = 0.8
+            
+            # Add learning metadata
+            enhanced_result['learning_applied'] = True
+            enhanced_result['iteration'] = iteration
+            enhanced_result['learning_data_count'] = len(learning_data)
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.error(f"Research learning enhancement failed: {e}")
+            return result

@@ -40,6 +40,16 @@ class TaskAnalyzerAgent:
         self.objective_templates = self._load_objective_templates()
         
         logger.info("Task Analyzer Agent initialized with autonomous analysis capabilities")
+        
+        # Learning capabilities
+        self.learning_data = []
+        self.analysis_patterns = self._load_analysis_patterns()
+        self.quality_metrics = {}
+        self.adaptive_thresholds = {
+            'complexity': 0.7,
+            'scope': 0.8,
+            'depth': 0.6
+        }
     
     def _load_analysis_patterns(self) -> Dict[str, Any]:
         """Load analysis patterns for objective extraction.
@@ -635,5 +645,132 @@ class TaskAnalyzerAgent:
         """Cleanup agent resources."""
         try:
             logger.info("Task Analyzer Agent cleanup completed")
+        except Exception as e:
+            logger.error(f"Task Analyzer Agent cleanup failed: {e}")
+    
+    async def update_capabilities(self, evaluation_result: Dict[str, Any], iteration: int) -> None:
+        """Update agent capabilities based on evaluation feedback.
+        
+        Args:
+            evaluation_result: Evaluation results from current iteration
+            iteration: Current iteration number
+        """
+        try:
+            feedback = evaluation_result.get('feedback', [])
+            quality_metrics = evaluation_result.get('quality_metrics', {})
+            
+            # Store learning data
+            learning_entry = {
+                'iteration': iteration,
+                'feedback': feedback,
+                'quality_metrics': quality_metrics,
+                'timestamp': datetime.now().isoformat()
+            }
+            self.learning_data.append(learning_entry)
+            
+            # Update adaptive thresholds based on feedback
+            if 'insufficient_depth' in str(feedback):
+                self.adaptive_thresholds['depth'] = min(0.9, self.adaptive_thresholds['depth'] + 0.1)
+            elif 'excessive_depth' in str(feedback):
+                self.adaptive_thresholds['depth'] = max(0.3, self.adaptive_thresholds['depth'] - 0.1)
+            
+            if 'insufficient_scope' in str(feedback):
+                self.adaptive_thresholds['scope'] = min(0.9, self.adaptive_thresholds['scope'] + 0.1)
+            elif 'excessive_scope' in str(feedback):
+                self.adaptive_thresholds['scope'] = max(0.3, self.adaptive_thresholds['scope'] - 0.1)
+            
+            if 'insufficient_complexity' in str(feedback):
+                self.adaptive_thresholds['complexity'] = min(0.9, self.adaptive_thresholds['complexity'] + 0.1)
+            elif 'excessive_complexity' in str(feedback):
+                self.adaptive_thresholds['complexity'] = max(0.3, self.adaptive_thresholds['complexity'] - 0.1)
+            
+            # Update analysis patterns based on successful patterns
+            if quality_metrics.get('overall_score', 0) > 0.8:
+                await self._update_successful_patterns(evaluation_result)
+            
+            logger.info(f"TaskAnalyzerAgent capabilities updated for iteration {iteration}")
+            
+        except Exception as e:
+            logger.error(f"Capability update failed: {e}")
+    
+    async def _update_successful_patterns(self, evaluation_result: Dict[str, Any]) -> None:
+        """Update analysis patterns based on successful evaluations."""
+        try:
+            # Extract successful patterns from evaluation
+            quality_metrics = evaluation_result.get('quality_metrics', {})
+            
+            # Update pattern weights based on success
+            for pattern_name in self.analysis_patterns:
+                if quality_metrics.get(f'{pattern_name}_score', 0) > 0.8:
+                    if 'weight' not in self.analysis_patterns[pattern_name]:
+                        self.analysis_patterns[pattern_name]['weight'] = 1.0
+                    self.analysis_patterns[pattern_name]['weight'] = min(2.0, 
+                        self.analysis_patterns[pattern_name]['weight'] + 0.1)
+            
+            logger.info("Successful patterns updated")
+            
+        except Exception as e:
+            logger.error(f"Pattern update failed: {e}")
+    
+    async def _enhanced_analyze_with_learning(self, user_request: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Enhanced analysis using learning from previous iterations."""
+        try:
+            # Get learning data from context
+            learning_data = context.get('learning_data', [])
+            iteration = context.get('iteration', 1)
+            
+            # Start with base analysis
+            objectives = await self.analyze(user_request, context)
+            
+            # Apply learning enhancements
+            if learning_data and iteration > 1:
+                objectives = await self._apply_learning_enhancements(objectives, learning_data, iteration)
+            
+            return objectives
+            
+        except Exception as e:
+            logger.error(f"Enhanced analysis failed: {e}")
+            return await self.analyze(user_request, context)
+    
+    async def _apply_learning_enhancements(self, objectives: List[Dict[str, Any]], 
+                                         learning_data: List[Dict[str, Any]], 
+                                         iteration: int) -> List[Dict[str, Any]]:
+        """Apply learning enhancements to objectives."""
+        try:
+            enhanced_objectives = []
+            
+            for objective in objectives:
+                enhanced_objective = objective.copy()
+                
+                # Apply learning-based enhancements
+                if iteration > 1:
+                    # Increase depth if previous iterations lacked depth
+                    latest_feedback = learning_data[-1].get('feedback', [])
+                    if 'insufficient_depth' in str(latest_feedback):
+                        enhanced_objective['depth_requirement'] = 'high'
+                        enhanced_objective['analysis_depth'] = 'comprehensive'
+                    
+                    # Expand scope if previous iterations were too narrow
+                    if 'insufficient_scope' in str(latest_feedback):
+                        enhanced_objective['scope'] = 'comprehensive'
+                        enhanced_objective['coverage_requirement'] = 'extensive'
+                    
+                    # Adjust complexity based on feedback
+                    if 'insufficient_complexity' in str(latest_feedback):
+                        enhanced_objective['complexity_level'] = 'high'
+                        enhanced_objective['analysis_complexity'] = 'advanced'
+                
+                # Add learning metadata
+                enhanced_objective['learning_applied'] = True
+                enhanced_objective['iteration'] = iteration
+                enhanced_objective['learning_data_count'] = len(learning_data)
+                
+                enhanced_objectives.append(enhanced_objective)
+            
+            return enhanced_objectives
+            
+        except Exception as e:
+            logger.error(f"Learning enhancement failed: {e}")
+            return objectives
         except Exception as e:
             logger.error(f"Task Analyzer Agent cleanup failed: {e}")
