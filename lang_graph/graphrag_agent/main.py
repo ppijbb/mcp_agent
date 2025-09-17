@@ -78,6 +78,15 @@ Environment Variables:
     GRAPH_PATH          Path to knowledge graph file (for query/visualize/optimize modes)
     OUTPUT_PATH         Path for output files
     QUERY               Query string (for query mode)
+    
+    # Optional configuration overrides
+    LOG_LEVEL           Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    MAX_SEARCH_RESULTS  Max search results for RAG (1-20)
+    CONTEXT_WINDOW_SIZE Context window size (1000-32000)
+    ENABLE_VISUALIZATION Enable graph visualization (true/false)
+    ENABLE_OPTIMIZATION Enable graph optimization (true/false)
+    OPTIMIZATION_QUALITY_THRESHOLD Quality threshold (0.0-1.0)
+    MAX_OPTIMIZATION_ITERATIONS Max iterations (1-100)
 
 Examples:
     # Create a knowledge graph

@@ -196,26 +196,35 @@ class ConfigManager:
                 self.logger.info(f"Found config file: {path}")
                 return path
         
-        self.logger.warning("No config file found in any of the expected locations:")
+        self.logger.info("No config file found in any of the expected locations, will use defaults and environment variables")
+        self.logger.debug("Searched paths:")
         for path in possible_paths:
-            self.logger.warning(f"  - {path}")
+            self.logger.debug(f"  - {path}")
         return None
     
     def load_config(self) -> GraphRAGConfig:
         """
         Load configuration from YAML file and environment variables
+        Priority: env > yaml > default
         
         Returns:
             GraphRAGConfig object with loaded settings
         """
+        self.logger.info("Loading configuration with priority: env > yaml > default")
+        
         # Start with default configuration
         config_data = self._get_default_config()
+        self.logger.debug("Default configuration loaded")
         
         # Load from YAML file if exists
         if self.config_path and os.path.exists(self.config_path):
+            self.logger.info(f"Loading YAML config from: {self.config_path}")
             config_data = self._load_yaml_config(config_data)
+        else:
+            self.logger.info("No YAML config file found, using defaults and environment variables only")
         
         # Override with environment variables
+        self.logger.info("Loading environment variables...")
         config_data = self._load_env_config(config_data)
         
         # Validate and create config object
@@ -269,6 +278,10 @@ class ConfigManager:
     
     def _load_yaml_config(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
         """Load configuration from YAML file"""
+        if not self.config_path:
+            self.logger.warning("No config file path specified, skipping YAML loading")
+            return config_data
+            
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 yaml_config = yaml.safe_load(f)
@@ -277,6 +290,9 @@ class ConfigManager:
                 # Deep merge with existing config
                 config_data = self._deep_merge(config_data, yaml_config)
                 self.logger.info(f"Configuration loaded from {self.config_path}")
+                self.logger.debug(f"YAML config keys: {list(yaml_config.keys())}")
+            else:
+                self.logger.warning(f"YAML file {self.config_path} is empty or invalid")
             
         except Exception as e:
             self.logger.warning(f"Failed to load YAML config from {self.config_path}: {e}")
@@ -288,10 +304,13 @@ class ConfigManager:
         env_mappings = {
             # Agent settings
             'OPENAI_API_KEY': ['agent', 'openai_api_key'],
+            'GEMINI_API_KEY': ['agent', 'gemini_api_key'],
             'GRAPH_MODEL_NAME': ['agent', 'model_name'],
             'RAG_MODEL_NAME': ['agent', 'model_name'],
             'MAX_SEARCH_RESULTS': ['agent', 'max_search_results'],
             'CONTEXT_WINDOW_SIZE': ['agent', 'context_window_size'],
+            'TEMPERATURE': ['agent', 'temperature'],
+            'MAX_TOKENS': ['agent', 'max_tokens'],
             
             # Graph settings
             'ENABLE_DOMAIN_SPECIALIZATION': ['graph', 'enable_domain_specialization'],
@@ -327,13 +346,20 @@ class ConfigManager:
             'VERBOSE': ['verbose']
         }
         
+        env_vars_found = []
         for env_var, config_path in env_mappings.items():
             value = os.getenv(env_var)
             if value is not None:
                 # Convert string values to appropriate types
                 converted_value = self._convert_env_value(value, config_path)
                 self._set_nested_value(config_data, config_path, converted_value)
+                env_vars_found.append(f"{env_var}={converted_value}")
                 self.logger.debug(f"Set {'.'.join(config_path)} = {converted_value} from {env_var}")
+        
+        if env_vars_found:
+            self.logger.info(f"Environment variables loaded: {', '.join(env_vars_found)}")
+        else:
+            self.logger.info("No environment variables found")
         
         return config_data
     
@@ -345,14 +371,14 @@ class ConfigManager:
         
         # Integer conversion
         if config_path[-1] in ['max_search_results', 'context_window_size', 'max_nodes', 
-                              'max_iterations', 'max_file_size', 'backup_count']:
+                              'max_iterations', 'max_file_size', 'backup_count', 'max_tokens']:
             try:
                 return int(value)
             except ValueError:
                 return value
         
         # Float conversion
-        if config_path[-1] in ['quality_threshold']:
+        if config_path[-1] in ['quality_threshold', 'temperature']:
             try:
                 return float(value)
             except ValueError:
