@@ -1,0 +1,147 @@
+# System Configuration for GraphRAG Agent
+# This file is used for system-to-system communication and automated workflows
+
+# System identification
+system:
+  name: "GraphRAG Agent System"
+  version: "1.0.0"
+  environment: "production"  # development, staging, production
+
+# API Server Configuration
+api_server:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8000
+  timeout: 30
+  max_connections: 100
+  rate_limit: 1000  # requests per minute
+
+# Workflow Configuration
+workflows:
+  # Automated graph creation workflow
+  auto_create:
+    enabled: true
+    trigger: "file_upload"  # file_upload, schedule, webhook
+    schedule: "0 2 * * *"  # Daily at 2 AM (cron format)
+    data_sources:
+      - path: "/data/input"
+        pattern: "*.csv"
+        auto_process: true
+      - path: "/data/input"
+        pattern: "*.json"
+        auto_process: true
+    
+  # Automated optimization workflow
+  auto_optimize:
+    enabled: true
+    trigger: "schedule"
+    schedule: "0 3 * * *"  # Daily at 3 AM
+    quality_threshold: 0.8
+    max_iterations: 10
+    
+  # Automated visualization workflow
+  auto_visualize:
+    enabled: true
+    trigger: "graph_update"
+    formats: ["png", "svg", "html"]
+    output_directory: "/data/visualizations"
+    max_nodes: 1000
+
+# Integration Settings
+integrations:
+  # Database integration
+  database:
+    enabled: false
+    type: "postgresql"  # postgresql, mysql, sqlite
+    host: "localhost"
+    port: 5432
+    database: "graphrag"
+    username: "graphrag_user"
+    password: ""  # Set via environment variable
+    
+  # Message queue integration
+  message_queue:
+    enabled: false
+    type: "redis"  # redis, rabbitmq, kafka
+    host: "localhost"
+    port: 6379
+    queue_name: "graphrag_tasks"
+    
+  # Webhook integration
+  webhooks:
+    enabled: false
+    endpoints:
+      - url: "https://api.example.com/graphrag/webhook"
+        events: ["graph_created", "graph_updated", "graph_optimized"]
+        secret: ""  # Set via environment variable
+
+# Monitoring and Logging
+monitoring:
+  enabled: true
+  metrics:
+    - "graph_size"
+    - "processing_time"
+    - "error_rate"
+    - "api_requests"
+  
+  alerts:
+    enabled: true
+    email: "admin@example.com"
+    slack_webhook: ""  # Set via environment variable
+    
+  health_check:
+    enabled: true
+    interval: 60  # seconds
+    timeout: 10   # seconds
+
+# Security Settings
+security:
+  api_key_required: true
+  api_keys:
+    - "system-key-12345"
+    - "integration-key-67890"
+  
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    burst_size: 20
+  
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE"]
+    allowed_headers: ["Content-Type", "Authorization"]
+
+# Performance Settings
+performance:
+  max_concurrent_operations: 10
+  graph_cache_size: 100  # MB
+  visualization_cache_ttl: 3600  # seconds
+  optimization_batch_size: 1000
+  
+  # Memory limits
+  max_memory_usage: "2GB"
+  graph_memory_limit: "1GB"
+  
+  # Processing limits
+  max_nodes_per_graph: 10000
+  max_edges_per_graph: 50000
+  max_processing_time: 300  # seconds
+
+# Backup and Recovery
+backup:
+  enabled: true
+  schedule: "0 1 * * *"  # Daily at 1 AM
+  retention_days: 30
+  storage:
+    type: "local"  # local, s3, gcs
+    path: "/data/backups"
+    s3_bucket: ""  # Set if using S3
+    gcs_bucket: ""  # Set if using GCS
+
+# Development Settings (only used in development environment)
+development:
+  debug_mode: false
+  hot_reload: false
+  mock_llm: false
+  test_data_path: "/data/test"

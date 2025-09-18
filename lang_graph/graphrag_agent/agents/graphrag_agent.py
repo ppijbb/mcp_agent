@@ -80,7 +80,8 @@ class GraphRAGAgent:
                 "data_file": self.config.data_file,
                 "graph_path": self.config.graph_path,
                 "output_path": self.config.output_path,
-                "query": self.config.query
+                "query": self.config.query,
+                "user_intent": getattr(self.config, 'user_intent', '')
             }
             
             # Run the workflow

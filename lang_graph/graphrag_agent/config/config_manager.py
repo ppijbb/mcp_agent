@@ -161,15 +161,17 @@ class GraphRAGConfig(BaseModel):
 class ConfigManager:
     """Configuration manager for loading and managing settings"""
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, system_config_path: Optional[str] = None):
         """
         Initialize configuration manager
         
         Args:
             config_path: Path to YAML configuration file (optional)
+            system_config_path: Path to system configuration file (optional)
         """
         self.logger = logging.getLogger(__name__)
         self.config_path = config_path or self._find_config_file()
+        self.system_config_path = system_config_path or self._find_system_config_file()
         
     def _find_config_file(self) -> Optional[str]:
         """Find configuration file in common locations"""
@@ -197,6 +199,37 @@ class ConfigManager:
                 return path
         
         self.logger.info("No config file found in any of the expected locations, will use defaults and environment variables")
+        self.logger.debug("Searched paths:")
+        for path in possible_paths:
+            self.logger.debug(f"  - {path}")
+        return None
+    
+    def _find_system_config_file(self) -> Optional[str]:
+        """Find system configuration file in common locations"""
+        # Get the directory containing this file (config/)
+        current_dir = os.path.dirname(__file__)
+        # Get the parent directory (graphrag_agent/)
+        parent_dir = os.path.dirname(current_dir)
+        
+        possible_paths = [
+            "system_config.yaml",
+            "system_config.yml",
+            "system.yaml",
+            "system.yml",
+            os.path.join(os.getcwd(), "system_config.yaml"),
+            os.path.join(os.getcwd(), "system_config.yml"),
+            os.path.join(current_dir, "system_config.yaml"),
+            os.path.join(current_dir, "system_config.yml"),
+            os.path.join(parent_dir, "system_config.yaml"),
+            os.path.join(parent_dir, "system_config.yml"),
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.logger.info(f"Found system config file: {path}")
+                return path
+        
+        self.logger.info("No system config file found, using defaults")
         self.logger.debug("Searched paths:")
         for path in possible_paths:
             self.logger.debug(f"  - {path}")

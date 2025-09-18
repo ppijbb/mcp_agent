@@ -1,7 +1,8 @@
 """
-LangGraph-optimized Graph Generator Node
+LLM-powered Dynamic Graph Generator Node
 
-This node handles knowledge graph generation from text data using LangGraph patterns.
+This node handles knowledge graph generation from text data using LLM-based processing
+without any hardcoded patterns or keywords.
 """
 
 import pandas as pd
@@ -10,17 +11,19 @@ from typing import Dict, Any, List
 from typing import Callable
 from models.types import GraphRAGState, GraphStats
 from config import AgentConfig
+from .llm_processor import LLMProcessor, Entity, Relationship
 
 
 class GraphGeneratorNode:
-    """LangGraph node for generating knowledge graphs from text data"""
+    """LLM-powered node for generating knowledge graphs from text data"""
     
     def __init__(self, config: AgentConfig):
         self.config = config
         self.logger = None
+        self.llm_processor = LLMProcessor(config)
     
     def __call__(self, state: GraphRAGState) -> GraphRAGState:
-        """Generate knowledge graph from text units"""
+        """Generate knowledge graph from text units using LLM"""
         try:
             # Load data if not already loaded
             if not state.get("text_units"):
@@ -31,8 +34,11 @@ class GraphGeneratorNode:
                 state["status"] = "error"
                 return state
             
-            # Generate knowledge graph
-            knowledge_graph = self._generate_graph(state["text_units"])
+            # Get user intent if available
+            user_intent = state.get("user_intent", "")
+            
+            # Generate knowledge graph using LLM
+            knowledge_graph = self._generate_graph_with_llm(state["text_units"], user_intent)
             
             # Calculate statistics
             stats = self._calculate_stats(knowledge_graph)
@@ -42,7 +48,7 @@ class GraphGeneratorNode:
             state["status"] = "completed"
             
             if self.logger:
-                self.logger.info(f"Graph generated: {stats.nodes} nodes, {stats.edges} edges")
+                self.logger.info(f"Graph generated with LLM: {stats.nodes} nodes, {stats.edges} edges")
             
         except Exception as e:
             state["error"] = f"Graph generation failed: {str(e)}"
@@ -53,7 +59,7 @@ class GraphGeneratorNode:
         return state
     
     def _load_data(self, state: GraphRAGState) -> GraphRAGState:
-        """Load data from file"""
+        """Load data from file with flexible column mapping"""
         try:
             if not state.get("data_file"):
                 state["error"] = "No data file specified"
@@ -61,36 +67,121 @@ class GraphGeneratorNode:
             
             df = pd.read_csv(state["data_file"])
             
-            # Validate required columns
-            required_columns = ["id", "document_id", "text_unit"]
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            if missing_columns:
-                state["error"] = f"Missing required columns: {missing_columns}"
+            # Auto-detect column mapping
+            column_mapping = self._detect_column_mapping(df.columns)
+            
+            if not column_mapping:
+                state["error"] = "Could not detect required columns in CSV file"
                 return state
             
             # Convert to text units
             text_units = []
-            for _, row in df.iterrows():
-                if pd.notna(row['text_unit']):
+            for idx, row in df.iterrows():
+                text_content = None
+                
+                # Try different text columns
+                for text_col in column_mapping.get('text_columns', []):
+                    if pd.notna(row[text_col]) and str(row[text_col]).strip():
+                        text_content = str(row[text_col]).strip()
+                        break
+                
+                if text_content:
                     text_units.append({
-                        "id": row["id"],
-                        "document_id": row["document_id"],
-                        "text": row["text_unit"]
+                        "id": row.get(column_mapping.get('id_column', 'id'), idx),
+                        "document_id": row.get(column_mapping.get('document_id_column', 'document_id'), f"doc_{idx}"),
+                        "text": text_content,
+                        "metadata": self._extract_metadata(row, column_mapping)
                     })
             
+            if not text_units:
+                state["error"] = "No valid text content found in CSV file"
+                return state
+            
             state["text_units"] = text_units
+            state["column_mapping"] = column_mapping
             
         except Exception as e:
             state["error"] = f"Data loading failed: {str(e)}"
         
         return state
     
-    def _generate_graph(self, text_units: List[Dict[str, Any]]) -> nx.Graph:
-        """Generate knowledge graph from text units"""
+    def _detect_column_mapping(self, columns: List[str]) -> Dict[str, Any]:
+        """Auto-detect column mapping for different CSV formats"""
+        columns_lower = [col.lower() for col in columns]
+        mapping = {}
+        
+        # Detect ID column
+        id_candidates = ['id', 'index', 'idx', 'key', 'pk']
+        for candidate in id_candidates:
+            if candidate in columns_lower:
+                mapping['id_column'] = columns[columns_lower.index(candidate)]
+                break
+        
+        # Detect document ID column
+        doc_id_candidates = ['document_id', 'doc_id', 'document', 'doc', 'file_id', 'source_id']
+        for candidate in doc_id_candidates:
+            if candidate in columns_lower:
+                mapping['document_id_column'] = columns[columns_lower.index(candidate)]
+                break
+        
+        # Detect text columns (multiple possible names)
+        text_candidates = [
+            'text', 'content', 'text_unit', 'sentence', 'paragraph', 'description',
+            'summary', 'abstract', 'body', 'message', 'comment', 'note'
+        ]
+        text_columns = []
+        for candidate in text_candidates:
+            if candidate in columns_lower:
+                text_columns.append(columns[columns_lower.index(candidate)])
+        
+        if text_columns:
+            mapping['text_columns'] = text_columns
+        else:
+            # If no standard text columns found, try to find any column with substantial text
+            for col in columns:
+                if col.lower() not in ['id', 'index', 'idx', 'key', 'pk', 'document_id', 'doc_id']:
+                    text_columns.append(col)
+            if text_columns:
+                mapping['text_columns'] = text_columns
+        
+        # Detect metadata columns
+        metadata_columns = []
+        for col in columns:
+            if col.lower() not in [mapping.get('id_column', '').lower(), 
+                                 mapping.get('document_id_column', '').lower()] and col not in text_columns:
+                metadata_columns.append(col)
+        mapping['metadata_columns'] = metadata_columns
+        
+        return mapping if mapping.get('text_columns') else None
+    
+    def _extract_metadata(self, row: pd.Series, column_mapping: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from row based on column mapping"""
+        metadata = {}
+        
+        for col in column_mapping.get('metadata_columns', []):
+            if pd.notna(row[col]):
+                metadata[col] = row[col]
+        
+        return metadata
+    
+    def _generate_graph_with_llm(self, text_units: List[Dict[str, Any]], user_intent: str = "") -> nx.Graph:
+        """Generate knowledge graph from text units using LLM"""
         # Create empty graph
         graph = nx.Graph()
         
-        # Add nodes for each text unit
+        # Combine all text for analysis
+        combined_text = " ".join([unit["text"] for unit in text_units])
+        
+        # Extract entities using LLM
+        entities = self.llm_processor.extract_entities(combined_text, user_intent)
+        
+        # Classify entities using LLM
+        entities = self.llm_processor.classify_entities(entities, combined_text)
+        
+        # Extract relationships using LLM
+        relationships = self.llm_processor.extract_relationships(combined_text, entities, user_intent)
+        
+        # Add text unit nodes
         for unit in text_units:
             node_id = f"text_{unit['id']}"
             graph.add_node(node_id, **{
@@ -100,52 +191,49 @@ class GraphGeneratorNode:
                 "original_id": unit["id"]
             })
         
-        # Simple entity extraction and relationship creation
-        # In a real implementation, this would use LLM for entity extraction
-        entities = self._extract_entities(text_units)
-        
         # Add entity nodes
         for entity in entities:
-            entity_id = f"entity_{entity['name'].replace(' ', '_').lower()}"
+            entity_id = f"entity_{entity.name.replace(' ', '_').lower()}"
             if not graph.has_node(entity_id):
                 graph.add_node(entity_id, **{
                     "type": "entity",
-                    "name": entity["name"],
-                    "category": entity["category"]
+                    "name": entity.name,
+                    "category": entity.category,
+                    "confidence": entity.confidence,
+                    "context": entity.context,
+                    "attributes": entity.attributes or {}
                 })
         
         # Add relationships
+        for relationship in relationships:
+            source_id = f"entity_{relationship.source.replace(' ', '_').lower()}"
+            target_id = f"entity_{relationship.target.replace(' ', '_').lower()}"
+            
+            if graph.has_node(source_id) and graph.has_node(target_id):
+                graph.add_edge(source_id, target_id, **{
+                    "relationship_type": relationship.relationship_type,
+                    "confidence": relationship.confidence,
+                    "context": relationship.context,
+                    "attributes": relationship.attributes or {}
+                })
+        
+        # Add entity-text relationships
         for unit in text_units:
             unit_id = f"text_{unit['id']}"
+            text = unit["text"].lower()
+            
             for entity in entities:
-                if entity["name"].lower() in unit["text"].lower():
-                    entity_id = f"entity_{entity['name'].replace(' ', '_').lower()}"
-                    graph.add_edge(unit_id, entity_id, relationship="mentions")
+                if entity.name.lower() in text:
+                    entity_id = f"entity_{entity.name.replace(' ', '_').lower()}"
+                    if graph.has_node(entity_id):
+                        graph.add_edge(unit_id, entity_id, **{
+                            "relationship_type": "mentions",
+                            "confidence": entity.confidence,
+                            "context": entity.context
+                        })
         
         return graph
     
-    def _extract_entities(self, text_units: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Extract entities from text units (simplified version)"""
-        entities = []
-        entity_names = set()
-        
-        # Simple keyword-based entity extraction
-        keywords = [
-            "Apple", "Microsoft", "Google", "CEO", "company", "technology",
-            "iPhone", "iPad", "Windows", "Azure", "founded", "headquartered"
-        ]
-        
-        for unit in text_units:
-            text = unit["text"]
-            for keyword in keywords:
-                if keyword.lower() in text.lower() and keyword not in entity_names:
-                    entities.append({
-                        "name": keyword,
-                        "category": "organization" if keyword in ["Apple", "Microsoft", "Google"] else "concept"
-                    })
-                    entity_names.add(keyword)
-        
-        return entities
     
     def _calculate_stats(self, graph: nx.Graph) -> GraphStats:
         """Calculate graph statistics"""
