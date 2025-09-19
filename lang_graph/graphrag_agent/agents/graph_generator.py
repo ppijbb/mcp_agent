@@ -172,8 +172,18 @@ class GraphGeneratorNode:
         # Combine all text for analysis
         combined_text = " ".join([unit["text"] for unit in text_units])
         
-        # Extract entities using LLM
-        entities = self.llm_processor.extract_entities(combined_text, user_intent)
+        # Extract entities using LLM with batch processing for better performance
+        if len(text_units) > 1:
+            # Use batch processing for multiple text units
+            texts = [unit["text"] for unit in text_units]
+            entities_list = self.llm_processor.extract_entities_batch(texts, user_intent)
+            # Flatten entities from all texts
+            entities = []
+            for entity_list in entities_list:
+                entities.extend(entity_list)
+        else:
+            # Single text processing
+            entities = self.llm_processor.extract_entities(combined_text, user_intent)
         
         # Classify entities using LLM
         entities = self.llm_processor.classify_entities(entities, combined_text)

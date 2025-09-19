@@ -2,11 +2,14 @@
 # This file contains default configuration settings for the GraphRAG Agent
 
 agent:
-  # OpenAI API configuration
+  # LLM API configuration
   openai_api_key: ""  # Set via OPENAI_API_KEY environment variable
-  model_name: "gemini-2.5-flash-lite-preview-06-07"
-  max_search_results: 5
-  context_window_size: 4000
+  gemini_api_key: ""  # Set via GEMINI_API_KEY environment variable
+  model_name: "gemini-2.0-flash-exp"  # Latest Gemini 2.5 model
+  max_search_results: 10
+  context_window_size: 8000  # Increased for Gemini 2.5
+  temperature: 0.1
+  max_tokens: 2000
 
 graph:
   # Graph generation settings

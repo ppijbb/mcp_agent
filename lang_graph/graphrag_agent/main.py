@@ -12,7 +12,14 @@ import argparse
 from config import ConfigManager
 from agents import GraphRAGAgent
 from utils.sample_data import create_sample_data
-from standalone_agent import StandaloneGraphRAGAgent
+
+# Import standalone agent with error handling
+try:
+    from standalone_agent import StandaloneGraphRAGAgent
+    STANDALONE_AGENT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: StandaloneGraphRAGAgent not available: {e}")
+    STANDALONE_AGENT_AVAILABLE = False
 
 
 async def main():
@@ -50,6 +57,10 @@ async def main():
     try:
         # Standalone mode
         if args.standalone:
+            if not STANDALONE_AGENT_AVAILABLE:
+                print("❌ Standalone agent not available. Please check dependencies.")
+                sys.exit(1)
+                
             agent = StandaloneGraphRAGAgent(agent_id=args.agent_id)
             
             if args.a2a_server:

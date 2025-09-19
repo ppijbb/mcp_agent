@@ -10,6 +10,7 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 import openai
+import google.generativeai as genai
 from config import AgentConfig
 
 
@@ -40,7 +41,19 @@ class LLMProcessor:
     def __init__(self, config: AgentConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.client = openai.OpenAI(api_key=config.openai_api_key)
+        
+        # Initialize OpenAI client
+        if config.openai_api_key:
+            self.openai_client = openai.OpenAI(api_key=config.openai_api_key)
+        else:
+            self.openai_client = None
+        
+        # Initialize Gemini client
+        if config.gemini_api_key:
+            genai.configure(api_key=config.gemini_api_key)
+            self.gemini_model = genai.GenerativeModel(config.model_name)
+        else:
+            self.gemini_model = None
         
     def extract_entities(self, text: str, user_intent: str = None) -> List[Entity]:
         """Extract entities from text using LLM"""
@@ -51,6 +64,24 @@ class LLMProcessor:
         except Exception as e:
             self.logger.error(f"Entity extraction failed: {e}")
             return []
+    
+    def extract_entities_batch(self, texts: List[str], user_intent: str = None) -> List[List[Entity]]:
+        """Extract entities from multiple texts in batch for better performance"""
+        try:
+            if not texts:
+                return []
+            
+            # Combine texts for batch processing
+            combined_text = "\n\n---TEXT_SEPARATOR---\n\n".join(texts)
+            prompt = self._build_batch_entity_extraction_prompt(combined_text, user_intent, len(texts))
+            
+            response = self._call_llm(prompt)
+            return self._parse_batch_entities_response(response, len(texts))
+            
+        except Exception as e:
+            self.logger.error(f"Batch entity extraction failed: {e}")
+            # Fallback to individual processing
+            return [self.extract_entities(text, user_intent) for text in texts]
     
     def extract_relationships(self, text: str, entities: List[Entity], user_intent: str = None) -> List[Relationship]:
         """Extract relationships between entities using LLM"""
@@ -118,6 +149,81 @@ Focus on entities that are relevant to the user's intent and desired graph struc
 """
         
         return base_prompt
+    
+    def _build_batch_entity_extraction_prompt(self, combined_text: str, user_intent: str = None, text_count: int = 1) -> str:
+        """Build prompt for batch entity extraction"""
+        base_prompt = f"""
+You are an expert at extracting entities from multiple texts. Analyze the following {text_count} texts and extract all relevant entities from each.
+
+Texts (separated by ---TEXT_SEPARATOR---):
+{combined_text}
+
+Please extract entities for each text and return them in the following JSON format:
+{{
+    "texts": [
+        {{
+            "text_index": 0,
+            "entities": [
+                {{
+                    "name": "entity_name",
+                    "category": "person|organization|location|time|event|concept|object|other",
+                    "confidence": 0.0-1.0,
+                    "context": "brief context where entity appears",
+                    "attributes": {{"key": "value"}}
+                }}
+            ]
+        }},
+        {{
+            "text_index": 1,
+            "entities": [...]
+        }}
+    ]
+}}
+
+Guidelines:
+- Extract ALL relevant entities from each text
+- Use appropriate categories based on context
+- Provide confidence scores based on certainty
+- Include relevant attributes when available
+- Be thorough but accurate
+- Process each text independently
+"""
+        
+        if user_intent:
+            base_prompt += f"""
+
+User Intent: "{user_intent}"
+Focus on entities that are relevant to the user's intent and desired graph structure.
+"""
+        
+        return base_prompt
+    
+    def _parse_batch_entities_response(self, response: str, text_count: int) -> List[List[Entity]]:
+        """Parse LLM response for batch entities"""
+        try:
+            data = json.loads(response)
+            results = [[] for _ in range(text_count)]
+            
+            for text_data in data.get("texts", []):
+                text_index = text_data.get("text_index", 0)
+                if 0 <= text_index < text_count:
+                    entities = []
+                    for entity_data in text_data.get("entities", []):
+                        entity = Entity(
+                            name=entity_data.get("name", ""),
+                            category=entity_data.get("category", "other"),
+                            confidence=entity_data.get("confidence", 0.5),
+                            context=entity_data.get("context", ""),
+                            attributes=entity_data.get("attributes", {})
+                        )
+                        entities.append(entity)
+                    results[text_index] = entities
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse batch entities response: {e}")
+            return [[] for _ in range(text_count)]
     
     def _build_relationship_extraction_prompt(self, text: str, entities: List[Entity], user_intent: str = None) -> str:
         """Build prompt for relationship extraction"""
@@ -228,7 +334,63 @@ Guidelines:
     def _call_llm(self, prompt: str) -> str:
         """Call the LLM with the given prompt"""
         try:
-            response = self.client.chat.completions.create(
+            # Use Gemini 2.5 if available, otherwise fallback to OpenAI
+            if self.gemini_model and "gemini" in self.config.model_name.lower():
+                return self._call_gemini(prompt)
+            elif self.openai_client:
+                return self._call_openai(prompt)
+            else:
+                self.logger.error("No LLM client available")
+                return "{}"
+        except Exception as e:
+            self.logger.error(f"LLM call failed: {e}")
+            return "{}"
+    
+    def _call_gemini(self, prompt: str) -> str:
+        """Call Gemini 2.5 with optimized settings"""
+        try:
+            system_prompt = "You are an expert knowledge graph analyst. Always respond with valid JSON."
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+            
+            # Optimized generation config for Gemini 2.5
+            generation_config = genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=min(self.config.max_tokens, 4000),  # Gemini 2.5 limit
+                top_p=0.8,
+                top_k=40,
+                candidate_count=1,
+                stop_sequences=None
+            )
+            
+            # Use safety settings for better performance
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"}
+            ]
+            
+            response = self.gemini_model.generate_content(
+                full_prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+            
+            # Handle response properly
+            if response.text:
+                return response.text
+            else:
+                self.logger.warning("Empty response from Gemini")
+                return "{}"
+                
+        except Exception as e:
+            self.logger.error(f"Gemini call failed: {e}")
+            return "{}"
+    
+    def _call_openai(self, prompt: str) -> str:
+        """Call OpenAI with the given prompt"""
+        try:
+            response = self.openai_client.chat.completions.create(
                 model=self.config.model_name,
                 messages=[
                     {"role": "system", "content": "You are an expert knowledge graph analyst. Always respond with valid JSON."},
@@ -239,7 +401,7 @@ Guidelines:
             )
             return response.choices[0].message.content
         except Exception as e:
-            self.logger.error(f"LLM call failed: {e}")
+            self.logger.error(f"OpenAI call failed: {e}")
             return "{}"
     
     def _parse_entities_response(self, response: str) -> List[Entity]:

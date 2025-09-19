@@ -11,10 +11,26 @@ import logging
 import sys
 import os
 from typing import Dict, Any, Optional
+from datetime import datetime
 from config import ConfigManager
 from agents.graphrag_agent import GraphRAGAgent
 from agents.natural_language_agent import NaturalLanguageAgent
 from utils.a2a_client import A2AClient, A2AServer, A2AMessage
+
+# Import intelligent agent components with error handling
+try:
+    from agents.intelligent_agent import IntelligentGraphRAGAgent
+    INTELLIGENT_AGENT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: IntelligentGraphRAGAgent not available: {e}")
+    INTELLIGENT_AGENT_AVAILABLE = False
+
+try:
+    from agents.autonomous_behavior import AutonomousBehaviorEngine
+    AUTONOMOUS_BEHAVIOR_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: AutonomousBehaviorEngine not available: {e}")
+    AUTONOMOUS_BEHAVIOR_AVAILABLE = False
 
 
 class StandaloneGraphRAGAgent:
@@ -34,6 +50,17 @@ class StandaloneGraphRAGAgent:
         # Initialize components
         self.graphrag_agent = GraphRAGAgent(self.config)
         self.nl_agent = NaturalLanguageAgent(self.config.agent)
+        
+        # Initialize intelligent agent components if available
+        if INTELLIGENT_AGENT_AVAILABLE:
+            self.intelligent_agent = IntelligentGraphRAGAgent(self.config.agent)
+        else:
+            self.intelligent_agent = None
+            
+        if AUTONOMOUS_BEHAVIOR_AVAILABLE:
+            self.autonomous_behavior = AutonomousBehaviorEngine(self.config.agent)
+        else:
+            self.autonomous_behavior = None
         
         # Initialize A2A client and server
         self.a2a_client = A2AClient(agent_id)
@@ -248,7 +275,58 @@ class StandaloneGraphRAGAgent:
             print("❌ GraphRAG operation failed")
     
     async def _process_command(self, command: str):
-        """Process a natural language command"""
+        """Process a natural language command with intelligent agent capabilities"""
+        try:
+            if self.intelligent_agent:
+                print(f"🧠 지능형 에이전트가 명령을 분석하고 있습니다...")
+                
+                # Use intelligent agent for deep understanding and autonomous execution
+                context = {
+                    "user_input": command,
+                    "agent_state": "processing",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # Process with intelligent agent
+                intelligent_result = await self.intelligent_agent.process_user_input(command, context)
+                
+                if intelligent_result.get("status") == "success":
+                    result = intelligent_result.get("result", {})
+                    suggestions = intelligent_result.get("suggestions", [])
+                    insights = intelligent_result.get("agent_insights", {})
+                    
+                    print(f"✅ {result.get('message', '지능형 에이전트가 작업을 완료했습니다.')}")
+                    
+                    # Show agent insights
+                    if insights:
+                        print(f"🤖 에이전트 인사이트:")
+                        for key, value in insights.items():
+                            print(f"   - {key}: {value}")
+                    
+                    # Show proactive suggestions
+                    if suggestions:
+                        print(f"💡 제안사항:")
+                        for suggestion in suggestions:
+                            print(f"   {suggestion}")
+                    
+                    # Execute autonomous actions if any
+                    await self._execute_autonomous_actions(context)
+                    
+                else:
+                    # Fallback to traditional processing
+                    await self._process_command_traditional(command)
+            else:
+                # Use traditional processing if intelligent agent not available
+                print(f"🤖 기본 에이전트가 명령을 처리하고 있습니다...")
+                await self._process_command_traditional(command)
+                
+        except Exception as e:
+            print(f"❌ 명령 처리 실패: {e}")
+            # Fallback to traditional processing
+            await self._process_command_traditional(command)
+    
+    async def _process_command_traditional(self, command: str):
+        """Traditional command processing as fallback"""
         try:
             # Parse command
             parsed_command = self.nl_agent.parse_command(command)
@@ -277,19 +355,58 @@ class StandaloneGraphRAGAgent:
         except Exception as e:
             print(f"❌ 명령 처리 실패: {e}")
     
+    async def _execute_autonomous_actions(self, context: Dict[str, Any]):
+        """Execute autonomous actions based on current context"""
+        try:
+            if not self.autonomous_behavior:
+                return
+                
+            # Analyze context for autonomous opportunities
+            autonomous_actions = await self.autonomous_behavior.analyze_context_and_act(context)
+            
+            if autonomous_actions:
+                print(f"🤖 {len(autonomous_actions)}개의 자율적 행동을 발견했습니다:")
+                
+                for action in autonomous_actions[:3]:  # Show top 3 actions
+                    print(f"   - {action.description} (우선순위: {action.priority}, 신뢰도: {action.confidence:.2f})")
+                
+                # Execute the highest priority action
+                if autonomous_actions:
+                    top_action = autonomous_actions[0]
+                    print(f"🚀 자율적 행동 실행: {top_action.description}")
+                    
+                    execution_result = await self.autonomous_behavior.execute_autonomous_action(top_action)
+                    
+                    if execution_result.get("success"):
+                        print(f"✅ 자율적 행동 완료: {execution_result.get('execution_time', 0):.2f}초")
+                    else:
+                        print(f"❌ 자율적 행동 실패: {execution_result.get('error', 'Unknown error')}")
+                        
+        except Exception as e:
+            print(f"❌ 자율적 행동 실행 실패: {e}")
+    
     async def _show_help(self):
         """Show help information"""
         help_text = """
-🤖 GraphRAG Agent - 사용 가능한 명령어들:
+🧠 지능형 GraphRAG Agent - 사용 가능한 명령어들:
+
+🤖 지능형 에이전트 기능:
+  - 자율적 의도 이해 및 해석
+  - 능동적 데이터 처리 및 분석
+  - 유연한 그래프 생성 및 시각화
+  - 지속적인 학습 및 개선
+  - 예측적 제안 및 최적화
 
 📊 그래프 생성:
   - "그래프 생성해줘" / "새로운 그래프 만들어줘"
   - "지식 그래프 생성"
   - "tech_companies.csv로 그래프 생성해줘"
+  - "scientific_research.csv 파일로 그래프 만들어줘"
 
 🔍 그래프 검색:
   - "Apple에 대해 알려줘"
   - "AI 관련 정보 찾아줘"
+  - "그래프에서 Microsoft 검색"
 
 📈 시각화:
   - "그래프 시각화해줘"
@@ -297,19 +414,28 @@ class StandaloneGraphRAGAgent:
 
 ⚡ 최적화:
   - "그래프 최적화해줘"
+  - "고품질로 그래프 개선"
 
 📊 상태 확인:
   - "현재 상태 보기"
   - "그래프 정보 알려줘"
+  - "에이전트 상태 보기"
 
 🎯 사용자 의도 기반:
   - "회사들의 관계를 중심으로 그래프 생성해줘"
   - "시간 순서대로 이벤트들을 정리해줘"
   - "인물들의 협력 관계를 보여줘"
 
+🧠 지능형 기능:
+  - "데이터 품질을 개선해줘"
+  - "그래프를 더 정확하게 만들어줘"
+  - "사용자 경험을 개선해줘"
+  - "시스템을 최적화해줘"
+
 ❓ 기타:
   - "help" - 이 도움말 보기
   - "quit" - 종료
+  - "status" - 에이전트 상태 확인
         """
         print(help_text)
     
