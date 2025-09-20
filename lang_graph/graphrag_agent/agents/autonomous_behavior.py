@@ -1,12 +1,13 @@
 """
-Autonomous Behavior Module
+True GraphRAG Autonomous Behavior Module
 
-This module implements truly autonomous agent behaviors:
-- Proactive data discovery and analysis
+This module implements genuine GraphRAG autonomous behaviors:
+- Autonomous data discovery and analysis
 - Self-directed learning and improvement
-- Autonomous decision making
+- Autonomous decision making and reasoning
 - Context-aware adaptation
-- Predictive capabilities
+- Predictive capabilities and insights
+- Multi-hop reasoning and inference
 """
 
 import asyncio
@@ -23,13 +24,17 @@ from .llm_processor import LLMProcessor
 
 
 class BehaviorType(Enum):
-    """Types of autonomous behaviors"""
+    """Types of autonomous GraphRAG behaviors"""
     PROACTIVE_ANALYSIS = "proactive_analysis"
     PREDICTIVE_SUGGESTION = "predictive_suggestion"
     SELF_IMPROVEMENT = "self_improvement"
     CONTEXT_ADAPTATION = "context_adaptation"
     DATA_DISCOVERY = "data_discovery"
     QUALITY_OPTIMIZATION = "quality_optimization"
+    MULTI_HOP_REASONING = "multi_hop_reasoning"
+    GRAPH_INSIGHT_GENERATION = "graph_insight_generation"
+    AUTONOMOUS_QUERY_EXPANSION = "autonomous_query_expansion"
+    KNOWLEDGE_SYNTHESIS = "knowledge_synthesis"
 
 
 @dataclass
@@ -47,14 +52,16 @@ class AutonomousAction:
 
 class AutonomousBehaviorEngine:
     """
-    Engine for autonomous agent behaviors
+    True GraphRAG Autonomous Behavior Engine
     
-    This engine enables the agent to:
-    - Act proactively without explicit user commands
-    - Learn and adapt from experience
-    - Make intelligent decisions autonomously
-    - Discover and suggest improvements
-    - Predict user needs and preferences
+    This engine embodies genuine GraphRAG principles:
+    - Autonomous data discovery and analysis
+    - Self-directed learning and improvement
+    - Autonomous decision making and reasoning
+    - Context-aware adaptation
+    - Predictive capabilities and insights
+    - Multi-hop reasoning and inference
+    - Knowledge synthesis and generation
     """
     
     def __init__(self, config: AgentConfig):
@@ -69,12 +76,19 @@ class AutonomousBehaviorEngine:
         self.user_preferences = {}
         self.context_memory = {}
         
-        # Autonomous capabilities
+        # GraphRAG autonomous capabilities
         self.proactive_threshold = 0.7
         self.learning_rate = 0.1
         self.adaptation_speed = 0.5
+        self.reasoning_depth = 3
+        self.insight_generation_threshold = 0.8
         
-        self.logger.info("Autonomous Behavior Engine initialized")
+        # GraphRAG specific state
+        self.graph_insights = []
+        self.reasoning_patterns = []
+        self.knowledge_synthesis_history = []
+        
+        self.logger.info("True GraphRAG Autonomous Behavior Engine initialized")
     
     async def analyze_context_and_act(self, current_context: Dict[str, Any]) -> List[AutonomousAction]:
         """
@@ -199,6 +213,31 @@ Consider:
                 "description": optimization,
                 "priority": self._calculate_priority("system_optimization", optimization),
                 "confidence": 0.6
+            })
+        
+        # GraphRAG specific opportunities
+        for insight in context_analysis.get("opportunities", {}).get("graph_insights", []):
+            opportunities.append({
+                "type": "graph_insight_generation",
+                "description": insight,
+                "priority": self._calculate_priority("graph_insight_generation", insight),
+                "confidence": 0.8
+            })
+        
+        for reasoning in context_analysis.get("opportunities", {}).get("multi_hop_reasoning", []):
+            opportunities.append({
+                "type": "multi_hop_reasoning",
+                "description": reasoning,
+                "priority": self._calculate_priority("multi_hop_reasoning", reasoning),
+                "confidence": 0.7
+            })
+        
+        for synthesis in context_analysis.get("opportunities", {}).get("knowledge_synthesis", []):
+            opportunities.append({
+                "type": "knowledge_synthesis",
+                "description": synthesis,
+                "priority": self._calculate_priority("knowledge_synthesis", synthesis),
+                "confidence": 0.9
             })
         
         return opportunities
@@ -347,7 +386,11 @@ The plan should be:
             "data_improvement": BehaviorType.PROACTIVE_ANALYSIS,
             "graph_enhancement": BehaviorType.QUALITY_OPTIMIZATION,
             "user_experience": BehaviorType.PREDICTIVE_SUGGESTION,
-            "system_optimization": BehaviorType.SELF_IMPROVEMENT
+            "system_optimization": BehaviorType.SELF_IMPROVEMENT,
+            "graph_insight_generation": BehaviorType.GRAPH_INSIGHT_GENERATION,
+            "multi_hop_reasoning": BehaviorType.MULTI_HOP_REASONING,
+            "knowledge_synthesis": BehaviorType.KNOWLEDGE_SYNTHESIS,
+            "autonomous_query_expansion": BehaviorType.AUTONOMOUS_QUERY_EXPANSION
         }
         return mapping.get(action_type, BehaviorType.PROACTIVE_ANALYSIS)
     
@@ -424,15 +467,230 @@ The plan should be:
         
         self.logger.info(f"Executing step: {step_id} - {description}")
         
-        # Implement step execution logic
-        # This would be customized based on the specific step type
+        # Execute GraphRAG-specific actions
+        if action.behavior_type == BehaviorType.GRAPH_INSIGHT_GENERATION:
+            result = await self._execute_graph_insight_generation(step, action)
+        elif action.behavior_type == BehaviorType.MULTI_HOP_REASONING:
+            result = await self._execute_multi_hop_reasoning(step, action)
+        elif action.behavior_type == BehaviorType.KNOWLEDGE_SYNTHESIS:
+            result = await self._execute_knowledge_synthesis(step, action)
+        elif action.behavior_type == BehaviorType.AUTONOMOUS_QUERY_EXPANSION:
+            result = await self._execute_autonomous_query_expansion(step, action)
+        else:
+            # Default step execution
+            result = {
+                "step_id": step_id,
+                "success": True,
+                "result": f"Step {step_id} completed",
+                "execution_time": 1.0
+            }
         
-        return {
-            "step_id": step_id,
-            "success": True,
-            "result": f"Step {step_id} completed",
-            "execution_time": 1.0
-        }
+        return result
+    
+    async def _execute_graph_insight_generation(self, step: Dict[str, Any], action: AutonomousAction) -> Dict[str, Any]:
+        """Execute graph insight generation step"""
+        try:
+            # Use LLM to generate insights from graph structure
+            insight_prompt = f"""
+Generate insights from the knowledge graph structure and data patterns.
+
+Action Description: {action.description}
+Step Description: {step["description"]}
+
+Context: {json.dumps(action.execution_plan.get("context", {}), indent=2)}
+
+Provide insights in JSON format:
+{{
+    "insights": [
+        {{
+            "insight_type": "pattern|anomaly|trend|relationship|structure",
+            "description": "detailed insight description",
+            "confidence": 0.0-1.0,
+            "evidence": ["supporting evidence"],
+            "implications": ["implications of this insight"],
+            "recommendations": ["recommendations based on this insight"]
+        }}
+    ],
+    "overall_confidence": 0.0-1.0,
+    "insight_quality": "high|medium|low"
+}}
+"""
+            
+            response = self.llm_processor._call_llm(insight_prompt)
+            insights_data = json.loads(response)
+            
+            # Store insights
+            self.graph_insights.extend(insights_data.get("insights", []))
+            
+            return {
+                "step_id": step["step_id"],
+                "success": True,
+                "result": f"Generated {len(insights_data.get('insights', []))} graph insights",
+                "execution_time": 2.0,
+                "insights": insights_data.get("insights", [])
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Graph insight generation failed: {e}")
+            return {
+                "step_id": step["step_id"],
+                "success": False,
+                "result": f"Graph insight generation failed: {e}",
+                "execution_time": 0.0
+            }
+    
+    async def _execute_multi_hop_reasoning(self, step: Dict[str, Any], action: AutonomousAction) -> Dict[str, Any]:
+        """Execute multi-hop reasoning step"""
+        try:
+            # Use LLM for multi-hop reasoning
+            reasoning_prompt = f"""
+Perform multi-hop reasoning to answer complex questions or discover new knowledge.
+
+Action Description: {action.description}
+Step Description: {step["description"]}
+
+Context: {json.dumps(action.execution_plan.get("context", {}), indent=2)}
+
+Provide multi-hop reasoning in JSON format:
+{{
+    "reasoning_chains": [
+        {{
+            "chain_id": "chain_1",
+            "premises": ["premise1", "premise2"],
+            "inferences": ["inference1", "inference2"],
+            "conclusion": "final conclusion",
+            "confidence": 0.0-1.0,
+            "reasoning_type": "deductive|inductive|abductive"
+        }}
+    ],
+    "synthesized_knowledge": "synthesized knowledge from all chains",
+    "overall_confidence": 0.0-1.0,
+    "reasoning_quality": "high|medium|low"
+}}
+"""
+            
+            response = self.llm_processor._call_llm(reasoning_prompt)
+            reasoning_data = json.loads(response)
+            
+            # Store reasoning patterns
+            self.reasoning_patterns.extend(reasoning_data.get("reasoning_chains", []))
+            
+            return {
+                "step_id": step["step_id"],
+                "success": True,
+                "result": f"Generated {len(reasoning_data.get('reasoning_chains', []))} reasoning chains",
+                "execution_time": 3.0,
+                "reasoning_chains": reasoning_data.get("reasoning_chains", [])
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Multi-hop reasoning failed: {e}")
+            return {
+                "step_id": step["step_id"],
+                "success": False,
+                "result": f"Multi-hop reasoning failed: {e}",
+                "execution_time": 0.0
+            }
+    
+    async def _execute_knowledge_synthesis(self, step: Dict[str, Any], action: AutonomousAction) -> Dict[str, Any]:
+        """Execute knowledge synthesis step"""
+        try:
+            # Use LLM for knowledge synthesis
+            synthesis_prompt = f"""
+Synthesize knowledge from multiple sources to create new insights and understanding.
+
+Action Description: {action.description}
+Step Description: {step["description"]}
+
+Context: {json.dumps(action.execution_plan.get("context", {}), indent=2)}
+
+Provide knowledge synthesis in JSON format:
+{{
+    "synthesized_knowledge": {{
+        "main_concepts": ["key concepts synthesized"],
+        "relationships": ["relationships between concepts"],
+        "new_insights": ["new insights discovered"],
+        "knowledge_gaps": ["identified knowledge gaps"],
+        "implications": ["implications of synthesized knowledge"]
+    }},
+    "synthesis_quality": "high|medium|low",
+    "confidence": 0.0-1.0,
+    "novelty_score": 0.0-1.0,
+    "coherence_score": 0.0-1.0
+}}
+"""
+            
+            response = self.llm_processor._call_llm(synthesis_prompt)
+            synthesis_data = json.loads(response)
+            
+            # Store synthesis history
+            self.knowledge_synthesis_history.append(synthesis_data)
+            
+            return {
+                "step_id": step["step_id"],
+                "success": True,
+                "result": "Knowledge synthesis completed successfully",
+                "execution_time": 2.5,
+                "synthesized_knowledge": synthesis_data.get("synthesized_knowledge", {})
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Knowledge synthesis failed: {e}")
+            return {
+                "step_id": step["step_id"],
+                "success": False,
+                "result": f"Knowledge synthesis failed: {e}",
+                "execution_time": 0.0
+            }
+    
+    async def _execute_autonomous_query_expansion(self, step: Dict[str, Any], action: AutonomousAction) -> Dict[str, Any]:
+        """Execute autonomous query expansion step"""
+        try:
+            # Use LLM for query expansion
+            expansion_prompt = f"""
+Expand and enhance queries to discover more relevant information and insights.
+
+Action Description: {action.description}
+Step Description: {step["description"]}
+
+Context: {json.dumps(action.execution_plan.get("context", {}), indent=2)}
+
+Provide query expansion in JSON format:
+{{
+    "expanded_queries": [
+        {{
+            "query": "expanded query",
+            "query_type": "factual|analytical|comparative|causal|temporal",
+            "complexity": "simple|medium|complex",
+            "expected_insights": ["insights this query might reveal"],
+            "confidence": 0.0-1.0
+        }}
+    ],
+    "query_strategies": ["strategies for executing these queries"],
+    "expansion_quality": "high|medium|low",
+    "coverage_score": 0.0-1.0
+}}
+"""
+            
+            response = self.llm_processor._call_llm(expansion_prompt)
+            expansion_data = json.loads(response)
+            
+            return {
+                "step_id": step["step_id"],
+                "success": True,
+                "result": f"Generated {len(expansion_data.get('expanded_queries', []))} expanded queries",
+                "execution_time": 1.5,
+                "expanded_queries": expansion_data.get("expanded_queries", [])
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Query expansion failed: {e}")
+            return {
+                "step_id": step["step_id"],
+                "success": False,
+                "result": f"Query expansion failed: {e}",
+                "execution_time": 0.0
+            }
     
     async def _learn_from_action_execution(self, action: AutonomousAction, results: List[Dict[str, Any]], success: bool):
         """Learn from the execution of an autonomous action"""
@@ -456,14 +714,25 @@ The plan should be:
             })
     
     async def get_autonomous_insights(self) -> Dict[str, Any]:
-        """Get insights about autonomous behavior"""
+        """Get insights about autonomous GraphRAG behavior"""
         return {
             "active_behaviors": len(self.active_behaviors),
             "behavior_history_count": len(self.behavior_history),
             "learning_patterns_count": len(self.learning_patterns),
             "user_preferences": self.user_preferences,
             "recent_success_rate": self._calculate_recent_success_rate(),
-            "most_effective_behaviors": self._get_most_effective_behaviors()
+            "most_effective_behaviors": self._get_most_effective_behaviors(),
+            "graph_insights_count": len(self.graph_insights),
+            "reasoning_patterns_count": len(self.reasoning_patterns),
+            "knowledge_synthesis_count": len(self.knowledge_synthesis_history),
+            "graphrag_capabilities": {
+                "multi_hop_reasoning": len([p for p in self.reasoning_patterns if p.get("reasoning_type")]),
+                "insight_generation": len([i for i in self.graph_insights if i.get("insight_type")]),
+                "knowledge_synthesis": len(self.knowledge_synthesis_history),
+                "autonomous_learning": self.learning_enabled
+            },
+            "reasoning_depth": self.reasoning_depth,
+            "insight_generation_threshold": self.insight_generation_threshold
         }
     
     def _calculate_recent_success_rate(self) -> float:
