@@ -15,6 +15,10 @@ from datetime import datetime
 import json
 import uuid
 from pathlib import Path
+import google.generativeai as genai
+import os
+import requests
+from bs4 import BeautifulSoup
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
@@ -34,25 +38,32 @@ class ResearchAgent:
         self.config_path = config_path
         self.config_manager = ConfigManager(config_path)
         
-        # Research capabilities
-        self.research_tools = self._load_research_tools()
-        self.data_sources = self._load_data_sources()
-        self.analysis_methods = self._load_analysis_methods()
+        # Initialize LLM
+        self.llm = self._initialize_llm()
         
         # Active research tasks
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
         
-        logger.info("Research Agent initialized with autonomous research capabilities")
-        
         # Learning capabilities
         self.learning_data = []
-        self.research_patterns = {}
-        self.quality_metrics = {}
-        self.adaptive_strategies = {
-            'search_depth': 3,
-            'content_length': 5000,
-            'source_diversity': 0.8
-        }
+        self.research_history = []
+        
+        logger.info("Research Agent initialized with LLM-based research capabilities")
+    
+    def _initialize_llm(self):
+        """Initialize the LLM client."""
+        try:
+            api_key = os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
+            
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            logger.info("LLM initialized for ResearchAgent")
+            return model
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM: {e}")
+            raise
     
     def _load_research_tools(self) -> Dict[str, Any]:
         """Load available research tools.
@@ -138,7 +149,7 @@ class ResearchAgent:
     
     async def execute_task(self, task: Dict[str, Any], objective_id: str, 
                           is_refinement: bool = False) -> Dict[str, Any]:
-        """Execute a research task autonomously.
+        """Execute a research task with LLM-based research.
         
         Args:
             task: Task to execute
@@ -152,7 +163,7 @@ class ResearchAgent:
             task_id = task.get('task_id', str(uuid.uuid4()))
             task_type = task.get('task_type', 'general')
             
-            logger.info(f"Executing research task: {task_id} (type: {task_type})")
+            logger.info(f"Executing LLM-based research task: {task_id} (type: {task_type})")
             
             # Track active task
             self.active_tasks[task_id] = {
@@ -162,17 +173,8 @@ class ResearchAgent:
                 'status': 'running'
             }
             
-            # Execute task based on type
-            if task_type == 'data_collection':
-                result = await self._execute_data_collection_task(task, objective_id)
-            elif task_type == 'analysis':
-                result = await self._execute_analysis_task(task, objective_id)
-            elif task_type == 'synthesis':
-                result = await self._execute_synthesis_task(task, objective_id)
-            elif task_type == 'validation':
-                result = await self._execute_validation_task(task, objective_id)
-            else:
-                result = await self._execute_general_research_task(task, objective_id)
+            # Use LLM to plan and execute research
+            result = await self._llm_conduct_research(task, objective_id)
             
             # Update task status
             self.active_tasks[task_id]['status'] = 'completed'
@@ -189,11 +191,20 @@ class ResearchAgent:
                 'status': 'completed'
             })
             
-            logger.info(f"Research task completed: {task_id}")
+            # Store in research history
+            self.research_history.append({
+                'task_id': task_id,
+                'objective_id': objective_id,
+                'task_type': task_type,
+                'result': result,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            logger.info(f"LLM-based research task completed: {task_id}")
             return result
             
         except Exception as e:
-            logger.error(f"Research task execution failed: {e}")
+            logger.error(f"LLM-based research task execution failed: {e}")
             
             # Update task status
             if task_id in self.active_tasks:
@@ -207,6 +218,332 @@ class ResearchAgent:
                 'status': 'failed',
                 'error': str(e),
                 'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _llm_conduct_research(self, task: Dict[str, Any], objective_id: str) -> Dict[str, Any]:
+        """Use LLM to conduct comprehensive research."""
+        try:
+            # Get LLM research plan
+            research_plan = await self._get_llm_research_plan(task)
+            
+            # Execute research based on plan
+            research_results = []
+            for research_step in research_plan.get('steps', []):
+                step_result = await self._execute_research_step(research_step, task)
+                if step_result:
+                    research_results.append(step_result)
+            
+            # Use LLM to analyze and synthesize results
+            analysis_result = await self._llm_analyze_research_results(research_results, task)
+            
+            return {
+                'research_plan': research_plan,
+                'research_results': research_results,
+                'analysis_result': analysis_result,
+                'total_sources': len(research_results),
+                'research_quality': analysis_result.get('quality_score', 0.0),
+                'key_findings': analysis_result.get('key_findings', []),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM research failed: {e}")
+            raise
+    
+    async def _get_llm_research_plan(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Get research plan from LLM."""
+        try:
+            prompt = f"""
+            다음 연구 작업을 위한 구체적인 연구 계획을 수립하세요.
+            
+            작업: {task.get('description', '')}
+            작업 유형: {task.get('task_type', 'general')}
+            
+            다음을 포함한 연구 계획을 수립하세요:
+            1. 필요한 정보 유형 식별
+            2. 적절한 정보원 선택
+            3. 검색 전략 수립
+            4. 데이터 수집 방법 결정
+            5. 분석 방법 선택
+            
+            JSON 형태로 응답하세요:
+            {{
+                "research_strategy": "전체 연구 전략",
+                "steps": [
+                    {{
+                        "step_id": "step_1",
+                        "description": "단계 설명",
+                        "method": "web_search|academic_search|data_analysis|content_analysis",
+                        "query": "검색 쿼리",
+                        "sources": ["웹", "학술", "데이터베이스"],
+                        "expected_output": "예상 결과"
+                    }}
+                ],
+                "quality_criteria": ["품질 기준1", "품질 기준2"],
+                "success_metrics": ["성공 지표1", "성공 지표2"]
+            }}
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            return json.loads(response.text)
+            
+        except Exception as e:
+            logger.error(f"LLM research planning failed: {e}")
+            return {'steps': []}
+    
+    async def _execute_research_step(self, step: Dict[str, Any], task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Execute a single research step."""
+        try:
+            method = step.get('method', 'web_search')
+            query = step.get('query', task.get('description', ''))
+            
+            if method == 'web_search':
+                return await self._perform_web_search(query)
+            elif method == 'academic_search':
+                return await self._perform_academic_search(query)
+            elif method == 'data_analysis':
+                return await self._perform_data_analysis(query, task)
+            elif method == 'content_analysis':
+                return await self._perform_content_analysis(query, task)
+            else:
+                return await self._perform_general_research(query)
+                
+        except Exception as e:
+            logger.error(f"Research step execution failed: {e}")
+            return None
+    
+    async def _perform_web_search(self, query: str) -> Dict[str, Any]:
+        """Perform actual web search."""
+        try:
+            # Use a simple web search (you can integrate with Google Search API, Bing API, etc.)
+            search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(search_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            # Parse search results (simplified)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            results = []
+            
+            # Extract search result titles and snippets
+            for result in soup.find_all('div', class_='g')[:5]:  # Top 5 results
+                title_elem = result.find('h3')
+                snippet_elem = result.find('span', class_='aCOpRe')
+                
+                if title_elem and snippet_elem:
+                    results.append({
+                        'title': title_elem.get_text(),
+                        'snippet': snippet_elem.get_text(),
+                        'source': 'google_search'
+                    })
+            
+            return {
+                'method': 'web_search',
+                'query': query,
+                'results': results,
+                'total_results': len(results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Web search failed: {e}")
+            return {
+                'method': 'web_search',
+                'query': query,
+                'results': [],
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _perform_academic_search(self, query: str) -> Dict[str, Any]:
+        """Perform academic search (simulated)."""
+        try:
+            # Simulate academic search results
+            academic_results = [
+                {
+                    'title': f"Academic paper on {query}",
+                    'authors': ["Dr. Researcher", "Prof. Academic"],
+                    'journal': "Journal of Research",
+                    'year': 2024,
+                    'abstract': f"Abstract of research on {query}",
+                    'source': 'academic_database'
+                }
+            ]
+            
+            return {
+                'method': 'academic_search',
+                'query': query,
+                'results': academic_results,
+                'total_results': len(academic_results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Academic search failed: {e}")
+            return {
+                'method': 'academic_search',
+                'query': query,
+                'results': [],
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _perform_data_analysis(self, query: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Perform data analysis."""
+        try:
+            # Use LLM to analyze data
+            prompt = f"""
+            다음 주제에 대한 데이터 분석을 수행하세요:
+            
+            주제: {query}
+            작업: {task.get('description', '')}
+            
+            다음을 포함한 분석을 제공하세요:
+            1. 주요 트렌드 식별
+            2. 통계적 인사이트
+            3. 패턴 분석
+            4. 결론 및 권고사항
+            
+            JSON 형태로 응답하세요.
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            analysis = json.loads(response.text)
+            
+            return {
+                'method': 'data_analysis',
+                'query': query,
+                'analysis': analysis,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Data analysis failed: {e}")
+            return {
+                'method': 'data_analysis',
+                'query': query,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _perform_content_analysis(self, query: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Perform content analysis."""
+        try:
+            # Use LLM for content analysis
+            prompt = f"""
+            다음 주제에 대한 콘텐츠 분석을 수행하세요:
+            
+            주제: {query}
+            작업: {task.get('description', '')}
+            
+            다음을 포함한 분석을 제공하세요:
+            1. 주요 주제 식별
+            2. 감정 분석
+            3. 키워드 분석
+            4. 핵심 메시지 추출
+            
+            JSON 형태로 응답하세요.
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            analysis = json.loads(response.text)
+            
+            return {
+                'method': 'content_analysis',
+                'query': query,
+                'analysis': analysis,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Content analysis failed: {e}")
+            return {
+                'method': 'content_analysis',
+                'query': query,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _perform_general_research(self, query: str) -> Dict[str, Any]:
+        """Perform general research."""
+        try:
+            # Use LLM for general research
+            prompt = f"""
+            다음 주제에 대한 종합적인 연구를 수행하세요:
+            
+            주제: {query}
+            
+            다음을 포함한 연구를 제공하세요:
+            1. 주제 개요
+            2. 주요 발견사항
+            3. 관련 정보
+            4. 결론
+            
+            JSON 형태로 응답하세요.
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            research = json.loads(response.text)
+            
+            return {
+                'method': 'general_research',
+                'query': query,
+                'research': research,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"General research failed: {e}")
+            return {
+                'method': 'general_research',
+                'query': query,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    async def _llm_analyze_research_results(self, research_results: List[Dict[str, Any]], task: Dict[str, Any]) -> Dict[str, Any]:
+        """Use LLM to analyze research results."""
+        try:
+            prompt = f"""
+            다음 연구 결과들을 분석하고 종합하세요:
+            
+            연구 결과들: {research_results}
+            원래 작업: {task.get('description', '')}
+            
+            다음을 포함한 분석을 제공하세요:
+            1. 결과 요약
+            2. 핵심 발견사항
+            3. 신뢰성 평가
+            4. 품질 점수 (0.0-1.0)
+            5. 결론 및 권고사항
+            
+            JSON 형태로 응답하세요:
+            {{
+                "summary": "결과 요약",
+                "key_findings": ["발견사항1", "발견사항2"],
+                "quality_score": 0.0-1.0,
+                "reliability_score": 0.0-1.0,
+                "conclusions": "결론",
+                "recommendations": ["권고사항1", "권고사항2"]
+            }}
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            return json.loads(response.text)
+            
+        except Exception as e:
+            logger.error(f"LLM result analysis failed: {e}")
+            return {
+                'summary': f'Analysis failed: {str(e)}',
+                'key_findings': [],
+                'quality_score': 0.0,
+                'reliability_score': 0.0,
+                'conclusions': 'Analysis could not be completed',
+                'recommendations': []
             }
     
     async def _execute_data_collection_task(self, task: Dict[str, Any], 

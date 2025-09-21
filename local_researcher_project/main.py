@@ -141,59 +141,25 @@ class AutonomousResearchSystem:
             logger.info(f"Starting autonomous research for objective: {objective.objective_id}")
             logger.info(f"User request: {user_request}")
             
-            # Phase 1: Autonomous Analysis
-            objective.status = "analyzing"
-            analysis_result = await self.orchestrator.analyze_objective(objective)
-            objective.analyzed_objectives = analysis_result
-            logger.info(f"Analysis completed: {len(analysis_result)} objectives identified")
+            # Use the new LLM-based orchestrator
+            objective_id = await self.orchestrator.start_autonomous_research(user_request, context)
             
-            # Phase 2: Task Decomposition and Agent Assignment
-            objective.status = "decomposing"
-            decomposition_result = await self.orchestrator.decompose_tasks(objective)
-            objective.decomposed_tasks = decomposition_result['tasks']
-            objective.assigned_agents = decomposition_result['assignments']
-            logger.info(f"Task decomposition completed: {len(objective.decomposed_tasks)} tasks assigned to {len(objective.assigned_agents)} agents")
+            # Get the updated objective from orchestrator
+            objective = self.active_objectives.get(objective_id)
+            if not objective:
+                # Create a simple objective for tracking
+                objective = ResearchObjective(user_request, context)
+                objective.objective_id = objective_id
+                self.active_objectives[objective_id] = objective
             
-            # Phase 3: Multi-Agent Execution with MCP Integration
-            objective.status = "executing"
-            execution_result = await self.orchestrator.execute_tasks(objective)
-            objective.execution_results = execution_result
-            logger.info(f"Multi-agent execution completed: {len(execution_result)} results generated")
+            logger.info(f"Autonomous research completed successfully: {objective_id}")
             
-            # Phase 4: Critical Evaluation and Recursive Execution
-            objective.status = "evaluating"
-            evaluation_result = await self.orchestrator.evaluate_results(objective)
-            objective.evaluation_results = evaluation_result
-            
-            # Check if recursive execution is needed
-            if evaluation_result.get('needs_recursion', False):
-                logger.info("Recursive execution required - restarting with refined objectives")
-                objective.status = "recursive_execution"
-                recursive_result = await self.orchestrator.execute_recursive_refinement(objective)
-                objective.execution_results.extend(recursive_result)
-                logger.info("Recursive execution completed")
-            
-            # Phase 5: Result Validation Against Original Objectives
-            objective.status = "validating"
-            validation_result = await self.orchestrator.validate_results(objective)
-            objective.validation_results = validation_result
-            logger.info(f"Validation completed: {validation_result.get('validation_score', 0):.2f}% match with original objectives")
-            
-            # Phase 6: Final Synthesis and Deliverable Generation
-            objective.status = "synthesizing"
-            synthesis_result = await self.orchestrator.synthesize_final_deliverable(objective)
-            objective.final_synthesis = synthesis_result
-            objective.status = "completed"
-            
-            logger.info(f"Autonomous research completed successfully: {objective.objective_id}")
-            logger.info(f"Final deliverable: {synthesis_result.get('deliverable_path', 'N/A')}")
-            
-            return objective.objective_id
+            return objective_id
             
         except Exception as e:
             logger.error(f"Autonomous research failed: {e}")
-            if objective.objective_id in self.active_objectives:
-                self.active_objectives[objective.objective_id].status = "failed"
+            if 'objective_id' in locals() and objective_id in self.active_objectives:
+                self.active_objectives[objective_id].status = "failed"
             raise
     
     async def get_research_status(self, objective_id: str) -> Optional[Dict[str, Any]]:
@@ -206,11 +172,17 @@ class AutonomousResearchSystem:
             Complete research status or None if not found
         """
         try:
-            if objective_id not in self.active_objectives:
-                return None
-                
-            objective = self.active_objectives[objective_id]
-            return objective.to_dict()
+            # Get status from orchestrator
+            status = await self.orchestrator.get_research_status(objective_id)
+            if status:
+                return status
+            
+            # Fallback to local objective if exists
+            if objective_id in self.active_objectives:
+                objective = self.active_objectives[objective_id]
+                return objective.to_dict()
+            
+            return None
             
         except Exception as e:
             logger.error(f"Failed to get research status: {e}")
@@ -226,12 +198,13 @@ class AutonomousResearchSystem:
             List of research objectives with full orchestration details
         """
         try:
-            objectives = list(self.active_objectives.values())
+            # Get list from orchestrator
+            objectives = await self.orchestrator.list_research()
             
             if status_filter:
-                objectives = [obj for obj in objectives if obj.status == status_filter]
+                objectives = [obj for obj in objectives if obj.get('status') == status_filter]
             
-            return [objective.to_dict() for objective in objectives]
+            return objectives
             
         except Exception as e:
             logger.error(f"Failed to list research: {e}")
@@ -247,18 +220,15 @@ class AutonomousResearchSystem:
             True if cancelled successfully, False otherwise
         """
         try:
-            if objective_id not in self.active_objectives:
-                logger.warning(f"Research objective not found: {objective_id}")
-                return False
-                
-            # Cancel all active agent tasks
-            await self.orchestrator.cancel_objective(objective_id)
+            # Cancel through orchestrator
+            success = await self.orchestrator.cancel_research(objective_id)
             
-            # Mark objective as cancelled
-            self.active_objectives[objective_id].status = "cancelled"
+            if success:
+                logger.info(f"Research objective cancelled: {objective_id}")
+            else:
+                logger.warning(f"Failed to cancel research objective: {objective_id}")
             
-            logger.info(f"Research objective cancelled: {objective_id}")
-            return True
+            return success
             
         except Exception as e:
             logger.error(f"Failed to cancel research: {e}")
@@ -289,7 +259,7 @@ class AutonomousResearchSystem:
                     print(f"\n🚀 Starting autonomous research for: {user_input}")
                     print("⏳ This may take several minutes...")
                     
-                    # Start enhanced autonomous research with iterative improvement
+                    # Start LLM-based autonomous research
                     objective_id = await self.orchestrator.start_autonomous_research(user_input)
                     
                     print(f"✅ Research objective created: {objective_id}")

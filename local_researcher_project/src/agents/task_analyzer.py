@@ -15,6 +15,8 @@ from datetime import datetime
 import json
 import re
 from pathlib import Path
+import google.generativeai as genai
+import os
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
@@ -34,22 +36,29 @@ class TaskAnalyzerAgent:
         self.config_path = config_path
         self.config_manager = ConfigManager(config_path)
         
-        # Analysis capabilities
-        self.analysis_patterns = self._load_analysis_patterns()
-        self.domain_knowledge = self._load_domain_knowledge()
-        self.objective_templates = self._load_objective_templates()
-        
-        logger.info("Task Analyzer Agent initialized with autonomous analysis capabilities")
+        # Initialize LLM
+        self.llm = self._initialize_llm()
         
         # Learning capabilities
         self.learning_data = []
-        self.analysis_patterns = self._load_analysis_patterns()
-        self.quality_metrics = {}
-        self.adaptive_thresholds = {
-            'complexity': 0.7,
-            'scope': 0.8,
-            'depth': 0.6
-        }
+        self.analysis_history = []
+        
+        logger.info("Task Analyzer Agent initialized with LLM-based analysis")
+    
+    def _initialize_llm(self):
+        """Initialize the LLM client."""
+        try:
+            api_key = os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
+            
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            logger.info("LLM initialized for TaskAnalyzerAgent")
+            return model
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM: {e}")
+            raise
     
     def _load_analysis_patterns(self) -> Dict[str, Any]:
         """Load analysis patterns for objective extraction.
@@ -138,7 +147,7 @@ class TaskAnalyzerAgent:
     
     async def analyze_objective(self, user_request: str, context: Optional[Dict[str, Any]] = None, 
                               objective_id: str = None) -> Dict[str, Any]:
-        """Autonomously analyze user request and extract research objectives.
+        """LLM-based analysis of user request and objective extraction.
         
         Args:
             user_request: The user's research request
@@ -149,55 +158,137 @@ class TaskAnalyzerAgent:
             Dictionary containing analyzed objectives and metadata
         """
         try:
-            logger.info(f"Starting autonomous analysis for objective: {objective_id}")
+            logger.info(f"Starting LLM-based analysis for objective: {objective_id}")
             
-            # Phase 1: Intent Analysis
-            intent_analysis = await self._analyze_research_intent(user_request)
+            # Use LLM for comprehensive analysis
+            analysis_result = await self._llm_analyze_request(user_request, context, objective_id)
             
-            # Phase 2: Domain Classification
-            domain_analysis = await self._classify_domain(user_request, context)
+            # Store analysis in history for learning
+            self.analysis_history.append({
+                'objective_id': objective_id,
+                'user_request': user_request,
+                'context': context,
+                'result': analysis_result,
+                'timestamp': datetime.now().isoformat()
+            })
             
-            # Phase 3: Scope Extraction
-            scope_analysis = await self._extract_scope(user_request, domain_analysis)
-            
-            # Phase 4: Constraint Identification
-            constraint_analysis = await self._identify_constraints(user_request, context)
-            
-            # Phase 5: Success Criteria Definition
-            success_criteria = await self._define_success_criteria(user_request, intent_analysis)
-            
-            # Phase 6: Objective Synthesis
-            objectives = await self._synthesize_objectives(
-                intent_analysis, domain_analysis, scope_analysis, 
-                constraint_analysis, success_criteria
-            )
-            
-            # Phase 7: Priority Assignment
-            prioritized_objectives = await self._assign_priorities(objectives, context)
-            
-            analysis_result = {
-                'objectives': prioritized_objectives,
-                'intent_analysis': intent_analysis,
-                'domain_analysis': domain_analysis,
-                'scope_analysis': scope_analysis,
-                'constraint_analysis': constraint_analysis,
-                'success_criteria': success_criteria,
-                'analysis_metadata': {
-                    'objective_id': objective_id,
-                    'timestamp': datetime.now().isoformat(),
-                    'analysis_version': '1.0',
-                    'confidence_score': self._calculate_confidence_score(
-                        intent_analysis, domain_analysis, scope_analysis
-                    )
-                }
-            }
-            
-            logger.info(f"Analysis completed: {len(prioritized_objectives)} objectives identified")
+            logger.info(f"LLM analysis completed: {len(analysis_result.get('objectives', []))} objectives identified")
             return analysis_result
             
         except Exception as e:
-            logger.error(f"Objective analysis failed: {e}")
+            logger.error(f"LLM objective analysis failed: {e}")
             raise
+    
+    async def _llm_analyze_request(self, user_request: str, context: Optional[Dict[str, Any]], 
+                                 objective_id: str) -> Dict[str, Any]:
+        """Use LLM to analyze the research request."""
+        try:
+            prompt = f"""
+            사용자의 연구 요청을 분석하고 구체적인 연구 목표들을 추출하세요.
+            
+            사용자 요청: {user_request}
+            추가 컨텍스트: {context or {}}
+            
+            다음을 수행하세요:
+            1. 요청의 핵심 의도 파악
+            2. 관련된 도메인 식별
+            3. 연구 범위와 깊이 결정
+            4. 제약사항과 요구사항 식별
+            5. 구체적인 연구 목표들 생성
+            6. 각 목표의 우선순위 설정
+            7. 성공 기준 정의
+            
+            JSON 형태로 응답하세요:
+            {{
+                "objectives": [
+                    {{
+                        "objective_id": "unique_id",
+                        "type": "primary|secondary|quality",
+                        "description": "목표 설명",
+                        "intent": "analysis|comparison|exploration|development",
+                        "domain": "identified_domain",
+                        "scope": "general|focused|comprehensive",
+                        "depth": "basic|standard|comprehensive",
+                        "priority": 0.0-1.0,
+                        "constraints": {{
+                            "time_constraints": [],
+                            "resource_constraints": [],
+                            "quality_constraints": [],
+                            "scope_constraints": []
+                        }},
+                        "success_criteria": {{
+                            "deliverable_types": [],
+                            "quality_metrics": [],
+                            "completion_indicators": [],
+                            "success_threshold": 0.0-1.0
+                        }},
+                        "estimated_effort": 0.0-1.0,
+                        "dependencies": []
+                    }}
+                ],
+                "intent_analysis": {{
+                    "primary_intent": "main_intent",
+                    "secondary_intents": [],
+                    "intent_confidence": 0.0-1.0,
+                    "research_type": "analytical|comparative|exploratory|developmental"
+                }},
+                "domain_analysis": {{
+                    "primary_domain": "domain",
+                    "subdomains": [],
+                    "domain_confidence": 0.0-1.0,
+                    "domain_keywords": []
+                }},
+                "scope_analysis": {{
+                    "scope_type": "general_analysis|comparative|trend_analysis|literature_review",
+                    "scope_boundaries": [],
+                    "scope_depth": "basic|standard|comprehensive",
+                    "scope_keywords": []
+                }},
+                "constraint_analysis": {{
+                    "time_constraints": [],
+                    "resource_constraints": [],
+                    "quality_constraints": [],
+                    "scope_constraints": []
+                }},
+                "success_criteria": {{
+                    "deliverable_types": [],
+                    "quality_metrics": [],
+                    "completion_indicators": [],
+                    "success_threshold": 0.0-1.0
+                }},
+                "analysis_metadata": {{
+                    "objective_id": "{objective_id}",
+                    "timestamp": "{datetime.now().isoformat()}",
+                    "analysis_version": "2.0",
+                    "confidence_score": 0.0-1.0,
+                    "complexity_level": "low|medium|high",
+                    "estimated_duration": "short|medium|long"
+                }}
+            }}
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            result = json.loads(response.text)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"LLM analysis failed: {e}")
+            # Return minimal fallback
+            return {
+                'objectives': [{
+                    'objective_id': f"primary_{objective_id}",
+                    'type': 'primary',
+                    'description': user_request,
+                    'priority': 1.0,
+                    'success_criteria': {'success_threshold': 0.8}
+                }],
+                'analysis_metadata': {
+                    'objective_id': objective_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'confidence_score': 0.5
+                }
+            }
     
     async def _analyze_research_intent(self, user_request: str) -> Dict[str, Any]:
         """Analyze the research intent from user request.

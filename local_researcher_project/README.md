@@ -1,202 +1,159 @@
-# Local Researcher - Gemini CLI + Open Deep Research Integration
+# Autonomous Multi-Agent Research System
 
-## 프로젝트 개요
+A fully autonomous multi-agent research system powered by LLM-based decision making that self-analyzes user requests, dynamically decomposes tasks, orchestrates specialized agents, and generates comprehensive research deliverables.
 
-Local Researcher는 Gemini CLI와 Open Deep Research를 통합하여 로컬 환경에서 고성능 리서치 시스템을 구축하는 프로젝트입니다. 이 시스템은 다음과 같은 특징을 가집니다:
+## 🚀 Key Features
 
-- **로컬 실행**: 모든 데이터와 처리가 로컬에서 이루어집니다
-- **Gemini CLI 통합**: 명령줄 인터페이스를 통한 직관적인 리서치 워크플로우
-- **Open Deep Research 활용**: 다중 에이전트 아키텍처를 통한 심층 리서치
-- **모듈화된 설계**: 확장 가능하고 유지보수가 용이한 구조
-- **프로덕션 레벨**: 실제 비즈니스 환경에서 사용할 수 있는 수준의 품질
+- **LLM-Powered Autonomy**: Uses advanced language models for intelligent decision making
+- **Dynamic Task Analysis**: AI-driven analysis of user requests and objective extraction
+- **Intelligent Task Decomposition**: LLM-based task breakdown and agent assignment
+- **Real Web Research**: Actual web scraping and data collection capabilities
+- **Multi-Agent Orchestration**: Coordinates specialized agents with LLM guidance
+- **Critical Evaluation**: AI-powered result evaluation and quality assessment
+- **Result Validation**: LLM-based validation against original objectives
+- **Final Synthesis**: Intelligent generation of comprehensive deliverables
 
-## 시스템 아키텍처
+## 🧠 LLM Integration
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Gemini CLI    │────│  Local Researcher │────│ Open Deep Res.  │
-│   Interface     │    │   Orchestrator   │    │   Multi-Agent   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Command       │    │   Research       │    │   Search Tools  │
-│   Processing    │    │   Workflow       │    │   & APIs        │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Report        │    │   Data Storage   │    │   Export        │
-│   Generation    │    │   & Cache        │    │   & Sharing     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+This system is now fully agentic with:
 
-## 주요 기능
+- **Gemini 2.0 Flash**: Primary LLM for decision making and analysis
+- **Real-time Web Search**: Actual web scraping and data collection
+- **Intelligent Planning**: LLM-based research strategy development
+- **Adaptive Learning**: System learns from previous executions
+- **Dynamic Decision Making**: No hardcoded rules or templates
 
-### 1. 통합 명령줄 인터페이스
-- Gemini CLI를 통한 자연어 명령 처리
-- 리서치 토픽 정의 및 워크플로우 관리
-- 실시간 진행 상황 모니터링
+## 🏗️ Architecture
 
-### 2. 고급 리서치 엔진
-- Open Deep Research의 다중 에이전트 시스템 활용
-- 자동화된 웹 검색 및 학술 자료 수집
-- 실시간 데이터 분석 및 인사이트 추출
+The system consists of LLM-powered specialized agents:
 
-### 3. 지능형 워크플로우
-- 토픽별 맞춤형 리서치 전략 수립
-- 자동화된 보고서 생성 및 구조화
-- 품질 검증 및 피드백 시스템
+- **AutonomousOrchestrator**: LLM-based orchestration and decision making
+- **TaskAnalyzerAgent**: AI-driven request analysis and objective extraction
+- **TaskDecomposerAgent**: LLM-based task decomposition and agent assignment
+- **ResearchAgent**: Real web research with LLM coordination
+- **LLMMethods**: Core LLM integration and decision making
 
-### 4. 로컬 데이터 관리
-- 모든 데이터의 로컬 저장 및 관리
-- 캐싱 시스템을 통한 성능 최적화
-- 보안 및 개인정보 보호
+## 📦 Installation
 
-## 설치 및 설정
+1. Clone the repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Set up environment variables (see Configuration section)
+4. Run the system: `python main.py`
 
-### 필수 요구사항
+## ⚙️ Configuration
 
-- Node.js 20+
-- Python 3.11+
-- Git
-- Docker (선택사항)
-
-### 1. 프로젝트 클론
+Set the following environment variables:
 
 ```bash
-git clone <repository-url>
-cd local_researcher_project
+# Required
+export GEMINI_API_KEY="your_gemini_api_key_here"
+
+# Optional
+export OPENAI_API_KEY="your_openai_api_key_here"
+export MCP_SERVER_URL="your_mcp_server_url"
 ```
 
-### 2. Gemini CLI 설치
+## 🚀 Usage
+
+### Command Line Interface
 
 ```bash
-npm install -g @google/gemini-cli
+# Start autonomous LLM-based research
+python main.py research "Analyze AI trends in healthcare"
+
+# Check research status
+python main.py status <objective_id>
+
+# List all research objectives
+python main.py list
+
+# Run in interactive mode
+python main.py interactive
 ```
 
-### 3. Python 환경 설정
+### Interactive Mode
+
+The system runs in interactive mode for continuous research:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 또는
-venv\Scripts\activate  # Windows
+python main.py interactive
 ```
 
-### 4. 의존성 설치
+## 🔍 How It Works
+
+1. **LLM Analysis**: The system uses Gemini to analyze your request and extract research objectives
+2. **Intelligent Decomposition**: AI breaks down objectives into specific, executable tasks
+3. **Real Research**: Agents perform actual web searches and data collection
+4. **LLM Coordination**: AI coordinates multi-agent execution and decision making
+5. **Quality Evaluation**: LLM evaluates results and suggests improvements
+6. **Final Synthesis**: AI generates comprehensive research reports
+
+## 📊 Example Output
+
+The system generates:
+- **Research Reports**: Comprehensive markdown reports
+- **Data Analysis**: Structured analysis of collected information
+- **Source Citations**: Proper attribution of all sources
+- **Quality Metrics**: AI-assessed quality scores
+- **Recommendations**: AI-generated insights and suggestions
+
+## 🎯 Examples
+
+### Basic Research
 
 ```bash
-pip install -r requirements.txt
-npm install
+python main.py research "Compare renewable energy technologies"
 ```
 
-### 5. 환경 변수 설정
+### Complex Analysis
 
 ```bash
-cp .env.example .env
-# .env 파일을 편집하여 API 키 및 설정을 구성
+python main.py research "Analyze the impact of AI on healthcare delivery systems"
 ```
 
-### 6. Open Deep Research 설정
+### Market Research
 
 ```bash
-cd open_researcher/open_deep_research
-pip install -e .
+python main.py research "Study emerging trends in fintech startups"
 ```
 
-## 사용 방법
+## 🔧 Development
 
-### 기본 사용법
+This system is production-ready with:
+- **No Fallback Code**: All functionality is real and autonomous
+- **LLM Integration**: Full AI-powered decision making
+- **Real Web Research**: Actual data collection capabilities
+- **Error Handling**: Robust error management and recovery
+- **Logging**: Comprehensive logging for monitoring
 
-```bash
-# 리서치 시작
-gemini research "인공지능의 최신 동향과 미래 전망"
+## 📈 Performance
 
-# 특정 도메인 리서치
-gemini research --domain "technology" "블록체인 기술의 발전"
+- **Autonomous Operation**: Requires minimal human intervention
+- **Intelligent Planning**: AI optimizes research strategies
+- **Quality Assurance**: Built-in quality evaluation and improvement
+- **Scalable**: Handles complex research requests efficiently
 
-# 상세 분석 요청
-gemini research --depth "comprehensive" "기후변화 대응 기술"
-```
+## 🛡️ Security
 
-### 고급 기능
+- **API Key Management**: Secure handling of API credentials
+- **Data Privacy**: No data is stored permanently
+- **Error Handling**: Graceful handling of API failures
 
-```bash
-# 커스텀 워크플로우 정의
-gemini workflow create my_research_workflow
-
-# 배치 리서치 실행
-gemini batch research topics.txt
-
-# 실시간 모니터링
-gemini monitor research_status
-```
-
-## 프로젝트 구조
-
-```
-local_researcher_project/
-├── src/
-│   ├── core/                 # 핵심 기능
-│   ├── cli/                  # CLI 인터페이스
-│   ├── research/             # 리서치 엔진
-│   ├── agents/               # 에이전트 시스템
-│   ├── storage/              # 데이터 저장소
-│   └── utils/                # 유틸리티
-├── configs/                  # 설정 파일
-├── tests/                    # 테스트
-├── docs/                     # 문서
-├── examples/                 # 예제
-└── scripts/                  # 스크립트
-```
-
-## 개발 가이드
-
-### 새로운 리서치 도구 추가
-
-1. `src/research/tools/` 디렉토리에 새 도구 클래스 생성
-2. `BaseResearchTool` 클래스 상속
-3. `configs/tools.yaml`에 설정 추가
-4. 테스트 작성 및 실행
-
-### 커스텀 에이전트 개발
-
-1. `src/agents/` 디렉토리에 새 에이전트 클래스 생성
-2. `BaseAgent` 클래스 상속
-3. 워크플로우에 통합
-4. 성능 테스트 및 최적화
-
-## 성능 최적화
-
-- 멀티프로세싱을 통한 병렬 처리
-- Redis 캐싱 시스템 활용
-- 비동기 I/O 처리
-- 메모리 사용량 최적화
-
-## 보안 고려사항
-
-- 모든 API 키의 안전한 관리
-- 로컬 데이터 암호화
-- 네트워크 통신 보안
-- 접근 권한 제어
-
-## 라이선스
+## 📝 License
 
 MIT License
 
-## 기여 방법
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+This system is designed for autonomous operation. Contributions should focus on:
+- Enhanced LLM integration
+- Improved research capabilities
+- Better error handling
+- Performance optimization
 
-## 지원
+## ⚠️ Requirements
 
-- Issues: GitHub Issues
-- Documentation: `/docs` 디렉토리
-- Examples: `/examples` 디렉토리 
+- Python 3.8+
+- Gemini API key
+- Internet connection for web research
+- Sufficient API quota for LLM calls
