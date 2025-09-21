@@ -138,7 +138,7 @@ class RAGAgentNode:
             )
             
             # Step 4: Learning from the query process
-            await self._learn_from_query_processing(query_analysis, retrieval_results, state["query"])
+            self._learn_from_query_processing(query_analysis, retrieval_results, state["query"])
             
             # Update state
             state["query_analysis"] = query_analysis
@@ -442,7 +442,7 @@ Response:
         response = self.llm_processor._call_llm(response_prompt)
         return response
     
-    async def _learn_from_query_processing(self, query_analysis: QueryAnalysis, retrieval_results: List[RetrievalResult], query: str):
+    def _learn_from_query_processing(self, query_analysis: QueryAnalysis, retrieval_results: List[RetrievalResult], query: str):
         """Learn from the query processing for future improvements"""
         if not self.learning_enabled:
             return

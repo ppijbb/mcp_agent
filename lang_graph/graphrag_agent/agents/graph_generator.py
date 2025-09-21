@@ -108,7 +108,7 @@ class GraphGeneratorNode:
             optimized_graph = self._optimize_and_validate_graph(knowledge_graph, construction_plan)
             
             # Step 5: Learning from the process
-            await self._learn_from_graph_construction(construction_plan, optimized_graph, user_intent)
+            self._learn_from_graph_construction(construction_plan, optimized_graph, user_intent)
             
             # Calculate statistics
             stats = self._calculate_advanced_stats(optimized_graph)
@@ -671,7 +671,7 @@ Guidelines:
         quality_score = (density * 0.3 + clustering * 0.2 + entity_coverage * 0.3 + relationship_quality * 0.2)
         return min(1.0, quality_score)
     
-    async def _learn_from_graph_construction(self, construction_plan: GraphConstructionPlan, graph: nx.Graph, user_intent: str):
+    def _learn_from_graph_construction(self, construction_plan: GraphConstructionPlan, graph: nx.Graph, user_intent: str):
         """Learn from the graph construction process"""
         if not self.learning_enabled:
             return

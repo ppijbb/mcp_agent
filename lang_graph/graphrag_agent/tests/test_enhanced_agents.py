@@ -11,23 +11,23 @@ from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime
 from typing import Dict, Any
 
-from ..agents.domain_specialist_agent import (
+from agents.domain_specialist_agent import (
     DomainSpecialistAgent, DomainSpecialistConfig, DomainType, 
     DomainEntitySchema, DomainRelationshipSchema
 )
-from ..agents.realtime_update_agent import (
+from agents.realtime_update_agent import (
     RealtimeUpdateAgent, RealtimeUpdateConfig, DataSource, DataSourceType,
     UpdateEvent, UpdateStrategy
 )
-from ..agents.query_optimizer_agent import (
+from agents.query_optimizer_agent import (
     QueryOptimizerAgent, QueryOptimizerConfig, QueryType, SearchStrategy,
     QueryIntent, SearchResult
 )
-from ..agents.security_privacy_agent import (
+from agents.security_privacy_agent import (
     SecurityPrivacyAgent, SecurityPrivacyConfig, DataClassification, 
     PrivacyLevel, SecurityThreat, SecurityPolicy, PrivacyRule
 )
-from ..agents.prompt_engine_agent import (
+from agents.prompt_engine_agent import (
     PromptEngineAgent, PromptEngineConfig, PromptType, PromptTemplate,
     PromptContext, PromptResult
 )
