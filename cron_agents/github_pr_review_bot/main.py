@@ -58,6 +58,8 @@ class PRInfo:
     head_ref: str
     base_ref: str
     action: str
+    detailed_changes: Optional[Dict[str, Any]] = None
+    line_by_line_changes: Optional[Dict[str, Any]] = None
 
 # 봇 인스턴스
 github_client = None
@@ -160,16 +162,22 @@ def parse_payload(payload: bytes) -> Dict[str, Any]:
         raise ValueError(f"웹훅 페이로드 파싱 실패: {e}")
 
 def extract_pr_info(event_data: Dict[str, Any]) -> PRInfo:
-    """PR 정보 추출 - 단순화된 버전"""
+    """PR 정보 추출 - 향상된 변경사항 추적"""
     pr = event_data.get('pull_request', {})
     repository = event_data.get('repository', {})
     
     if not pr or not repository:
         raise ValueError("PR 또는 저장소 정보가 없습니다.")
     
-    # PR 파일 정보 조회
+    # PR 파일 정보 조회 (향상된 버전)
     pr_files = github_client.get_pr_files(repository['full_name'], pr['number'])
     pr_diff = github_client.get_pr_diff(repository['full_name'], pr['number'])
+    
+    # 상세한 변경사항 분석
+    detailed_changes = github_client.get_detailed_changes(repository['full_name'], pr['number'])
+    
+    # 라인별 변경사항 분석
+    line_by_line_changes = github_client.get_line_by_line_changes(repository['full_name'], pr['number'])
     
     # 언어 감지
     language = detect_language(pr_files)
@@ -181,7 +189,7 @@ def extract_pr_info(event_data: Dict[str, Any]) -> PRInfo:
         pr_body=pr.get('body', ''),
         pr_diff=pr_diff,
         language=language,
-        files=[f.filename for f in pr_files],
+        files=[f['filename'] for f in pr_files],  # 딕셔너리 형태로 변경
         author=pr.get('user', {}).get('login', 'unknown'),
         stats={
             'additions': pr.get('additions', 0),
@@ -190,7 +198,9 @@ def extract_pr_info(event_data: Dict[str, Any]) -> PRInfo:
         },
         head_ref=pr.get('head', {}).get('ref', ''),
         base_ref=pr.get('base', {}).get('ref', ''),
-        action=event_data.get('action', '')
+        action=event_data.get('action', ''),
+        detailed_changes=detailed_changes,  # 상세 변경사항 추가
+        line_by_line_changes=line_by_line_changes  # 라인별 변경사항 추가
     )
 
 def detect_language(pr_files: List[Any]) -> str:
@@ -200,7 +210,12 @@ def detect_language(pr_files: List[Any]) -> str:
     
     extensions = {}
     for file in pr_files:
-        filename = file.filename
+        # 딕셔너리 형태와 객체 형태 모두 지원
+        if isinstance(file, dict):
+            filename = file.get('filename', '')
+        else:
+            filename = getattr(file, 'filename', '')
+            
         if '.' in filename:
             ext = filename.split('.')[-1].lower()
             extensions[ext] = extensions.get(ext, 0) + 1
@@ -251,7 +266,7 @@ def should_review_pr(pr_info: PRInfo) -> bool:
     return any(keyword in pr_info.pr_body for keyword in review_keywords)
 
 def generate_review(pr_info: PRInfo) -> str:
-    """리뷰 생성 - MCP 연동 Gemini CLI 사용"""
+    """리뷰 생성 - 향상된 변경사항 추적 기반"""
     try:
         # MCP 서비스를 통한 향상된 코드 분석
         mcp_result = mcp_manager.analyze_code(
@@ -264,7 +279,9 @@ def generate_review(pr_info: PRInfo) -> str:
                 "author": pr_info.author,
                 "files": pr_info.files,
                 "repo_full_name": pr_info.repo_full_name,
-                "file_path": f"{pr_info.repo_full_name}#{pr_info.pr_number}"
+                "file_path": f"{pr_info.repo_full_name}#{pr_info.pr_number}",
+                "detailed_changes": pr_info.detailed_changes,
+                "line_by_line_changes": pr_info.line_by_line_changes
             }
         )
         
@@ -272,7 +289,7 @@ def generate_review(pr_info: PRInfo) -> str:
         review_parts = []
         
         # 헤더
-        review_parts.append(f"## 🔍 PR #{pr_info.pr_number} 리뷰 (무료 AI 리뷰)")
+        review_parts.append(f"## 🔍 PR #{pr_info.pr_number} 리뷰 (향상된 변경사항 추적)")
         review_parts.append("")
         
         # 기본 정보
@@ -283,6 +300,108 @@ def generate_review(pr_info: PRInfo) -> str:
         review_parts.append(f"- **변경된 파일**: {len(pr_info.files)}개")
         review_parts.append(f"- **변경 통계**: +{pr_info.stats['additions']}/-{pr_info.stats['deletions']}")
         review_parts.append("")
+        
+        # 상세 변경사항 분석 (새로운 기능)
+        if pr_info.detailed_changes:
+            review_parts.append("### 🔍 상세 변경사항 분석")
+            change_summary = pr_info.detailed_changes.get('summary', {})
+            review_parts.append(f"- **총 파일 수**: {change_summary.get('total_files', 0)}개")
+            review_parts.append(f"- **총 변경 라인**: {change_summary.get('total_changes', 0)}줄")
+            review_parts.append(f"- **커밋 수**: {change_summary.get('commits_count', 0)}개")
+            review_parts.append("")
+            
+            # 변경 카테고리 분석
+            categories = pr_info.detailed_changes.get('change_categories', {})
+            if categories.get('new_files'):
+                review_parts.append("#### 📁 새로 추가된 파일")
+                for file_info in categories['new_files']:
+                    review_parts.append(f"- `{file_info['filename']}` ({file_info['changes']}줄)")
+                review_parts.append("")
+            
+            if categories.get('deleted_files'):
+                review_parts.append("#### 🗑️ 삭제된 파일")
+                for file_info in categories['deleted_files']:
+                    review_parts.append(f"- `{file_info['filename']}` ({file_info['changes']}줄)")
+                review_parts.append("")
+            
+            if categories.get('critical_files'):
+                review_parts.append("#### ⚠️ 중요 파일 변경")
+                for file_info in categories['critical_files']:
+                    review_parts.append(f"- `{file_info['filename']}` ({file_info['change_type']}, {file_info['changes']}줄)")
+                review_parts.append("")
+            
+            # 영향도 분석
+            impact_analysis = pr_info.detailed_changes.get('impact_analysis', {})
+            if impact_analysis.get('api_changes'):
+                review_parts.append("#### 🔌 API 변경사항")
+                for change in impact_analysis['api_changes']:
+                    review_parts.append(f"- `{change['file']}`: {change['type']}")
+                review_parts.append("")
+            
+            if impact_analysis.get('breaking_changes'):
+                review_parts.append("#### 💥 잠재적 Breaking Changes")
+                for change in impact_analysis['breaking_changes']:
+                    review_parts.append(f"- `{change['file']}`: {change['type']}")
+                review_parts.append("")
+            
+            if impact_analysis.get('dependency_changes'):
+                review_parts.append("#### 📦 의존성 변경사항")
+                for change in impact_analysis['dependency_changes']:
+                    review_parts.append(f"- `{change['file']}`: {change['type']}")
+                review_parts.append("")
+            
+            # 의미적 변경사항 분석
+            semantic_changes = pr_info.detailed_changes.get('semantic_changes', {})
+            if any(semantic_changes.values()):
+                review_parts.append("#### 🎯 의미적 변경사항")
+                for category, changes in semantic_changes.items():
+                    if changes:
+                        category_name = {
+                            'feature_additions': '새 기능 추가',
+                            'bug_fixes': '버그 수정',
+                            'refactoring': '리팩토링',
+                            'performance_improvements': '성능 개선',
+                            'security_updates': '보안 업데이트'
+                        }.get(category, category)
+                        review_parts.append(f"- **{category_name}**: {len(changes)}개 파일")
+                review_parts.append("")
+        
+        # 라인별 변경사항 분석 (새로운 기능)
+        if pr_info.line_by_line_changes:
+            review_parts.append("### 📝 라인별 변경사항 분석")
+            line_summary = pr_info.line_by_line_changes.get('summary', {})
+            review_parts.append(f"- **분석된 파일**: {line_summary.get('total_files_analyzed', 0)}개")
+            review_parts.append(f"- **추가된 라인**: {line_summary.get('total_lines_added', 0)}줄")
+            review_parts.append(f"- **삭제된 라인**: {line_summary.get('total_lines_removed', 0)}줄")
+            review_parts.append("")
+            
+            # 중요 변경사항 표시
+            critical_changes = []
+            function_changes = []
+            import_changes = []
+            
+            for file_change in pr_info.line_by_line_changes.get('file_changes', []):
+                critical_changes.extend(file_change.get('critical_changes', []))
+                function_changes.extend(file_change.get('function_changes', []))
+                import_changes.extend(file_change.get('import_changes', []))
+            
+            if critical_changes:
+                review_parts.append("#### ⚠️ 중요 변경사항 감지")
+                for change in critical_changes[:5]:  # 최대 5개만 표시
+                    review_parts.append(f"- `{change['line'][:50]}...` ({change['type']})")
+                review_parts.append("")
+            
+            if function_changes:
+                review_parts.append("#### 🔧 함수 변경사항")
+                for change in function_changes[:5]:  # 최대 5개만 표시
+                    review_parts.append(f"- `{change['function_name']}` ({change['type']})")
+                review_parts.append("")
+            
+            if import_changes:
+                review_parts.append("#### 📦 Import 변경사항")
+                for change in import_changes[:5]:  # 최대 5개만 표시
+                    review_parts.append(f"- `{change['module']}` ({change['type']})")
+                review_parts.append("")
         
         # AI 분석 결과
         analysis_type = mcp_result.get('analysis_type', 'unknown')
@@ -545,6 +664,8 @@ async def manual_review(repo_owner: str, repo_name: str, pr_number: int):
         pr = github_client.get_pull_request(repo_full_name, pr_number)
         pr_files = github_client.get_pr_files(repo_full_name, pr_number)
         pr_diff = github_client.get_pr_diff(repo_full_name, pr_number)
+        detailed_changes = github_client.get_detailed_changes(repo_full_name, pr_number)
+        line_by_line_changes = github_client.get_line_by_line_changes(repo_full_name, pr_number)
         
         # PR 정보 생성
         pr_info = PRInfo(
@@ -554,7 +675,7 @@ async def manual_review(repo_owner: str, repo_name: str, pr_number: int):
             pr_body=pr.body or '',
             pr_diff=pr_diff,
             language=detect_language(pr_files),
-            files=[f.filename for f in pr_files],
+            files=[f['filename'] for f in pr_files],  # 딕셔너리 형태로 변경
             author=pr.user.login,
             stats={
                 'additions': pr.additions,
@@ -563,7 +684,9 @@ async def manual_review(repo_owner: str, repo_name: str, pr_number: int):
             },
             head_ref=pr.head.ref,
             base_ref=pr.base.ref,
-            action='manual_review'
+            action='manual_review',
+            detailed_changes=detailed_changes,
+            line_by_line_changes=line_by_line_changes
         )
         
         # 리뷰 처리

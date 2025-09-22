@@ -233,10 +233,14 @@ class MCPIntegrationManager:
             # LangGraph 앱 실행
             final_state = self.langgraph_app.invoke(initial_state)
             
+            # 상세 변경사항 정보 추가
+            detailed_changes = context.get('detailed_changes', {}) if context else {}
+            
             results = {
                 'timestamp': datetime.now().isoformat(),
                 'language': language,
                 'mcp_analyses': final_state.get('analysis_results', {}),
+                'change_analysis': self._analyze_changes_for_review(detailed_changes),
                 'summary': {
                     'total_analyses': len(final_state.get('analysis_results', {})),
                     'final_review': final_state.get('final_review', ''),
@@ -248,6 +252,146 @@ class MCPIntegrationManager:
             
         except Exception as e:
             raise ValueError(f"LangGraph 워크플로우 실행 실패: {e}")
+    
+    def _analyze_changes_for_review(self, detailed_changes: Dict[str, Any]) -> Dict[str, Any]:
+        """리뷰를 위한 변경사항 분석"""
+        if not detailed_changes:
+            return {}
+        
+        analysis = {
+            'change_summary': detailed_changes.get('summary', {}),
+            'critical_issues': [],
+            'recommendations': [],
+            'focus_areas': []
+        }
+        
+        # 중요 파일 변경사항 분석
+        categories = detailed_changes.get('change_categories', {})
+        if categories.get('critical_files'):
+            analysis['critical_issues'].extend([
+                f"중요 파일 변경: {file['filename']} ({file['change_type']})"
+                for file in categories['critical_files']
+            ])
+        
+        # API 변경사항 분석
+        impact_analysis = detailed_changes.get('impact_analysis', {})
+        if impact_analysis.get('api_changes'):
+            analysis['critical_issues'].extend([
+                f"API 변경 감지: {change['file']}"
+                for change in impact_analysis['api_changes']
+            ])
+            analysis['recommendations'].append("API 변경사항에 대한 테스트를 추가하세요")
+        
+        # Breaking changes 분석
+        if impact_analysis.get('breaking_changes'):
+            analysis['critical_issues'].extend([
+                f"잠재적 Breaking Change: {change['file']}"
+                for change in impact_analysis['breaking_changes']
+            ])
+            analysis['recommendations'].append("Breaking Change 가능성을 검토하고 문서화하세요")
+        
+        # 의존성 변경사항 분석
+        if impact_analysis.get('dependency_changes'):
+            analysis['focus_areas'].extend([
+                f"의존성 변경: {change['file']}"
+                for change in impact_analysis['dependency_changes']
+            ])
+            analysis['recommendations'].append("의존성 변경사항의 호환성을 확인하세요")
+        
+        # 의미적 변경사항 분석
+        semantic_changes = detailed_changes.get('semantic_changes', {})
+        if semantic_changes.get('security_updates'):
+            analysis['focus_areas'].append("보안 업데이트 감지")
+            analysis['recommendations'].append("보안 변경사항에 대한 추가 검토가 필요합니다")
+        
+        if semantic_changes.get('performance_improvements'):
+            analysis['focus_areas'].append("성능 개선 감지")
+            analysis['recommendations'].append("성능 개선 효과를 측정하고 문서화하세요")
+        
+        return analysis
+    
+    async def analyze_code(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """향상된 코드 분석 (변경사항 추적 포함)"""
+        try:
+            # 기본 MCP 분석
+            comprehensive_review = await self.get_comprehensive_review(code, language, context)
+            
+            # 변경사항 분석 추가
+            detailed_changes = context.get('detailed_changes', {}) if context else {}
+            change_analysis = self._analyze_changes_for_review(detailed_changes)
+            
+            # 리뷰 생성
+            review_content = self._generate_enhanced_review_content(
+                comprehensive_review, 
+                change_analysis, 
+                detailed_changes
+            )
+            
+            return {
+                'analysis_type': 'mcp_enhanced_gemini',
+                'result': {
+                    'review': review_content,
+                    'change_analysis': change_analysis,
+                    'comprehensive_analysis': comprehensive_review
+                },
+                'github_metadata': {'status': 'success'},
+                'comments_analysis': {'status': 'success'}
+            }
+            
+        except Exception as e:
+            logger.error(f"코드 분석 실패: {e}")
+            return {
+                'analysis_type': 'error',
+                'result': {
+                    'review': f"코드 분석 중 오류가 발생했습니다: {e}",
+                    'error': str(e)
+                },
+                'github_metadata': {'status': 'error'},
+                'comments_analysis': {'status': 'error'}
+            }
+    
+    def _generate_enhanced_review_content(self, comprehensive_review: Dict[str, Any], 
+                                        change_analysis: Dict[str, Any], 
+                                        detailed_changes: Dict[str, Any]) -> str:
+        """향상된 리뷰 내용 생성"""
+        review_parts = []
+        
+        # 기본 AI 분석 결과
+        if comprehensive_review.get('summary', {}).get('final_review'):
+            review_parts.append("### 🤖 AI 코드 분석")
+            review_parts.append(comprehensive_review['summary']['final_review'])
+            review_parts.append("")
+        
+        # 변경사항 기반 분석
+        if change_analysis.get('critical_issues'):
+            review_parts.append("### ⚠️ 중요 이슈")
+            for issue in change_analysis['critical_issues']:
+                review_parts.append(f"- {issue}")
+            review_parts.append("")
+        
+        if change_analysis.get('focus_areas'):
+            review_parts.append("### 🎯 집중 검토 영역")
+            for area in change_analysis['focus_areas']:
+                review_parts.append(f"- {area}")
+            review_parts.append("")
+        
+        if change_analysis.get('recommendations'):
+            review_parts.append("### 💡 권장사항")
+            for rec in change_analysis['recommendations']:
+                review_parts.append(f"- {rec}")
+            review_parts.append("")
+        
+        # 상세 변경사항 요약
+        if detailed_changes.get('summary'):
+            summary = detailed_changes['summary']
+            review_parts.append("### 📊 변경사항 요약")
+            review_parts.append(f"- **총 파일 수**: {summary.get('total_files', 0)}개")
+            review_parts.append(f"- **추가된 라인**: {summary.get('total_additions', 0)}줄")
+            review_parts.append(f"- **삭제된 라인**: {summary.get('total_deletions', 0)}줄")
+            review_parts.append(f"- **커밋 수**: {summary.get('commits_count', 0)}개")
+            review_parts.append("")
+        
+        return "\n".join(review_parts) if review_parts else "변경사항 분석을 완료했습니다."
     
     def _generate_comprehensive_summary(self, analyses: Dict[str, Any]) -> Dict[str, Any]:
         """종합 분석 요약 생성 (LangChain 방식)"""
