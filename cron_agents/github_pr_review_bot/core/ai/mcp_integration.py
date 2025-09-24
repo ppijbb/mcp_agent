@@ -310,9 +310,231 @@ class MCPIntegrationManager:
         
         return analysis
     
-    async def analyze_code(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """향상된 코드 분석 (변경사항 추적 포함)"""
+    async def _gather_external_codebase_context(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """외부 코드베이스에서 관련 컨텍스트 수집"""
+        external_context = {
+            'best_practices': [],
+            'security_patterns': [],
+            'performance_insights': [],
+            'common_issues': [],
+            'framework_guidelines': [],
+            'library_documentation': []
+        }
+        
         try:
+            # 코드에서 주요 키워드 추출
+            keywords = self._extract_code_keywords(code, language)
+            
+            # 각 키워드에 대해 외부 검색 수행
+            for keyword in keywords[:5]:  # 최대 5개 키워드만 검색
+                try:
+                    # 보안 패턴 검색
+                    security_info = await self._search_security_patterns(keyword, language)
+                    if security_info:
+                        external_context['security_patterns'].extend(security_info)
+                    
+                    # 모범 사례 검색
+                    best_practices = await self._search_best_practices(keyword, language)
+                    if best_practices:
+                        external_context['best_practices'].extend(best_practices)
+                    
+                    # 성능 인사이트 검색
+                    performance_info = await self._search_performance_insights(keyword, language)
+                    if performance_info:
+                        external_context['performance_insights'].extend(performance_info)
+                    
+                    # 일반적인 이슈 검색
+                    common_issues = await self._search_common_issues(keyword, language)
+                    if common_issues:
+                        external_context['common_issues'].extend(common_issues)
+                        
+                except Exception as e:
+                    logger.warning(f"키워드 '{keyword}' 검색 실패: {e}")
+                    continue
+            
+            # 중복 제거 및 정리
+            for key in external_context:
+                external_context[key] = list(set(external_context[key]))[:10]  # 최대 10개씩만 유지
+            
+            logger.info(f"외부 컨텍스트 수집 완료: {sum(len(v) for v in external_context.values())}개 항목")
+            return external_context
+            
+        except Exception as e:
+            logger.error(f"외부 컨텍스트 수집 실패: {e}")
+            return external_context
+    
+    def _extract_code_keywords(self, code: str, language: str) -> List[str]:
+        """코드에서 검색할 키워드 추출"""
+        keywords = []
+        
+        # 언어별 주요 패턴 추출
+        if language.lower() == 'python':
+            # Python 함수, 클래스, import 추출
+            import re
+            functions = re.findall(r'def\s+(\w+)', code)
+            classes = re.findall(r'class\s+(\w+)', code)
+            imports = re.findall(r'import\s+(\w+)', code)
+            keywords.extend(functions + classes + imports)
+        
+        elif language.lower() == 'javascript':
+            # JavaScript 함수, 변수, import 추출
+            import re
+            functions = re.findall(r'function\s+(\w+)', code)
+            consts = re.findall(r'const\s+(\w+)', code)
+            imports = re.findall(r'import.*?from\s+[\'"]([^\'"]+)[\'"]', code)
+            keywords.extend(functions + consts + imports)
+        
+        elif language.lower() == 'java':
+            # Java 클래스, 메서드 추출
+            import re
+            classes = re.findall(r'class\s+(\w+)', code)
+            methods = re.findall(r'public\s+\w+\s+(\w+)\s*\(', code)
+            keywords.extend(classes + methods)
+        
+        # 일반적인 프로그래밍 키워드
+        common_keywords = ['api', 'database', 'security', 'auth', 'config', 'error', 'exception', 'test']
+        keywords.extend(common_keywords)
+        
+        # 중복 제거 및 길이 제한
+        keywords = list(set(keywords))
+        keywords = [k for k in keywords if len(k) > 2 and len(k) < 20]
+        
+        return keywords[:10]  # 최대 10개 키워드만 반환
+    
+    async def _search_security_patterns(self, keyword: str, language: str) -> List[str]:
+        """보안 패턴 검색 (GitHub + 웹 검색)"""
+        results = []
+        
+        try:
+            # 1. GitHub에서 보안 관련 코드 검색
+            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            if github_tool:
+                try:
+                    github_result = github_tool.invoke({
+                        "action": "search_code",
+                        "query": f"{keyword} security {language}",
+                        "language": language
+                    })
+                    if github_result and isinstance(github_result, str):
+                        results.append(f"GitHub 보안 패턴: {github_result[:150]}")
+                except Exception as e:
+                    logger.warning(f"GitHub 보안 검색 실패: {e}")
+            
+            # 2. 웹 검색을 통한 보안 정보
+            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+            if search_tool:
+                query = f"{language} {keyword} security best practices vulnerability"
+                result = search_tool.invoke({"query": query})
+                if result and isinstance(result, str):
+                    results.append(f"웹 보안 정보: {result[:150]}")
+                    
+        except Exception as e:
+            logger.warning(f"보안 패턴 검색 실패: {e}")
+        
+        return results[:2]  # 최대 2개 결과만 반환
+    
+    async def _search_best_practices(self, keyword: str, language: str) -> List[str]:
+        """모범 사례 검색 (GitHub + 웹 검색)"""
+        results = []
+        
+        try:
+            # 1. GitHub에서 모범 사례 코드 검색
+            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            if github_tool:
+                try:
+                    github_result = github_tool.invoke({
+                        "action": "search_code",
+                        "query": f"{keyword} best practice {language}",
+                        "language": language
+                    })
+                    if github_result and isinstance(github_result, str):
+                        results.append(f"GitHub 모범 사례: {github_result[:150]}")
+                except Exception as e:
+                    logger.warning(f"GitHub 모범 사례 검색 실패: {e}")
+            
+            # 2. 웹 검색
+            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+            if search_tool:
+                query = f"{language} {keyword} best practices coding standards"
+                result = search_tool.invoke({"query": query})
+                if result and isinstance(result, str):
+                    results.append(f"웹 모범 사례: {result[:150]}")
+                    
+        except Exception as e:
+            logger.warning(f"모범 사례 검색 실패: {e}")
+        
+        return results[:2]
+    
+    async def _search_performance_insights(self, keyword: str, language: str) -> List[str]:
+        """성능 인사이트 검색 (GitHub + 웹 검색)"""
+        results = []
+        
+        try:
+            # 1. GitHub에서 성능 관련 코드 검색
+            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            if github_tool:
+                try:
+                    github_result = github_tool.invoke({
+                        "action": "search_code",
+                        "query": f"{keyword} performance optimization {language}",
+                        "language": language
+                    })
+                    if github_result and isinstance(github_result, str):
+                        results.append(f"GitHub 성능 패턴: {github_result[:150]}")
+                except Exception as e:
+                    logger.warning(f"GitHub 성능 검색 실패: {e}")
+            
+            # 2. 웹 검색
+            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+            if search_tool:
+                query = f"{language} {keyword} performance optimization tips"
+                result = search_tool.invoke({"query": query})
+                if result and isinstance(result, str):
+                    results.append(f"웹 성능 정보: {result[:150]}")
+                    
+        except Exception as e:
+            logger.warning(f"성능 인사이트 검색 실패: {e}")
+        
+        return results[:2]
+    
+    async def _search_common_issues(self, keyword: str, language: str) -> List[str]:
+        """일반적인 이슈 검색 (GitHub + 웹 검색)"""
+        results = []
+        
+        try:
+            # 1. GitHub에서 이슈 검색
+            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            if github_tool:
+                try:
+                    github_result = github_tool.invoke({
+                        "action": "search_issues",
+                        "query": f"{keyword} {language} common problems",
+                        "language": language
+                    })
+                    if github_result and isinstance(github_result, str):
+                        results.append(f"GitHub 이슈: {github_result[:150]}")
+                except Exception as e:
+                    logger.warning(f"GitHub 이슈 검색 실패: {e}")
+            
+            # 2. 웹 검색
+            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
+            if search_tool:
+                query = f"{language} {keyword} common problems issues troubleshooting"
+                result = search_tool.invoke({"query": query})
+                if result and isinstance(result, str):
+                    results.append(f"웹 이슈 정보: {result[:150]}")
+                    
+        except Exception as e:
+            logger.warning(f"일반적인 이슈 검색 실패: {e}")
+        
+        return results[:2]
+    
+    async def analyze_code(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """향상된 코드 분석 (외부 코드베이스 조회 포함)"""
+        try:
+            # 외부 코드베이스 조회
+            external_context = await self._gather_external_codebase_context(code, language, context)
+            
             # 기본 MCP 분석
             comprehensive_review = await self.get_comprehensive_review(code, language, context)
             
@@ -320,19 +542,21 @@ class MCPIntegrationManager:
             detailed_changes = context.get('detailed_changes', {}) if context else {}
             change_analysis = self._analyze_changes_for_review(detailed_changes)
             
-            # 리뷰 생성
+            # 외부 컨텍스트와 통합된 리뷰 생성
             review_content = self._generate_enhanced_review_content(
                 comprehensive_review, 
                 change_analysis, 
-                detailed_changes
+                detailed_changes,
+                external_context
             )
             
             return {
-                'analysis_type': 'mcp_enhanced_gemini',
+                'analysis_type': 'mcp_enhanced_gemini_with_external_context',
                 'result': {
                     'review': review_content,
                     'change_analysis': change_analysis,
-                    'comprehensive_analysis': comprehensive_review
+                    'comprehensive_analysis': comprehensive_review,
+                    'external_context': external_context
                 },
                 'github_metadata': {'status': 'success'},
                 'comments_analysis': {'status': 'success'}
@@ -352,7 +576,8 @@ class MCPIntegrationManager:
     
     def _generate_enhanced_review_content(self, comprehensive_review: Dict[str, Any], 
                                         change_analysis: Dict[str, Any], 
-                                        detailed_changes: Dict[str, Any]) -> str:
+                                        detailed_changes: Dict[str, Any],
+                                        external_context: Dict[str, Any] = None) -> str:
         """향상된 리뷰 내용 생성"""
         review_parts = []
         
@@ -390,6 +615,34 @@ class MCPIntegrationManager:
             review_parts.append(f"- **삭제된 라인**: {summary.get('total_deletions', 0)}줄")
             review_parts.append(f"- **커밋 수**: {summary.get('commits_count', 0)}개")
             review_parts.append("")
+        
+        # 외부 코드베이스 컨텍스트 (새로운 기능)
+        if external_context:
+            review_parts.append("### 🌐 외부 코드베이스 인사이트")
+            
+            if external_context.get('security_patterns'):
+                review_parts.append("#### 🔒 보안 관련 정보")
+                for pattern in external_context['security_patterns'][:3]:
+                    review_parts.append(f"- {pattern}")
+                review_parts.append("")
+            
+            if external_context.get('best_practices'):
+                review_parts.append("#### ✅ 모범 사례")
+                for practice in external_context['best_practices'][:3]:
+                    review_parts.append(f"- {practice}")
+                review_parts.append("")
+            
+            if external_context.get('performance_insights'):
+                review_parts.append("#### ⚡ 성능 최적화 팁")
+                for insight in external_context['performance_insights'][:3]:
+                    review_parts.append(f"- {insight}")
+                review_parts.append("")
+            
+            if external_context.get('common_issues'):
+                review_parts.append("#### ⚠️ 주의사항")
+                for issue in external_context['common_issues'][:3]:
+                    review_parts.append(f"- {issue}")
+                review_parts.append("")
         
         return "\n".join(review_parts) if review_parts else "변경사항 분석을 완료했습니다."
     

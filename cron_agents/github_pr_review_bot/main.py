@@ -405,7 +405,10 @@ def generate_review(pr_info: PRInfo) -> str:
         
         # AI 분석 결과
         analysis_type = mcp_result.get('analysis_type', 'unknown')
-        if analysis_type == 'mcp_enhanced_gemini':
+        if analysis_type == 'mcp_enhanced_gemini_with_external_context':
+            review_parts.append("### 🤖 MCP 연동 AI 분석 결과 (외부 코드베이스 포함)")
+            review_parts.append("**GitHub 메타데이터, 댓글 분석, 외부 코드베이스 조회 포함**")
+        elif analysis_type == 'mcp_enhanced_gemini':
             review_parts.append("### 🤖 MCP 연동 AI 분석 결과 (무료)")
             review_parts.append("**GitHub 메타데이터 및 댓글 분석 포함**")
         else:
