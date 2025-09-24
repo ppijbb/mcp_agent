@@ -35,28 +35,38 @@ class MCPIntegrationManager:
         self.agent = None
         self.langgraph_app = None
         self.tools = []
+        self.audit_log = []
         
-        # 실제 존재하는 MCP 서버 설정 (LangChain 방식)
+        # 보안이 강화된 MCP 서버 설정 (읽기 전용, 샌드박스 환경)
         self.server_configs = {
-            "github": {
+            "github_secure": {
                 "command": "npx",
-                "args": ["@modelcontextprotocol/server-github"],
+                "args": ["@modelcontextprotocol/server-github", "--read-only", "--sandbox"],
                 "transport": "stdio",
+                "permissions": ["read"],
+                "sandbox": True
             },
-            "filesystem": {
+            "filesystem_secure": {
                 "command": "npx",
-                "args": ["@modelcontextprotocol/server-filesystem", "/tmp"],
+                "args": ["@modelcontextprotocol/server-filesystem", "/tmp/mcp_sandbox", "--read-only"],
                 "transport": "stdio",
+                "permissions": ["read"],
+                "sandbox": True,
+                "restricted_paths": ["/tmp/mcp_sandbox"]
             },
-            "brave_search": {
+            "memory_secure": {
                 "command": "npx",
-                "args": ["@modelcontextprotocol/server-brave-search"],
+                "args": ["@modelcontextprotocol/server-memory", "--secure-mode"],
                 "transport": "stdio",
+                "permissions": ["read"],
+                "sandbox": True
             },
-            "fetch": {
+            "sequential_thinking": {
                 "command": "npx",
-                "args": ["@modelcontextprotocol/server-fetch"],
+                "args": ["@modelcontextprotocol/server-sequential-thinking", "--sandbox"],
                 "transport": "stdio",
+                "permissions": ["read"],
+                "sandbox": True
             }
         }
         
@@ -67,11 +77,14 @@ class MCPIntegrationManager:
             api_key=config.llm.openai_api_key
         )
         
+        # 샌드박스 환경 생성
+        self._create_sandbox_environment()
+        
         self._initialize_mcp_client()
         self._initialize_agent()
         self._initialize_langgraph()
         
-        logger.info(f"MCP Integration Manager initialized with real MCP servers")
+        logger.info(f"MCP Integration Manager initialized with secure MCP servers (sandbox mode)")
     
     def _initialize_mcp_client(self):
         """MCP 클라이언트 초기화 (LangChain 방식)"""
@@ -199,7 +212,14 @@ class MCPIntegrationManager:
             raise ValueError(f"MCP 서버 {server_name}에 연결할 수 없습니다.")
     
     async def call_mcp_tool(self, server_name: str, tool_name: str, **kwargs) -> Dict[str, Any]:
-        """MCP 서버의 도구 호출 (LangChain 방식)"""
+        """MCP 서버의 도구 호출 (보안 검증 포함)"""
+        # 보안 권한 검증
+        if not self._validate_mcp_permissions(server_name, tool_name):
+            raise ValueError(f"보안 위반: {server_name}에서 {tool_name} 실행 권한 없음")
+        
+        # 활동 로깅
+        self._log_mcp_activity(server_name, tool_name, kwargs)
+        
         # LangChain 도구에서 해당 도구 찾기
         target_tool = None
         for tool in self.tools:
@@ -210,12 +230,21 @@ class MCPIntegrationManager:
         if not target_tool:
             raise ValueError(f"도구를 찾을 수 없습니다: {server_name}.{tool_name}")
         
-        # LangChain 도구 호출
-        result = target_tool.invoke(kwargs)
-        if not result:
-            raise ValueError(f"No result from MCP tool {tool_name} on {server_name}")
-        
-        return {"result": result}
+        try:
+            # LangChain 도구 호출
+            result = target_tool.invoke(kwargs)
+            if not result:
+                raise ValueError(f"No result from MCP tool {tool_name} on {server_name}")
+            
+            # 성공 로깅
+            self._log_mcp_activity(server_name, f"{tool_name}_success", {"result_length": len(str(result))})
+            
+            return {"result": result}
+            
+        except Exception as e:
+            # 오류 로깅
+            self._log_mcp_activity(server_name, f"{tool_name}_error", {"error": str(e)})
+            raise
     
     async def get_comprehensive_review(self, code: str, language: str, 
                                      context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -402,34 +431,50 @@ class MCPIntegrationManager:
         return keywords[:10]  # 최대 10개 키워드만 반환
     
     async def _search_security_patterns(self, keyword: str, language: str) -> List[str]:
-        """보안 패턴 검색 (GitHub + 웹 검색)"""
+        """보안 패턴 검색 (보안 강화된 GitHub + 웹 검색)"""
         results = []
         
         try:
-            # 1. GitHub에서 보안 관련 코드 검색
-            github_tool = next((t for t in self.tools if "github" in t.name.lower()), None)
+            # 1. 보안 강화된 GitHub 서버에서 검색
+            github_tool = next((t for t in self.tools if "github_secure" in t.name.lower()), None)
             if github_tool:
                 try:
-                    github_result = github_tool.invoke({
-                        "action": "search_code",
-                        "query": f"{keyword} security {language}",
-                        "language": language
-                    })
-                    if github_result and isinstance(github_result, str):
-                        results.append(f"GitHub 보안 패턴: {github_result[:150]}")
+                    # 보안 검증 후 실행
+                    if self._validate_mcp_permissions("github_secure", "search_code"):
+                        self._log_mcp_activity("github_secure", "search_security_patterns", {"keyword": keyword})
+                        
+                        github_result = github_tool.invoke({
+                            "action": "search_code",
+                            "query": f"{keyword} security {language}",
+                            "language": language,
+                            "read_only": True
+                        })
+                        if github_result and isinstance(github_result, str):
+                            results.append(f"GitHub 보안 패턴: {github_result[:150]}")
                 except Exception as e:
                     logger.warning(f"GitHub 보안 검색 실패: {e}")
+                    self._log_mcp_activity("github_secure", "search_error", {"error": str(e)})
             
-            # 2. 웹 검색을 통한 보안 정보
-            search_tool = next((t for t in self.tools if "search" in t.name.lower()), None)
-            if search_tool:
-                query = f"{language} {keyword} security best practices vulnerability"
-                result = search_tool.invoke({"query": query})
-                if result and isinstance(result, str):
-                    results.append(f"웹 보안 정보: {result[:150]}")
+            # 2. 메모리 서버를 통한 안전한 검색
+            memory_tool = next((t for t in self.tools if "memory_secure" in t.name.lower()), None)
+            if memory_tool:
+                try:
+                    if self._validate_mcp_permissions("memory_secure", "search"):
+                        self._log_mcp_activity("memory_secure", "search_security", {"keyword": keyword})
+                        
+                        memory_result = memory_tool.invoke({
+                            "action": "search",
+                            "query": f"{keyword} security patterns {language}",
+                            "secure_mode": True
+                        })
+                        if memory_result and isinstance(memory_result, str):
+                            results.append(f"메모리 보안 정보: {memory_result[:150]}")
+                except Exception as e:
+                    logger.warning(f"메모리 보안 검색 실패: {e}")
                     
         except Exception as e:
             logger.warning(f"보안 패턴 검색 실패: {e}")
+            self._log_mcp_activity("security_search", "general_error", {"error": str(e)})
         
         return results[:2]  # 최대 2개 결과만 반환
     
@@ -528,6 +573,81 @@ class MCPIntegrationManager:
             logger.warning(f"일반적인 이슈 검색 실패: {e}")
         
         return results[:2]
+    
+    def _log_mcp_activity(self, server_name: str, action: str, details: Dict[str, Any] = None):
+        """MCP 서버 활동 감사 로깅"""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "server": server_name,
+            "action": action,
+            "details": details or {},
+            "security_level": "high" if "write" in action.lower() else "medium"
+        }
+        self.audit_log.append(log_entry)
+        
+        # 보안 위험 활동 감지
+        if log_entry["security_level"] == "high":
+            logger.warning(f"보안 위험 활동 감지: {server_name} - {action}")
+        
+        # 로그 크기 제한 (최대 1000개 항목)
+        if len(self.audit_log) > 1000:
+            self.audit_log = self.audit_log[-1000:]
+    
+    def _validate_mcp_permissions(self, server_name: str, action: str) -> bool:
+        """MCP 서버 권한 검증"""
+        server_config = self.server_configs.get(server_name, {})
+        permissions = server_config.get("permissions", [])
+        
+        # 읽기 전용 모드에서 쓰기 작업 차단
+        if "write" in action.lower() and "write" not in permissions:
+            logger.error(f"권한 없음: {server_name}에서 {action} 실행 시도")
+            return False
+        
+        # 샌드박스 모드 검증
+        if not server_config.get("sandbox", False):
+            logger.warning(f"샌드박스 모드 비활성화: {server_name}")
+            return False
+        
+        return True
+    
+    def _create_sandbox_environment(self):
+        """MCP 샌드박스 환경 생성"""
+        import os
+        import tempfile
+        
+        try:
+            # 안전한 임시 디렉토리 생성
+            sandbox_dir = "/tmp/mcp_sandbox"
+            os.makedirs(sandbox_dir, exist_ok=True)
+            
+            # 권한 제한 (읽기 전용)
+            os.chmod(sandbox_dir, 0o555)
+            
+            # 샌드박스 환경 변수 설정
+            os.environ["MCP_SANDBOX_MODE"] = "true"
+            os.environ["MCP_RESTRICTED_PATHS"] = sandbox_dir
+            
+            logger.info(f"샌드박스 환경 생성 완료: {sandbox_dir}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"샌드박스 환경 생성 실패: {e}")
+            return False
+    
+    def get_security_audit_log(self) -> List[Dict[str, Any]]:
+        """보안 감사 로그 조회"""
+        return self.audit_log.copy()
+    
+    def get_security_status(self) -> Dict[str, Any]:
+        """보안 상태 조회"""
+        return {
+            "sandbox_enabled": all(config.get("sandbox", False) for config in self.server_configs.values()),
+            "read_only_mode": all("read" in config.get("permissions", []) for config in self.server_configs.values()),
+            "total_servers": len(self.server_configs),
+            "secure_servers": len([s for s in self.server_configs.values() if s.get("sandbox", False)]),
+            "audit_log_entries": len(self.audit_log),
+            "security_incidents": len([log for log in self.audit_log if log.get("security_level") == "high"])
+        }
     
     async def analyze_code(self, code: str, language: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """향상된 코드 분석 (외부 코드베이스 조회 포함)"""

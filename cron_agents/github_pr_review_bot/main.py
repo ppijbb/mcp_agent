@@ -578,6 +578,47 @@ async def get_mcp_info():
         logger.error(f"MCP 정보 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"MCP 정보 조회 실패: {e}")
 
+@app.get("/security")
+async def get_security_status():
+    """MCP 보안 상태 조회"""
+    if not mcp_manager:
+        raise HTTPException(status_code=503, detail="MCP 매니저가 초기화되지 않음")
+    
+    try:
+        security_status = mcp_manager.get_security_status()
+        audit_log = mcp_manager.get_security_audit_log()
+        
+        return {
+            "security_status": security_status,
+            "audit_log": audit_log[-10:],  # 최근 10개 항목만
+            "timestamp": datetime.now().isoformat(),
+            "security_level": "high" if security_status["sandbox_enabled"] else "medium"
+        }
+    except Exception as e:
+        logger.error(f"보안 상태 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보안 상태 조회 실패: {e}")
+
+@app.get("/security/audit")
+async def get_security_audit():
+    """보안 감사 로그 조회"""
+    if not mcp_manager:
+        raise HTTPException(status_code=503, detail="MCP 매니저가 초기화되지 않음")
+    
+    try:
+        audit_log = mcp_manager.get_security_audit_log()
+        security_incidents = [log for log in audit_log if log.get("security_level") == "high"]
+        
+        return {
+            "total_entries": len(audit_log),
+            "security_incidents": len(security_incidents),
+            "recent_activities": audit_log[-20:],  # 최근 20개 항목
+            "incidents": security_incidents[-5:],  # 최근 5개 보안 사고
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"보안 감사 로그 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보안 감사 로그 조회 실패: {e}")
+
 @app.get("/optimization")
 async def get_optimization_status():
     """최적화 상태 조회"""
