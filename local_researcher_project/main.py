@@ -26,7 +26,7 @@ import json
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.core.autonomous_orchestrator import AutonomousOrchestrator
+from src.core.autonomous_orchestrator import LangGraphOrchestrator
 from src.agents.task_analyzer import TaskAnalyzerAgent
 from src.agents.task_decomposer import TaskDecomposerAgent
 from src.agents.research_agent import ResearchAgent
@@ -96,8 +96,8 @@ class AutonomousResearchSystem:
         self.validation_agent = ValidationAgent(config_path)
         self.synthesis_agent = SynthesisAgent(config_path)
         
-        # Initialize orchestrator
-        self.orchestrator = AutonomousOrchestrator(
+        # Initialize LangGraph orchestrator
+        self.orchestrator = LangGraphOrchestrator(
             config_path=config_path,
             agents={
                 'analyzer': self.task_analyzer,

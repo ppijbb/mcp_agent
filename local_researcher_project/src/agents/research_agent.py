@@ -19,8 +19,25 @@ import google.generativeai as genai
 import os
 import requests
 from bs4 import BeautifulSoup
+import base64
+import markdownify
 
-from src.utils.config_manager import ConfigManager
+# Browser automation imports
+try:
+    from browser_use import Browser as BrowserUseBrowser
+    from browser_use import BrowserConfig
+    from browser_use.browser.context import BrowserContext, BrowserContextConfig
+    from browser_use.dom.service import DomService
+    BROWSER_USE_AVAILABLE = True
+except ImportError:
+    BROWSER_USE_AVAILABLE = False
+    BrowserUseBrowser = None
+    BrowserConfig = None
+    BrowserContext = None
+    BrowserContextConfig = None
+    DomService = None
+
+from src.utils.config_manager import ConfigManager, SearchAPI
 from src.utils.logger import setup_logger
 
 logger = setup_logger("research_agent", log_level="INFO")
@@ -48,7 +65,17 @@ class ResearchAgent:
         self.learning_data = []
         self.research_history = []
         
-        logger.info("Research Agent initialized with LLM-based research capabilities")
+        # Browser automation components
+        self.browser: Optional[BrowserUseBrowser] = None
+        self.browser_context: Optional[BrowserContext] = None
+        self.dom_service: Optional[DomService] = None
+        self.browser_lock = asyncio.Lock()
+        
+        # Search configuration
+        self.search_config = self.config_manager.get_search_config()
+        self.advanced_config = self.config_manager.get_advanced_config()
+        
+        logger.info("Research Agent initialized with LLM-based research capabilities and browser automation")
     
     def _initialize_llm(self):
         """Initialize the LLM client."""
@@ -1719,3 +1746,270 @@ class ResearchAgent:
         except Exception as e:
             logger.error(f"Research learning enhancement failed: {e}")
             return result
+    
+    # Browser Automation Methods
+    async def _ensure_browser_initialized(self) -> BrowserContext:
+        """Ensure browser and context are initialized."""
+        if not BROWSER_USE_AVAILABLE:
+            raise ImportError("browser-use package not available. Install with: pip install browser-use")
+        
+        async with self.browser_lock:
+            if self.browser is None:
+                browser_config = self.config_manager.get_browser_config()
+                browser_config_kwargs = {
+                    "headless": browser_config.get("headless", False),
+                    "disable_security": browser_config.get("disable_security", True)
+                }
+                
+                self.browser = BrowserUseBrowser(BrowserConfig(**browser_config_kwargs))
+                logger.info("Browser initialized for research automation")
+            
+            if self.browser_context is None:
+                context_config = BrowserContextConfig()
+                self.browser_context = await self.browser.new_context(context_config)
+                self.dom_service = DomService(await self.browser_context.get_current_page())
+                logger.info("Browser context initialized for research automation")
+            
+            return self.browser_context
+    
+    async def browser_navigate_and_extract(self, url: str, extraction_goal: str) -> Dict[str, Any]:
+        """Navigate to URL and extract content based on goal.
+        
+        Args:
+            url: URL to navigate to
+            extraction_goal: Specific goal for content extraction
+            
+        Returns:
+            Dictionary containing extracted content and metadata
+        """
+        try:
+            context = await self._ensure_browser_initialized()
+            page = await context.get_current_page()
+            
+            # Navigate to URL
+            await page.goto(url)
+            await page.wait_for_load_state()
+            
+            # Extract content using LLM
+            content = markdownify.markdownify(await page.content())
+            max_content_length = self.config_manager.get_browser_config().get("max_content_length", 2000)
+            
+            prompt = f"""
+            Your task is to extract content from a webpage based on a specific goal.
+            Extract all relevant information around this goal from the page.
+            If the goal is vague, provide a comprehensive summary.
+            Respond in JSON format.
+            
+            Extraction goal: {extraction_goal}
+            
+            Page content:
+            {content[:max_content_length]}
+            """
+            
+            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            
+            # Parse LLM response
+            try:
+                extracted_data = json.loads(response.text)
+            except json.JSONDecodeError:
+                # Fallback if LLM doesn't return valid JSON
+                extracted_data = {
+                    "extracted_content": {
+                        "text": response.text,
+                        "metadata": {
+                            "source": url,
+                            "extraction_goal": extraction_goal
+                        }
+                    }
+                }
+            
+            return {
+                "success": True,
+                "url": url,
+                "extraction_goal": extraction_goal,
+                "extracted_data": extracted_data,
+                "content_length": len(content),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Browser navigation and extraction failed: {e}")
+            return {
+                "success": False,
+                "url": url,
+                "extraction_goal": extraction_goal,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    async def browser_search_and_extract(self, query: str, extraction_goal: str, max_results: int = 3) -> List[Dict[str, Any]]:
+        """Perform web search and extract content from results.
+        
+        Args:
+            query: Search query
+            extraction_goal: Goal for content extraction
+            max_results: Maximum number of results to process
+            
+        Returns:
+            List of extracted content from search results
+        """
+        try:
+            # First perform web search
+            search_results = await self._perform_web_search(query, max_results)
+            
+            if not search_results:
+                return []
+            
+            extracted_results = []
+            
+            for result in search_results[:max_results]:
+                try:
+                    # Extract content from each search result
+                    extraction_result = await self.browser_navigate_and_extract(
+                        result.get('url', ''), 
+                        extraction_goal
+                    )
+                    
+                    if extraction_result.get('success'):
+                        extraction_result['search_result'] = result
+                        extracted_results.append(extraction_result)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to extract from {result.get('url', '')}: {e}")
+                    continue
+            
+            return extracted_results
+            
+        except Exception as e:
+            logger.error(f"Browser search and extract failed: {e}")
+            return []
+    
+    async def browser_interactive_research(self, research_plan: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Perform interactive research using browser automation.
+        
+        Args:
+            research_plan: List of research steps with actions and goals
+            
+        Returns:
+            Dictionary containing research results
+        """
+        try:
+            context = await self._ensure_browser_initialized()
+            research_results = {
+                "plan": research_plan,
+                "steps_completed": [],
+                "data_collected": [],
+                "success": True,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            for step in research_plan:
+                step_result = await self._execute_research_step(step, context)
+                research_results["steps_completed"].append(step_result)
+                
+                if step_result.get("data_collected"):
+                    research_results["data_collected"].extend(step_result["data_collected"])
+            
+            return research_results
+            
+        except Exception as e:
+            logger.error(f"Interactive research failed: {e}")
+            return {
+                "plan": research_plan,
+                "steps_completed": [],
+                "data_collected": [],
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    async def _execute_research_step(self, step: Dict[str, Any], context: BrowserContext) -> Dict[str, Any]:
+        """Execute a single research step.
+        
+        Args:
+            step: Research step configuration
+            context: Browser context
+            
+        Returns:
+            Step execution result
+        """
+        try:
+            action = step.get("action")
+            goal = step.get("goal", "")
+            
+            if action == "navigate":
+                url = step.get("url")
+                if url:
+                    page = await context.get_current_page()
+                    await page.goto(url)
+                    await page.wait_for_load_state()
+                    
+                    # Extract content if goal is specified
+                    if goal:
+                        content = markdownify.markdownify(await page.content())
+                        return {
+                            "action": action,
+                            "url": url,
+                            "goal": goal,
+                            "data_collected": [{"content": content, "url": url}],
+                            "success": True
+                        }
+            
+            elif action == "search":
+                query = step.get("query")
+                if query:
+                    search_results = await self._perform_web_search(query, 5)
+                    return {
+                        "action": action,
+                        "query": query,
+                        "goal": goal,
+                        "data_collected": search_results,
+                        "success": True
+                    }
+            
+            elif action == "extract":
+                # Extract content from current page
+                page = await context.get_current_page()
+                content = markdownify.markdownify(await page.content())
+                return {
+                    "action": action,
+                    "goal": goal,
+                    "data_collected": [{"content": content, "url": page.url}],
+                    "success": True
+                }
+            
+            return {
+                "action": action,
+                "goal": goal,
+                "data_collected": [],
+                "success": False,
+                "error": f"Unknown action: {action}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Research step execution failed: {e}")
+            return {
+                "action": step.get("action"),
+                "goal": step.get("goal"),
+                "data_collected": [],
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def cleanup_browser(self):
+        """Clean up browser resources."""
+        try:
+            async with self.browser_lock:
+                if self.browser_context:
+                    await self.browser_context.close()
+                    self.browser_context = None
+                    self.dom_service = None
+                
+                if self.browser:
+                    await self.browser.close()
+                    self.browser = None
+                
+                logger.info("Browser resources cleaned up")
+                
+        except Exception as e:
+            logger.error(f"Browser cleanup failed: {e}")
