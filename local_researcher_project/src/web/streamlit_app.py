@@ -385,6 +385,27 @@ def system_monitor():
                     st.success("🟢 Running")
                 else:
                     st.error("🔴 Stopped")
+        
+        # Browser status
+        st.subheader("Browser Automation Status")
+        try:
+            research_agent = st.session_state.orchestrator.agents.get('researcher')
+            if research_agent and hasattr(research_agent, 'browser_manager'):
+                browser_status = research_agent.browser_manager.get_status()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Browser Available", "✅ Yes" if browser_status['browser_available'] else "❌ No")
+                with col2:
+                    st.metric("Fallback Mode", "✅ Active" if browser_status['fallback_mode'] else "❌ Inactive")
+                with col3:
+                    st.metric("Environment", "Streamlit" if browser_status['is_streamlit'] else "CLI" if browser_status['is_cli'] else "Background")
+                
+                # Browser details
+                with st.expander("Browser Details"):
+                    st.json(browser_status)
+        except Exception as e:
+            st.warning(f"Could not get browser status: {e}")
     
     # Recent activity
     st.subheader("Recent Activity")

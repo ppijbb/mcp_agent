@@ -56,6 +56,10 @@ python-docx>=0.8.11
 # System monitoring
 psutil>=5.9.0
 
+# Enhanced browser automation
+browser-use>=0.1.40
+playwright>=1.51.0
+
 # File handling and utilities
 python-dotenv>=1.0.0
 pyyaml>=6.0.0
