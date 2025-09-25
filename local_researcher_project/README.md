@@ -1,159 +1,194 @@
-# Autonomous Multi-Agent Research System
+# Local Researcher Project
 
-A fully autonomous multi-agent research system powered by LLM-based decision making that self-analyzes user requests, dynamically decomposes tasks, orchestrates specialized agents, and generates comprehensive research deliverables.
+A fully autonomous multi-agent research system powered by AI with advanced web interface and real-time monitoring.
 
-## 🚀 Key Features
+## 🚀 Features
 
-- **LLM-Powered Autonomy**: Uses advanced language models for intelligent decision making
-- **Dynamic Task Analysis**: AI-driven analysis of user requests and objective extraction
-- **Intelligent Task Decomposition**: LLM-based task breakdown and agent assignment
-- **Real Web Research**: Actual web scraping and data collection capabilities
-- **Multi-Agent Orchestration**: Coordinates specialized agents with LLM guidance
-- **Critical Evaluation**: AI-powered result evaluation and quality assessment
-- **Result Validation**: LLM-based validation against original objectives
-- **Final Synthesis**: Intelligent generation of comprehensive deliverables
+### Core Research Capabilities
+- **Autonomous Research**: Self-analyzing and self-executing research workflows
+- **Multi-Agent Architecture**: Specialized agents for different research tasks
+- **LangGraph Integration**: Advanced workflow management with LangGraph
+- **LLM Integration**: Advanced language model integration for intelligent decision making
+- **MCP Support**: Model Context Protocol integration for enhanced capabilities
 
-## 🧠 LLM Integration
+### Web Interface & Visualization
+- **Streamlit Web App**: Interactive web interface for research management
+- **Real-time Dashboard**: Live monitoring of research progress and system status
+- **Data Visualization**: Interactive charts and analytics using Plotly
+- **Report Generation**: Automated report generation in multiple formats (PDF, HTML, DOCX, Markdown)
 
-This system is now fully agentic with:
+### Advanced Features
+- **Browser Automation**: Automated web browsing and data collection
+- **Real-time Monitoring**: System health monitoring and performance tracking
+- **Multi-format Reports**: Executive summaries, detailed analysis, academic papers
+- **Collaborative Research**: Multi-user support and shared workspaces
 
-- **Gemini 2.0 Flash**: Primary LLM for decision making and analysis
-- **Real-time Web Search**: Actual web scraping and data collection
-- **Intelligent Planning**: LLM-based research strategy development
-- **Adaptive Learning**: System learns from previous executions
-- **Dynamic Decision Making**: No hardcoded rules or templates
+## 🛠️ Quick Start
+
+### 1. Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd local_researcher_project
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install additional system dependencies (for PDF generation)
+# Ubuntu/Debian:
+sudo apt-get install wkhtmltopdf
+
+# macOS:
+brew install wkhtmltopdf
+
+# Windows:
+# Download from https://wkhtmltopdf.org/downloads.html
+```
+
+### 2. Environment Setup
+
+```bash
+# Set up environment variables
+export GEMINI_API_KEY="your_api_key_here"
+export OPENAI_API_KEY="your_openai_key_here"  # Optional
+export ANTHROPIC_API_KEY="your_anthropic_key_here"  # Optional
+```
+
+### 3. Run the System
+
+#### Command Line Interface
+```bash
+python main.py
+```
+
+#### Web Interface
+```bash
+python run_web_app.py
+```
+Then open http://localhost:8501 in your browser.
+
+#### Streamlit Integration (from pages/)
+```bash
+# From the parent directory
+streamlit run pages/research.py
+```
 
 ## 🏗️ Architecture
 
-The system consists of LLM-powered specialized agents:
+### Core Components
 
-- **AutonomousOrchestrator**: LLM-based orchestration and decision making
-- **TaskAnalyzerAgent**: AI-driven request analysis and objective extraction
-- **TaskDecomposerAgent**: LLM-based task decomposition and agent assignment
-- **ResearchAgent**: Real web research with LLM coordination
-- **LLMMethods**: Core LLM integration and decision making
+- **LangGraphOrchestrator**: Main orchestrator using LangGraph for workflow management
+- **Task Analyzer**: Analyzes research objectives and requirements
+- **Task Decomposer**: Breaks down complex research into manageable tasks
+- **Research Agent**: Conducts actual research and data collection with browser automation
+- **Evaluation Agent**: Evaluates research quality and completeness
+- **Validation Agent**: Validates results against original objectives
+- **Synthesis Agent**: Synthesizes final deliverables
 
-## 📦 Installation
+### Web Interface Components
 
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Set up environment variables (see Configuration section)
-4. Run the system: `python main.py`
+- **Streamlit App**: Main web interface (`src/web/streamlit_app.py`)
+- **Data Visualizer**: Advanced visualization capabilities (`src/visualization/data_visualizer.py`)
+- **Report Generator**: Multi-format report generation (`src/generation/report_generator.py`)
+- **System Monitor**: Real-time system monitoring (`src/monitoring/system_monitor.py`)
+
+### Integration Points
+
+- **Pages Integration**: Seamless integration with existing Streamlit pages
+- **MCP Integration**: Enhanced tool capabilities through Model Context Protocol
+- **Browser Automation**: Automated web research using browser-use
+- **Real-time Monitoring**: System health and performance tracking
+
+## 📊 Usage Examples
+
+### Basic Research
+```python
+from src.core.autonomous_orchestrator import LangGraphOrchestrator
+from src.agents.research_agent import ResearchAgent
+
+# Initialize orchestrator
+orchestrator = LangGraphOrchestrator(config_path, agents, mcp_manager)
+
+# Start research
+objective_id = await orchestrator.start_autonomous_research(
+    "AI trends in 2024",
+    context={"depth": "comprehensive", "domain": "technology"}
+)
+```
+
+### Web Interface
+1. Start the web app: `python run_web_app.py`
+2. Navigate to Research Dashboard
+3. Enter your research query
+4. Configure research options
+5. Click "Start Research"
+6. Monitor progress in real-time
+7. Download generated reports
+
+### Data Visualization
+```python
+from src.visualization.data_visualizer import DataVisualizer
+
+visualizer = DataVisualizer()
+fig = visualizer.create_research_timeline(research_data)
+fig.show()
+```
 
 ## ⚙️ Configuration
 
-Set the following environment variables:
+The system can be configured through YAML configuration files in the `configs/` directory:
 
-```bash
-# Required
-export GEMINI_API_KEY="your_gemini_api_key_here"
+- **General Settings**: Basic system configuration
+- **Research Settings**: Research-specific parameters
+- **Display Settings**: UI and visualization preferences
+- **Advanced Settings**: Advanced features and integrations
 
-# Optional
-export OPENAI_API_KEY="your_openai_api_key_here"
-export MCP_SERVER_URL="your_mcp_server_url"
-```
+## 🔧 Advanced Features
 
-## 🚀 Usage
+### Browser Automation
+- Automated web browsing and data collection
+- JavaScript execution and interaction
+- Screenshot capture and analysis
+- Form filling and navigation
 
-### Command Line Interface
+### Real-time Monitoring
+- System performance metrics
+- Research progress tracking
+- Error monitoring and alerting
+- Resource utilization analysis
 
-```bash
-# Start autonomous LLM-based research
-python main.py research "Analyze AI trends in healthcare"
-
-# Check research status
-python main.py status <objective_id>
-
-# List all research objectives
-python main.py list
-
-# Run in interactive mode
-python main.py interactive
-```
-
-### Interactive Mode
-
-The system runs in interactive mode for continuous research:
-
-```bash
-python main.py interactive
-```
-
-## 🔍 How It Works
-
-1. **LLM Analysis**: The system uses Gemini to analyze your request and extract research objectives
-2. **Intelligent Decomposition**: AI breaks down objectives into specific, executable tasks
-3. **Real Research**: Agents perform actual web searches and data collection
-4. **LLM Coordination**: AI coordinates multi-agent execution and decision making
-5. **Quality Evaluation**: LLM evaluates results and suggests improvements
-6. **Final Synthesis**: AI generates comprehensive research reports
-
-## 📊 Example Output
-
-The system generates:
-- **Research Reports**: Comprehensive markdown reports
-- **Data Analysis**: Structured analysis of collected information
-- **Source Citations**: Proper attribution of all sources
-- **Quality Metrics**: AI-assessed quality scores
-- **Recommendations**: AI-generated insights and suggestions
-
-## 🎯 Examples
-
-### Basic Research
-
-```bash
-python main.py research "Compare renewable energy technologies"
-```
-
-### Complex Analysis
-
-```bash
-python main.py research "Analyze the impact of AI on healthcare delivery systems"
-```
-
-### Market Research
-
-```bash
-python main.py research "Study emerging trends in fintech startups"
-```
-
-## 🔧 Development
-
-This system is production-ready with:
-- **No Fallback Code**: All functionality is real and autonomous
-- **LLM Integration**: Full AI-powered decision making
-- **Real Web Research**: Actual data collection capabilities
-- **Error Handling**: Robust error management and recovery
-- **Logging**: Comprehensive logging for monitoring
-
-## 📈 Performance
-
-- **Autonomous Operation**: Requires minimal human intervention
-- **Intelligent Planning**: AI optimizes research strategies
-- **Quality Assurance**: Built-in quality evaluation and improvement
-- **Scalable**: Handles complex research requests efficiently
-
-## 🛡️ Security
-
-- **API Key Management**: Secure handling of API credentials
-- **Data Privacy**: No data is stored permanently
-- **Error Handling**: Graceful handling of API failures
-
-## 📝 License
-
-MIT License
+### Report Generation
+- Multiple output formats (PDF, HTML, DOCX, Markdown)
+- Customizable templates
+- Automated formatting and styling
+- Citation management
 
 ## 🤝 Contributing
 
-This system is designed for autonomous operation. Contributions should focus on:
-- Enhanced LLM integration
-- Improved research capabilities
-- Better error handling
-- Performance optimization
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## ⚠️ Requirements
+## 📄 License
 
-- Python 3.8+
-- Gemini API key
-- Internet connection for web research
-- Sufficient API quota for LLM calls
+MIT License
+
+## 🆘 Support
+
+For support and questions:
+- Check the documentation in the `docs/` directory
+- Open an issue on GitHub
+- Contact the development team
+
+## 🔄 Updates
+
+### Version 2.0.0
+- Added LangGraph integration
+- Implemented web interface
+- Added data visualization capabilities
+- Enhanced report generation
+- Integrated browser automation
+- Added real-time monitoring

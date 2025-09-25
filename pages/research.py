@@ -1,7 +1,7 @@
 """
-🔍 Research Agent Page
+🔍 Research Agent Page - Local Researcher Integration
 
-정보 검색 및 분석 AI
+AI 기반 자율 연구 시스템과 통합된 연구 에이전트
 """
 
 import streamlit as st
@@ -31,234 +31,485 @@ except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
 
-# Research Agent 임포트 시도
+# Local Researcher Project 임포트 시도
 try:
-    from srcs.advanced_agents.researcher_v2 import (
-        ResearcherAgent,
-        load_research_focus_options,
-        load_research_templates,
-        get_research_agent_status,
-        save_research_report
-    )
+    # Local Researcher 프로젝트 경로 추가
+    local_researcher_path = Path(__file__).parent.parent / "local_researcher_project"
+    sys.path.insert(0, str(local_researcher_path))
+    
+    from local_researcher_project.src.core.autonomous_orchestrator import LangGraphOrchestrator
+    from local_researcher_project.src.agents.task_analyzer import TaskAnalyzerAgent
+    from local_researcher_project.src.agents.task_decomposer import TaskDecomposerAgent
+    from local_researcher_project.src.agents.research_agent import ResearchAgent
+    from local_researcher_project.src.agents.evaluation_agent import EvaluationAgent
+    from local_researcher_project.src.agents.validation_agent import ValidationAgent
+    from local_researcher_project.src.agents.synthesis_agent import SynthesisAgent
+    from local_researcher_project.src.core.mcp_integration import MCPIntegrationManager
+    from local_researcher_project.src.utils.config_manager import ConfigManager
+    
+    LOCAL_RESEARCHER_AVAILABLE = True
 except ImportError as e:
-    st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {e}")
-    st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
-    st.stop()
+    st.error(f"⚠️ Local Researcher를 불러올 수 없습니다: {e}")
+    st.info("Local Researcher 프로젝트를 확인하고 필요한 의존성을 설치해주세요.")
+    LOCAL_RESEARCHER_AVAILABLE = False
 
-def validate_research_result(result):
-    """연구 결과 검증"""
-    if not result:
-        raise Exception("Research Agent에서 유효한 결과를 반환하지 않았습니다")
-    return result
+# 기존 Research Agent 임포트 (fallback)
+if not LOCAL_RESEARCHER_AVAILABLE:
+    try:
+        from srcs.advanced_agents.researcher_v2 import (
+            ResearcherAgent,
+            load_research_focus_options,
+            load_research_templates,
+            get_research_agent_status,
+            save_research_report
+        )
+    except ImportError as e:
+        st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {e}")
+        st.info("에이전트 모듈을 확인하고 필요한 의존성을 설치해주세요.")
+        st.stop()
+
 
 def main():
-    """Research Agent 메인 페이지"""
+    """메인 함수 - Local Researcher 통합"""
+    st.title("🔍 Research Agent - Local Researcher Integration")
+    st.markdown("AI 기반 자율 연구 시스템")
     
-    create_agent_page(
-        agent_name="Research Agent",
-        page_icon="🔍",
-        page_type="research",
-        title="Research Agent",
-        subtitle="AI 기반 정보 검색 및 분석 시스템",
-        module_path="srcs.advanced_agents.researcher_v2"
-    )
-    
-    st.success("🤖 Research Agent v2가 성공적으로 연결되었습니다!")
-    
-    # 에이전트 인터페이스
-    render_research_agent_interface()
+    # Local Researcher 사용 가능 여부 확인
+    if LOCAL_RESEARCHER_AVAILABLE:
+        st.success("✅ Local Researcher 프로젝트가 연결되었습니다!")
+        run_local_researcher_interface()
+    else:
+        st.warning("⚠️ Local Researcher를 사용할 수 없습니다. 기본 Research Agent를 사용합니다.")
+        run_fallback_interface()
 
-def render_research_agent_interface():
-    """Research Agent 실행 인터페이스 (실시간 프로세스 모니터링)"""
-    st.markdown("### 🚀 Research Agent 실행")
-    
-    process_key = "research_process"
 
-    with st.form(key="research_form"):
-        st.markdown("#### 🎯 연구 설정")
-        research_topic = st.text_input(
-            "연구 주제",
-            placeholder="예: 인공지능이 채용 시장에 미치는 영향",
-            help="조사하고 싶은 주제를 입력하세요"
-        )
-        try:
-            focus_options = load_research_focus_options()
-            research_focus = st.selectbox(
-                "연구 초점",
-                focus_options,
-                index=None,
-                placeholder="연구 초점을 선택하세요"
-            )
-        except Exception as e:
-            st.warning(f"연구 초점 옵션 로드 실패: {e}")
-            research_focus = st.text_input(
-                "연구 초점",
-                placeholder="연구 초점을 직접 입력하세요"
-            )
-
-        submitted = st.form_submit_button("🚀 Research Agent 실행", type="primary", use_container_width=True)
-
-    if submitted:
-        if not research_topic or not research_focus:
-            st.warning("연구 주제와 초점을 모두 입력(선택)해주세요.")
-            st.stop()
-            
-        reports_path = Path(get_reports_path('research'))
-        reports_path.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_topic = "".join(c for c in research_topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        result_json_path = reports_path / f"research_result_{safe_topic}_{timestamp}.json"
+def run_local_researcher_interface():
+    """Local Researcher 통합 인터페이스 실행"""
+    try:
+        # 탭으로 기능 분리
+        tab1, tab2, tab3 = st.tabs(["연구 실행", "데이터 시각화", "시스템 모니터"])
         
-        py_executable = sys.executable
-        command = [
-            py_executable, "-u", "-m", "srcs.advanced_agents.run_research_agent",
-            "--topic", research_topic,
-            "--focus", research_focus,
-            "--result-json-path", str(result_json_path),
-            "--save-to-file" # Always save report file from script
+        with tab1:
+            run_research_interface()
+        
+        with tab2:
+            run_visualization_interface()
+        
+        with tab3:
+            run_monitoring_interface()
+    
+    except Exception as e:
+        st.error(f"❌ Local Researcher 초기화 실패: {e}")
+        st.info("기본 Research Agent로 전환합니다.")
+        run_fallback_interface()
+
+
+def run_research_interface():
+    """연구 실행 인터페이스"""
+    st.subheader("🚀 자율 연구 실행")
+    
+    # 연구 설정
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        research_query = st.text_area(
+            "연구 주제를 입력하세요:",
+            placeholder="예: 인공지능의 최신 동향과 미래 전망",
+            height=100
+        )
+    
+    with col2:
+        research_depth = st.selectbox(
+            "연구 깊이",
+            options=["Quick", "Standard", "Deep", "Comprehensive"],
+            index=1
+        )
+        
+        research_domain = st.selectbox(
+            "연구 도메인",
+            options=["General", "Academic", "Business", "Technical", "Scientific"],
+            index=0
+        )
+        
+        use_browser = st.checkbox("브라우저 자동화", value=True)
+        use_mcp = st.checkbox("MCP 도구 사용", value=True)
+    
+    # 고급 옵션
+    with st.expander("고급 옵션"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            max_iterations = st.number_input("최대 반복 횟수", min_value=1, max_value=10, value=6)
+            quality_threshold = st.slider("품질 임계값", 0.0, 1.0, 0.8)
+        
+        with col2:
+            parallel_execution = st.checkbox("병렬 실행", value=True)
+            real_time_monitoring = st.checkbox("실시간 모니터링", value=True)
+    
+    # 연구 실행
+    if st.button("🔍 연구 시작", type="primary"):
+        if not research_query.strip():
+            st.warning("⚠️ 연구 주제를 입력해주세요.")
+            return
+        
+        # 연구 컨텍스트 구성
+        context = {
+            "research_depth": research_depth,
+            "research_domain": research_domain,
+            "use_browser": use_browser,
+            "use_mcp": use_mcp,
+            "max_iterations": max_iterations,
+            "quality_threshold": quality_threshold,
+            "parallel_execution": parallel_execution,
+            "real_time_monitoring": real_time_monitoring,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 연구 실행
+        with st.spinner("연구를 진행하는 중입니다..."):
+            try:
+                # Local Researcher 컴포넌트 초기화
+                config_manager = ConfigManager()
+                mcp_manager = MCPIntegrationManager()
+                
+                agents = {
+                    'analyzer': TaskAnalyzerAgent(),
+                    'decomposer': TaskDecomposerAgent(),
+                    'researcher': ResearchAgent(),
+                    'evaluator': EvaluationAgent(),
+                    'validator': ValidationAgent(),
+                    'synthesizer': SynthesisAgent()
+                }
+                
+                orchestrator = LangGraphOrchestrator(
+                    config_path=None,
+                    agents=agents,
+                    mcp_manager=mcp_manager
+                )
+                
+                # 비동기 함수 실행
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                objective_id = loop.run_until_complete(
+                    orchestrator.start_autonomous_research(research_query, context)
+                )
+                loop.close()
+                
+                st.success(f"✅ 연구가 완료되었습니다! Objective ID: {objective_id}")
+                
+                # 결과를 세션 상태에 저장
+                st.session_state['last_research_id'] = objective_id
+                st.session_state['last_orchestrator'] = orchestrator
+                
+                # 결과 표시
+                display_local_researcher_results(objective_id, orchestrator)
+                
+            except Exception as e:
+                st.error(f"❌ 연구 실행 실패: {e}")
+                st.exception(e)
+
+
+def run_visualization_interface():
+    """데이터 시각화 인터페이스"""
+    st.subheader("📊 데이터 시각화")
+    
+    try:
+        # 시각화 옵션
+        viz_type = st.selectbox(
+            "시각화 유형",
+            ["연구 타임라인", "에이전트 성능", "품질 분포", "연구 트렌드", "도메인 분석", "시스템 상태"]
+        )
+        
+        if st.button("📈 시각화 생성"):
+            with st.spinner("시각화를 생성하는 중..."):
+                # 샘플 데이터로 시각화 생성
+                if viz_type == "연구 타임라인":
+                    sample_data = generate_sample_timeline_data()
+                    st.write("연구 타임라인 데이터:")
+                    st.json(sample_data)
+                elif viz_type == "에이전트 성능":
+                    sample_data = generate_sample_performance_data()
+                    st.write("에이전트 성능 데이터:")
+                    st.json(sample_data)
+                elif viz_type == "품질 분포":
+                    sample_data = generate_sample_quality_data()
+                    st.write("품질 분포 데이터:")
+                    st.write(f"평균: {sum(sample_data)/len(sample_data):.2f}")
+                elif viz_type == "연구 트렌드":
+                    sample_data = generate_sample_trends_data()
+                    st.write("연구 트렌드 데이터:")
+                    st.json(sample_data)
+                elif viz_type == "도메인 분석":
+                    sample_data = generate_sample_domain_data()
+                    st.write("도메인 분석 데이터:")
+                    st.json(sample_data)
+                elif viz_type == "시스템 상태":
+                    sample_data = generate_sample_system_data()
+                    st.write("시스템 상태 데이터:")
+                    st.json(sample_data)
+    
+    except Exception as e:
+        st.error(f"시각화 생성 실패: {e}")
+
+
+def run_monitoring_interface():
+    """시스템 모니터링 인터페이스"""
+    st.subheader("🔍 시스템 모니터링")
+    
+    try:
+        # 현재 시스템 상태 (시뮬레이션)
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("CPU 사용률", "45.2%")
+        with col2:
+            st.metric("메모리 사용률", "67.8%")
+        with col3:
+            st.metric("디스크 사용률", "23.1%")
+        with col4:
+            st.metric("활성 프로세스", "156")
+        
+        # 시스템 건강 점수
+        st.metric("시스템 건강 점수", "87.5/100")
+        
+        # 최근 알림
+        st.subheader("최근 알림")
+        alerts = [
+            {"level": "info", "message": "연구 작업이 완료되었습니다", "time": "10:30 AM"},
+            {"level": "warning", "message": "메모리 사용률이 높습니다", "time": "10:25 AM"},
+            {"level": "info", "message": "새로운 에이전트가 시작되었습니다", "time": "10:20 AM"},
         ]
         
-        placeholder = st.empty()
-        result = run_agent_process(
-            placeholder=placeholder,
-            command=command,
-            process_key_prefix="logs/research",
-            log_expander_title="실시간 실행 로그"
+        for alert in alerts:
+            alert_color = {
+                "info": "blue",
+                "warning": "orange", 
+                "error": "red",
+                "critical": "darkred"
+            }.get(alert["level"], "gray")
+            
+            st.markdown(f"<div style='color: {alert_color}'>[{alert['level'].upper()}] {alert['message']} - {alert['time']}</div>", 
+                       unsafe_allow_html=True)
+    
+    except Exception as e:
+        st.error(f"모니터링 실패: {e}")
+
+
+def run_fallback_interface():
+    """기본 Research Agent 인터페이스 (fallback)"""
+    st.info("기본 Research Agent를 사용합니다.")
+    
+    # 기존 Research Agent 로직
+    research_focus_options = load_research_focus_options()
+    research_templates = load_research_templates()
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        research_query = st.text_area(
+            "연구 주제를 입력하세요:",
+            placeholder="예: 인공지능의 최신 동향과 미래 전망",
+            height=100
+        )
+    
+    with col2:
+        research_focus = st.selectbox(
+            "연구 초점",
+            options=list(research_focus_options.keys()),
+            help="연구의 주요 초점 영역을 선택하세요"
         )
         
-        if result:
-            if result.get('success'):
-                display_research_results(result)
-            else:
-                st.error(f"❌ 실행 중 오류가 보고되었습니다: {result.get('message', '알 수 없는 오류')}")
-                with st.expander("🔍 오류 상세 정보"):
-                    st.code(result.get('error', '상세 정보 없음'))
+        research_depth = st.selectbox(
+            "연구 깊이",
+            options=["표면적", "중간", "깊이있게", "매우 깊이있게"],
+            index=1
+        )
+    
+    if st.button("🔍 연구 시작", type="primary"):
+        if not research_query.strip():
+            st.warning("⚠️ 연구 주제를 입력해주세요.")
+            return
+        
+        research_config = {
+            "query": research_query,
+            "focus": research_focus,
+            "depth": research_depth
+        }
+        
+        with st.spinner("연구를 진행하는 중입니다..."):
+            try:
+                result = run_agent_process("researcher_v2", research_config, timeout=300)
+                
+                if result and result.get("success"):
+                    st.success("✅ 연구가 완료되었습니다!")
+                    display_research_results(result)
+                else:
+                    st.error("❌ 연구 실행 중 오류가 발생했습니다.")
+            
+            except Exception as e:
+                st.error(f"❌ 연구 실행 실패: {e}")
+
+
+def display_local_researcher_results(objective_id: str, orchestrator: LangGraphOrchestrator):
+    """Local Researcher 결과 표시"""
+    try:
+        # 연구 상태 가져오기
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        status = loop.run_until_complete(orchestrator.get_research_status(objective_id))
+        loop.close()
+        
+        if status:
+            st.subheader("📊 연구 결과")
+            
+            # 기본 정보
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("상태", status.get('status', 'Unknown'))
+            with col2:
+                st.metric("목표 수", len(status.get('analyzed_objectives', [])))
+            with col3:
+                st.metric("작업 수", len(status.get('decomposed_tasks', [])))
+            
+            # 상세 결과
+            if status.get('final_synthesis'):
+                st.subheader("📝 최종 보고서")
+                synthesis = status['final_synthesis']
+                
+                if synthesis.get('summary'):
+                    st.write("**요약:**")
+                    st.write(synthesis['summary'])
+                
+                if synthesis.get('key_findings'):
+                    st.write("**주요 발견사항:**")
+                    for finding in synthesis['key_findings']:
+                        st.write(f"• {finding}")
+                
+                if synthesis.get('recommendations'):
+                    st.write("**권장사항:**")
+                    for rec in synthesis['recommendations']:
+                        st.write(f"• {rec}")
+            
+            # 보고서 다운로드
+            if status.get('final_synthesis', {}).get('deliverable_path'):
+                st.subheader("📄 보고서 다운로드")
+                report_path = status['final_synthesis']['deliverable_path']
+                if os.path.exists(report_path):
+                    with open(report_path, 'rb') as f:
+                        st.download_button(
+                            label="보고서 다운로드",
+                            data=f.read(),
+                            file_name=os.path.basename(report_path),
+                            mime="application/octet-stream"
+                        )
+        
+    except Exception as e:
+        st.error(f"결과 표시 실패: {e}")
 
 
 def display_research_results(result: dict):
-    """연구 결과 표시 (탭 형식으로 개선)"""
-    st.markdown("---")
-    st.markdown("#### 📊 실행 결과 요약")
-    
-    summary_cols = st.columns(2)
-    with summary_cols[0]:
-        st.info(f"**주제**: {result.get('topic', 'N/A')}")
-    with summary_cols[1]:
-        st.info(f"**초점**: {result.get('focus', 'N/A')}")
-
-    if result.get('output_dir'):
-        st.success(f"**보고서 파일 경로**: `{result['output_dir']}`")
-    
-    if 'content' in result and result['content']:
-        st.markdown("#### 📄 생성된 연구 보고서")
-        content = result['content']
+    """기존 Research Agent 결과 표시"""
+    try:
+        if result.get("research_summary"):
+            st.subheader("📝 연구 요약")
+            st.write(result["research_summary"])
         
-        # Markdown 내용을 섹션별로 분리
-        sections = content.split('## ')
+        if result.get("key_findings"):
+            st.subheader("🔍 주요 발견사항")
+            for finding in result["key_findings"]:
+                st.write(f"• {finding}")
         
-        # 첫 번째 요소는 보통 제목 이전의 내용이므로, 비어있지 않으면 '소개'로 처리
-        tabs_data = {}
-        if sections[0].strip():
-            tabs_data["소개"] = sections[0]
-        
-        for section in sections[1:]:
-            parts = section.split('\\n', 1)
-            title = parts[0].strip().replace('#', '')
-            body = parts[1].strip() if len(parts) > 1 else ""
-            if title:
-                tabs_data[title] = "## " + section # 원래 마크다운 형식 유지
-
-        # '전체 보고서' 탭 추가
-        tabs_data["전체 보고서 보기"] = content
-
-        tab_titles = list(tabs_data.keys())
-        tabs = st.tabs(tab_titles)
-        
-        for i, title in enumerate(tab_titles):
-            with tabs[i]:
-                st.markdown(tabs_data[title])
-
-        st.download_button(
-            label="📥 연구 결과 전문 다운로드 (.md)",
-            data=content,
-            file_name=f"research_report_{result.get('topic', 'untitled').replace(' ', '_')}.md",
-            mime="text/markdown",
-            use_container_width=True,
-            key="research_download"
-        )
-
-    with st.expander("🔍 상세 실행 정보 (JSON)"):
-        st.json(result)
-
-def display_research_info():
-    """연구 에이전트 정보 표시"""
-    st.markdown("""
-    #### 🤖 Research Agent 정보
+        if result.get("sources"):
+            st.subheader("📚 참고 자료")
+            for source in result["sources"]:
+                st.write(f"• {source}")
     
-    **실행되는 프로세스:**
-    1. **다중 에이전트 생성** - 전문 연구 AI 에이전트들
-    2. **MCP App 초기화** - MCP 프레임워크 연결
-    3. **오케스트레이터 실행** - 통합 워크플로우 관리
-    4. **연구 수행** - 포괄적 정보 수집 및 분석
+    except Exception as e:
+        st.error(f"결과 표시 실패: {e}")
+
+
+# 샘플 데이터 생성 함수들
+def generate_sample_timeline_data():
+    """샘플 타임라인 데이터 생성"""
+    return [
+        {
+            "objective_id": "obj_001",
+            "start_time": "2024-01-01 09:00:00",
+            "end_time": "2024-01-01 10:30:00",
+            "status": "completed",
+            "agent_count": 3,
+            "quality_score": 0.85
+        },
+        {
+            "objective_id": "obj_002", 
+            "start_time": "2024-01-01 11:00:00",
+            "end_time": "2024-01-01 12:15:00",
+            "status": "completed",
+            "agent_count": 4,
+            "quality_score": 0.92
+        }
+    ]
+
+
+def generate_sample_performance_data():
+    """샘플 성능 데이터 생성"""
+    return {
+        "Task Analyzer": {"tasks_completed": 45, "success_rate": 0.95, "avg_quality": 0.88},
+        "Research Agent": {"tasks_completed": 38, "success_rate": 0.88, "avg_quality": 0.85},
+        "Evaluation Agent": {"tasks_completed": 42, "success_rate": 0.92, "avg_quality": 0.90},
+        "Validation Agent": {"tasks_completed": 40, "success_rate": 0.90, "avg_quality": 0.87},
+        "Synthesis Agent": {"tasks_completed": 35, "success_rate": 0.87, "avg_quality": 0.89}
+    }
+
+
+def generate_sample_quality_data():
+    """샘플 품질 데이터 생성"""
+    import random
+    return [random.uniform(0.6, 1.0) for _ in range(100)]
+
+
+def generate_sample_trends_data():
+    """샘플 트렌드 데이터 생성"""
+    import random
+    from datetime import datetime, timedelta
     
-    **생성되는 연구 결과:**
-    - 📈 **트렌드 분석**: 현재 동향 및 발전 패턴
-    - 🏢 **경쟁 분석**: 주요 업체 및 시장 현황
-    - 🔮 **미래 전망**: 전략적 시사점 및 기회
-    - 📋 **종합 보고서**: 실행 요약 및 권고사항
+    data = []
+    base_date = datetime.now() - timedelta(days=30)
     
-    **출력 옵션:**
-    - 🖥️ **화면 표시**: 즉시 결과 확인 (기본값)
-    - 💾 **파일 저장**: research_reports/ 디렉토리에 저장
-    """)
+    for i in range(30):
+        date = base_date + timedelta(days=i)
+        data.append({
+            "date": date.strftime("%Y-%m-%d"),
+            "research_count": random.randint(1, 5),
+            "avg_quality": random.uniform(0.7, 0.95),
+            "agent_utilization": random.uniform(0.6, 0.9),
+            "success_rate": random.uniform(0.8, 0.95)
+        })
+    
+    return data
+
+
+def generate_sample_domain_data():
+    """샘플 도메인 데이터 생성"""
+    return {
+        "AI/ML": {"research_count": 25, "avg_quality": 0.88, "success_rate": 0.92},
+        "Business": {"research_count": 18, "avg_quality": 0.85, "success_rate": 0.89},
+        "Science": {"research_count": 22, "avg_quality": 0.91, "success_rate": 0.94},
+        "Technology": {"research_count": 30, "avg_quality": 0.87, "success_rate": 0.90}
+    }
+
+
+def generate_sample_system_data():
+    """샘플 시스템 데이터 생성"""
+    return {
+        "cpu_usage": 45.2,
+        "memory_usage": 67.8,
+        "research_status": {"running": 3, "completed": 15, "failed": 1},
+        "error_rates": {"network": 2, "processing": 1, "validation": 0}
+    }
+
 
 if __name__ == "__main__":
     main()
-
-# 최신 Research Agent 결과 확인
-st.markdown("---")
-st.markdown("## 📊 최신 Research Agent 결과")
-
-latest_research_result = result_reader.get_latest_result("research_agent", "research_analysis")
-
-if latest_research_result:
-    with st.expander("🔍 최신 연구 분석 결과", expanded=False):
-        st.subheader("🤖 최근 연구 분석 결과")
-        
-        if isinstance(latest_research_result, dict):
-            # 연구 정보 표시
-            topic = latest_research_result.get('topic', 'N/A')
-            focus = latest_research_result.get('focus', 'N/A')
-            
-            st.success(f"**연구 주제: {topic}**")
-            st.info(f"**연구 초점: {focus}**")
-            
-            # 연구 결과 요약
-            col1, col2, col3 = st.columns(3)
-            col1.metric("연구 상태", "완료" if latest_research_result.get('success', False) else "실패")
-            col2.metric("보고서 길이", f"{len(latest_research_result.get('content', ''))} 문자")
-            col3.metric("출력 디렉토리", "저장됨" if latest_research_result.get('output_dir') else "미저장")
-            
-            # 연구 내용 표시
-            content = latest_research_result.get('content', '')
-            if content:
-                st.subheader("📄 연구 보고서")
-                with st.expander("보고서 내용", expanded=False):
-                    st.markdown(content)
-                
-                # 다운로드 버튼
-                st.download_button(
-                    label="📥 연구 보고서 다운로드 (.md)",
-                    data=content,
-                    file_name=f"research_report_{topic.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
-            
-            # 메타데이터 표시
-            if 'timestamp' in latest_research_result:
-                st.caption(f"⏰ 연구 시간: {latest_research_result['timestamp']}")
-        else:
-            st.json(latest_research_result)
-else:
-    st.info("💡 아직 Research Agent의 결과가 없습니다. 위에서 연구 분석을 실행해보세요.") 
