@@ -42,32 +42,49 @@ class ValidationAgent:
         logger.info("Validation Agent initialized with autonomous validation capabilities")
     
     def _load_validation_criteria(self) -> Dict[str, Any]:
-        """Load validation criteria for different types of research."""
+        """Load enhanced validation criteria for critical research validation."""
         return {
             'objective_alignment': {
-                'weight': 0.3,
-                'threshold': 0.8,
-                'description': 'Results must align with original objectives'
+                'weight': 0.2,
+                'threshold': 0.85,
+                'description': 'Results must align with original objectives',
+                'critical': True
             },
-            'quality_standards': {
-                'weight': 0.25,
-                'threshold': 0.7,
-                'description': 'Results must meet quality standards'
-            },
-            'completeness': {
+            'cross_validation': {
                 'weight': 0.2,
                 'threshold': 0.8,
-                'description': 'Results must be complete'
+                'description': 'Information must be cross-validated across multiple sources',
+                'critical': True
             },
-            'accuracy': {
+            'source_credibility': {
+                'weight': 0.2,
+                'threshold': 0.85,
+                'description': 'Sources must be credible and authoritative',
+                'critical': True
+            },
+            'data_accuracy': {
                 'weight': 0.15,
                 'threshold': 0.8,
-                'description': 'Results must be accurate'
+                'description': 'Data must be accurate and verifiable',
+                'critical': True
             },
-            'relevance': {
+            'completeness': {
+                'weight': 0.1,
+                'threshold': 0.8,
+                'description': 'Research must be comprehensive',
+                'critical': False
+            },
+            'temporal_accuracy': {
                 'weight': 0.1,
                 'threshold': 0.7,
-                'description': 'Results must be relevant'
+                'description': 'Information must be current and up-to-date',
+                'critical': False
+            },
+            'bias_detection': {
+                'weight': 0.05,
+                'threshold': 0.6,
+                'description': 'Results must be free from significant bias',
+                'critical': False
             }
         }
     
@@ -133,33 +150,47 @@ class ValidationAgent:
             Validation results with scores and recommendations
         """
         try:
-            logger.info(f"Starting autonomous validation for objective: {objective_id}")
+            logger.info(f"Starting enhanced autonomous validation for objective: {objective_id}")
             
-            # Phase 1: Objective Alignment Validation
-            alignment_validation = await self._validate_objective_alignment(
-                execution_results, original_objectives, user_request
+            # Phase 1: Cross-Validation Analysis
+            cross_validation_results = await self._perform_cross_validation(execution_results)
+            
+            # Phase 2: Source Credibility Analysis
+            source_credibility = await self._analyze_source_credibility(execution_results)
+            
+            # Phase 3: Bias Detection Analysis
+            bias_analysis = await self._detect_bias(execution_results)
+            
+            # Phase 4: Objective Alignment Validation
+            alignment_validation = await self._validate_objective_alignment_enhanced(
+                execution_results, original_objectives, user_request, cross_validation_results
             )
             
-            # Phase 2: Quality Standards Validation
-            quality_validation = await self._validate_quality_standards(execution_results)
-            
-            # Phase 3: Completeness Validation
-            completeness_validation = await self._validate_completeness(
-                execution_results, original_objectives
+            # Phase 5: Quality Standards Validation
+            quality_validation = await self._validate_quality_standards_enhanced(
+                execution_results, source_credibility
             )
             
-            # Phase 4: Accuracy Validation
-            accuracy_validation = await self._validate_accuracy(execution_results)
-            
-            # Phase 5: Relevance Validation
-            relevance_validation = await self._validate_relevance(
-                execution_results, user_request, original_objectives
+            # Phase 6: Completeness Validation
+            completeness_validation = await self._validate_completeness_enhanced(
+                execution_results, original_objectives, cross_validation_results
             )
             
-            # Phase 6: Overall Validation Score
-            overall_validation = await self._calculate_overall_validation(
+            # Phase 7: Accuracy Validation
+            accuracy_validation = await self._validate_accuracy_enhanced(
+                execution_results, cross_validation_results, source_credibility
+            )
+            
+            # Phase 8: Relevance Validation
+            relevance_validation = await self._validate_relevance_enhanced(
+                execution_results, user_request, original_objectives, bias_analysis
+            )
+            
+            # Phase 9: Overall Validation Score with Enhanced Weighting
+            overall_validation = await self._calculate_enhanced_overall_validation(
                 alignment_validation, quality_validation, completeness_validation,
-                accuracy_validation, relevance_validation
+                accuracy_validation, relevance_validation, cross_validation_results,
+                source_credibility, bias_analysis
             )
             
             # Phase 7: Generate Validation Report
@@ -622,6 +653,337 @@ class ValidationAgent:
             recommendations.append("Increase relevance to user request")
         
         return recommendations
+    
+    # Enhanced Validation Methods
+    
+    async def _perform_cross_validation(self, execution_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Perform cross-validation across multiple sources."""
+        try:
+            cross_validation = {
+                'total_sources': 0,
+                'consistent_sources': 0,
+                'conflicting_sources': 0,
+                'consistency_score': 0.0,
+                'conflicts': [],
+                'source_agreement': {}
+            }
+            
+            # Extract all sources from results
+            all_sources = []
+            for result in execution_results:
+                if 'sources' in result:
+                    all_sources.extend(result['sources'])
+                if 'source' in result:
+                    all_sources.append(result['source'])
+            
+            cross_validation['total_sources'] = len(set(all_sources))
+            
+            # Analyze consistency across sources
+            if len(all_sources) > 1:
+                # Group results by similar content
+                content_groups = self._group_similar_content(execution_results)
+                
+                for group in content_groups:
+                    if len(group) > 1:
+                        # Check consistency within group
+                        consistency = self._check_content_consistency(group)
+                        cross_validation['consistent_sources'] += consistency['consistent']
+                        cross_validation['conflicting_sources'] += consistency['conflicting']
+                        cross_validation['conflicts'].extend(consistency['conflicts'])
+            
+            # Calculate consistency score
+            if cross_validation['total_sources'] > 0:
+                cross_validation['consistency_score'] = (
+                    cross_validation['consistent_sources'] / 
+                    (cross_validation['consistent_sources'] + cross_validation['conflicting_sources'])
+                )
+            
+            return cross_validation
+            
+        except Exception as e:
+            logger.error(f"Cross-validation failed: {e}")
+            return {'consistency_score': 0.0, 'total_sources': 0}
+    
+    async def _analyze_source_credibility(self, execution_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze source credibility and reliability."""
+        try:
+            credibility_analysis = {
+                'high_credibility_sources': 0,
+                'medium_credibility_sources': 0,
+                'low_credibility_sources': 0,
+                'overall_credibility_score': 0.0,
+                'source_ratings': {}
+            }
+            
+            # Define credibility criteria
+            high_credibility_domains = [
+                'edu', 'gov', 'org', 'ac.uk', 'edu.au', 'edu.ca'
+            ]
+            
+            medium_credibility_domains = [
+                'com', 'net', 'io', 'co.uk', 'com.au'
+            ]
+            
+            # Analyze each source
+            for result in execution_results:
+                sources = result.get('sources', [])
+                if isinstance(sources, str):
+                    sources = [sources]
+                
+                for source in sources:
+                    if isinstance(source, dict):
+                        url = source.get('url', '')
+                    else:
+                        url = str(source)
+                    
+                    credibility_score = self._rate_source_credibility(url, high_credibility_domains, medium_credibility_domains)
+                    credibility_analysis['source_ratings'][url] = credibility_score
+                    
+                    if credibility_score >= 0.8:
+                        credibility_analysis['high_credibility_sources'] += 1
+                    elif credibility_score >= 0.5:
+                        credibility_analysis['medium_credibility_sources'] += 1
+                    else:
+                        credibility_analysis['low_credibility_sources'] += 1
+            
+            # Calculate overall credibility score
+            total_sources = sum([
+                credibility_analysis['high_credibility_sources'],
+                credibility_analysis['medium_credibility_sources'],
+                credibility_analysis['low_credibility_sources']
+            ])
+            
+            if total_sources > 0:
+                credibility_analysis['overall_credibility_score'] = (
+                    (credibility_analysis['high_credibility_sources'] * 1.0 +
+                     credibility_analysis['medium_credibility_sources'] * 0.6 +
+                     credibility_analysis['low_credibility_sources'] * 0.2) / total_sources
+                )
+            
+            return credibility_analysis
+            
+        except Exception as e:
+            logger.error(f"Source credibility analysis failed: {e}")
+            return {'overall_credibility_score': 0.0}
+    
+    async def _detect_bias(self, execution_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Detect potential bias in research results."""
+        try:
+            bias_analysis = {
+                'bias_indicators': [],
+                'bias_score': 0.0,
+                'language_bias': 0.0,
+                'source_bias': 0.0,
+                'content_bias': 0.0,
+                'recommendations': []
+            }
+            
+            # Analyze language bias
+            language_bias = self._analyze_language_bias(execution_results)
+            bias_analysis['language_bias'] = language_bias
+            
+            # Analyze source bias
+            source_bias = self._analyze_source_bias(execution_results)
+            bias_analysis['source_bias'] = source_bias
+            
+            # Analyze content bias
+            content_bias = self._analyze_content_bias(execution_results)
+            bias_analysis['content_bias'] = content_bias
+            
+            # Calculate overall bias score
+            bias_analysis['bias_score'] = (
+                language_bias + source_bias + content_bias
+            ) / 3.0
+            
+            # Generate bias indicators
+            if language_bias > 0.7:
+                bias_analysis['bias_indicators'].append("Strong language bias detected")
+            if source_bias > 0.7:
+                bias_analysis['bias_indicators'].append("Source diversity issues detected")
+            if content_bias > 0.7:
+                bias_analysis['bias_indicators'].append("Content perspective bias detected")
+            
+            return bias_analysis
+            
+        except Exception as e:
+            logger.error(f"Bias detection failed: {e}")
+            return {'bias_score': 0.0}
+    
+    def _group_similar_content(self, execution_results: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+        """Group results with similar content for consistency analysis."""
+        groups = []
+        
+        for result in execution_results:
+            content = result.get('content', '') or result.get('summary', '')
+            if not content:
+                continue
+            
+            # Simple similarity grouping based on content overlap
+            added_to_group = False
+            for group in groups:
+                if self._calculate_content_similarity(content, group[0].get('content', '') or group[0].get('summary', '')) > 0.7:
+                    group.append(result)
+                    added_to_group = True
+                    break
+            
+            if not added_to_group:
+                groups.append([result])
+        
+        return groups
+    
+    def _check_content_consistency(self, group: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Check consistency within a group of similar content."""
+        consistency = {
+            'consistent': 0,
+            'conflicting': 0,
+            'conflicts': []
+        }
+        
+        if len(group) < 2:
+            return consistency
+        
+        # Compare each pair in the group
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                content1 = group[i].get('content', '') or group[i].get('summary', '')
+                content2 = group[j].get('content', '') or group[j].get('summary', '')
+                
+                similarity = self._calculate_content_similarity(content1, content2)
+                
+                if similarity > 0.8:
+                    consistency['consistent'] += 1
+                elif similarity < 0.5:
+                    consistency['conflicting'] += 1
+                    consistency['conflicts'].append({
+                        'source1': group[i].get('source', 'unknown'),
+                        'source2': group[j].get('source', 'unknown'),
+                        'similarity': similarity
+                    })
+        
+        return consistency
+    
+    def _calculate_content_similarity(self, content1: str, content2: str) -> float:
+        """Calculate similarity between two content strings."""
+        if not content1 or not content2:
+            return 0.0
+        
+        # Simple word overlap similarity
+        words1 = set(content1.lower().split())
+        words2 = set(content2.lower().split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
+    
+    def _rate_source_credibility(self, url: str, high_domains: List[str], medium_domains: List[str]) -> float:
+        """Rate source credibility based on domain and other factors."""
+        if not url:
+            return 0.0
+        
+        url_lower = url.lower()
+        
+        # Check for high credibility domains
+        for domain in high_domains:
+            if domain in url_lower:
+                return 0.9
+        
+        # Check for medium credibility domains
+        for domain in medium_domains:
+            if domain in url_lower:
+                return 0.6
+        
+        # Check for suspicious patterns
+        suspicious_patterns = ['blogspot', 'wordpress', 'tumblr', 'wix']
+        for pattern in suspicious_patterns:
+            if pattern in url_lower:
+                return 0.3
+        
+        # Default rating
+        return 0.4
+    
+    def _analyze_language_bias(self, execution_results: List[Dict[str, Any]]) -> float:
+        """Analyze language bias in results."""
+        # This is a simplified implementation
+        # In a real system, this would use more sophisticated NLP techniques
+        
+        bias_indicators = [
+            'clearly', 'obviously', 'undoubtedly', 'certainly',
+            'definitely', 'absolutely', 'never', 'always',
+            'all', 'none', 'every', 'no one'
+        ]
+        
+        total_content = ''
+        for result in execution_results:
+            content = result.get('content', '') or result.get('summary', '')
+            total_content += content + ' '
+        
+        total_content = total_content.lower()
+        bias_count = sum(1 for indicator in bias_indicators if indicator in total_content)
+        
+        # Normalize bias score
+        return min(bias_count / 10.0, 1.0)
+    
+    def _analyze_source_bias(self, execution_results: List[Dict[str, Any]]) -> float:
+        """Analyze source diversity and potential bias."""
+        sources = []
+        for result in execution_results:
+            if 'sources' in result:
+                sources.extend(result['sources'])
+            if 'source' in result:
+                sources.append(result['source'])
+        
+        if not sources:
+            return 0.0
+        
+        # Check domain diversity
+        domains = set()
+        for source in sources:
+            if isinstance(source, dict):
+                url = source.get('url', '')
+            else:
+                url = str(source)
+            
+            # Extract domain
+            if '://' in url:
+                domain = url.split('://')[1].split('/')[0]
+                domains.add(domain)
+        
+        # Low diversity indicates potential bias
+        if len(domains) <= 2:
+            return 0.8
+        elif len(domains) <= 5:
+            return 0.5
+        else:
+            return 0.2
+    
+    def _analyze_content_bias(self, execution_results: List[Dict[str, Any]]) -> float:
+        """Analyze content for perspective bias."""
+        # This is a simplified implementation
+        # In a real system, this would use more sophisticated analysis
+        
+        positive_words = ['excellent', 'great', 'amazing', 'wonderful', 'perfect']
+        negative_words = ['terrible', 'awful', 'horrible', 'disastrous', 'catastrophic']
+        
+        total_content = ''
+        for result in execution_results:
+            content = result.get('content', '') or result.get('summary', '')
+            total_content += content + ' '
+        
+        total_content = total_content.lower()
+        
+        positive_count = sum(1 for word in positive_words if word in total_content)
+        negative_count = sum(1 for word in negative_words if word in total_content)
+        
+        if positive_count + negative_count == 0:
+            return 0.0
+        
+        # Calculate bias towards positive or negative
+        bias_ratio = abs(positive_count - negative_count) / (positive_count + negative_count)
+        return bias_ratio
     
     async def _generate_validation_summary(self, overall_validation: Dict[str, Any], 
                                          all_issues: List[Dict[str, Any]]) -> str:

@@ -411,32 +411,57 @@ class LangGraphOrchestrator:
             return state
     
     async def _validate_results_node(self, state: ResearchState) -> ResearchState:
-        """Validate results against original objectives."""
+        """Enhanced validation of results with critical analysis."""
         try:
-            logger.info("Validating results")
+            logger.info("Starting enhanced validation of results")
             
-            # Use validation agent
+            # Use enhanced validation agent
             validator = self.agents.get('validator')
             if validator:
                 validation_result = await validator.validate_results(
-                    state['user_request'],
-                    state['analyzed_objectives'],
-                    state['execution_results']
+                    execution_results=state['execution_results'],
+                    original_objectives=state['analyzed_objectives'],
+                    user_request=state['user_request'],
+                    context=state.get('context', {}),
+                    objective_id=state.get('objective_id', 'unknown')
                 )
             else:
                 # Fallback to LLM validation
                 validation_result = await self.llm_methods.llm_validate_results(state)
             
+            # Update state with enhanced validation data
             state['validation_results'] = validation_result
-            state['validation_score'] = validation_result.get('validation_score', 0.0)
+            state['validation_score'] = validation_result.get('overall_score', 0.0)
             state['missing_elements'] = validation_result.get('missing_elements', [])
-            state['current_step'] = "synthesize_deliverable"
-            state['messages'].append(AIMessage(content="Results validated"))
+            
+            # Add critical validation metrics
+            state['cross_validation_results'] = validation_result.get('cross_validation_results', {})
+            state['source_credibility_scores'] = validation_result.get('source_credibility_scores', {})
+            state['bias_analysis'] = validation_result.get('bias_analysis', {})
+            state['critical_issues'] = validation_result.get('critical_issues', [])
+            state['validation_warnings'] = validation_result.get('warnings', [])
+            
+            # Generate enhanced validation summary
+            validation_summary = self._generate_validation_summary(validation_result)
+            state['messages'].append(AIMessage(content=validation_summary))
+            
+            # Check if validation meets critical thresholds
+            critical_failed = any(
+                issue.get('severity') == 'critical' 
+                for issue in state.get('critical_issues', [])
+            )
+            
+            if critical_failed:
+                logger.warning("Critical validation issues detected - research may need revision")
+                state['should_continue'] = True  # Force another iteration
+            else:
+                logger.info(f"Enhanced validation completed with score: {state['validation_score']:.2f}")
+                state['current_step'] = "synthesize_deliverable"
             
             return state
             
         except Exception as e:
-            logger.error(f"Result validation failed: {e}")
+            logger.error(f"Enhanced validation failed: {e}")
             state['error_message'] = str(e)
             return state
     
@@ -588,6 +613,61 @@ class LangGraphOrchestrator:
             
         except Exception as e:
             logger.error(f"Orchestrator cleanup failed: {e}")
+    
+    def _generate_validation_summary(self, validation_result: Dict[str, Any]) -> str:
+        """Generate enhanced validation summary."""
+        try:
+            overall_score = validation_result.get('overall_score', 0.0)
+            critical_issues = validation_result.get('critical_issues', [])
+            warnings = validation_result.get('warnings', [])
+            cross_validation = validation_result.get('cross_validation_results', {})
+            source_credibility = validation_result.get('source_credibility_scores', {})
+            bias_analysis = validation_result.get('bias_analysis', {})
+            
+            summary_parts = []
+            
+            # Overall score
+            score_emoji = "🟢" if overall_score >= 0.8 else "🟡" if overall_score >= 0.6 else "🔴"
+            summary_parts.append(f"{score_emoji} **Validation Score: {overall_score:.2f}/1.0**")
+            
+            # Cross-validation results
+            if cross_validation:
+                consistency_score = cross_validation.get('consistency_score', 0.0)
+                total_sources = cross_validation.get('total_sources', 0)
+                summary_parts.append(f"📊 **Cross-Validation: {consistency_score:.2f}** ({total_sources} sources)")
+            
+            # Source credibility
+            if source_credibility:
+                credibility_score = source_credibility.get('overall_credibility_score', 0.0)
+                high_cred = source_credibility.get('high_credibility_sources', 0)
+                summary_parts.append(f"🎯 **Source Credibility: {credibility_score:.2f}** ({high_cred} high-credibility sources)")
+            
+            # Bias analysis
+            if bias_analysis:
+                bias_score = bias_analysis.get('bias_score', 0.0)
+                bias_indicators = bias_analysis.get('bias_indicators', [])
+                if bias_score > 0.7:
+                    summary_parts.append(f"⚠️ **Bias Detected: {bias_score:.2f}** - {', '.join(bias_indicators)}")
+                else:
+                    summary_parts.append(f"✅ **Bias Analysis: {bias_score:.2f}** (Low bias)")
+            
+            # Critical issues
+            if critical_issues:
+                summary_parts.append(f"🚨 **Critical Issues: {len(critical_issues)}**")
+                for issue in critical_issues[:3]:  # Show first 3
+                    summary_parts.append(f"   • {issue.get('description', 'Unknown issue')}")
+            
+            # Warnings
+            if warnings:
+                summary_parts.append(f"⚠️ **Warnings: {len(warnings)}**")
+                for warning in warnings[:2]:  # Show first 2
+                    summary_parts.append(f"   • {warning.get('description', 'Unknown warning')}")
+            
+            return "\n".join(summary_parts)
+            
+        except Exception as e:
+            logger.error(f"Failed to generate validation summary: {e}")
+            return f"Validation completed with score: {validation_result.get('overall_score', 0.0):.2f}"
 
 
 # Backward compatibility alias

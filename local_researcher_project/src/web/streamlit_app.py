@@ -406,6 +406,82 @@ def system_monitor():
                     st.json(browser_status)
         except Exception as e:
             st.warning(f"Could not get browser status: {e}")
+        
+        # Validation Status
+        st.subheader("Enhanced Validation Status")
+        try:
+            if 'last_research_id' in st.session_state:
+                objective_id = st.session_state['last_research_id']
+                orchestrator = st.session_state['last_orchestrator']
+                
+                # Get research status
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                status = loop.run_until_complete(orchestrator.get_research_status(objective_id))
+                loop.close()
+                
+                if status and status.get('validation_results'):
+                    validation = status['validation_results']
+                    
+                    # Overall validation score
+                    overall_score = validation.get('overall_score', 0.0)
+                    score_color = "green" if overall_score >= 0.8 else "orange" if overall_score >= 0.6 else "red"
+                    st.metric("Overall Validation Score", f"{overall_score:.2f}", delta=None)
+                    
+                    # Cross-validation metrics
+                    cross_validation = validation.get('cross_validation_results', {})
+                    if cross_validation:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Cross-Validation Score", f"{cross_validation.get('consistency_score', 0.0):.2f}")
+                        with col2:
+                            st.metric("Total Sources", cross_validation.get('total_sources', 0))
+                    
+                    # Source credibility
+                    source_credibility = validation.get('source_credibility_scores', {})
+                    if source_credibility:
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Source Credibility", f"{source_credibility.get('overall_credibility_score', 0.0):.2f}")
+                        with col2:
+                            st.metric("High Credibility", source_credibility.get('high_credibility_sources', 0))
+                        with col3:
+                            st.metric("Low Credibility", source_credibility.get('low_credibility_sources', 0))
+                    
+                    # Bias analysis
+                    bias_analysis = validation.get('bias_analysis', {})
+                    if bias_analysis:
+                        bias_score = bias_analysis.get('bias_score', 0.0)
+                        bias_color = "red" if bias_score > 0.7 else "orange" if bias_score > 0.4 else "green"
+                        st.metric("Bias Score", f"{bias_score:.2f}", delta=None)
+                        
+                        if bias_analysis.get('bias_indicators'):
+                            st.warning("Bias Indicators Detected:")
+                            for indicator in bias_analysis['bias_indicators']:
+                                st.write(f"• {indicator}")
+                    
+                    # Critical issues and warnings
+                    critical_issues = validation.get('critical_issues', [])
+                    warnings = validation.get('warnings', [])
+                    
+                    if critical_issues:
+                        st.error(f"Critical Issues: {len(critical_issues)}")
+                        for issue in critical_issues[:3]:
+                            st.write(f"• {issue.get('description', 'Unknown issue')}")
+                    
+                    if warnings:
+                        st.warning(f"Warnings: {len(warnings)}")
+                        for warning in warnings[:3]:
+                            st.write(f"• {warning.get('description', 'Unknown warning')}")
+                    
+                    # Detailed validation report
+                    with st.expander("Detailed Validation Report"):
+                        st.json(validation)
+                else:
+                    st.info("No validation results available yet")
+        except Exception as e:
+            st.warning(f"Could not get validation status: {e}")
     
     # Recent activity
     st.subheader("Recent Activity")
