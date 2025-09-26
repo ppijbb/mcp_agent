@@ -184,33 +184,38 @@ class TaskAnalyzerAgent:
                                  objective_id: str) -> Dict[str, Any]:
         """Use LLM to analyze the research request."""
         try:
+            # Validate user request
+            if not user_request or user_request.strip() == "":
+                raise ValueError("User request is empty or invalid")
+            
+            # Clean and validate user request
+            user_request = user_request.strip()
+            if len(user_request) < 3:
+                raise ValueError("User request is too short to analyze")
+            
             prompt = f"""
-            사용자의 연구 요청을 분석하고 구체적인 연구 목표들을 추출하세요.
+            Analyze the user's research request and extract specific research objectives.
             
-            사용자 요청: {user_request}
-            추가 컨텍스트: {context or {}}
+            User Request: "{user_request}"
+            Context: {context or "None"}
             
-            다음을 수행하세요:
-            1. 요청의 핵심 의도 파악
-            2. 관련된 도메인 식별
-            3. 연구 범위와 깊이 결정
-            4. 제약사항과 요구사항 식별
-            5. 구체적인 연구 목표들 생성
-            6. 각 목표의 우선순위 설정
-            7. 성공 기준 정의
+            Instructions:
+            1. Identify the core research intent
+            2. Determine the research domain/topic
+            3. Extract specific research objectives
+            4. Set priority and scope for each objective
             
-            JSON 형태로 응답하세요:
+            Respond in JSON format:
             {{
                 "objectives": [
                     {{
-                        "objective_id": "unique_id",
-                        "type": "primary|secondary|quality",
-                        "description": "목표 설명",
+                        "objective_id": "obj_001",
+                        "type": "primary",
+                        "description": "Clear description of what to research",
                         "intent": "analysis|comparison|exploration|development",
-                        "domain": "identified_domain",
-                        "scope": "general|focused|comprehensive",
-                        "depth": "basic|standard|comprehensive",
-                        "priority": 0.0-1.0,
+                        "domain": "specific_domain_or_topic",
+                        "scope": "focused|comprehensive",
+                        "priority": 0.9,
                         "constraints": {{
                             "time_constraints": [],
                             "resource_constraints": [],
@@ -218,32 +223,32 @@ class TaskAnalyzerAgent:
                             "scope_constraints": []
                         }},
                         "success_criteria": {{
-                            "deliverable_types": [],
-                            "quality_metrics": [],
-                            "completion_indicators": [],
-                            "success_threshold": 0.0-1.0
+                            "deliverable_types": ["report", "analysis"],
+                            "quality_metrics": ["accuracy", "completeness"],
+                            "completion_indicators": ["comprehensive_analysis"],
+                            "success_threshold": 0.8
                         }},
-                        "estimated_effort": 0.0-1.0,
+                        "estimated_effort": 0.7,
                         "dependencies": []
                     }}
                 ],
                 "intent_analysis": {{
-                    "primary_intent": "main_intent",
+                    "primary_intent": "main_research_goal",
                     "secondary_intents": [],
-                    "intent_confidence": 0.0-1.0,
+                    "intent_confidence": 0.9,
                     "research_type": "analytical|comparative|exploratory|developmental"
                 }},
                 "domain_analysis": {{
-                    "primary_domain": "domain",
+                    "primary_domain": "specific_domain",
                     "subdomains": [],
-                    "domain_confidence": 0.0-1.0,
-                    "domain_keywords": []
+                    "domain_confidence": 0.9,
+                    "domain_keywords": ["keyword1", "keyword2"]
                 }},
                 "scope_analysis": {{
-                    "scope_type": "general_analysis|comparative|trend_analysis|literature_review",
+                    "scope_type": "comprehensive_analysis",
                     "scope_boundaries": [],
-                    "scope_depth": "basic|standard|comprehensive",
-                    "scope_keywords": []
+                    "scope_depth": "comprehensive",
+                    "scope_keywords": ["keyword1", "keyword2"]
                 }},
                 "constraint_analysis": {{
                     "time_constraints": [],
@@ -269,27 +274,29 @@ class TaskAnalyzerAgent:
             """
             
             response = await asyncio.to_thread(self.llm.generate_content, prompt)
-            result = json.loads(response.text)
+            
+            # Parse Gemini response properly
+            response_text = response.text.strip()
+            logger.debug(f"Raw Gemini response: {response_text}")
+            
+            # Try to extract JSON from response
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError:
+                # Try to find JSON in the response
+                import re
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    raise ValueError("No valid JSON found in response")
             
             return result
             
         except Exception as e:
             logger.error(f"LLM analysis failed: {e}")
-            # Return minimal fallback
-            return {
-                'objectives': [{
-                    'objective_id': f"primary_{objective_id}",
-                    'type': 'primary',
-                    'description': user_request,
-                    'priority': 1.0,
-                    'success_criteria': {'success_threshold': 0.8}
-                }],
-                'analysis_metadata': {
-                    'objective_id': objective_id,
-                    'timestamp': datetime.now().isoformat(),
-                    'confidence_score': 0.5
-                }
-            }
+            # Re-raise the exception instead of fallback
+            raise ValueError(f"Failed to analyze user request: {e}")
     
     async def _analyze_research_intent(self, user_request: str) -> Dict[str, Any]:
         """Analyze the research intent from user request.

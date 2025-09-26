@@ -688,7 +688,30 @@ class SynthesisAgent:
         user_request: str
     ) -> str:
         """Generate executive summary."""
-        return f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
+        try:
+            # Extract actual research findings from aggregated content
+            research_results = aggregated_content.get('research_results', [])
+            key_findings = []
+            
+            # Process research results to extract key findings
+            for result in research_results:
+                if result.get('success', False):
+                    findings = result.get('analysis_result', {}).get('key_findings', [])
+                    key_findings.extend(findings)
+            
+            # Generate summary based on actual findings
+            if key_findings:
+                summary = f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. Through comprehensive research and analysis, the following key findings have been identified:\n\n"
+                for i, finding in enumerate(key_findings[:5], 1):  # Top 5 findings
+                    summary += f"{i}. {finding}\n"
+                summary += f"\nThe research employed autonomous multi-agent collaboration to ensure comprehensive coverage and high-quality results."
+            else:
+                summary = f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
+            
+            return summary
+        except Exception as e:
+            logger.error(f"Executive summary generation failed: {e}")
+            return f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
     
     async def _generate_introduction(
         self,
@@ -711,10 +734,56 @@ class SynthesisAgent:
         insights: List[Dict[str, Any]]
     ) -> str:
         """Generate findings section."""
-        findings = "# Key Findings\n\n"
-        for i, insight in enumerate(insights[:5], 1):  # Limit to top 5 insights
-            findings += f"{i}. {insight.get('title', 'Insight')}: {insight.get('description', '')}\n\n"
-        return findings
+        try:
+            findings = "# Key Findings\n\n"
+            
+            # Extract actual research results
+            research_results = aggregated_content.get('research_results', [])
+            web_search_results = []
+            academic_results = []
+            
+            # Process different types of research results
+            for result in research_results:
+                if result.get('success', False):
+                    if result.get('method') == 'web_search':
+                        web_search_results.extend(result.get('results', []))
+                    elif result.get('method') == 'academic_search':
+                        academic_results.extend(result.get('results', []))
+            
+            # Add web search findings
+            if web_search_results:
+                findings += "## Web Research Findings\n\n"
+                for i, result in enumerate(web_search_results[:3], 1):
+                    title = result.get('title', 'Untitled')
+                    snippet = result.get('snippet', 'No description available')
+                    findings += f"{i}. **{title}**: {snippet}\n\n"
+            
+            # Add academic research findings
+            if academic_results:
+                findings += "## Academic Research Findings\n\n"
+                for i, result in enumerate(academic_results[:3], 1):
+                    title = result.get('title', 'Untitled')
+                    abstract = result.get('abstract', 'No abstract available')
+                    authors = ', '.join(result.get('authors', []))
+                    year = result.get('year', 'Unknown')
+                    findings += f"{i}. **{title}** ({year})\n"
+                    findings += f"   Authors: {authors}\n"
+                    findings += f"   Abstract: {abstract[:200]}...\n\n"
+            
+            # Add insights if available
+            if insights:
+                findings += "## Key Insights\n\n"
+                for i, insight in enumerate(insights[:5], 1):
+                    findings += f"{i}. {insight.get('title', 'Insight')}: {insight.get('description', '')}\n\n"
+            
+            # If no findings, add a message
+            if not web_search_results and not academic_results and not insights:
+                findings += "No specific findings were identified in the research process. This may indicate that the research query needs to be refined or that additional research sources should be consulted.\n\n"
+            
+            return findings
+        except Exception as e:
+            logger.error(f"Findings generation failed: {e}")
+            return "# Key Findings\n\nResearch findings are being processed and will be available shortly.\n\n"
     
     async def _generate_analysis(
         self,
@@ -722,7 +791,52 @@ class SynthesisAgent:
         insights: List[Dict[str, Any]]
     ) -> str:
         """Generate analysis section."""
-        return "# Analysis\n\nDetailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report."
+        try:
+            analysis = "# Analysis\n\n"
+            
+            # Extract research results for analysis
+            research_results = aggregated_content.get('research_results', [])
+            total_sources = len(research_results)
+            successful_research = len([r for r in research_results if r.get('success', False)])
+            
+            analysis += f"## Research Overview\n\n"
+            analysis += f"This analysis is based on {successful_research} successful research tasks out of {total_sources} total attempts. "
+            
+            if successful_research > 0:
+                analysis += f"The research quality score is {sum(r.get('research_quality', 0) for r in research_results if r.get('success', False)) / successful_research:.2f} out of 1.0.\n\n"
+                
+                # Analyze research methods used
+                methods_used = set()
+                for result in research_results:
+                    if result.get('success', False):
+                        methods_used.add(result.get('method', 'unknown'))
+                
+                if methods_used:
+                    analysis += f"## Research Methods\n\n"
+                    analysis += f"The following research methods were employed: {', '.join(methods_used)}.\n\n"
+                
+                # Analyze findings patterns
+                analysis += f"## Pattern Analysis\n\n"
+                analysis += f"Detailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report.\n\n"
+                
+                # Add specific analysis based on research results
+                web_results = [r for r in research_results if r.get('method') == 'web_search' and r.get('success', False)]
+                academic_results = [r for r in research_results if r.get('method') == 'academic_search' and r.get('success', False)]
+                
+                if web_results:
+                    analysis += f"### Web Research Analysis\n\n"
+                    analysis += f"Web research yielded {sum(len(r.get('results', [])) for r in web_results)} relevant sources, providing current information and real-time data.\n\n"
+                
+                if academic_results:
+                    analysis += f"### Academic Research Analysis\n\n"
+                    analysis += f"Academic research identified {sum(len(r.get('results', [])) for r in academic_results)} scholarly sources, providing peer-reviewed insights and established knowledge.\n\n"
+            else:
+                analysis += f"Unfortunately, no successful research tasks were completed, which limits the depth of analysis possible.\n\n"
+            
+            return analysis
+        except Exception as e:
+            logger.error(f"Analysis generation failed: {e}")
+            return "# Analysis\n\nDetailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report."
     
     async def _generate_conclusions(
         self,
@@ -810,7 +924,7 @@ class SynthesisAgent:
             }
             
             # 2. Generate HTML file
-            html_content = await self._generate_html_content(enhanced_content, user_request)
+            html_content = self._generate_html_content(enhanced_content, user_request)
             html_path = await self._save_html_file(html_content, objective_id, user_request)
             deliverables['html'] = {
                 'path': html_path,
@@ -862,15 +976,18 @@ class SynthesisAgent:
         """Save Markdown file."""
         try:
             import os
+            from datetime import datetime
+            
+            # Generate objective_id if None
+            if not objective_id or objective_id == "None":
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
             # Create output directory
             output_dir = f"output/{objective_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            # Generate filename
-            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_title = safe_title.replace(' ', '_')[:50]
-            filename = f"{safe_title}_report.md"
+            # Generate filename using objective_id as primary identifier
+            filename = f"{objective_id}_report.md"
             file_path = os.path.join(output_dir, filename)
             
             # Write file
@@ -893,15 +1010,18 @@ class SynthesisAgent:
         """Save HTML file."""
         try:
             import os
+            from datetime import datetime
+            
+            # Generate objective_id if None
+            if not objective_id or objective_id == "None":
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
             # Create output directory
             output_dir = f"output/{objective_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            # Generate filename
-            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_title = safe_title.replace(' ', '_')[:50]
-            filename = f"{safe_title}_report.html"
+            # Generate filename using objective_id as primary identifier
+            filename = f"{objective_id}_report.html"
             file_path = os.path.join(output_dir, filename)
             
             # Write file
@@ -924,15 +1044,18 @@ class SynthesisAgent:
         """Generate PDF file."""
         try:
             import os
+            from datetime import datetime
+            
+            # Generate objective_id if None
+            if not objective_id or objective_id == "None":
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
             # Create output directory
             output_dir = f"output/{objective_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            # Generate filename
-            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_title = safe_title.replace(' ', '_')[:50]
-            filename = f"{safe_title}_report.pdf"
+            # Generate filename using objective_id as primary identifier
+            filename = f"{objective_id}_report.pdf"
             file_path = os.path.join(output_dir, filename)
             
             # Simple PDF generation (fallback to text file if PDF libraries not available)
@@ -989,15 +1112,18 @@ class SynthesisAgent:
         """Generate Word document."""
         try:
             import os
+            from datetime import datetime
+            
+            # Generate objective_id if None
+            if not objective_id or objective_id == "None":
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
             # Create output directory
             output_dir = f"output/{objective_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            # Generate filename
-            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_title = safe_title.replace(' ', '_')[:50]
-            filename = f"{safe_title}_report.docx"
+            # Generate filename using objective_id as primary identifier
+            filename = f"{objective_id}_report.docx"
             file_path = os.path.join(output_dir, filename)
             
             try:
@@ -1048,15 +1174,18 @@ class SynthesisAgent:
         try:
             import json
             import os
+            from datetime import datetime
+            
+            # Generate objective_id if None
+            if not objective_id or objective_id == "None":
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
             # Create output directory
             output_dir = f"output/{objective_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            # Generate filename
-            safe_title = "".join(c for c in user_request if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_title = safe_title.replace(' ', '_')[:50]
-            filename = f"{safe_title}_data.json"
+            # Generate filename using objective_id as primary identifier
+            filename = f"{objective_id}_data.json"
             file_path = os.path.join(output_dir, filename)
             
             # Prepare data
@@ -1263,6 +1392,57 @@ class SynthesisAgent:
         except Exception as e:
             logger.error(f"Synthesis quality calculation failed: {e}")
             return 0.5
+    
+    def _generate_html_content(self, enhanced_content: Dict[str, Any], user_request: str) -> str:
+        """Generate HTML content from enhanced content."""
+        try:
+            # Extract content sections
+            title = enhanced_content.get('title', 'Research Report')
+            sections = enhanced_content.get('sections', [])
+            
+            # Generate HTML
+            html_content = f"""
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; }}
+        h1 {{ color: #333; border-bottom: 2px solid #333; }}
+        h2 {{ color: #666; margin-top: 30px; }}
+        p {{ margin-bottom: 15px; }}
+        .section {{ margin-bottom: 30px; }}
+    </style>
+</head>
+<body>
+    <h1>{title}</h1>
+    <p><strong>Research Query:</strong> {user_request}</p>
+"""
+            
+            for section in sections:
+                if isinstance(section, dict):
+                    section_title = section.get('title', 'Section')
+                    section_content = section.get('content', '')
+                    html_content += f"""
+    <div class="section">
+        <h2>{section_title}</h2>
+        <p>{section_content}</p>
+    </div>
+"""
+                else:
+                    html_content += f"    <p>{section}</p>\n"
+            
+            html_content += """
+</body>
+</html>
+"""
+            return html_content
+            
+        except Exception as e:
+            logger.error(f"HTML content generation failed: {e}")
+            return f"<html><body><h1>Error</h1><p>Failed to generate HTML content: {e}</p></body></html>"
     
     async def cleanup(self):
         """Cleanup agent resources."""

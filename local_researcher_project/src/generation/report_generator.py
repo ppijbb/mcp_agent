@@ -18,9 +18,7 @@ from jinja2 import Environment, FileSystemLoader
 import markdown
 import pdfkit
 from docx import Document
-from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.style import WD_STYLE_TYPE
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger

@@ -213,7 +213,22 @@ class TaskDecomposerAgent:
             """
             
             response = await asyncio.to_thread(self.llm.generate_content, prompt)
-            result = json.loads(response.text)
+            
+            # Parse Gemini response properly
+            response_text = response.text.strip()
+            logger.debug(f"Raw Gemini response: {response_text}")
+            
+            # Try to extract JSON from response
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError:
+                # Try to find JSON in the response
+                import re
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    raise ValueError("No valid JSON found in response")
             
             return result
             

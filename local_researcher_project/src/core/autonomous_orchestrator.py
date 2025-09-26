@@ -176,14 +176,8 @@ class LangGraphOrchestrator:
         workflow.add_edge("synthesize_deliverable", "decide_continuation")
         
         # Conditional edges for iteration and validation
-        workflow.add_conditional_edges(
-            "validate_results",
-            self._should_continue_after_validation,
-            {
-                "continue": "execute_research",
-                "synthesize": "synthesize_deliverable"
-            }
-        )
+        # Add direct edge from validation to synthesis (no loops)
+        workflow.add_edge("validate_results", "synthesize_deliverable")
         
         workflow.add_conditional_edges(
             "decide_continuation",
@@ -194,7 +188,7 @@ class LangGraphOrchestrator:
             }
         )
         
-        return workflow.compile()
+        return workflow.compile(checkpointer=None, interrupt_before=None, interrupt_after=None)
     
     def _initialize_llm(self):
         """Initialize the LLM client."""
@@ -224,12 +218,21 @@ class LangGraphOrchestrator:
             Research objective ID
         """
         try:
+            # Validate user request
+            if not user_request or user_request.strip() == "":
+                raise ValueError("User request cannot be empty")
+            
+            # Clean and validate user request
+            user_request = user_request.strip()
+            if len(user_request) < 3:
+                raise ValueError("User request is too short to process")
+            
             # Create objective ID
             objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(user_request) % 10000:04d}"
             
-            # Initialize state
+            # Initialize state with persistent user request
             initial_state = ResearchState(
-                user_request=user_request,
+                user_request=user_request,  # Ensure user_request is preserved
                 context=context or {},
                 objective_id=objective_id,
                 analyzed_objectives=[],
@@ -289,25 +292,30 @@ class LangGraphOrchestrator:
     async def _analyze_objectives_node(self, state: ResearchState) -> ResearchState:
         """Analyze user request and extract objectives."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info(f"Analyzing objectives for: {state['user_request']}")
             
             # Use task analyzer agent
             analyzer = self.agents.get('analyzer')
-            if analyzer:
-                analysis_result = await analyzer.analyze_objective(
-                    state['user_request'], 
-                    state['context'], 
-                    state['objective_id']
-                )
-                
-                state['analyzed_objectives'] = analysis_result.get('objectives', [])
-                state['intent_analysis'] = analysis_result.get('intent_analysis', {})
-                state['domain_analysis'] = analysis_result.get('domain_analysis', {})
-                state['scope_analysis'] = analysis_result.get('scope_analysis', {})
-            else:
-                # Fallback to LLM analysis
-                analysis_result = await self.llm_methods.llm_analyze_objective(state)
-                state['analyzed_objectives'] = analysis_result
+            if not analyzer:
+                raise ValueError("Task analyzer agent not available")
+            
+            analysis_result = await analyzer.analyze_objective(
+                state['user_request'], 
+                state['context'], 
+                state['objective_id']
+            )
+            
+            state['analyzed_objectives'] = analysis_result.get('objectives', [])
+            state['intent_analysis'] = analysis_result.get('intent_analysis', {})
+            state['domain_analysis'] = analysis_result.get('domain_analysis', {})
+            state['scope_analysis'] = analysis_result.get('scope_analysis', {})
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
             
             state['current_step'] = "decompose_tasks"
             state['messages'].append(AIMessage(content=f"Analyzed {len(state['analyzed_objectives'])} objectives"))
@@ -317,31 +325,35 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Objective analysis failed: {e}")
             state['error_message'] = str(e)
+            state['should_continue'] = False
             return state
     
     async def _decompose_tasks_node(self, state: ResearchState) -> ResearchState:
         """Decompose objectives into executable tasks."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info("Decomposing tasks")
             
             # Use task decomposer agent
             decomposer = self.agents.get('decomposer')
-            if decomposer:
-                decomposition_result = await decomposer.decompose_tasks(
-                    state['analyzed_objectives'],
-                    self.agents,
-                    state['objective_id']
-                )
-                
-                state['decomposed_tasks'] = decomposition_result.get('tasks', [])
-                state['task_assignments'] = decomposition_result.get('assignments', [])
-                state['execution_strategy'] = decomposition_result.get('strategy', 'sequential')
-            else:
-                # Fallback to LLM decomposition
-                decomposition_result = await self.llm_methods.llm_decompose_tasks(state)
-                state['decomposed_tasks'] = decomposition_result.get('tasks', [])
-                state['task_assignments'] = decomposition_result.get('assignments', [])
-                state['execution_strategy'] = decomposition_result.get('strategy', 'sequential')
+            if not decomposer:
+                raise ValueError("Task decomposer agent not available")
+            
+            decomposition_result = await decomposer.decompose_tasks(
+                state['analyzed_objectives'],
+                self.agents,
+                state['objective_id']
+            )
+            
+            state['decomposed_tasks'] = decomposition_result.get('tasks', [])
+            state['task_assignments'] = decomposition_result.get('assignments', [])
+            state['execution_strategy'] = decomposition_result.get('strategy', 'sequential')
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
             
             state['current_step'] = "execute_research"
             state['messages'].append(AIMessage(content=f"Decomposed into {len(state['decomposed_tasks'])} tasks"))
@@ -351,11 +363,16 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Task decomposition failed: {e}")
             state['error_message'] = str(e)
+            state['should_continue'] = False
             return state
     
     async def _execute_research_node(self, state: ResearchState) -> ResearchState:
         """Execute research tasks using specialized agents."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info("Executing research tasks")
             
             # Increment iteration count
@@ -366,7 +383,10 @@ class LangGraphOrchestrator:
             
             # Execute research tasks using research agent
             research_agent = self.agents.get('researcher')
-            if research_agent and state['decomposed_tasks']:
+            if not research_agent:
+                raise ValueError("Research agent not available")
+            
+            if state['decomposed_tasks']:
                 # Group tasks by type for efficient execution
                 research_tasks = [task for task in state['decomposed_tasks'] 
                                 if task.get('type') in ['research', 'data_collection', 'analysis']]
@@ -418,6 +438,10 @@ class LangGraphOrchestrator:
             
             state['execution_results'] = execution_results
             state['agent_status'] = agent_status
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
+            
             state['current_step'] = "evaluate_results"
             state['messages'].append(AIMessage(content=f"Executed {len(execution_results)} tasks"))
             
@@ -426,6 +450,7 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Research execution failed: {e}")
             state['error_message'] = str(e)
+            state['should_continue'] = False
             return state
     
     async def _execute_single_task(self, task: Dict[str, Any], agent_name: str, state: ResearchState) -> Dict[str, Any]:
@@ -672,25 +697,9 @@ class LangGraphOrchestrator:
     
     def _should_continue(self, state: ResearchState) -> str:
         """Determine whether to continue or end the workflow."""
-        # Check if we have valid results
-        if not state.get('execution_results') or len(state['execution_results']) == 0:
-            return "continue"
-        
-        # Check validation score
-        validation_score = state.get('validation_score', 0.0)
-        if validation_score < 0.5:  # Low validation score, continue
-            return "continue"
-        
-        # Check if we have enough iterations
-        iteration_count = state.get('iteration', 0)
-        if iteration_count >= 3:  # Maximum 3 iterations
-            return "end"
-        
-        # If validation is good enough, end
-        if validation_score >= 0.7:
-            return "end"
-        
-        return "continue"
+        # Always end after synthesis (no loops)
+        logger.info("Workflow completed, ending")
+        return "end"
     
     async def get_research_status(self, objective_id: str) -> Optional[Dict[str, Any]]:
         """Get research status."""

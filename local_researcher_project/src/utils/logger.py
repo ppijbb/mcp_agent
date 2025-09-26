@@ -19,7 +19,8 @@ def setup_logger(
     log_file: Optional[str] = None,
     console_output: bool = True,
     max_file_size: str = "10MB",
-    backup_count: int = 5
+    backup_count: int = 5,
+    detailed_format: bool = True
 ) -> logging.Logger:
     """Setup and configure a logger instance.
     
@@ -45,10 +46,16 @@ def setup_logger(
     logger.setLevel(level)
     
     # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    if detailed_format:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+    else:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
     
     # Console handler
     if console_output:

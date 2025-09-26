@@ -368,13 +368,24 @@ class ResearchAgent:
             """
             
             response = await asyncio.to_thread(self.llm.generate_content, prompt)
-            return json.loads(response.text)
+            # Parse Gemini response properly
+            response_text = response.text.strip()
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Try to find JSON in the response
+                import re
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+                else:
+                    raise ValueError("No valid JSON found in response")
             
         except Exception as e:
             logger.error(f"LLM research planning failed: {e}")
             return {'steps': []}
     
-    async def _execute_research_step(self, step: Dict[str, Any], task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _execute_research_step(self, step: Dict[str, Any], task: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Execute a single research step."""
         try:
             method = step.get('method', 'web_search')
@@ -647,7 +658,18 @@ class ResearchAgent:
             """
             
             response = await asyncio.to_thread(self.llm.generate_content, prompt)
-            return json.loads(response.text)
+            # Parse Gemini response properly
+            response_text = response.text.strip()
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Try to find JSON in the response
+                import re
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+                else:
+                    raise ValueError("No valid JSON found in response")
             
         except Exception as e:
             logger.error(f"LLM result analysis failed: {e}")
