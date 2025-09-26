@@ -86,17 +86,19 @@ class ResearchState(TypedDict):
 class LangGraphOrchestrator:
     """LangGraph-optimized autonomous orchestrator for multi-agent research system."""
     
-    def __init__(self, config_path: Optional[str], agents: Dict[str, Any], mcp_manager: MCPIntegrationManager):
+    def __init__(self, config_manager: ConfigManager, config_path: Optional[str] = None, 
+                 agents: Optional[Dict[str, Any]] = None, mcp_manager: Optional[MCPIntegrationManager] = None):
         """Initialize the LangGraph orchestrator.
         
         Args:
+            config_manager: Configuration manager instance
             config_path: Path to configuration file
             agents: Dictionary of specialized agents
             mcp_manager: MCP integration manager
         """
         self.config_path = config_path
-        self.config_manager = ConfigManager(config_path)
-        self.agents = agents
+        self.config_manager = config_manager
+        self.agents = agents or {}
         self.mcp_manager = mcp_manager
         
         # Initialize LLM
@@ -105,6 +107,14 @@ class LangGraphOrchestrator:
         
         # Advanced configuration
         self.advanced_config = self.config_manager.get_advanced_config()
+        
+        # Initialize agents if not provided
+        if not self.agents:
+            self.agents = self._initialize_agents()
+        
+        # Initialize MCP manager if not provided
+        if not self.mcp_manager:
+            self.mcp_manager = MCPIntegrationManager(self.config_manager)
         
         # Orchestration state
         self.active_objectives: Dict[str, Any] = {}
@@ -117,6 +127,32 @@ class LangGraphOrchestrator:
         self.graph = self._build_langgraph_workflow()
         
         logger.info("LangGraph Orchestrator initialized with advanced workflow management")
+    
+    def _initialize_agents(self) -> Dict[str, Any]:
+        """Initialize all specialized agents."""
+        try:
+            from src.agents.task_analyzer import TaskAnalyzerAgent
+            from src.agents.task_decomposer import TaskDecomposerAgent
+            from src.agents.research_agent import ResearchAgent
+            from src.agents.evaluation_agent import EvaluationAgent
+            from src.agents.validation_agent import ValidationAgent
+            from src.agents.synthesis_agent import SynthesisAgent
+            
+            agents = {
+                'analyzer': TaskAnalyzerAgent(self.config_path),
+                'decomposer': TaskDecomposerAgent(self.config_path),
+                'researcher': ResearchAgent(self.config_path),
+                'evaluator': EvaluationAgent(self.config_path),
+                'validator': ValidationAgent(self.config_path),
+                'synthesizer': SynthesisAgent(self.config_path)
+            }
+            
+            logger.info(f"Initialized {len(agents)} agents: {list(agents.keys())}")
+            return agents
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize agents: {e}")
+            return {}
     
     def _build_langgraph_workflow(self) -> StateGraph:
         """Build the LangGraph workflow for autonomous research."""
@@ -137,10 +173,18 @@ class LangGraphOrchestrator:
         workflow.add_edge("decompose_tasks", "execute_research")
         workflow.add_edge("execute_research", "evaluate_results")
         workflow.add_edge("evaluate_results", "validate_results")
-        workflow.add_edge("validate_results", "synthesize_deliverable")
         workflow.add_edge("synthesize_deliverable", "decide_continuation")
         
-        # Conditional edges for iteration
+        # Conditional edges for iteration and validation
+        workflow.add_conditional_edges(
+            "validate_results",
+            self._should_continue_after_validation,
+            {
+                "continue": "execute_research",
+                "synthesize": "synthesize_deliverable"
+            }
+        )
+        
         workflow.add_conditional_edges(
             "decide_continuation",
             self._should_continue,
@@ -315,30 +359,57 @@ class LangGraphOrchestrator:
             execution_results = []
             agent_status = {}
             
-            # Execute tasks based on strategy
-            if state['execution_strategy'] == 'parallel':
-                # Execute tasks in parallel
-                tasks = []
-                for task in state['decomposed_tasks']:
-                    agent_name = task.get('assigned_to')
-                    if agent_name and agent_name in self.agents:
-                        task_coro = self._execute_single_task(task, agent_name, state)
-                        tasks.append(task_coro)
+            # Execute research tasks using research agent
+            research_agent = self.agents.get('researcher')
+            if research_agent and state['decomposed_tasks']:
+                # Group tasks by type for efficient execution
+                research_tasks = [task for task in state['decomposed_tasks'] 
+                                if task.get('type') in ['research', 'data_collection', 'analysis']]
                 
-                if tasks:
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for result in results:
-                        if isinstance(result, Exception):
-                            logger.error(f"Task execution failed: {result}")
-                        else:
+                if research_tasks:
+                    # Execute research tasks
+                    research_result = await research_agent.conduct_research(
+                        research_tasks, 
+                        state['context'], 
+                        state['objective_id']
+                    )
+                    execution_results.append({
+                        "agent": "researcher",
+                        "task_type": "research",
+                        "result": research_result,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    agent_status['researcher'] = "completed"
+            
+            # Execute other specialized tasks
+            other_tasks = [task for task in state['decomposed_tasks'] 
+                          if task.get('type') not in ['research', 'data_collection', 'analysis']]
+            
+            if other_tasks:
+                # Execute other tasks based on strategy
+                if state.get('execution_strategy') == 'parallel':
+                    # Execute tasks in parallel
+                    tasks = []
+                    for task in other_tasks:
+                        agent_name = task.get('assigned_to')
+                        if agent_name and agent_name in self.agents:
+                            task_coro = self._execute_single_task(task, agent_name, state)
+                            tasks.append(task_coro)
+                    
+                    if tasks:
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                        for result in results:
+                            if isinstance(result, Exception):
+                                logger.error(f"Task execution failed: {result}")
+                            else:
+                                execution_results.append(result)
+                else:
+                    # Execute tasks sequentially
+                    for task in other_tasks:
+                        agent_name = task.get('assigned_to')
+                        if agent_name and agent_name in self.agents:
+                            result = await self._execute_single_task(task, agent_name, state)
                             execution_results.append(result)
-            else:
-                # Execute tasks sequentially
-                for task in state['decomposed_tasks']:
-                    agent_name = task.get('assigned_to')
-                    if agent_name and agent_name in self.agents:
-                        result = await self._execute_single_task(task, agent_name, state)
-                        execution_results.append(result)
             
             state['execution_results'] = execution_results
             state['agent_status'] = agent_status
@@ -357,17 +428,50 @@ class LangGraphOrchestrator:
         try:
             agent = self.agents[agent_name]
             
-            # Execute task based on agent type
-            if hasattr(agent, 'execute_task'):
-                result = await agent.execute_task(task, state['context'], state['objective_id'])
-            elif hasattr(agent, 'conduct_research'):
-                result = await agent.conduct_research(task, state['context'], state['objective_id'])
+            # Execute task based on agent type and task type
+            task_type = task.get('type', 'general')
+            
+            if agent_name == 'researcher':
+                # Research agent handles all research tasks
+                result = await agent.execute_task(task, state['objective_id'], state['context'])
+            elif agent_name == 'evaluator':
+                # Evaluation agent
+                result = await agent.evaluate_results(
+                    state['execution_results'],
+                    state['analyzed_objectives'],
+                    state['user_request'],
+                    state['context'],
+                    state['objective_id']
+                )
+            elif agent_name == 'validator':
+                # Validation agent
+                result = await agent.validate_results(
+                    state['execution_results'],
+                    state['analyzed_objectives'],
+                    state['user_request'],
+                    state['context'],
+                    state['objective_id']
+                )
+            elif agent_name == 'synthesizer':
+                # Synthesis agent
+                result = await agent.synthesize_deliverable(
+                    state['execution_results'],
+                    state['analyzed_objectives'],
+                    state['user_request'],
+                    state['context'],
+                    state['objective_id']
+                )
             else:
-                result = {"error": f"Agent {agent_name} does not support task execution"}
+                # Fallback for other agents
+                if hasattr(agent, 'execute_task'):
+                    result = await agent.execute_task(task, state['objective_id'], state['context'])
+                else:
+                    result = {"error": f"Agent {agent_name} does not support task execution"}
             
             return {
                 "task_id": task.get('task_id'),
                 "agent": agent_name,
+                "task_type": task_type,
                 "result": result,
                 "timestamp": datetime.now().isoformat()
             }
@@ -529,6 +633,37 @@ class LangGraphOrchestrator:
             state['error_message'] = str(e)
             state['should_continue'] = False
             return state
+    
+    def _should_continue_after_validation(self, state: ResearchState) -> str:
+        """Determine if research should continue after validation."""
+        try:
+            # Check if there are critical issues
+            critical_issues = state.get('critical_issues', [])
+            if critical_issues:
+                logger.info(f"Critical validation issues detected: {len(critical_issues)}")
+                return "continue"
+            
+            # Check if validation score is below threshold
+            validation_score = state.get('validation_score', 0.0)
+            if validation_score < 0.7:
+                logger.info(f"Validation score below threshold: {validation_score}")
+                return "continue"
+            
+            # Check if max iterations reached
+            if state.get('iteration', 0) >= state.get('max_iterations', 3):
+                logger.info("Max iterations reached")
+                return "synthesize"
+            
+            # Check if should_continue flag is set
+            if not state.get('should_continue', False):
+                logger.info("Should continue flag is False")
+                return "synthesize"
+            
+            return "synthesize"
+            
+        except Exception as e:
+            logger.error(f"Validation continuation decision failed: {e}")
+            return "synthesize"
     
     def _should_continue(self, state: ResearchState) -> str:
         """Determine whether to continue or end the workflow."""

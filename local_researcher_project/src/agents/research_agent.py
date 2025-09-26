@@ -159,6 +159,76 @@ class ResearchAgent:
             }
         }
     
+    async def conduct_research(self, tasks: List[Dict[str, Any]], 
+                              context: Optional[Dict[str, Any]] = None, 
+                              objective_id: str = None) -> Dict[str, Any]:
+        """Conduct comprehensive research for multiple tasks.
+        
+        Args:
+            tasks: List of research tasks
+            context: Additional context
+            objective_id: Objective ID for tracking
+            
+        Returns:
+            Comprehensive research result
+        """
+        try:
+            logger.info(f"Conducting research for {len(tasks)} tasks")
+            
+            research_results = []
+            successful_tasks = 0
+            failed_tasks = 0
+            
+            # Execute each task
+            for task in tasks:
+                try:
+                    result = await self.execute_task(task, objective_id)
+                    research_results.append(result)
+                    
+                    if result.get('success', False):
+                        successful_tasks += 1
+                    else:
+                        failed_tasks += 1
+                        
+                except Exception as e:
+                    logger.error(f"Task execution failed: {e}")
+                    research_results.append({
+                        "success": False,
+                        "error": str(e),
+                        "task_id": task.get('task_id'),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    failed_tasks += 1
+            
+            # Generate comprehensive research summary
+            summary = await self._generate_research_summary(research_results, {
+                "total_tasks": len(tasks),
+                "successful_tasks": successful_tasks,
+                "failed_tasks": failed_tasks
+            })
+            
+            return {
+                "success": successful_tasks > 0,
+                "research_results": research_results,
+                "summary": summary,
+                "statistics": {
+                    "total_tasks": len(tasks),
+                    "successful_tasks": successful_tasks,
+                    "failed_tasks": failed_tasks,
+                    "success_rate": successful_tasks / len(tasks) if tasks else 0
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Research conduction failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "research_results": [],
+                "timestamp": datetime.now().isoformat()
+            }
+    
     async def execute_task(self, task: Dict[str, Any], objective_id: str, 
                           is_refinement: bool = False) -> Dict[str, Any]:
         """Execute a research task with LLM-based research.
