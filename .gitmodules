@@ -4,3 +4,9 @@
 [submodule "claude-code"]
 	path = claude-code
 	url = https://github.com/anthropics/claude-code.git
+[submodule "open_researcher/open_researcher/DeepResearch"]
+	path = open_researcher/open_researcher/DeepResearch
+	url = https://github.com/Alibaba-NLP/DeepResearch.git
+[submodule "open_researcher/DeepResearch"]
+	path = open_researcher/DeepResearch
+	url = https://github.com/Alibaba-NLP/DeepResearch.git
