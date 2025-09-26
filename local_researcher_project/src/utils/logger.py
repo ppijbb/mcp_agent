@@ -2,7 +2,7 @@
 Logging system for Local Researcher
 
 This module provides a centralized logging system with configurable
-log levels, formats, and output destinations.
+log levels, formats, and output destinations with color support.
 """
 
 import logging
@@ -13,6 +13,59 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with color support for console output."""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Green
+        'WARNING': '\033[33m',    # Yellow
+        'ERROR': '\033[31m',      # Red
+        'CRITICAL': '\033[35m',   # Magenta
+        'RESET': '\033[0m'        # Reset
+    }
+    
+    # Agent-specific colors
+    AGENT_COLORS = {
+        'autonomous_orchestrator': '\033[94m',    # Blue
+        'task_analyzer': '\033[95m',              # Magenta
+        'task_decomposer': '\033[96m',            # Cyan
+        'research_agent': '\033[92m',             # Light Green
+        'evaluation_agent': '\033[93m',           # Light Yellow
+        'validation_agent': '\033[91m',           # Light Red
+        'synthesis_agent': '\033[97m',            # White
+        'mcp_integration': '\033[90m',            # Gray
+        'llm_methods': '\033[94m',                # Blue
+        'RESET': '\033[0m'                        # Reset
+    }
+    
+    def __init__(self, fmt=None, datefmt=None, use_colors=True):
+        super().__init__(fmt, datefmt)
+        self.use_colors = use_colors
+    
+    def format(self, record):
+        if not self.use_colors or not hasattr(record, 'levelname'):
+            return super().format(record)
+        
+        # Get base format
+        formatted = super().format(record)
+        
+        # Add colors
+        level_color = self.COLORS.get(record.levelname, '')
+        agent_color = self.AGENT_COLORS.get(record.name, '')
+        reset_color = self.COLORS['RESET']
+        
+        # Apply colors to different parts
+        if level_color:
+            formatted = formatted.replace(record.levelname, f"{level_color}{record.levelname}{reset_color}")
+        
+        if agent_color and record.name in self.AGENT_COLORS:
+            formatted = formatted.replace(record.name, f"{agent_color}{record.name}{reset_color}")
+        
+        return formatted
+
+
 def setup_logger(
     name: str,
     log_level: str = "INFO",
@@ -20,7 +73,8 @@ def setup_logger(
     console_output: bool = True,
     max_file_size: str = "10MB",
     backup_count: int = 5,
-    detailed_format: bool = True
+    detailed_format: bool = True,
+    use_colors: bool = True
 ) -> logging.Logger:
     """Setup and configure a logger instance.
     
@@ -31,6 +85,8 @@ def setup_logger(
         console_output: Whether to output to console
         max_file_size: Maximum log file size before rotation
         backup_count: Number of backup files to keep
+        detailed_format: Whether to use detailed formatting
+        use_colors: Whether to use colors in console output
         
     Returns:
         Configured logger instance
@@ -45,23 +101,32 @@ def setup_logger(
     level = getattr(logging, log_level.upper(), logging.INFO)
     logger.setLevel(level)
     
-    # Create formatter
+    # Create formatters
     if detailed_format:
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+        console_format = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s'
+        file_format = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s'
     else:
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
+        console_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        file_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    
+    # Console formatter with colors
+    console_formatter = ColoredFormatter(
+        console_format,
+        datefmt='%Y-%m-%d %H:%M:%S',
+        use_colors=use_colors
+    )
+    
+    # File formatter without colors
+    file_formatter = logging.Formatter(
+        file_format,
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     
     # Console handler
     if console_output:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(level)
-        console_handler.setFormatter(formatter)
+        console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
     
     # File handler
@@ -82,7 +147,7 @@ def setup_logger(
                 encoding='utf-8'
             )
             file_handler.setLevel(level)
-            file_handler.setFormatter(formatter)
+            file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
             
         except Exception as e:
@@ -90,7 +155,7 @@ def setup_logger(
             try:
                 file_handler = logging.FileHandler(log_file, encoding='utf-8')
                 file_handler.setLevel(level)
-                file_handler.setFormatter(formatter)
+                file_handler.setFormatter(file_formatter)
                 logger.addHandler(file_handler)
             except Exception as e2:
                 logger.warning(f"Failed to setup file logging: {e2}")
@@ -158,7 +223,8 @@ def add_file_handler(
     log_file: str,
     level: str = "INFO",
     max_file_size: str = "10MB",
-    backup_count: int = 5
+    backup_count: int = 5,
+    detailed_format: bool = True
 ):
     """Add a file handler to an existing logger.
     
@@ -168,14 +234,21 @@ def add_file_handler(
         level: Log level for the file handler
         max_file_size: Maximum file size before rotation
         backup_count: Number of backup files
+        detailed_format: Whether to use detailed formatting
     """
     logger = logging.getLogger(logger_name)
     
     # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    if detailed_format:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+    else:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
     
     try:
         # Create logs directory if it doesn't exist
@@ -224,7 +297,8 @@ def remove_file_handler(logger_name: str, log_file: str):
 def setup_default_logging(
     log_level: str = "INFO",
     log_file: Optional[str] = None,
-    console_output: bool = True
+    console_output: bool = True,
+    use_colors: bool = True
 ):
     """Setup default logging configuration for the application.
     
@@ -232,6 +306,7 @@ def setup_default_logging(
         log_level: Default log level
         log_file: Default log file path
         console_output: Whether to output to console
+        use_colors: Whether to use colors in console output
     """
     if log_file is None:
         # Create default log file in logs directory
@@ -243,25 +318,27 @@ def setup_default_logging(
         "local_researcher",
         log_level=log_level,
         log_file=log_file,
-        console_output=console_output
+        console_output=console_output,
+        use_colors=use_colors
     )
     
     # Setup common loggers
-    setup_logger("research_orchestrator", log_level=log_level, console_output=console_output)
-    setup_logger("gemini_cli_integration", log_level=log_level, console_output=console_output)
-    setup_logger("open_deep_research_adapter", log_level=log_level, console_output=console_output)
+    setup_logger("research_orchestrator", log_level=log_level, console_output=console_output, use_colors=use_colors)
+    setup_logger("gemini_cli_integration", log_level=log_level, console_output=console_output, use_colors=use_colors)
+    setup_logger("open_deep_research_adapter", log_level=log_level, console_output=console_output, use_colors=use_colors)
     
     return root_logger
 
 
 # Convenience function for quick logging setup
-def quick_logger(name: str) -> logging.Logger:
+def quick_logger(name: str, use_colors: bool = True) -> logging.Logger:
     """Quick setup for a logger with default settings.
     
     Args:
         name: Logger name
+        use_colors: Whether to use colors in console output
         
     Returns:
         Logger instance
     """
-    return setup_logger(name, console_output=True)
+    return setup_logger(name, console_output=True, use_colors=use_colors)
