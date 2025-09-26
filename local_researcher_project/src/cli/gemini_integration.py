@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from ..core.research_orchestrator import ResearchOrchestrator, ResearchRequest
+from ..core.autonomous_orchestrator import LangGraphOrchestrator
 from ..utils.config_manager import ConfigManager
 from ..utils.logger import setup_logger
 
@@ -36,7 +36,7 @@ class GeminiCLIIntegration:
         self.console = Console()
         self.logger = setup_logger("gemini_cli_integration")
         self.config_manager = ConfigManager(config_path)
-        self.orchestrator = ResearchOrchestrator(config_path)
+        self.orchestrator = LangGraphOrchestrator(self.config_manager, config_path)
         
         # Gemini CLI configuration
         self.gemini_cli_path = self._find_gemini_cli()
@@ -159,17 +159,16 @@ class GeminiCLIIntegration:
         topic = args[0]
         options = self._parse_options(args[1:])
         
-        # Create research request
-        request = ResearchRequest(
-            topic=topic,
-            domain=options.get("--domain"),
-            depth=options.get("--depth", "standard"),
-            sources=options.get("--sources", "").split(",") if options.get("--sources") else [],
-            output_format=options.get("--format", "markdown")
-        )
+        # Prepare research context
+        context = {
+            "domain": options.get("--domain"),
+            "depth": options.get("--depth", "standard"),
+            "sources": options.get("--sources", "").split(",") if options.get("--sources") else [],
+            "output_format": options.get("--format", "markdown")
+        }
         
         # Start research
-        research_id = await self.orchestrator.start_research(request)
+        research_id = await self.orchestrator.start_autonomous_research(topic, context)
         
         return {
             "success": True,

@@ -6,11 +6,21 @@ and their execution workflows.
 """
 
 from .agent_manager import AgentManager, AgentStatus, AgentType
-from .open_deep_research_adapter import OpenDeepResearchAdapter
+from .task_analyzer import TaskAnalyzerAgent
+from .task_decomposer import TaskDecomposerAgent
+from .research_agent import ResearchAgent
+from .evaluation_agent import EvaluationAgent
+from .validation_agent import ValidationAgent
+from .synthesis_agent import SynthesisAgent
 
 __all__ = [
     'AgentManager',
     'AgentStatus',
     'AgentType',
-    'OpenDeepResearchAdapter'
+    'TaskAnalyzerAgent',
+    'TaskDecomposerAgent',
+    'ResearchAgent',
+    'EvaluationAgent',
+    'ValidationAgent',
+    'SynthesisAgent'
 ]

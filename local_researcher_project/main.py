@@ -98,6 +98,7 @@ class AutonomousResearchSystem:
         
         # Initialize LangGraph orchestrator
         self.orchestrator = LangGraphOrchestrator(
+            config_manager=self.config_manager,
             config_path=config_path,
             agents={
                 'analyzer': self.task_analyzer,

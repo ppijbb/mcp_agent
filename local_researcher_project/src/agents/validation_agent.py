@@ -166,35 +166,34 @@ class ValidationAgent:
             bias_analysis = await self._detect_bias(execution_results)
             
             # Phase 4: Objective Alignment Validation
-            alignment_validation = await self._validate_objective_alignment_enhanced(
-                execution_results, original_objectives, user_request, cross_validation_results
+            alignment_validation = await self._validate_objective_alignment(
+                execution_results, original_objectives, user_request
             )
             
             # Phase 5: Quality Standards Validation
-            quality_validation = await self._validate_quality_standards_enhanced(
-                execution_results, source_credibility
+            quality_validation = await self._validate_quality_standards(
+                execution_results
             )
             
             # Phase 6: Completeness Validation
-            completeness_validation = await self._validate_completeness_enhanced(
-                execution_results, original_objectives, cross_validation_results
+            completeness_validation = await self._validate_completeness(
+                execution_results, original_objectives
             )
             
             # Phase 7: Accuracy Validation
-            accuracy_validation = await self._validate_accuracy_enhanced(
-                execution_results, cross_validation_results, source_credibility
+            accuracy_validation = await self._validate_accuracy(
+                execution_results
             )
             
             # Phase 8: Relevance Validation
-            relevance_validation = await self._validate_relevance_enhanced(
-                execution_results, user_request, original_objectives, bias_analysis
+            relevance_validation = await self._validate_relevance(
+                execution_results, original_objectives, user_request
             )
             
             # Phase 9: Overall Validation Score with Enhanced Weighting
-            overall_validation = await self._calculate_enhanced_overall_validation(
+            overall_validation = await self._calculate_overall_validation(
                 alignment_validation, quality_validation, completeness_validation,
-                accuracy_validation, relevance_validation, cross_validation_results,
-                source_credibility, bias_analysis
+                accuracy_validation, relevance_validation
             )
             
             # Phase 7: Benchmark Evaluation

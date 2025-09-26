@@ -1,7 +1,7 @@
 """
 Simple Markdown Document Generator
 """
-
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 from pathlib import Path

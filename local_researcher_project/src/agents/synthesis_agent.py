@@ -116,13 +116,16 @@ class SynthesisAgent:
             }
         }
     
-    async def synthesize_deliverable(self, execution_results: List[Dict[str, Any]], 
-                                   evaluation_results: Dict[str, Any],
-                                   validation_results: Dict[str, Any],
-                                   original_objectives: List[Dict[str, Any]],
-                                   user_request: str,
-                                   context: Optional[Dict[str, Any]] = None,
-                                   objective_id: str = None) -> Dict[str, Any]:
+    async def synthesize_deliverable(
+        self,
+        execution_results: List[Dict[str, Any]], 
+        evaluation_results: Dict[str, Any],
+        validation_results: Dict[str, Any],
+        original_objectives: List[Dict[str, Any]],
+        user_request: str,
+        context: Optional[Dict[str, Any]] = None,
+        objective_id: str = None
+    ) -> Dict[str, Any]:
         """Autonomously synthesize final deliverable.
         
         Args:
@@ -150,7 +153,7 @@ class SynthesisAgent:
             
             # Phase 3: Deliverable Structure Design
             deliverable_structure = await self._design_deliverable_structure(
-                aggregated_content, insights, user_request, original_objectives
+                aggregated_content, insights, user_request, original_objectives, context
             )
             
             # Phase 4: Content Synthesis
@@ -193,10 +196,13 @@ class SynthesisAgent:
             logger.error(f"Deliverable synthesis failed: {e}")
             raise
     
-    async def _aggregate_content(self, execution_results: List[Dict[str, Any]], 
-                               evaluation_results: Dict[str, Any],
-                               validation_results: Dict[str, Any],
-                               original_objectives: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _aggregate_content(
+        self,
+        execution_results: List[Dict[str, Any]], 
+        evaluation_results: Dict[str, Any],
+        validation_results: Dict[str, Any],
+        original_objectives: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """Aggregate content from all sources.
         
         Args:
@@ -283,9 +289,12 @@ class SynthesisAgent:
             logger.error(f"Content aggregation failed: {e}")
             return {'research_data': [], 'analysis_results': [], 'evaluation_insights': [], 'validation_findings': [], 'objective_metadata': []}
     
-    async def _generate_insights(self, aggregated_content: Dict[str, Any], 
-                               user_request: str, 
-                               original_objectives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def _generate_insights(
+        self,
+        aggregated_content: Dict[str, Any], 
+        user_request: str, 
+        original_objectives: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Generate insights from aggregated content.
         
         Args:
@@ -437,8 +446,11 @@ class SynthesisAgent:
             logger.error(f"Gap insight generation failed: {e}")
             return []
     
-    async def _generate_implication_insights(self, aggregated_content: Dict[str, Any], 
-                                           user_request: str) -> List[Dict[str, Any]]:
+    async def _generate_implication_insights(
+        self,
+        aggregated_content: Dict[str, Any], 
+        user_request: str
+    ) -> List[Dict[str, Any]]:
         """Generate implication analysis insights."""
         try:
             insights = []
@@ -517,10 +529,14 @@ class SynthesisAgent:
             logger.error(f"Cross-reference insight generation failed: {e}")
             return []
     
-    async def _design_deliverable_structure(self, aggregated_content: Dict[str, Any], 
-                                         insights: List[Dict[str, Any]], 
-                                         user_request: str, 
-                                         original_objectives: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _design_deliverable_structure(
+        self, 
+        aggregated_content: Dict[str, Any], 
+        insights: List[Dict[str, Any]], 
+        user_request: str, 
+        original_objectives: List[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Design structure for the final deliverable.
         
         Args:
@@ -559,9 +575,12 @@ class SynthesisAgent:
             logger.error(f"Deliverable structure design failed: {e}")
             return {'template_type': 'research_report', 'format_type': 'markdown', 'sections': []}
     
-    async def _select_template_type(self, aggregated_content: Dict[str, Any], 
-                                  user_request: str, 
-                                  original_objectives: List[Dict[str, Any]]) -> str:
+    async def _select_template_type(
+        self, 
+        aggregated_content: Dict[str, Any], 
+        user_request: str, 
+        original_objectives: List[Dict[str, Any]]
+    ) -> str:
         """Select appropriate template type."""
         # Simple template selection logic
         if 'brief' in user_request.lower() or 'summary' in user_request.lower():
@@ -662,41 +681,70 @@ class SynthesisAgent:
             'insights_included': len([i for i in insights if section_name in i.get('applicable_sections', [])])
         }
     
-    async def _generate_executive_summary(self, aggregated_content: Dict[str, Any], 
-                                        insights: List[Dict[str, Any]], 
-                                        user_request: str) -> str:
+    async def _generate_executive_summary(
+        self,
+        aggregated_content: Dict[str, Any], 
+        insights: List[Dict[str, Any]], 
+        user_request: str
+    ) -> str:
         """Generate executive summary."""
         return f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
     
-    async def _generate_introduction(self, aggregated_content: Dict[str, Any], user_request: str) -> str:
+    async def _generate_introduction(
+        self,
+        aggregated_content: Dict[str, Any],
+        user_request: str
+    ) -> str:
         """Generate introduction section."""
         return f"# Introduction\n\nThis research was initiated to address: '{user_request}'. The study employs autonomous multi-agent research methodology to ensure comprehensive coverage and high-quality results."
     
-    async def _generate_methodology(self, aggregated_content: Dict[str, Any]) -> str:
+    async def _generate_methodology(
+        self,
+        aggregated_content: Dict[str, Any]
+    ) -> str:
         """Generate methodology section."""
         return "# Methodology\n\nThis research employed an autonomous multi-agent system with specialized agents for data collection, analysis, evaluation, validation, and synthesis."
     
-    async def _generate_findings(self, aggregated_content: Dict[str, Any], insights: List[Dict[str, Any]]) -> str:
+    async def _generate_findings(
+        self,
+        aggregated_content: Dict[str, Any],
+        insights: List[Dict[str, Any]]
+    ) -> str:
         """Generate findings section."""
         findings = "# Key Findings\n\n"
         for i, insight in enumerate(insights[:5], 1):  # Limit to top 5 insights
             findings += f"{i}. {insight.get('title', 'Insight')}: {insight.get('description', '')}\n\n"
         return findings
     
-    async def _generate_analysis(self, aggregated_content: Dict[str, Any], insights: List[Dict[str, Any]]) -> str:
+    async def _generate_analysis(
+        self,
+        aggregated_content: Dict[str, Any],
+        insights: List[Dict[str, Any]]
+    ) -> str:
         """Generate analysis section."""
         return "# Analysis\n\nDetailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report."
     
-    async def _generate_conclusions(self, aggregated_content: Dict[str, Any], insights: List[Dict[str, Any]]) -> str:
+    async def _generate_conclusions(
+        self,
+        aggregated_content: Dict[str, Any],
+        insights: List[Dict[str, Any]]
+    ) -> str:
         """Generate conclusions section."""
         return "# Conclusions\n\nBased on the comprehensive research conducted, several key conclusions can be drawn that address the original research objectives."
     
-    async def _generate_recommendations(self, aggregated_content: Dict[str, Any], insights: List[Dict[str, Any]]) -> str:
+    async def _generate_recommendations(
+        self,
+        aggregated_content: Dict[str, Any],
+        insights: List[Dict[str, Any]]
+    ) -> str:
         """Generate recommendations section."""
         return "# Recommendations\n\nBased on the research findings, the following recommendations are proposed to address the research objectives and provide actionable next steps."
     
-    async def _enhance_content_quality(self, synthesized_content: Dict[str, Any], 
-                                     validation_results: Dict[str, Any]) -> Dict[str, Any]:
+    async def _enhance_content_quality(
+        self,
+        synthesized_content: Dict[str, Any], 
+        validation_results: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Enhance content quality based on validation results.
         
         Args:
@@ -730,10 +778,13 @@ class SynthesisAgent:
             logger.error(f"Content quality enhancement failed: {e}")
             return synthesized_content
     
-    async def _generate_deliverable(self, enhanced_content: Dict[str, Any], 
-                                 deliverable_structure: Dict[str, Any], 
-                                 user_request: str, 
-                                 objective_id: str) -> Dict[str, Any]:
+    async def _generate_deliverable(
+        self,
+        enhanced_content: Dict[str, Any], 
+        deliverable_structure: Dict[str, Any], 
+        user_request: str, 
+        objective_id: str
+    ) -> Dict[str, Any]:
         """Generate the final deliverable file with real file generation.
         
         Args:
@@ -802,7 +853,12 @@ class SynthesisAgent:
             logger.error(f"Deliverable generation failed: {e}")
             return {'error': str(e), 'deliverables': {}}
     
-    async def _save_markdown_file(self, content: str, objective_id: str, user_request: str) -> str:
+    async def _save_markdown_file(
+        self,
+        content: str,
+        objective_id: str,
+        user_request: str
+    ) -> str:
         """Save Markdown file."""
         try:
             import os
@@ -828,7 +884,12 @@ class SynthesisAgent:
             logger.error(f"Markdown file save failed: {e}")
             return ""
     
-    async def _save_html_file(self, content: str, objective_id: str, user_request: str) -> str:
+    async def _save_html_file(
+        self,
+        content: str,
+        objective_id: str, 
+        user_request: str
+    ) -> str:
         """Save HTML file."""
         try:
             import os
@@ -854,7 +915,12 @@ class SynthesisAgent:
             logger.error(f"HTML file save failed: {e}")
             return ""
     
-    async def _generate_pdf_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+    async def _generate_pdf_file(
+        self,
+        enhanced_content: Dict[str, Any],
+        objective_id: str,
+        user_request: str
+    ) -> str:
         """Generate PDF file."""
         try:
             import os
@@ -914,7 +980,12 @@ class SynthesisAgent:
             logger.error(f"PDF generation failed: {e}")
             return ""
     
-    async def _generate_docx_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+    async def _generate_docx_file(
+        self,
+        enhanced_content: Dict[str, Any],
+        objective_id: str,
+        user_request: str
+    ) -> str:
         """Generate Word document."""
         try:
             import os
@@ -967,7 +1038,12 @@ class SynthesisAgent:
             logger.error(f"Word document generation failed: {e}")
             return ""
     
-    async def _save_json_file(self, enhanced_content: Dict[str, Any], objective_id: str, user_request: str) -> str:
+    async def _save_json_file(
+        self,
+        enhanced_content: Dict[str, Any],
+        objective_id: str,
+        user_request: str
+    ) -> str:
         """Save JSON data file."""
         try:
             import json
@@ -1012,7 +1088,11 @@ class SynthesisAgent:
         except Exception:
             return 0
     
-    async def _generate_markdown_content(self, enhanced_content: Dict[str, Any], user_request: str) -> str:
+    async def _generate_markdown_content(
+        self,
+        enhanced_content: Dict[str, Any],
+        user_request: str
+    ) -> str:
         """Generate Markdown content."""
         try:
             title = enhanced_content.get('title', f"Research Report: {user_request}")
@@ -1071,7 +1151,11 @@ class SynthesisAgent:
             logger.error(f"Deliverable generation failed: {e}")
             return {'file_path': None, 'content': '', 'format': 'markdown'}
     
-    async def _format_content(self, enhanced_content: Dict[str, Any], format_type: str) -> str:
+    async def _format_content(
+        self,
+        enhanced_content: Dict[str, Any],
+        format_type: str
+    ) -> str:
         """Format content for specific deliverable format."""
         if format_type == 'markdown':
             return await self._format_markdown(enhanced_content)
@@ -1082,7 +1166,10 @@ class SynthesisAgent:
         else:
             return await self._format_markdown(enhanced_content)
     
-    async def _format_markdown(self, enhanced_content: Dict[str, Any]) -> str:
+    async def _format_markdown(
+        self,
+        enhanced_content: Dict[str, Any]
+    ) -> str:
         """Format content as Markdown."""
         content = f"# {enhanced_content.get('title', 'Research Report')}\n\n"
         
@@ -1092,7 +1179,10 @@ class SynthesisAgent:
         
         return content
     
-    async def _format_html(self, enhanced_content: Dict[str, Any]) -> str:
+    async def _format_html(
+        self,
+        enhanced_content: Dict[str, Any]
+    ) -> str:
         """Format content as HTML."""
         content = f"<html><head><title>{enhanced_content.get('title', 'Research Report')}</title></head><body>"
         content += f"<h1>{enhanced_content.get('title', 'Research Report')}</h1>"
@@ -1104,15 +1194,21 @@ class SynthesisAgent:
         content += "</body></html>"
         return content
     
-    async def _format_json(self, enhanced_content: Dict[str, Any]) -> str:
+    async def _format_json(
+        self,
+        enhanced_content: Dict[str, Any]
+    ) -> str:
         """Format content as JSON."""
         return json.dumps(enhanced_content, indent=2, ensure_ascii=False)
     
-    async def _generate_metadata(self, deliverable: Dict[str, Any], 
-                               execution_results: List[Dict[str, Any]], 
-                               evaluation_results: Dict[str, Any], 
-                               validation_results: Dict[str, Any], 
-                               objective_id: str) -> Dict[str, Any]:
+    async def _generate_metadata(
+        self,
+        deliverable: Dict[str, Any], 
+        execution_results: List[Dict[str, Any]], 
+        evaluation_results: Dict[str, Any], 
+        validation_results: Dict[str, Any], 
+        objective_id: str
+    ) -> Dict[str, Any]:
         """Generate comprehensive metadata for the deliverable."""
         try:
             return {
@@ -1141,7 +1237,11 @@ class SynthesisAgent:
             logger.error(f"Metadata generation failed: {e}")
             return {}
     
-    def _calculate_synthesis_quality(self, content: str, insights: List[Dict[str, Any]]) -> float:
+    def _calculate_synthesis_quality(
+        self,
+        content: str,
+        insights: List[Dict[str, Any]]
+    ) -> float:
         """Calculate synthesis quality score."""
         try:
             if not content:

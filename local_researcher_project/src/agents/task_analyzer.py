@@ -53,8 +53,9 @@ class TaskAnalyzerAgent:
                 raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
             
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            logger.info("LLM initialized for TaskAnalyzerAgent")
+            model_name = self.config_manager.get('models.primary', 'gemini-2.5-flash-lite')
+            model = genai.GenerativeModel(model_name)
+            logger.info(f"LLM initialized for TaskAnalyzerAgent with model: {model_name}")
             return model
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")

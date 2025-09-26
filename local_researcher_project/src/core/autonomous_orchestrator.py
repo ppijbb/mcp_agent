@@ -205,8 +205,9 @@ class LangGraphOrchestrator:
                 raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
             
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            logger.info("LLM initialized successfully")
+            model_name = self.config_manager.get('models.primary', 'gemini-2.5-flash-lite')
+            model = genai.GenerativeModel(model_name)
+            logger.info(f"LLM initialized successfully with model: {model_name}")
             return model
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
@@ -328,7 +329,8 @@ class LangGraphOrchestrator:
             if decomposer:
                 decomposition_result = await decomposer.decompose_tasks(
                     state['analyzed_objectives'],
-                    state['context']
+                    self.agents,
+                    state['objective_id']
                 )
                 
                 state['decomposed_tasks'] = decomposition_result.get('tasks', [])
@@ -355,6 +357,9 @@ class LangGraphOrchestrator:
         """Execute research tasks using specialized agents."""
         try:
             logger.info("Executing research tasks")
+            
+            # Increment iteration count
+            state['iteration'] = state.get('iteration', 0) + 1
             
             execution_results = []
             agent_status = {}
@@ -667,7 +672,25 @@ class LangGraphOrchestrator:
     
     def _should_continue(self, state: ResearchState) -> str:
         """Determine whether to continue or end the workflow."""
-        return "continue" if state['should_continue'] else "end"
+        # Check if we have valid results
+        if not state.get('execution_results') or len(state['execution_results']) == 0:
+            return "continue"
+        
+        # Check validation score
+        validation_score = state.get('validation_score', 0.0)
+        if validation_score < 0.5:  # Low validation score, continue
+            return "continue"
+        
+        # Check if we have enough iterations
+        iteration_count = state.get('iteration', 0)
+        if iteration_count >= 3:  # Maximum 3 iterations
+            return "end"
+        
+        # If validation is good enough, end
+        if validation_score >= 0.7:
+            return "end"
+        
+        return "continue"
     
     async def get_research_status(self, objective_id: str) -> Optional[Dict[str, Any]]:
         """Get research status."""

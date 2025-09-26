@@ -487,7 +487,7 @@ class AgentManager:
                 config = AgentConfig(
                     name=agent_name,
                     agent_type=agent_type,
-                    model=config_data.get("model", "gpt-4"),
+                    model=config_data.get("model", "gpt-4o-mini"),
                     max_tokens=config_data.get("max_tokens", 2000),
                     timeout=config_data.get("timeout", 300),
                     retry_count=config_data.get("retry_count", 3),

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import psutil
 import time
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Tuple, Optional, Callable
 from datetime import datetime, timedelta
 import json
 from pathlib import Path

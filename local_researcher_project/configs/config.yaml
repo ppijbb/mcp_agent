@@ -52,8 +52,8 @@ gemini_cli:
 open_deep_research:
   enabled: true
   workflow_mode: "multi_agent"  # multi_agent, workflow
-  model_provider: "openai"  # openai, anthropic, google
-  model_name: "gpt-4"
+  model_provider: "google"  # openai, anthropic, google
+  model_name: "gemini-2.5-flash-lite"
   max_iterations: 10
   timeout: 300
   search_tools:
@@ -65,23 +65,23 @@ open_deep_research:
   agents:
     topic_analyzer:
       enabled: true
-      model: "gpt-4"
+      model: "gemini-2.5-flash-lite"
       max_tokens: 2000
     source_discoverer:
       enabled: true
-      model: "gpt-4"
+      model: "gemini-2.5-flash-lite"
       max_sources: 20
     content_gatherer:
       enabled: true
-      model: "gpt-4"
+      model: "gemini-2.5-flash-lite"
       max_content_length: 10000
     content_analyzer:
       enabled: true
-      model: "gpt-4"
+      model: "gemini-2.5-flash-lite"
       analysis_depth: "comprehensive"
     report_generator:
       enabled: true
-      model: "gpt-4"
+      model: "gemini-2.5-flash-lite"
       report_structure: "standard"
 
 # Research Workflow Settings
@@ -123,6 +123,15 @@ search_tools:
     max_results: 15
     timeout: 60
 
+# LLM Model Configuration
+models:
+  primary: "gemini-2.5-flash-lite"
+  fallback: "gemini-2.0-flash-exp"
+  provider: "google"
+  max_tokens: 8192
+  temperature: 0.7
+  timeout: 60
+
 # API Keys and Authentication
 api_keys:
   openai:
@@ -131,7 +140,7 @@ api_keys:
   anthropic:
     api_key: "${ANTHROPIC_API_KEY}"
   google:
-    api_key: "${GOOGLE_API_KEY}"
+    api_key: "${GEMINI_API_KEY}"
     project_id: "${GOOGLE_PROJECT_ID}"
   newsapi:
     api_key: "${NEWSAPI_KEY}"
