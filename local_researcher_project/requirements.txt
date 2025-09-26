@@ -27,6 +27,15 @@ tavily-python>=0.5.0
 browser-use>=0.1.40
 playwright>=1.51.0
 
+# Advanced search APIs
+exa-py>=0.1.0
+azure-search-documents>=11.4.0
+supabase>=2.0.0
+
+# Academic search
+arxiv>=2.1.0
+scholarly>=1.7.0
+
 # Data processing
 pandas>=2.1.0
 numpy>=1.24.0
@@ -45,7 +54,6 @@ typer>=0.9.0
 # Web interface
 streamlit>=1.28.0
 plotly>=5.17.0
-pandas>=2.1.0
 
 # Report generation
 jinja2>=3.1.0
@@ -56,22 +64,17 @@ python-docx>=0.8.11
 # System monitoring
 psutil>=5.9.0
 
-# Enhanced browser automation
-browser-use>=0.1.40
-playwright>=1.51.0
+# Enhanced browser automation (already included above)
 
 # File handling and utilities
 python-dotenv>=1.0.0
 pyyaml>=6.0.0
-jinja2>=3.1.0
 markdownify>=0.11.6
 mcp>=1.9.4
 
 # Document generation
 reportlab>=4.0.0
 weasyprint>=60.0
-markdown>=3.5.0
-python-docx>=0.8.11
 PyPDF2>=3.0.1
 PyMuPDF>=1.23.0
 

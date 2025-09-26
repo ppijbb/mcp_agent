@@ -32,6 +32,18 @@ except ImportError:
     BrowserContextConfig = None
     DomService = None
 
+# Playwright imports for advanced features
+try:
+    from playwright.async_api import async_playwright, Browser as PlaywrightBrowser, Page as PlaywrightPage
+    from playwright.async_api import BrowserContext as PlaywrightContext
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    async_playwright = None
+    PlaywrightBrowser = None
+    PlaywrightPage = None
+    PlaywrightContext = None
+
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
 
@@ -55,6 +67,12 @@ class BrowserManager:
         self.browser_context: Optional[BrowserContext] = None
         self.dom_service: Optional[DomService] = None
         self.browser_lock = asyncio.Lock()
+        
+        # Playwright components for advanced features
+        self.playwright_browser: Optional[PlaywrightBrowser] = None
+        self.playwright_context: Optional[PlaywrightContext] = None
+        self.playwright_page: Optional[PlaywrightPage] = None
+        self.playwright_lock = asyncio.Lock()
         
         # Environment detection
         self.is_cli = not hasattr(sys, 'ps1') and not hasattr(sys, 'getwindowsversion')
@@ -432,9 +450,265 @@ class BrowserManager:
                 
                 self.browser_available = False
                 logger.info("Browser resources cleaned up")
+            
+            # Cleanup Playwright resources
+            async with self.playwright_lock:
+                if self.playwright_page:
+                    await self.playwright_page.close()
+                    self.playwright_page = None
                 
+                if self.playwright_context:
+                    await self.playwright_context.close()
+                    self.playwright_context = None
+                
+                if self.playwright_browser:
+                    await self.playwright_browser.close()
+                    self.playwright_browser = None
+                    
         except Exception as e:
             logger.error(f"Browser cleanup failed: {e}")
+    
+    # ==================== ADVANCED BROWSER FEATURES ====================
+    
+    async def initialize_playwright(self) -> bool:
+        """Initialize Playwright for advanced browser features."""
+        try:
+            if not PLAYWRIGHT_AVAILABLE:
+                logger.warning("Playwright not available. Advanced features disabled.")
+                return False
+            
+            async with self.playwright_lock:
+                if self.playwright_browser is None:
+                    self.playwright = await async_playwright().start()
+                    
+                    # Choose browser type based on environment
+                    if self.is_cli or self.is_background:
+                        self.playwright_browser = await self.playwright.chromium.launch(
+                            headless=True,
+                            args=['--no-sandbox', '--disable-dev-shm-usage']
+                        )
+                    else:
+                        self.playwright_browser = await self.playwright.chromium.launch(
+                            headless=False
+                        )
+                    
+                    # Create context with optimized settings
+                    self.playwright_context = await self.playwright_browser.new_context(
+                        viewport={'width': 1920, 'height': 1080},
+                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    )
+                    
+                    self.playwright_page = await self.playwright_context.new_page()
+                    
+                    logger.info("Playwright initialized successfully")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Playwright initialization failed: {e}")
+            return False
+    
+    async def take_screenshot(self, url: str, filename: Optional[str] = None) -> Dict[str, Any]:
+        """Take a screenshot of a webpage."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            if filename is None:
+                filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            
+            await self.playwright_page.screenshot(path=filename, full_page=True)
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'url': url,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Screenshot failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def generate_pdf(self, url: str, filename: Optional[str] = None) -> Dict[str, Any]:
+        """Generate PDF from a webpage."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            if filename is None:
+                filename = f"page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            
+            await self.playwright_page.pdf(
+                path=filename,
+                format='A4',
+                print_background=True
+            )
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'url': url,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def execute_javascript(self, url: str, script: str) -> Dict[str, Any]:
+        """Execute JavaScript on a webpage."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            result = await self.playwright_page.evaluate(script)
+            
+            return {
+                'success': True,
+                'result': result,
+                'url': url,
+                'script': script,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"JavaScript execution failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def fill_form(self, url: str, form_data: Dict[str, str]) -> Dict[str, Any]:
+        """Fill and submit a form on a webpage."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            # Fill form fields
+            for field_name, value in form_data.items():
+                try:
+                    # Try different selectors
+                    selectors = [
+                        f'input[name="{field_name}"]',
+                        f'input[id="{field_name}"]',
+                        f'textarea[name="{field_name}"]',
+                        f'textarea[id="{field_name}"]',
+                        f'select[name="{field_name}"]',
+                        f'select[id="{field_name}"]'
+                    ]
+                    
+                    for selector in selectors:
+                        try:
+                            element = await self.playwright_page.query_selector(selector)
+                            if element:
+                                await element.fill(value)
+                                break
+                        except:
+                            continue
+                            
+                except Exception as e:
+                    logger.warning(f"Failed to fill field {field_name}: {e}")
+                    continue
+            
+            # Try to submit the form
+            try:
+                submit_button = await self.playwright_page.query_selector('input[type="submit"], button[type="submit"], button:has-text("Submit")')
+                if submit_button:
+                    await submit_button.click()
+                    await self.playwright_page.wait_for_load_state('networkidle')
+            except:
+                pass  # Form might not have a submit button
+            
+            return {
+                'success': True,
+                'url': url,
+                'form_data': form_data,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Form filling failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def extract_structured_data(self, url: str, schema: Dict[str, str]) -> Dict[str, Any]:
+        """Extract structured data from a webpage using CSS selectors."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            extracted_data = {}
+            
+            for field_name, selector in schema.items():
+                try:
+                    element = await self.playwright_page.query_selector(selector)
+                    if element:
+                        text_content = await element.text_content()
+                        extracted_data[field_name] = text_content.strip() if text_content else ''
+                    else:
+                        extracted_data[field_name] = ''
+                except Exception as e:
+                    logger.warning(f"Failed to extract {field_name}: {e}")
+                    extracted_data[field_name] = ''
+            
+            return {
+                'success': True,
+                'url': url,
+                'extracted_data': extracted_data,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Structured data extraction failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def monitor_page_changes(self, url: str, interval: int = 5, duration: int = 60) -> Dict[str, Any]:
+        """Monitor a webpage for changes over time."""
+        try:
+            if not await self.initialize_playwright():
+                return {'success': False, 'error': 'Playwright not available'}
+            
+            await self.playwright_page.goto(url, wait_until='networkidle')
+            
+            initial_content = await self.playwright_page.content()
+            changes = []
+            start_time = datetime.now()
+            
+            while (datetime.now() - start_time).seconds < duration:
+                await asyncio.sleep(interval)
+                
+                current_content = await self.playwright_page.content()
+                if current_content != initial_content:
+                    changes.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'change_detected': True,
+                        'content_length': len(current_content)
+                    })
+                    initial_content = current_content
+                else:
+                    changes.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'change_detected': False
+                    })
+            
+            return {
+                'success': True,
+                'url': url,
+                'monitoring_duration': duration,
+                'changes_detected': len([c for c in changes if c['change_detected']]),
+                'changes': changes,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Page monitoring failed: {e}")
+            return {'success': False, 'error': str(e)}
     
     def get_status(self) -> Dict[str, Any]:
         """Get browser manager status."""

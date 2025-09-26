@@ -442,27 +442,57 @@ class ResearchAgent:
             }
     
     async def _perform_academic_search(self, query: str) -> Dict[str, Any]:
-        """Perform academic search (simulated)."""
+        """Perform academic search using real academic APIs."""
         try:
-            # Simulate academic search results
-            academic_results = [
-                {
-                    'title': f"Academic paper on {query}",
-                    'authors': ["Dr. Researcher", "Prof. Academic"],
-                    'journal': "Journal of Research",
-                    'year': 2024,
-                    'abstract': f"Abstract of research on {query}",
-                    'source': 'academic_database'
-                }
-            ]
+            from src.research.tools.academic_search import AcademicSearchTool
             
-            return {
-                'method': 'academic_search',
-                'query': query,
-                'results': academic_results,
-                'total_results': len(academic_results),
-                'timestamp': datetime.now().isoformat()
+            # Initialize academic search tool
+            academic_config = {
+                'max_results': 10,
+                'timeout': 30,
+                'primary_provider': 'arxiv',
+                'fallback_providers': ['scholar', 'pubmed']
             }
+            
+            academic_tool = AcademicSearchTool(academic_config)
+            result = await academic_tool.arun(query)
+            
+            if result['success']:
+                # Convert academic results to standard format
+                academic_results = []
+                for item in result['results']:
+                    academic_results.append({
+                        'title': item.get('title', ''),
+                        'authors': item.get('authors', []),
+                        'journal': item.get('journal', ''),
+                        'year': item.get('published', '')[:4] if item.get('published') else '',
+                        'abstract': item.get('abstract', ''),
+                        'source': item.get('source', 'academic_database'),
+                        'url': item.get('url', ''),
+                        'pdf_url': item.get('pdf_url', ''),
+                        'arxiv_id': item.get('arxiv_id', ''),
+                        'pmid': item.get('pmid', ''),
+                        'doi': item.get('doi', '')
+                    })
+                
+                return {
+                    'method': 'academic_search',
+                    'query': query,
+                    'results': academic_results,
+                    'total_results': len(academic_results),
+                    'provider': result.get('provider', 'academic'),
+                    'timestamp': datetime.now().isoformat()
+                }
+            else:
+                logger.warning(f"Academic search failed: {result.get('error', 'Unknown error')}")
+                return {
+                    'method': 'academic_search',
+                    'query': query,
+                    'results': [],
+                    'total_results': 0,
+                    'error': result.get('error', 'Academic search failed'),
+                    'timestamp': datetime.now().isoformat()
+                }
             
         except Exception as e:
             logger.error(f"Academic search failed: {e}")
@@ -470,6 +500,7 @@ class ResearchAgent:
                 'method': 'academic_search',
                 'query': query,
                 'results': [],
+                'total_results': 0,
                 'error': str(e),
                 'timestamp': datetime.now().isoformat()
             }

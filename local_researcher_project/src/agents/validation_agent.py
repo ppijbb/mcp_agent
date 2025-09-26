@@ -18,6 +18,7 @@ from pathlib import Path
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
+from src.evaluation.benchmark_evaluator import BenchmarkEvaluator, EvaluationMetric
 
 logger = setup_logger("validation_agent", log_level="INFO")
 
@@ -39,7 +40,10 @@ class ValidationAgent:
         self.quality_standards = self._load_quality_standards()
         self.validation_methods = self._load_validation_methods()
         
-        logger.info("Validation Agent initialized with autonomous validation capabilities")
+        # Initialize benchmark evaluator
+        self.benchmark_evaluator = BenchmarkEvaluator(self.config_manager.get_config())
+        
+        logger.info("Validation Agent initialized with autonomous validation capabilities and benchmark evaluation")
     
     def _load_validation_criteria(self) -> Dict[str, Any]:
         """Load enhanced validation criteria for critical research validation."""
@@ -193,10 +197,16 @@ class ValidationAgent:
                 source_credibility, bias_analysis
             )
             
-            # Phase 7: Generate Validation Report
+            # Phase 7: Benchmark Evaluation
+            benchmark_evaluation = await self._perform_benchmark_evaluation(
+                execution_results, user_request
+            )
+            
+            # Phase 8: Generate Validation Report
             validation_report = await self._generate_validation_report(
                 overall_validation, alignment_validation, quality_validation,
-                completeness_validation, accuracy_validation, relevance_validation
+                completeness_validation, accuracy_validation, relevance_validation,
+                benchmark_evaluation
             )
             
             validation_result = {
@@ -207,11 +217,12 @@ class ValidationAgent:
                 'completeness_validation': completeness_validation,
                 'accuracy_validation': accuracy_validation,
                 'relevance_validation': relevance_validation,
+                'benchmark_evaluation': benchmark_evaluation,
                 'validation_report': validation_report,
                 'validation_metadata': {
                     'objective_id': objective_id,
                     'timestamp': datetime.now().isoformat(),
-                    'validation_version': '1.0',
+                    'validation_version': '2.0',
                     'total_results_validated': len(execution_results)
                 }
             }
@@ -524,7 +535,8 @@ class ValidationAgent:
                                         quality_validation: Dict[str, Any],
                                         completeness_validation: Dict[str, Any],
                                         accuracy_validation: Dict[str, Any],
-                                        relevance_validation: Dict[str, Any]) -> Dict[str, Any]:
+                                        relevance_validation: Dict[str, Any],
+                                        benchmark_evaluation: Dict[str, Any]) -> Dict[str, Any]:
         """Generate comprehensive validation report.
         
         Args:
@@ -556,6 +568,23 @@ class ValidationAgent:
             # Generate summary
             summary = await self._generate_validation_summary(overall_validation, all_issues)
             
+            # Include benchmark evaluation results
+            benchmark_summary = {}
+            if benchmark_evaluation.get('success'):
+                benchmark_summary = {
+                    'benchmark_score': benchmark_evaluation.get('overall_score', 0.0),
+                    'grade': benchmark_evaluation.get('summary', {}).get('grade', 'N/A'),
+                    'strengths': benchmark_evaluation.get('summary', {}).get('strengths', []),
+                    'weaknesses': benchmark_evaluation.get('summary', {}).get('weaknesses', []),
+                    'benchmark_recommendations': benchmark_evaluation.get('summary', {}).get('recommendations', [])
+                }
+            else:
+                benchmark_summary = {
+                    'benchmark_score': 0.0,
+                    'grade': 'N/A',
+                    'error': benchmark_evaluation.get('error', 'Benchmark evaluation failed')
+                }
+            
             return {
                 'summary': summary,
                 'overall_score': overall_validation['overall_score'],
@@ -569,6 +598,7 @@ class ValidationAgent:
                     'accuracy': len(accuracy_validation.get('accuracy_issues', [])),
                     'relevance': len(relevance_validation.get('relevance_issues', []))
                 },
+                'benchmark_evaluation': benchmark_summary,
                 'recommendations': recommendations,
                 'validation_timestamp': datetime.now().isoformat()
             }
@@ -1002,6 +1032,55 @@ class ValidationAgent:
             return f"Validation passed with acceptable score ({score:.2f}). {issues_count} issues found."
         else:
             return f"Validation failed with poor score ({score:.2f}). {issues_count} significant issues found."
+    
+    async def _perform_benchmark_evaluation(self, execution_results: List[Dict[str, Any]], 
+                                           user_request: str) -> Dict[str, Any]:
+        """Perform comprehensive benchmark evaluation using the benchmark evaluator."""
+        try:
+            # Combine all execution results into a single research result
+            combined_content = []
+            combined_sources = []
+            
+            for result in execution_results:
+                if result.get('content'):
+                    combined_content.append(result['content'])
+                
+                if result.get('sources'):
+                    combined_sources.extend(result['sources'])
+            
+            # Create research result for benchmark evaluation
+            research_result = {
+                'content': '\n\n'.join(combined_content),
+                'sources': combined_sources,
+                'methodology': 'Multi-agent autonomous research',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Perform benchmark evaluation
+            benchmark_result = await self.benchmark_evaluator.evaluate_research(
+                research_result, user_request
+            )
+            
+            if benchmark_result['success']:
+                logger.info(f"Benchmark evaluation completed: {benchmark_result['overall_score']:.2f}")
+                return benchmark_result
+            else:
+                logger.warning(f"Benchmark evaluation failed: {benchmark_result.get('error', 'Unknown error')}")
+                return {
+                    'success': False,
+                    'overall_score': 0.0,
+                    'error': benchmark_result.get('error', 'Benchmark evaluation failed'),
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Benchmark evaluation failed: {e}")
+            return {
+                'success': False,
+                'overall_score': 0.0,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
     
     async def cleanup(self):
         """Cleanup agent resources."""
