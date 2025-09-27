@@ -50,12 +50,12 @@ class TaskDecomposerAgent:
         try:
             api_key = os.getenv('GEMINI_API_KEY')
             if not api_key:
-                raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
+                logger.warning("Gemini API key not found. Decomposition functionality will be limited.")
+                return None
             
             genai.configure(api_key=api_key)
-            model_name = self.config_manager.get('models.primary', 'gemini-2.5-flash-lite')
-            model = genai.GenerativeModel(model_name)
-            logger.info(f"LLM initialized for TaskDecomposerAgent with model: {model_name}")
+            model = genai.GenerativeModel('gemini-2.5-flash-lite')
+            logger.info("LLM initialized for TaskDecomposerAgent with model: gemini-2.5-flash-lite")
             return model
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
