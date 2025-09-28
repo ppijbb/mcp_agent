@@ -608,10 +608,13 @@ class LangGraphOrchestrator:
             synthesizer = self.agents.get('synthesizer')
             if synthesizer:
                 synthesis_result = await synthesizer.synthesize_deliverable(
-                    state['user_request'],
-                    state['execution_results'],
-                    state['evaluation_results'],
-                    state['validation_results']
+                    state.get('execution_results', []),
+                    state.get('evaluation_results', {}),
+                    state.get('validation_results', {}),
+                    state.get('analyzed_objectives', []),
+                    state.get('user_request', ''),
+                    state.get('context'),
+                    state.get('objective_id')
                 )
             else:
                 # Fallback to LLM synthesis

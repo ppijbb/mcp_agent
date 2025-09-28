@@ -234,15 +234,115 @@ class TaskDecomposerAgent:
             
         except Exception as e:
             logger.error(f"LLM task decomposition failed: {e}")
-            return {
-                'tasks': [],
-                'assignments': [],
-                'dependencies': [],
-                'priorities': [],
-                'strategy': 'sequential',
-                'execution_plan': {},
-                'quality_metrics': {}
+            logger.info("Falling back to rule-based task decomposition")
+            return await self._rule_based_decomposition(objectives, available_agents)
+    
+    async def _rule_based_decomposition(self, objectives: List[Dict[str, Any]], available_agents: Dict[str, Any]) -> Dict[str, Any]:
+        """Rule-based task decomposition when LLM is not available.
+        
+        Args:
+            objectives: List of research objectives
+            available_agents: Available agents and their capabilities
+            
+        Returns:
+            Task decomposition results
+        """
+        tasks = []
+        assignments = []
+        dependencies = []
+        priorities = []
+        
+        for i, objective in enumerate(objectives):
+            obj_type = objective.get('type', 'exploratory')
+            description = objective.get('description', '')
+            objective_id = objective.get('objective_id', f'obj_{i}')
+            
+            # Generate basic tasks based on objective type
+            base_tasks = []
+            
+            if obj_type == "trend_analysis":
+                base_tasks = [
+                    f"Research current trends in {description}",
+                    f"Analyze historical data for {description}",
+                    f"Identify emerging patterns in {description}",
+                    f"Compile trend analysis report for {description}"
+                ]
+            elif obj_type == "comparative":
+                base_tasks = [
+                    f"Gather information on comparison subjects in {description}",
+                    f"Analyze similarities and differences in {description}",
+                    f"Evaluate pros and cons in {description}",
+                    f"Create comparative analysis report for {description}"
+                ]
+            elif obj_type == "analytical":
+                base_tasks = [
+                    f"Collect relevant data for {description}",
+                    f"Perform detailed analysis of {description}",
+                    f"Identify key insights from {description}",
+                    f"Generate analytical report for {description}"
+                ]
+            else:  # exploratory or comprehensive
+                base_tasks = [
+                    f"Conduct initial research on {description}",
+                    f"Gather comprehensive information about {description}",
+                    f"Analyze findings related to {description}",
+                    f"Synthesize research results for {description}"
+                ]
+            
+            # Create task objects
+            for j, task_desc in enumerate(base_tasks):
+                task_id = f"task_{objective_id}_{j+1}"
+                task = {
+                    "task_id": task_id,
+                    "description": task_desc,
+                    "objective_id": objective_id,
+                    "type": "research" if j < len(base_tasks) - 1 else "synthesis",
+                    "priority": "high" if j == 0 else "medium",
+                    "estimated_duration": 30 if j < len(base_tasks) - 1 else 15,
+                    "required_capabilities": ["research", "analysis"],
+                    "method": "rule_based"
+                }
+                tasks.append(task)
+                
+                # Simple agent assignment
+                agent_type = "research_agent" if j < len(base_tasks) - 1 else "synthesis_agent"
+                assignments.append({
+                    "task_id": task_id,
+                    "agent_type": agent_type,
+                    "assignment_reason": f"Rule-based assignment for {task['type']} task"
+                })
+                
+                priorities.append({
+                    "task_id": task_id,
+                    "priority_score": 10 - j,
+                    "urgency": objective.get('urgency', 'normal')
+                })
+                
+                # Add dependencies (sequential execution)
+                if j > 0:
+                    dependencies.append({
+                        "task_id": task_id,
+                        "depends_on": [f"task_{objective_id}_{j}"],
+                        "dependency_type": "sequential"
+                    })
+        
+        return {
+            'tasks': tasks,
+            'assignments': assignments,
+            'dependencies': dependencies,
+            'priorities': priorities,
+            'strategy': 'sequential',
+            'execution_plan': {
+                'total_tasks': len(tasks),
+                'estimated_duration': sum(task.get('estimated_duration', 30) for task in tasks),
+                'method': 'rule_based'
+            },
+            'quality_metrics': {
+                'decomposition_confidence': 0.7,
+                'task_coverage': 1.0,
+                'method': 'rule_based'
             }
+        }
     
     async def get_decomposition_status(self, decomposition_id: str) -> Optional[Dict[str, Any]]:
         """Get decomposition status."""

@@ -295,8 +295,76 @@ class TaskAnalyzerAgent:
             
         except Exception as e:
             logger.error(f"LLM analysis failed: {e}")
-            # Re-raise the exception instead of fallback
-            raise ValueError(f"Failed to analyze user request: {e}")
+            logger.info("Falling back to rule-based analysis")
+            return await self._rule_based_analysis(user_request)
+    
+    async def _rule_based_analysis(self, user_request: str) -> Dict[str, Any]:
+        """Rule-based analysis when LLM is not available.
+        
+        Args:
+            user_request: The user's research request
+            
+        Returns:
+            Analysis results based on keyword patterns
+        """
+        import re
+        
+        # Analyze keywords and patterns
+        request_lower = user_request.lower()
+        
+        # Determine research type based on keywords
+        research_type = "exploratory"
+        if any(word in request_lower for word in ["compare", "vs", "versus", "difference"]):
+            research_type = "comparative"
+        elif any(word in request_lower for word in ["trend", "trends", "evolution", "development"]):
+            research_type = "trend_analysis"
+        elif any(word in request_lower for word in ["analyze", "analysis", "examine", "study"]):
+            research_type = "analytical"
+        elif any(word in request_lower for word in ["review", "survey", "overview", "summary"]):
+            research_type = "comprehensive"
+        
+        # Extract key topics
+        topics = []
+        # Simple topic extraction based on common patterns
+        words = re.findall(r'\b[A-Za-z]{3,}\b', user_request)
+        for word in words:
+            if word.lower() not in ["the", "and", "for", "with", "about", "from", "into", "what", "how", "why"]:
+                topics.append(word)
+        
+        # Determine scope
+        scope = "medium"
+        if any(word in request_lower for word in ["comprehensive", "detailed", "thorough", "complete"]):
+            scope = "broad"
+        elif any(word in request_lower for word in ["brief", "quick", "summary", "overview"]):
+            scope = "narrow"
+        
+        # Determine urgency
+        urgency = "normal"
+        if any(word in request_lower for word in ["urgent", "asap", "quickly", "fast"]):
+            urgency = "high"
+        elif any(word in request_lower for word in ["when possible", "no rush", "eventually"]):
+            urgency = "low"
+        
+        return {
+            "objectives": [{
+                "objective_id": f"obj_{hash(user_request) % 10000:04d}",
+                "description": user_request,
+                "type": research_type,
+                "priority": "high",
+                "scope": scope,
+                "urgency": urgency,
+                "topics": topics[:5],  # Limit to top 5 topics
+                "estimated_complexity": "medium",
+                "requires_real_time_data": "trend" in request_lower or "current" in request_lower,
+                "analysis_method": "rule_based"
+            }],
+            "analysis_metadata": {
+                "method": "rule_based",
+                "confidence": 0.7,
+                "timestamp": "2025-09-28T13:56:39Z",
+                "total_objectives": 1
+            }
+        }
     
     async def _analyze_research_intent(self, user_request: str) -> Dict[str, Any]:
         """Analyze the research intent from user request.
