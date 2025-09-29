@@ -215,6 +215,19 @@ class SynthesisAgent:
             Aggregated content
         """
         try:
+            # Handle execution_results - flatten nested lists
+            if isinstance(execution_results, list):
+                results_to_process = []
+                for item in execution_results:
+                    if isinstance(item, list):
+                        results_to_process.extend(item)
+                    else:
+                        results_to_process.append(item)
+            elif execution_results is not None:
+                results_to_process = [execution_results]
+            else:
+                results_to_process = []
+            
             aggregated = {
                 'research_data': [],
                 'analysis_results': [],
@@ -222,66 +235,134 @@ class SynthesisAgent:
                 'validation_findings': [],
                 'objective_metadata': [],
                 'content_metadata': {
-                    'total_sources': len(execution_results),
+                    'total_sources': len(results_to_process),
                     'aggregation_timestamp': datetime.now().isoformat()
                 }
             }
             
             # Aggregate execution results
-            for result in execution_results:
-                result_type = result.get('agent', 'unknown')
+            for result in results_to_process:
+                # Handle different types of result
+                if isinstance(result, dict):
+                    result_type = result.get('agent', 'unknown')
+                    task_id = result.get('task_id', 'unknown')
+                    task_result = result.get('result', {})
+                elif isinstance(result, list):
+                    # Process each item in the list
+                    for item in result:
+                        if isinstance(item, dict):
+                            result_type = item.get('agent', 'unknown')
+                            task_id = item.get('task_id', 'unknown')
+                            task_result = item.get('result', {})
+                            # Process this item
+                            if 'researcher' in result_type:
+                                aggregated['research_data'].append({
+                                    'type': 'research_data',
+                                    'task_id': task_id,
+                                    'content': task_result.get('research_data', {}),
+                                    'sources': task_result.get('sources', []),
+                                    'metadata': task_result.get('metadata', {})
+                                })
+                            elif 'analyzer' in result_type:
+                                aggregated['analysis_results'].append({
+                                    'type': 'analysis_results',
+                                    'task_id': task_id,
+                                    'content': task_result.get('analysis_results', {}),
+                                    'insights': task_result.get('insights', []),
+                                    'metadata': task_result.get('metadata', {})
+                                })
+                    continue
+                else:
+                    # Convert other types to dict
+                    result = {'content': str(result), 'agent': 'unknown'}
+                    result_type = 'unknown'
+                    task_id = 'unknown'
+                    task_result = {}
                 
                 if 'researcher' in result_type:
                     aggregated['research_data'].append({
                         'type': 'research_data',
-                        'content': result.get('research_data', {}),
-                        'summary': result.get('research_summary', {}),
-                        'quality_score': result.get('quality_score', 0.5)
+                        'task_id': task_id,
+                        'content': task_result.get('research_data', {}),
+                        'summary': task_result.get('research_summary', {}),
+                        'quality_score': task_result.get('quality_score', 0.5)
                     })
                 elif 'analyzer' in result_type:
                     aggregated['analysis_results'].append({
                         'type': 'analysis_result',
-                        'content': result.get('analysis_data', {}),
-                        'insights': result.get('insights', []),
-                        'quality_score': result.get('analysis_quality', 0.5)
+                        'task_id': task_id,
+                        'content': task_result.get('analysis_data', {}),
+                        'insights': task_result.get('insights', []),
+                        'quality_score': task_result.get('analysis_quality', 0.5)
                     })
                 elif 'synthesizer' in result_type:
                     aggregated['analysis_results'].append({
                         'type': 'synthesis_result',
-                        'content': result.get('synthesis_data', {}),
-                        'recommendations': result.get('recommendations', []),
-                        'quality_score': result.get('synthesis_quality', 0.5)
+                        'task_id': task_id,
+                        'content': task_result.get('synthesis_data', {}),
+                        'recommendations': task_result.get('recommendations', []),
+                        'quality_score': task_result.get('synthesis_quality', 0.5)
                     })
             
             # Aggregate evaluation insights
             if evaluation_results:
-                aggregated['evaluation_insights'].append({
-                    'type': 'evaluation_insights',
-                    'overall_quality': evaluation_results.get('overall_quality', {}),
-                    'alignment_assessment': evaluation_results.get('alignment_assessment', {}),
-                    'gap_analysis': evaluation_results.get('gap_analysis', {}),
-                    'refinement_recommendations': evaluation_results.get('refinement_recommendations', [])
-                })
+                if isinstance(evaluation_results, list):
+                    for eval_result in evaluation_results:
+                        if isinstance(eval_result, dict):
+                            aggregated['evaluation_insights'].append({
+                                'type': 'evaluation_insights',
+                                'overall_quality': eval_result.get('overall_quality', {}),
+                                'alignment_assessment': eval_result.get('alignment_assessment', {}),
+                                'gap_analysis': eval_result.get('gap_analysis', {}),
+                                'refinement_recommendations': eval_result.get('refinement_recommendations', [])
+                            })
+                elif isinstance(evaluation_results, dict):
+                    aggregated['evaluation_insights'].append({
+                        'type': 'evaluation_insights',
+                        'overall_quality': evaluation_results.get('overall_quality', {}),
+                        'alignment_assessment': evaluation_results.get('alignment_assessment', {}),
+                        'gap_analysis': evaluation_results.get('gap_analysis', {}),
+                        'refinement_recommendations': evaluation_results.get('refinement_recommendations', [])
+                    })
             
             # Aggregate validation findings
             if validation_results:
-                aggregated['validation_findings'].append({
-                    'type': 'validation_findings',
-                    'validation_score': validation_results.get('validation_score', 0),
-                    'validation_level': validation_results.get('validation_level', 'unknown'),
-                    'validation_report': validation_results.get('validation_report', {}),
-                    'component_scores': validation_results.get('validation_report', {}).get('component_scores', {})
-                })
+                if isinstance(validation_results, list):
+                    for val_result in validation_results:
+                        if isinstance(val_result, dict):
+                            aggregated['validation_findings'].append({
+                                'type': 'validation_findings',
+                                'validation_score': val_result.get('validation_score', 0),
+                                'validation_level': val_result.get('validation_level', 'unknown'),
+                                'validation_report': val_result.get('validation_report', {}),
+                                'component_scores': val_result.get('validation_report', {}).get('component_scores', {})
+                            })
+                elif isinstance(validation_results, dict):
+                    aggregated['validation_findings'].append({
+                        'type': 'validation_findings',
+                        'validation_score': validation_results.get('validation_score', 0),
+                        'validation_level': validation_results.get('validation_level', 'unknown'),
+                        'validation_report': validation_results.get('validation_report', {}),
+                        'component_scores': validation_results.get('validation_report', {}).get('component_scores', {})
+                    })
             
             # Aggregate objective metadata
-            for objective in original_objectives:
-                aggregated['objective_metadata'].append({
-                    'objective_id': objective.get('objective_id'),
-                    'description': objective.get('description'),
-                    'type': objective.get('type'),
-                    'priority': objective.get('priority'),
-                    'success_criteria': objective.get('success_criteria', {})
-                })
+            if isinstance(original_objectives, list):
+                objectives_to_process = original_objectives
+            elif original_objectives is not None:
+                objectives_to_process = [original_objectives]
+            else:
+                objectives_to_process = []
+            
+            for objective in objectives_to_process:
+                if isinstance(objective, dict):
+                    aggregated['objective_metadata'].append({
+                        'objective_id': objective.get('objective_id'),
+                        'description': objective.get('description'),
+                        'type': objective.get('type'),
+                        'priority': objective.get('priority'),
+                        'success_criteria': objective.get('success_criteria', {})
+                    })
             
             return aggregated
             
@@ -869,10 +950,14 @@ class SynthesisAgent:
             Enhanced content
         """
         try:
-            enhanced_content = synthesized_content.copy()
+            # Handle different types of synthesized_content
+            if isinstance(synthesized_content, str):
+                enhanced_content = {'content': synthesized_content}
+            else:
+                enhanced_content = synthesized_content.copy() if isinstance(synthesized_content, dict) else {'content': str(synthesized_content)}
             
             # Apply quality enhancements based on validation results
-            validation_score = validation_results.get('validation_score', 0.5)
+            validation_score = validation_results.get('validation_score', 0.5) if isinstance(validation_results, dict) else 0.5
             
             if validation_score < 0.7:
                 # Enhance content quality
@@ -1493,9 +1578,9 @@ class SynthesisAgent:
                 },
                 'research_metadata': {
                     'objective_id': objective_id,
-                    'total_execution_results': len(execution_results),
-                    'evaluation_score': evaluation_results.get('overall_quality', {}).get('overall_score', 0),
-                    'validation_score': validation_results.get('validation_score', 0),
+                    'total_execution_results': len(execution_results) if isinstance(execution_results, list) else 1,
+                    'evaluation_score': evaluation_results.get('overall_quality', {}).get('overall_score', 0) if isinstance(evaluation_results, dict) else 0,
+                    'validation_score': validation_results.get('validation_score', 0) if isinstance(validation_results, dict) else 0,
                     'synthesis_quality': self._calculate_synthesis_quality(deliverable.get('content', ''), [])
                 },
                 'system_metadata': {
@@ -1519,9 +1604,15 @@ class SynthesisAgent:
             if not content:
                 return 0.0
             
+            # Handle different types of content
+            if isinstance(content, dict):
+                content_text = str(content)
+            else:
+                content_text = str(content)
+            
             # Simple quality calculation based on content length and insight count
-            word_count = len(content.split())
-            insight_count = len(insights)
+            word_count = len(content_text.split())
+            insight_count = len(insights) if isinstance(insights, list) else 0
             
             # Quality factors
             length_score = min(word_count / 2000, 1.0)  # Normalize to 2000 words

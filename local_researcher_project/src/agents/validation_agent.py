@@ -491,14 +491,20 @@ class ValidationAgent:
         """
         try:
             # Weighted average of all validation scores
-            weights = self.validation_criteria
+            weights = getattr(self, 'validation_criteria', {
+                'objective_alignment': {'weight': 0.2},
+                'quality_standards': {'weight': 0.2},
+                'completeness': {'weight': 0.2},
+                'accuracy': {'weight': 0.2},
+                'relevance': {'weight': 0.2}
+            })
             
             overall_score = (
-                alignment_validation.get('overall_alignment_score', 0) * weights['objective_alignment']['weight'] +
-                quality_validation.get('overall_quality_score', 0) * weights['quality_standards']['weight'] +
-                completeness_validation.get('overall_completeness_score', 0) * weights['completeness']['weight'] +
-                accuracy_validation.get('overall_accuracy_score', 0) * weights['accuracy']['weight'] +
-                relevance_validation.get('overall_relevance_score', 0) * weights['relevance']['weight']
+                alignment_validation.get('overall_alignment_score', 0) * weights.get('objective_alignment', {}).get('weight', 0.2) +
+                quality_validation.get('overall_quality_score', 0) * weights.get('quality_standards', {}).get('weight', 0.2) +
+                completeness_validation.get('overall_completeness_score', 0) * weights.get('completeness', {}).get('weight', 0.2) +
+                accuracy_validation.get('overall_accuracy_score', 0) * weights.get('accuracy', {}).get('weight', 0.2) +
+                relevance_validation.get('overall_relevance_score', 0) * weights.get('relevance', {}).get('weight', 0.2)
             )
             
             # Determine validation level
@@ -586,9 +592,9 @@ class ValidationAgent:
             
             return {
                 'summary': summary,
-                'overall_score': overall_validation['overall_score'],
-                'validation_level': overall_validation['validation_level'],
-                'component_scores': overall_validation['component_scores'],
+                'overall_score': overall_validation.get('overall_score', 0.0),
+                'validation_level': overall_validation.get('validation_level', 'poor'),
+                'component_scores': overall_validation.get('component_scores', {}),
                 'total_issues': len(all_issues),
                 'issues_by_category': {
                     'alignment': len(alignment_validation.get('alignment_issues', [])),

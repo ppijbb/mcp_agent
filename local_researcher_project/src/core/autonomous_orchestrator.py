@@ -165,7 +165,6 @@ class LangGraphOrchestrator:
         workflow.add_node("evaluate_results", self._evaluate_results_node)
         workflow.add_node("validate_results", self._validate_results_node)
         workflow.add_node("synthesize_deliverable", self._synthesize_deliverable_node)
-        workflow.add_node("decide_continuation", self._decide_continuation_node)
         
         # Add edges
         workflow.set_entry_point("analyze_objectives")
@@ -173,14 +172,11 @@ class LangGraphOrchestrator:
         workflow.add_edge("decompose_tasks", "execute_research")
         workflow.add_edge("execute_research", "evaluate_results")
         workflow.add_edge("evaluate_results", "validate_results")
-        workflow.add_edge("synthesize_deliverable", "decide_continuation")
-        
-        # Conditional edges for iteration and validation
-        # Add direct edge from validation to synthesis (no loops)
         workflow.add_edge("validate_results", "synthesize_deliverable")
         
+        # Conditional edges for iteration
         workflow.add_conditional_edges(
-            "decide_continuation",
+            "synthesize_deliverable",
             self._should_continue,
             {
                 "continue": "execute_research",
@@ -469,7 +465,6 @@ class LangGraphOrchestrator:
                 result = await agent.evaluate_results(
                     state['execution_results'],
                     state['analyzed_objectives'],
-                    state['user_request'],
                     state['context'],
                     state['objective_id']
                 )
@@ -518,22 +513,29 @@ class LangGraphOrchestrator:
     async def _evaluate_results_node(self, state: ResearchState) -> ResearchState:
         """Evaluate research results and identify improvements."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info("Evaluating results")
             
             # Use evaluation agent
             evaluator = self.agents.get('evaluator')
-            if evaluator:
-                evaluation_result = await evaluator.evaluate_results(
-                    state['execution_results'],
-                    state['analyzed_objectives']
-                )
-            else:
-                # Fallback to LLM evaluation
-                evaluation_result = await self.llm_methods.llm_evaluate_results(state)
+            if not evaluator:
+                raise ValueError("Evaluation agent not available")
+            
+            evaluation_result = await evaluator.evaluate_results(
+                state['execution_results'],
+                state['analyzed_objectives']
+            )
             
             state['evaluation_results'] = evaluation_result
             state['quality_metrics'] = evaluation_result.get('quality_metrics', {})
             state['improvement_areas'] = evaluation_result.get('improvement_areas', [])
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
+            
             state['current_step'] = "validate_results"
             state['messages'].append(AIMessage(content="Results evaluated"))
             
@@ -542,26 +544,30 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Result evaluation failed: {e}")
             state['error_message'] = str(e)
+            state['should_continue'] = False
             return state
     
     async def _validate_results_node(self, state: ResearchState) -> ResearchState:
         """Enhanced validation of results with critical analysis."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info("Starting enhanced validation of results")
             
             # Use enhanced validation agent
             validator = self.agents.get('validator')
-            if validator:
-                validation_result = await validator.validate_results(
-                    execution_results=state['execution_results'],
-                    original_objectives=state['analyzed_objectives'],
-                    user_request=state['user_request'],
-                    context=state.get('context', {}),
-                    objective_id=state.get('objective_id', 'unknown')
-                )
-            else:
-                # Fallback to LLM validation
-                validation_result = await self.llm_methods.llm_validate_results(state)
+            if not validator:
+                raise ValueError("Validation agent not available")
+            
+            validation_result = await validator.validate_results(
+                execution_results=state['execution_results'],
+                original_objectives=state['analyzed_objectives'],
+                user_request=state['user_request'],
+                context=state.get('context', {}),
+                objective_id=state.get('objective_id', 'unknown')
+            )
             
             # Update state with enhanced validation data
             state['validation_results'] = validation_result
@@ -578,6 +584,9 @@ class LangGraphOrchestrator:
             # Generate enhanced validation summary
             validation_summary = self._generate_validation_summary(validation_result)
             state['messages'].append(AIMessage(content=validation_summary))
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
             
             # Check if validation meets critical thresholds
             critical_failed = any(
@@ -597,33 +606,41 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Enhanced validation failed: {e}")
             state['error_message'] = str(e)
+            state['should_continue'] = False
             return state
     
     async def _synthesize_deliverable_node(self, state: ResearchState) -> ResearchState:
         """Synthesize final deliverable from all results."""
         try:
+            # Ensure user_request is preserved
+            if not state.get('user_request'):
+                raise ValueError("User request is missing from state")
+            
             logger.info("Synthesizing deliverable")
             
             # Use synthesis agent
             synthesizer = self.agents.get('synthesizer')
-            if synthesizer:
-                synthesis_result = await synthesizer.synthesize_deliverable(
-                    state.get('execution_results', []),
-                    state.get('evaluation_results', {}),
-                    state.get('validation_results', {}),
-                    state.get('analyzed_objectives', []),
-                    state.get('user_request', ''),
-                    state.get('context'),
-                    state.get('objective_id')
-                )
-            else:
-                # Fallback to LLM synthesis
-                synthesis_result = await self.llm_methods.llm_synthesize_deliverable(state)
+            if not synthesizer:
+                raise ValueError("Synthesis agent not available")
+            
+            synthesis_result = await synthesizer.synthesize_deliverable(
+                state.get('execution_results', []),
+                state.get('evaluation_results', {}),
+                state.get('validation_results', {}),
+                state.get('analyzed_objectives', []),
+                state.get('user_request', ''),
+                state.get('context'),
+                state.get('objective_id')
+            )
             
             state['final_synthesis'] = synthesis_result
             state['deliverable_path'] = synthesis_result.get('deliverable_path')
             state['synthesis_metadata'] = synthesis_result.get('metadata', {})
-            state['current_step'] = "decide_continuation"
+            
+            # Ensure user_request remains in state
+            state['user_request'] = state['user_request']
+            
+            state['current_step'] = "completed"
             state['messages'].append(AIMessage(content="Deliverable synthesized"))
             
             return state
@@ -631,72 +648,10 @@ class LangGraphOrchestrator:
         except Exception as e:
             logger.error(f"Deliverable synthesis failed: {e}")
             state['error_message'] = str(e)
-            return state
-    
-    async def _decide_continuation_node(self, state: ResearchState) -> ResearchState:
-        """Decide whether to continue with another iteration."""
-        try:
-            logger.info("Deciding continuation")
-            
-            # Check if we should continue based on quality and iterations
-            quality_score = state['validation_score']
-            iteration = state['iteration']
-            max_iterations = state['max_iterations']
-            
-            should_continue = (
-                quality_score < 0.8 and 
-                iteration < max_iterations and 
-                not state.get('error_message')
-            )
-            
-            state['should_continue'] = should_continue
-            state['iteration'] = iteration + 1
-            
-            if should_continue:
-                state['current_step'] = "execute_research"
-                state['messages'].append(AIMessage(content=f"Continuing iteration {iteration + 1}"))
-            else:
-                state['current_step'] = "completed"
-                state['messages'].append(AIMessage(content="Research completed"))
-            
-            return state
-            
-        except Exception as e:
-            logger.error(f"Continuation decision failed: {e}")
-            state['error_message'] = str(e)
             state['should_continue'] = False
             return state
     
-    def _should_continue_after_validation(self, state: ResearchState) -> str:
-        """Determine if research should continue after validation."""
-        try:
-            # Check if there are critical issues
-            critical_issues = state.get('critical_issues', [])
-            if critical_issues:
-                logger.info(f"Critical validation issues detected: {len(critical_issues)}")
-                return "continue"
-            
-            # Check if validation score is below threshold
-            validation_score = state.get('validation_score', 0.0)
-            if validation_score < 0.7:
-                logger.info(f"Validation score below threshold: {validation_score}")
-                return "continue"
-            
-            # Check if max iterations reached
-            if state.get('iteration', 0) >= state.get('max_iterations', 3):
-                logger.info("Max iterations reached")
-                return "synthesize"
-            
-            # Check if should_continue flag is set
-            if not state.get('should_continue', False):
-                logger.info("Should continue flag is False")
-                return "synthesize"
-            
-            return "synthesize"
-            
-        except Exception as e:
-            logger.error(f"Validation continuation decision failed: {e}")
-            return "synthesize"
+    
     
     def _should_continue(self, state: ResearchState) -> str:
         """Determine whether to continue or end the workflow."""
@@ -758,7 +713,10 @@ class LangGraphOrchestrator:
                     await agent.cancel_tasks(objective_id)
             
             # Mark objective as cancelled
-            self.active_objectives[objective_id].status = "cancelled"
+            if hasattr(self.active_objectives[objective_id], 'status'):
+                self.active_objectives[objective_id].status = "cancelled"
+            elif isinstance(self.active_objectives[objective_id], dict):
+                self.active_objectives[objective_id]['status'] = "cancelled"
             
             logger.info(f"Research objective cancelled: {objective_id}")
             return True
