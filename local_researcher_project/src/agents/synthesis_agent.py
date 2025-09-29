@@ -780,14 +780,14 @@ class SynthesisAgent:
                     findings = result.get('analysis_result', {}).get('key_findings', [])
                     key_findings.extend(findings)
             
-            # Generate summary based on actual findings
+            # Generate summary based on actual findings in Korean
             if key_findings:
-                summary = f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. Through comprehensive research and analysis, the following key findings have been identified:\n\n"
+                summary = f"# 요약\n\n이 보고서는 연구 요청사항 '{user_request}'에 대해 다룹니다. 포괄적인 연구와 분석을 통해 다음과 같은 핵심 발견사항들이 확인되었습니다:\n\n"
                 for i, finding in enumerate(key_findings[:5], 1):  # Top 5 findings
                     summary += f"{i}. {finding}\n"
-                summary += f"\nThe research employed autonomous multi-agent collaboration to ensure comprehensive coverage and high-quality results."
+                summary += f"\n이 연구는 포괄적인 커버리지와 고품질 결과를 보장하기 위해 자율 다중 에이전트 협업을 활용했습니다."
             else:
-                summary = f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
+                summary = f"# 요약\n\n이 보고서는 연구 요청사항 '{user_request}'에 대해 다룹니다. 자율 다중 에이전트 협업을 통해 연구가 수행되어 포괄적인 발견사항과 실행 가능한 통찰을 도출했습니다."
             
             return summary
         except Exception as e:
@@ -816,50 +816,52 @@ class SynthesisAgent:
     ) -> str:
         """Generate findings section."""
         try:
-            findings = "# Key Findings\n\n"
+            findings = "# 주요 발견사항\n\n"
             
-            # Extract actual research results
-            research_results = aggregated_content.get('research_results', [])
-            web_search_results = []
-            academic_results = []
+            # Extract actual research data from aggregated content
+            research_data = aggregated_content.get('research_data', [])
+            analysis_results = aggregated_content.get('analysis_results', [])
             
-            # Process different types of research results
-            for result in research_results:
-                if result.get('success', False):
-                    if result.get('method') == 'web_search':
-                        web_search_results.extend(result.get('results', []))
-                    elif result.get('method') == 'academic_search':
-                        academic_results.extend(result.get('results', []))
+            # Process research data
+            if research_data:
+                findings += "## 연구 데이터 분석\n\n"
+                for i, data in enumerate(research_data[:3], 1):
+                    if isinstance(data, dict):
+                        content = data.get('content', {})
+                        if isinstance(content, dict):
+                            research_summary = content.get('research_summary', {})
+                            if isinstance(research_summary, dict):
+                                key_insights = research_summary.get('key_insights', [])
+                                if key_insights:
+                                    findings += f"{i}. **연구 통찰 {i}**: {key_insights[0]}\n\n"
+                                else:
+                                    findings += f"{i}. **연구 데이터 {i}**: {str(content)[:200]}...\n\n"
             
-            # Add web search findings
-            if web_search_results:
-                findings += "## Web Research Findings\n\n"
-                for i, result in enumerate(web_search_results[:3], 1):
-                    title = result.get('title', 'Untitled')
-                    snippet = result.get('snippet', 'No description available')
-                    findings += f"{i}. **{title}**: {snippet}\n\n"
-            
-            # Add academic research findings
-            if academic_results:
-                findings += "## Academic Research Findings\n\n"
-                for i, result in enumerate(academic_results[:3], 1):
-                    title = result.get('title', 'Untitled')
-                    abstract = result.get('abstract', 'No abstract available')
-                    authors = ', '.join(result.get('authors', []))
-                    year = result.get('year', 'Unknown')
-                    findings += f"{i}. **{title}** ({year})\n"
-                    findings += f"   Authors: {authors}\n"
-                    findings += f"   Abstract: {abstract[:200]}...\n\n"
+            # Process analysis results
+            if analysis_results:
+                findings += "## 분석 결과\n\n"
+                for i, result in enumerate(analysis_results[:3], 1):
+                    if isinstance(result, dict):
+                        content = result.get('content', {})
+                        if isinstance(content, dict):
+                            insights_data = content.get('insights', [])
+                            if insights_data:
+                                findings += f"{i}. **분석 통찰 {i}**: {insights_data[0]}\n\n"
+                            else:
+                                findings += f"{i}. **분석 결과 {i}**: {str(content)[:200]}...\n\n"
             
             # Add insights if available
             if insights:
-                findings += "## Key Insights\n\n"
+                findings += "## 핵심 통찰\n\n"
                 for i, insight in enumerate(insights[:5], 1):
-                    findings += f"{i}. {insight.get('title', 'Insight')}: {insight.get('description', '')}\n\n"
+                    if isinstance(insight, dict):
+                        findings += f"{i}. {insight.get('title', '통찰')}: {insight.get('description', '')}\n\n"
+                    else:
+                        findings += f"{i}. {str(insight)}\n\n"
             
             # If no findings, add a message
-            if not web_search_results and not academic_results and not insights:
-                findings += "No specific findings were identified in the research process. This may indicate that the research query needs to be refined or that additional research sources should be consulted.\n\n"
+            if not research_data and not analysis_results and not insights:
+                findings += "연구 과정에서 구체적인 발견사항이 확인되지 않았습니다. 이는 연구 질문을 구체화하거나 추가 연구 소스를 참조해야 할 수 있음을 시사합니다.\n\n"
             
             return findings
         except Exception as e:
@@ -873,46 +875,60 @@ class SynthesisAgent:
     ) -> str:
         """Generate analysis section."""
         try:
-            analysis = "# Analysis\n\n"
+            analysis = "# 분석\n\n"
             
-            # Extract research results for analysis
-            research_results = aggregated_content.get('research_results', [])
-            total_sources = len(research_results)
-            successful_research = len([r for r in research_results if r.get('success', False)])
+            # Extract research data for analysis
+            research_data = aggregated_content.get('research_data', [])
+            analysis_results = aggregated_content.get('analysis_results', [])
             
-            analysis += f"## Research Overview\n\n"
-            analysis += f"This analysis is based on {successful_research} successful research tasks out of {total_sources} total attempts. "
+            analysis += f"## 연구 개요\n\n"
+            analysis += f"이 분석은 {len(research_data)}개의 연구 데이터 소스와 {len(analysis_results)}개의 분석 결과를 기반으로 합니다. "
             
-            if successful_research > 0:
-                analysis += f"The research quality score is {sum(r.get('research_quality', 0) for r in research_results if r.get('success', False)) / successful_research:.2f} out of 1.0.\n\n"
+            if research_data or analysis_results:
+                analysis += f"연구는 자율 다중 에이전트 분석을 통해 포괄적인 통찰을 제공합니다.\n\n"
                 
-                # Analyze research methods used
-                methods_used = set()
-                for result in research_results:
-                    if result.get('success', False):
-                        methods_used.add(result.get('method', 'unknown'))
+                # Analyze research data
+                if research_data:
+                    analysis += f"## 연구 데이터 분석\n\n"
+                    for i, data in enumerate(research_data[:3], 1):
+                        if isinstance(data, dict):
+                            content = data.get('content', {})
+                            if isinstance(content, dict):
+                                research_summary = content.get('research_summary', {})
+                                if isinstance(research_summary, dict):
+                                    expert_analysis = research_summary.get('expert_analysis', '')
+                                    if expert_analysis:
+                                        analysis += f"**분석 {i}**: {expert_analysis}\n\n"
+                                    else:
+                                        analysis += f"**연구 데이터 {i}**: {str(content)[:300]}...\n\n"
                 
-                if methods_used:
-                    analysis += f"## Research Methods\n\n"
-                    analysis += f"The following research methods were employed: {', '.join(methods_used)}.\n\n"
+                # Analyze analysis results
+                if analysis_results:
+                    analysis += f"## 분석 결과\n\n"
+                    for i, result in enumerate(analysis_results[:3], 1):
+                        if isinstance(result, dict):
+                            content = result.get('content', {})
+                            if isinstance(content, dict):
+                                insights_data = content.get('insights', [])
+                                if insights_data:
+                                    analysis += f"**분석 결과 {i}**: {insights_data[0]}\n\n"
+                                else:
+                                    analysis += f"**분석 결과 {i}**: {str(content)[:300]}...\n\n"
                 
-                # Analyze findings patterns
-                analysis += f"## Pattern Analysis\n\n"
-                analysis += f"Detailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report.\n\n"
+                # Add insights if available
+                if insights:
+                    analysis += f"### 추가 통찰\n\n"
+                    for i, insight in enumerate(insights[:3], 1):
+                        if isinstance(insight, dict):
+                            analysis += f"**통찰 {i}**: {insight.get('description', str(insight))}\n\n"
+                        else:
+                            analysis += f"**통찰 {i}**: {str(insight)}\n\n"
                 
-                # Add specific analysis based on research results
-                web_results = [r for r in research_results if r.get('method') == 'web_search' and r.get('success', False)]
-                academic_results = [r for r in research_results if r.get('method') == 'academic_search' and r.get('success', False)]
-                
-                if web_results:
-                    analysis += f"### Web Research Analysis\n\n"
-                    analysis += f"Web research yielded {sum(len(r.get('results', [])) for r in web_results)} relevant sources, providing current information and real-time data.\n\n"
-                
-                if academic_results:
-                    analysis += f"### Academic Research Analysis\n\n"
-                    analysis += f"Academic research identified {sum(len(r.get('results', [])) for r in academic_results)} scholarly sources, providing peer-reviewed insights and established knowledge.\n\n"
+                # Add summary
+                analysis += f"### 연구 요약\n\n"
+                analysis += f"이 포괄적인 분석은 {len(research_data)}개의 연구 데이터 소스와 {len(analysis_results)}개의 분석 결과를 기반으로 한 가치 있는 통찰을 제공합니다.\n\n"
             else:
-                analysis += f"Unfortunately, no successful research tasks were completed, which limits the depth of analysis possible.\n\n"
+                analysis += f"안타깝게도 성공적인 연구 작업이 완료되지 않아 분석의 깊이가 제한됩니다.\n\n"
             
             return analysis
         except Exception as e:
@@ -1021,32 +1037,32 @@ class SynthesisAgent:
             validation = enhanced_content.get('validation', [])
             conclusions = enhanced_content.get('conclusions', [])
             
-            # Build comprehensive report
-            report = f"# Comprehensive Research Report: {user_request}\n\n"
-            report += f"**Research ID:** {objective_id}\n"
-            report += f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            # Build comprehensive report in Korean
+            report = f"# 포괄적 연구 보고서: {user_request}\n\n"
+            report += f"**연구 ID:** {objective_id}\n"
+            report += f"**생성일:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             
             # Executive Summary
-            report += "## Executive Summary\n\n"
+            report += "## 요약\n\n"
             if conclusions:
                 for conclusion in conclusions[:3]:  # Top 3 conclusions
                     if isinstance(conclusion, dict):
                         statement = conclusion.get('statement', str(conclusion))
                         confidence = conclusion.get('confidence', 0)
-                        report += f"- **{statement}** (Confidence: {confidence:.1%})\n"
+                        report += f"- **{statement}** (신뢰도: {confidence:.1%})\n"
                     else:
                         report += f"- {str(conclusion)}\n"
             else:
-                report += "Research conducted using autonomous multi-agent system with LLM-guided analysis.\n"
+                report += "자율 다중 에이전트 시스템을 통한 LLM 기반 분석 연구가 수행되었습니다.\n"
             report += "\n"
             
             # Research Methodology
-            report += "## Research Methodology\n\n"
-            strategy = enhanced_content.get('strategy', 'LLM-autonomous research approach')
+            report += "## 연구 방법론\n\n"
+            strategy = enhanced_content.get('strategy', 'LLM 자율 연구 접근법')
             report += f"{strategy}\n\n"
             
             # Key Findings
-            report += "## Key Findings\n\n"
+            report += "## 주요 발견사항\n\n"
             if findings:
                 for i, finding in enumerate(findings, 1):
                     if isinstance(finding, dict):
@@ -1055,23 +1071,23 @@ class SynthesisAgent:
                         purpose = finding.get('purpose', '')
                         data = finding.get('data', {})
                         
-                        report += f"### Finding {i}: {source.title()} Research\n"
-                        report += f"**Query:** {query}\n"
-                        report += f"**Purpose:** {purpose}\n"
+                        report += f"### 발견사항 {i}: {source.title()} 연구\n"
+                        report += f"**질문:** {query}\n"
+                        report += f"**목적:** {purpose}\n"
                         
                         if isinstance(data, dict) and 'results' in data:
                             results = data['results'][:3]  # Top 3 results
                             for j, result in enumerate(results, 1):
                                 if isinstance(result, dict):
-                                    title = result.get('title', 'Untitled')
-                                    snippet = result.get('snippet', result.get('abstract', 'No description'))
+                                    title = result.get('title', '제목 없음')
+                                    snippet = result.get('snippet', result.get('abstract', '설명 없음'))
                                     report += f"{j}. **{title}**: {snippet[:200]}...\n"
                         report += "\n"
             else:
-                report += "No specific findings available from automated research.\n\n"
+                report += "자동화된 연구에서 구체적인 발견사항을 확인할 수 없습니다.\n\n"
             
             # Analysis Results
-            report += "## Analysis Results\n\n"
+            report += "## 분석 결과\n\n"
             if analysis:
                 for i, analysis_item in enumerate(analysis, 1):
                     if isinstance(analysis_item, dict):
