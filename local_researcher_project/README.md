@@ -46,7 +46,36 @@ brew install wkhtmltopdf
 # Download from https://wkhtmltopdf.org/downloads.html
 ```
 
-### 2. Environment Setup
+### 2. API Keys Setup
+
+The system supports multiple search APIs with automatic fallback. Configure at least one:
+
+**Priority Order**: Tavily > Exa > Brave > Serper > DuckDuckGo
+
+#### Recommended (Free Tier Available):
+
+1. **Tavily** (Best quality)
+   - Sign up: https://tavily.com/
+   - Set: `TAVILY_API_KEY=your_key`
+
+2. **Exa** (Neural search)
+   - Sign up: https://exa.ai/
+   - Set: `EXA_API_KEY=your_key`
+
+3. **Brave Search**
+   - Sign up: https://brave.com/search/api/
+   - Set: `BRAVE_SEARCH_API_KEY=your_key`
+
+#### Optional (Paid):
+
+4. **Serper** (Google Search)
+   - Sign up: https://serper.dev/
+   - Set: `SERPER_API_KEY=your_key`
+
+5. **DuckDuckGo** (No API key needed, but rate limited)
+   - Works automatically without configuration
+
+### 3. Environment Setup
 
 ```bash
 # Set up environment variables

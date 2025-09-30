@@ -339,12 +339,12 @@ class SynthesisAgent:
                             })
                 elif isinstance(validation_results, dict):
                     aggregated['validation_findings'].append({
-                        'type': 'validation_findings',
-                        'validation_score': validation_results.get('validation_score', 0),
-                        'validation_level': validation_results.get('validation_level', 'unknown'),
-                        'validation_report': validation_results.get('validation_report', {}),
-                        'component_scores': validation_results.get('validation_report', {}).get('component_scores', {})
-                    })
+                    'type': 'validation_findings',
+                    'validation_score': validation_results.get('validation_score', 0),
+                    'validation_level': validation_results.get('validation_level', 'unknown'),
+                    'validation_report': validation_results.get('validation_report', {}),
+                    'component_scores': validation_results.get('validation_report', {}).get('component_scores', {})
+                })
             
             # Aggregate objective metadata
             if isinstance(original_objectives, list):
@@ -792,7 +792,7 @@ class SynthesisAgent:
             return summary
         except Exception as e:
             logger.error(f"Executive summary generation failed: {e}")
-            return f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
+        return f"# Executive Summary\n\nThis report addresses the research request: '{user_request}'. The research has been conducted through autonomous multi-agent collaboration, resulting in comprehensive findings and actionable insights."
     
     async def _generate_introduction(
         self,
@@ -933,7 +933,7 @@ class SynthesisAgent:
             return analysis
         except Exception as e:
             logger.error(f"Analysis generation failed: {e}")
-            return "# Analysis\n\nDetailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report."
+        return "# Analysis\n\nDetailed analysis of research findings reveals significant patterns and trends that inform the conclusions and recommendations presented in this report."
     
     async def _generate_conclusions(
         self,

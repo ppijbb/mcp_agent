@@ -542,23 +542,27 @@ class ResearchAgent:
     async def _perform_web_search(self, query: str) -> Dict[str, Any]:
         """Perform actual web search using real search APIs."""
         try:
-            # Try multiple search methods
+            # Try multiple search methods in priority order
             search_methods = [
-                self._search_with_duckduckgo,
-                self._search_with_google_custom,
-                self._search_with_bing
+                self._search_with_tavily,
+                self._search_with_exa,
+                self._search_with_brave,
+                self._search_with_serper,
+                self._search_with_duckduckgo
             ]
             
             for method in search_methods:
                 try:
                     result = await method(query)
                     if result.get('success') and result.get('results'):
+                        logger.info(f"Search succeeded with {method.__name__}: {len(result.get('results', []))} results")
                         return result
                 except Exception as e:
                     logger.warning(f"Search method {method.__name__} failed: {e}")
                     continue
             
             # If all methods fail, use LLM as fallback
+            logger.warning("All search APIs failed, falling back to LLM-generated research")
             return await self._perform_llm_fallback_search(query)
             
         except Exception as e:
@@ -571,6 +575,163 @@ class ResearchAgent:
                 'error': str(e),
                 'timestamp': datetime.now().isoformat()
             }
+    
+    async def _search_with_tavily(self, query: str) -> Dict[str, Any]:
+        """Search using Tavily API (best quality)."""
+        try:
+            tavily_key = os.getenv('TAVILY_API_KEY')
+            if not tavily_key:
+                return {'success': False, 'error': 'Tavily API key not configured'}
+            
+            from tavily import TavilyClient
+            
+            client = TavilyClient(api_key=tavily_key)
+            response = client.search(query, max_results=5, search_depth="advanced")
+            
+            formatted_results = []
+            for result in response.get('results', []):
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'snippet': result.get('content', ''),
+                    'url': result.get('url', ''),
+                    'source': 'tavily',
+                    'score': result.get('score', 0)
+                })
+            
+            return {
+                'success': True,
+                'method': 'tavily',
+                'query': query,
+                'results': formatted_results,
+                'total_results': len(formatted_results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"Tavily search failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def _search_with_exa(self, query: str) -> Dict[str, Any]:
+        """Search using Exa API (neural search)."""
+        try:
+            exa_key = os.getenv('EXA_API_KEY')
+            if not exa_key:
+                return {'success': False, 'error': 'Exa API key not configured'}
+            
+            from exa_py import Exa
+            
+            client = Exa(api_key=exa_key)
+            response = client.search_and_contents(
+                query,
+                num_results=5,
+                text=True,
+                highlights=True
+            )
+            
+            formatted_results = []
+            for result in response.results:
+                formatted_results.append({
+                    'title': result.title,
+                    'snippet': result.text[:500] if result.text else '',
+                    'url': result.url,
+                    'source': 'exa',
+                    'score': result.score if hasattr(result, 'score') else 0
+                })
+            
+            return {
+                'success': True,
+                'method': 'exa',
+                'query': query,
+                'results': formatted_results,
+                'total_results': len(formatted_results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"Exa search failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def _search_with_brave(self, query: str) -> Dict[str, Any]:
+        """Search using Brave Search API."""
+        try:
+            brave_key = os.getenv('BRAVE_SEARCH_API_KEY')
+            if not brave_key:
+                return {'success': False, 'error': 'Brave API key not configured'}
+            
+            url = "https://api.search.brave.com/res/v1/web/search"
+            headers = {
+                'Accept': 'application/json',
+                'X-Subscription-Token': brave_key
+            }
+            params = {'q': query, 'count': 5}
+            
+            async with asyncio.timeout(10):
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+            
+            formatted_results = []
+            for result in data.get('web', {}).get('results', [])[:5]:
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'snippet': result.get('description', ''),
+                    'url': result.get('url', ''),
+                    'source': 'brave'
+                })
+            
+            return {
+                'success': True,
+                'method': 'brave',
+                'query': query,
+                'results': formatted_results,
+                'total_results': len(formatted_results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"Brave search failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def _search_with_serper(self, query: str) -> Dict[str, Any]:
+        """Search using Serper API (Google Search)."""
+        try:
+            serper_key = os.getenv('SERPER_API_KEY')
+            if not serper_key:
+                return {'success': False, 'error': 'Serper API key not configured'}
+            
+            url = "https://google.serper.dev/search"
+            headers = {
+                'X-API-KEY': serper_key,
+                'Content-Type': 'application/json'
+            }
+            payload = {'q': query, 'num': 5, 'gl': 'kr', 'hl': 'ko'}
+            
+            async with asyncio.timeout(10):
+                response = requests.post(url, headers=headers, json=payload, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+            
+            formatted_results = []
+            for result in data.get('organic', [])[:5]:
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'snippet': result.get('snippet', ''),
+                    'url': result.get('link', ''),
+                    'source': 'serper'
+                })
+            
+            return {
+                'success': True,
+                'method': 'serper',
+                'query': query,
+                'results': formatted_results,
+                'total_results': len(formatted_results),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"Serper search failed: {e}")
+            return {'success': False, 'error': str(e)}
     
     async def _search_with_duckduckgo(self, query: str) -> Dict[str, Any]:
         """Search using DuckDuckGo (no API key required)."""
@@ -687,12 +848,12 @@ class ResearchAgent:
             
             # Add expert opinions as results
             for i, opinion in enumerate(research_data.get('expert_opinions', [])[:2]):
-                results.append({
+                    results.append({
                     'title': f"전문가 분석: {query}",
                     'snippet': opinion,
                     'url': f"https://expert-analysis-{i+1}.com",
                     'source': 'llm_research'
-                })
+                    })
             
             return {
                 'success': True,
@@ -1743,12 +1904,12 @@ class ResearchAgent:
                 'task_type': task.get('task_type', 'general'),
                 'result': {
                     'research_data': {
-                        'query': research_query,
+                'query': research_query,
                         'web_search_results': search_results,
-                        'collected_data': collected_data,
-                        'additional_research': additional_research,
+                'collected_data': collected_data,
+                'additional_research': additional_research,
                         'research_summary': research_summary,
-                        'total_sources': len(collected_data) + len(additional_research.get('sources', [])),
+                'total_sources': len(collected_data) + len(additional_research.get('sources', [])),
                         'research_timestamp': datetime.now().isoformat()
                     },
                     'sources': [item['url'] for item in collected_data if item.get('url')],
