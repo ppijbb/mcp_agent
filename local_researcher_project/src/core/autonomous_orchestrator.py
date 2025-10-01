@@ -305,6 +305,10 @@ class LangGraphOrchestrator:
                 state['objective_id']
             )
             
+            # Ensure analysis_result is a dict
+            if not isinstance(analysis_result, dict):
+                analysis_result = {}
+            
             state['analyzed_objectives'] = analysis_result.get('objectives', [])
             state['intent_analysis'] = analysis_result.get('intent_analysis', {})
             state['domain_analysis'] = analysis_result.get('domain_analysis', {})
@@ -343,6 +347,10 @@ class LangGraphOrchestrator:
                 self.agents,
                 state['objective_id']
             )
+            
+            # Ensure decomposition_result is a dict
+            if not isinstance(decomposition_result, dict):
+                decomposition_result = {}
             
             state['decomposed_tasks'] = decomposition_result.get('tasks', [])
             state['task_assignments'] = decomposition_result.get('assignments', [])
@@ -383,9 +391,15 @@ class LangGraphOrchestrator:
                 raise ValueError("Research agent not available")
             
             if state['decomposed_tasks']:
+                # Ensure decomposed_tasks is a list
+                if not isinstance(state['decomposed_tasks'], list):
+                    state['decomposed_tasks'] = []
+                
                 # Group tasks by type for efficient execution
-                research_tasks = [task for task in state['decomposed_tasks'] 
-                                if task.get('type') in ['research', 'data_collection', 'analysis']]
+                research_tasks = []
+                for task in state['decomposed_tasks']:
+                    if isinstance(task, dict) and task.get('type') in ['research', 'data_collection', 'analysis']:
+                        research_tasks.append(task)
                 
                 if research_tasks:
                     # Execute research tasks
@@ -452,6 +466,10 @@ class LangGraphOrchestrator:
     async def _execute_single_task(self, task: Dict[str, Any], agent_name: str, state: ResearchState) -> Dict[str, Any]:
         """Execute a single task using the specified agent."""
         try:
+            # Ensure task is a dict
+            if not isinstance(task, dict):
+                task = {'type': 'general', 'description': 'Unknown task'}
+            
             agent = self.agents[agent_name]
             
             # Execute task based on agent type and task type

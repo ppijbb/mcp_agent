@@ -350,13 +350,22 @@ class ResearchAgent:
             
             # Execute research based on plan
             research_results = []
-            for research_step in research_plan.get('steps', []):
-                step_result = await self._execute_research_step(research_step, task)
-                if step_result:
-                    research_results.append(step_result)
+            research_steps = research_plan.get('steps', [])
+            if not isinstance(research_steps, list):
+                research_steps = []
+            
+            for research_step in research_steps:
+                if isinstance(research_step, dict):
+                    step_result = await self._execute_research_step(research_step, task)
+                    if step_result:
+                        research_results.append(step_result)
             
             # Use LLM to analyze and synthesize results
             analysis_result = await self._llm_analyze_research_results(research_results, task)
+            
+            # Ensure analysis_result is a dict
+            if not isinstance(analysis_result, dict):
+                analysis_result = {'quality_score': 0.0, 'key_findings': []}
             
             return {
                 'research_plan': research_plan,
@@ -516,6 +525,14 @@ class ResearchAgent:
     async def _execute_research_step(self, step: Dict[str, Any], task: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Execute a single research step."""
         try:
+            # Ensure step is a dict
+            if not isinstance(step, dict):
+                step = {'method': 'web_search', 'query': ''}
+            
+            # Ensure task is a dict
+            if not isinstance(task, dict):
+                task = {'description': ''}
+            
             method = step.get('method', 'web_search')
             query = step.get('query', task.get('description', ''))
             
@@ -554,9 +571,11 @@ class ResearchAgent:
             for method in search_methods:
                 try:
                     result = await method(query)
-                    if result.get('success') and result.get('results'):
-                        logger.info(f"Search succeeded with {method.__name__}: {len(result.get('results', []))} results")
-                        return result
+                    if isinstance(result, dict) and result.get('success') and result.get('results'):
+                        results = result.get('results', [])
+                        if isinstance(results, list):
+                            logger.info(f"Search succeeded with {method.__name__}: {len(results)} results")
+                            return result
                 except Exception as e:
                     logger.warning(f"Search method {method.__name__} failed: {e}")
                     continue
@@ -589,14 +608,19 @@ class ResearchAgent:
             response = client.search(query, max_results=5, search_depth="advanced")
             
             formatted_results = []
-            for result in response.get('results', []):
-                formatted_results.append({
-                    'title': result.get('title', ''),
-                    'snippet': result.get('content', ''),
-                    'url': result.get('url', ''),
-                    'source': 'tavily',
-                    'score': result.get('score', 0)
-                })
+            results = response.get('results', [])
+            if not isinstance(results, list):
+                results = []
+            
+            for result in results:
+                if isinstance(result, dict):
+                    formatted_results.append({
+                        'title': result.get('title', ''),
+                        'snippet': result.get('content', ''),
+                        'url': result.get('url', ''),
+                        'source': 'tavily',
+                        'score': result.get('score', 0)
+                    })
             
             return {
                 'success': True,
@@ -712,13 +736,18 @@ class ResearchAgent:
                 data = response.json()
             
             formatted_results = []
-            for result in data.get('organic', [])[:5]:
-                formatted_results.append({
-                    'title': result.get('title', ''),
-                    'snippet': result.get('snippet', ''),
-                    'url': result.get('link', ''),
-                    'source': 'serper'
-                })
+            organic_results = data.get('organic', [])
+            if not isinstance(organic_results, list):
+                organic_results = []
+            
+            for result in organic_results[:5]:
+                if isinstance(result, dict):
+                    formatted_results.append({
+                        'title': result.get('title', ''),
+                        'snippet': result.get('snippet', ''),
+                        'url': result.get('link', ''),
+                        'source': 'serper'
+                    })
             
             return {
                 'success': True,
@@ -742,13 +771,17 @@ class ResearchAgent:
             results = duckduckgo_search.DDGS().text(query, max_results=5)
             
             formatted_results = []
+            if not isinstance(results, list):
+                results = []
+            
             for result in results:
-                formatted_results.append({
-                    'title': result.get('title', ''),
-                    'snippet': result.get('body', ''),
-                    'url': result.get('href', ''),
-                    'source': 'duckduckgo'
-                })
+                if isinstance(result, dict):
+                    formatted_results.append({
+                        'title': result.get('title', ''),
+                        'snippet': result.get('body', ''),
+                        'url': result.get('href', ''),
+                        'source': 'duckduckgo'
+                    })
             
             return {
                 'success': True,
@@ -1875,27 +1908,41 @@ class ResearchAgent:
             
             # 2. Collect additional data from URLs
             collected_data = []
-            if search_results.get('success') and search_results.get('results'):
-                for result in search_results['results'][:3]:  # Limit to top 3 results
-                    try:
-                        # For now, just use the snippet as content since we don't have URLs
-                        content = result.get('snippet', '')
-                        if content:
-                            collected_data.append({
-                                'url': result.get('url', ''),
-                                'title': result.get('title', ''),
-                                'content': content,
-                                'source': result.get('source', 'unknown')
-                            })
-                    except Exception as e:
-                        logger.warning(f"Failed to process result: {e}")
-                        continue
+            if isinstance(search_results, dict) and search_results.get('success') and search_results.get('results'):
+                results = search_results.get('results', [])
+                if isinstance(results, list):
+                    for result in results[:3]:  # Limit to top 3 results
+                        if isinstance(result, dict):
+                            try:
+                                # For now, just use the snippet as content since we don't have URLs
+                                content = result.get('snippet', '')
+                                if content:
+                                    collected_data.append({
+                                        'url': result.get('url', ''),
+                                        'title': result.get('title', ''),
+                                        'content': content,
+                                        'source': result.get('source', 'unknown')
+                                    })
+                            except Exception as e:
+                                logger.warning(f"Failed to process result: {e}")
+                                continue
             
             # 3. Perform additional research using different methods
             additional_research = await self._perform_additional_research(research_query)
+            if not isinstance(additional_research, dict):
+                additional_research = {'sources': []}
             
             # 4. Generate comprehensive research summary
-            research_summary = await self._generate_research_summary(research_query, search_results)
+            research_summary = await self._generate_research_summary({
+                'query': research_query,
+                'collected_data': collected_data,
+                'additional_research': additional_research,
+                'research_quality': 0.8
+            }, task)
+            
+            # Ensure research_summary is a dict
+            if not isinstance(research_summary, dict):
+                research_summary = {'summary': 'Research summary generation failed', 'error': 'Invalid summary format'}
             
             # 5. Compile research results
             research_result = {
@@ -1912,7 +1959,7 @@ class ResearchAgent:
                 'total_sources': len(collected_data) + len(additional_research.get('sources', [])),
                         'research_timestamp': datetime.now().isoformat()
                     },
-                    'sources': [item['url'] for item in collected_data if item.get('url')],
+                    'sources': [item.get('url', '') for item in collected_data if isinstance(item, dict) and item.get('url')],
                     'metadata': {
                         'research_method': 'web_search_and_analysis',
                         'data_quality': 'high' if len(collected_data) > 0 else 'low',
@@ -2113,10 +2160,18 @@ class ResearchAgent:
             if not isinstance(research_result, dict):
                 research_result = {'query': str(research_result), 'collected_data': [], 'additional_research': {}}
             
-            # Extract key information from research results
+            # Extract key information from research results with type safety
             query = research_result.get('query', '')
+            
+            # Ensure collected_data is a list
             collected_data = research_result.get('collected_data', [])
+            if not isinstance(collected_data, list):
+                collected_data = []
+            
+            # Ensure additional_research is a dict
             additional_research = research_result.get('additional_research', {})
+            if not isinstance(additional_research, dict):
+                additional_research = {}
             
             # Generate summary based on collected data
             summary_parts = []
@@ -2127,18 +2182,23 @@ class ResearchAgent:
                 # Extract key insights from collected data
                 key_insights = []
                 for item in collected_data[:2]:  # Top 2 sources
-                    title = item.get('title', '')
-                    content = item.get('content', '')
-                    if title and content:
-                        # Extract first 200 characters as insight
-                        insight = content[:200] + "..." if len(content) > 200 else content
-                        key_insights.append(f"• {title}: {insight}")
+                    if isinstance(item, dict):
+                        title = item.get('title', '')
+                        content = item.get('content', '')
+                        if title and content:
+                            # Extract first 200 characters as insight
+                            insight = content[:200] + "..." if len(content) > 200 else content
+                            key_insights.append(f"• {title}: {insight}")
                 
                 if key_insights:
                     summary_parts.append("Key insights:")
                     summary_parts.extend(key_insights)
             
+            # Ensure additional_sources is a list
             additional_sources = additional_research.get('sources', [])
+            if not isinstance(additional_sources, list):
+                additional_sources = []
+            
             if additional_sources:
                 summary_parts.append(f"Found {len(additional_sources)} additional sources from academic, news, and social media.")
             

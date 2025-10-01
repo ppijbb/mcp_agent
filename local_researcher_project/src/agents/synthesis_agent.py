@@ -141,6 +141,10 @@ class SynthesisAgent:
             Synthesis result with deliverable information
         """
         try:
+            # Generate objective_id if None or "None"
+            if not objective_id or objective_id == 'None':
+                objective_id = f"obj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(str(execution_results)) % 10000}"
+            
             logger.info(f"Starting autonomous synthesis for objective: {objective_id}")
             
             # Phase 1: Content Aggregation
@@ -215,18 +219,32 @@ class SynthesisAgent:
             Aggregated content
         """
         try:
+            # Ensure all inputs are properly typed
+            if not isinstance(execution_results, list):
+                if execution_results is not None:
+                    execution_results = [execution_results]
+                else:
+                    execution_results = []
+            
+            if not isinstance(evaluation_results, dict):
+                evaluation_results = {}
+            
+            if not isinstance(validation_results, dict):
+                validation_results = {}
+            
+            if not isinstance(original_objectives, list):
+                if original_objectives is not None:
+                    original_objectives = [original_objectives]
+                else:
+                    original_objectives = []
+            
             # Handle execution_results - flatten nested lists
-            if isinstance(execution_results, list):
-                results_to_process = []
-                for item in execution_results:
-                    if isinstance(item, list):
-                        results_to_process.extend(item)
-                    else:
-                        results_to_process.append(item)
-            elif execution_results is not None:
-                results_to_process = [execution_results]
-            else:
-                results_to_process = []
+            results_to_process = []
+            for item in execution_results:
+                if isinstance(item, list):
+                    results_to_process.extend(item)
+                else:
+                    results_to_process.append(item)
             
             aggregated = {
                 'research_data': [],

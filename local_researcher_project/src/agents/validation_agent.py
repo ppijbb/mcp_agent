@@ -251,12 +251,19 @@ class ValidationAgent:
             alignment_issues = []
             
             for objective in original_objectives:
+                if not isinstance(objective, dict):
+                    continue
+                    
                 objective_id = objective.get('objective_id')
                 objective_description = objective.get('description', '')
                 objective_type = objective.get('type', 'primary')
                 
                 # Find results related to this objective
-                related_results = [r for r in execution_results if r.get('objective_id') == objective_id]
+                related_results = []
+                if isinstance(execution_results, list):
+                    for r in execution_results:
+                        if isinstance(r, dict) and r.get('objective_id') == objective_id:
+                            related_results.append(r)
                 
                 if related_results:
                     # Calculate alignment score for this objective
@@ -311,6 +318,9 @@ class ValidationAgent:
             quality_issues = []
             
             for result in execution_results:
+                if not isinstance(result, dict):
+                    continue
+                    
                 result_type = result.get('agent', 'unknown')
                 quality_score = await self._calculate_result_quality_score(result, result_type)
                 quality_scores.append(quality_score)
@@ -351,8 +361,21 @@ class ValidationAgent:
         """
         try:
             # Check if all objectives have results
-            objective_ids = set(obj.get('objective_id') for obj in original_objectives)
-            result_objective_ids = set(r.get('objective_id') for r in execution_results)
+            objective_ids = set()
+            if isinstance(original_objectives, list):
+                for obj in original_objectives:
+                    if isinstance(obj, dict):
+                        objective_id = obj.get('objective_id')
+                        if objective_id:
+                            objective_ids.add(objective_id)
+            
+            result_objective_ids = set()
+            if isinstance(execution_results, list):
+                for r in execution_results:
+                    if isinstance(r, dict):
+                        objective_id = r.get('objective_id')
+                        if objective_id:
+                            result_objective_ids.add(objective_id)
             missing_objectives = objective_ids - result_objective_ids
             
             # Calculate completeness score
@@ -404,6 +427,9 @@ class ValidationAgent:
             accuracy_issues = []
             
             for result in execution_results:
+                if not isinstance(result, dict):
+                    continue
+                    
                 result_accuracy = await self._calculate_result_accuracy(result)
                 accuracy_scores.append(result_accuracy)
                 
@@ -447,6 +473,9 @@ class ValidationAgent:
             relevance_issues = []
             
             for result in execution_results:
+                if not isinstance(result, dict):
+                    continue
+                    
                 result_relevance = await self._calculate_result_relevance(result, user_request, original_objectives)
                 relevance_scores.append(result_relevance)
                 
