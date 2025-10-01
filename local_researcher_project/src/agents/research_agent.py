@@ -2109,6 +2109,10 @@ class ResearchAgent:
     async def _generate_research_summary(self, research_result: Dict[str, Any], task: Dict[str, Any]) -> Dict[str, Any]:
         """Generate research summary from actual data."""
         try:
+            # Ensure research_result is a dictionary
+            if not isinstance(research_result, dict):
+                research_result = {'query': str(research_result), 'collected_data': [], 'additional_research': {}}
+            
             # Extract key information from research results
             query = research_result.get('query', '')
             collected_data = research_result.get('collected_data', [])
