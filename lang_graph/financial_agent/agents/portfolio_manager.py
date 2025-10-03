@@ -54,50 +54,25 @@ def portfolio_manager_node(state: AgentState) -> Dict:
 }}
 """
 
-    plan = None
-    last_error = None
+    # LLM 호출 및 응답 파싱
+    plan_str = call_llm(prompt)
+    print(f"LLM이 생성한 투자 계획 (raw): {plan_str}")
     
-    # LLM 응답 파싱을 위한 재시도 루프 (최대 2번 시도)
-    for _ in range(2): 
-        plan_str = call_llm(prompt)
-        print(f"LLM이 생성한 투자 계획 (raw): {plan_str}")
+    try:
+        # JSON 파싱 시도
+        cleaned_response = plan_str.strip().replace("```json", "").replace("```", "")
+        plan = json.loads(cleaned_response)
         
-        try:
-            plan = json.loads(plan_str.strip().replace("```json", "").replace("```", ""))
-            # 성공적으로 파싱되면 루프 종료
-            break 
-        except (json.JSONDecodeError, AttributeError) as e:
-            last_error = e
-            print(f"LLM 응답 파싱 실패: {e}. 재시도합니다...")
-            # 자가 수정을 위한 프롬프트 재구성
-            prompt = f"""
-            이전 응답이 JSON 형식에 맞지 않아 파싱에 실패했습니다.
-            오류: {e}
-            이전 응답: "{plan_str}"
-
-            규칙을 다시 한번 확인해주세요:
-            1. 응답은 반드시 유효한 JSON 객체여야 합니다.
-            2. JSON 외에 어떠한 설명이나 주석도 포함해서는 안 됩니다.
-            3. `buy`, `sell`, `hold` 키를 사용해야 합니다.
-
-            아래 정보를 바탕으로 올바른 JSON 형식으로만 다시 투자 계획을 생성해주세요.
+        # 필수 키 검증
+        required_keys = ["buy", "sell", "hold", "reason_by_ticker"]
+        missing_keys = [key for key in required_keys if key not in plan]
+        if missing_keys:
+            raise KeyError(f"필수 키가 누락되었습니다: {missing_keys}")
             
-            **시장 전망:**
-            {outlook}
-
-            **투자자 리스크 성향:** {risk_profile}
-
-            **분석 대상 티커:** {tickers}
-
-            **투자 계획 (오직 JSON 객체만 응답):**
-            """
-            continue
-
-    if plan is None:
-        error_message = f"LLM으로부터 유효한 JSON 형식의 투자 계획을 받지 못했습니다. 마지막 오류: {last_error}"
+    except (json.JSONDecodeError, AttributeError, KeyError) as e:
+        error_message = f"LLM 응답 파싱 실패: {e}. 응답: {plan_str}"
         print(error_message)
         state["log"].append(error_message)
-        # NO FALLBACK: 실패를 상위로 전파
         raise ValueError(error_message)
 
     print(f"수립된 투자 계획: {plan}")

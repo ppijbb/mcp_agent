@@ -57,8 +57,23 @@ def chief_strategist_node(state: AgentState) -> Dict:
 }}
 """
     
-    outlook = call_llm(prompt)
-    print(f"LLM이 생성한 시장 전망:\n{outlook}")
-    state["log"].append("LLM 기반 시장 전망 분석 완료.")
-    
-    return {"market_outlook": outlook}
+    try:
+        outlook = call_llm(prompt)
+        print(f"LLM이 생성한 시장 전망:\n{outlook}")
+        state["log"].append("LLM 기반 시장 전망 분석 완료.")
+        
+        # JSON 파싱 검증
+        try:
+            json.loads(outlook)
+        except json.JSONDecodeError:
+            error_message = f"LLM 응답이 유효한 JSON 형식이 아닙니다: {outlook}"
+            print(error_message)
+            state["log"].append(error_message)
+            raise ValueError(error_message)
+        
+        return {"market_outlook": outlook}
+    except Exception as e:
+        error_message = f"시장 전망 분석 중 오류 발생: {e}"
+        print(error_message)
+        state["log"].append(error_message)
+        raise ValueError(error_message)

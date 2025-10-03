@@ -51,16 +51,25 @@ def news_analyzer_node(state: AgentState) -> Dict:
         try:
             response_str = call_llm(prompt)
             analysis = json.loads(response_str)
-            if "sentiment" not in analysis or "summary" not in analysis:
-                raise KeyError("LLM 응답에 'sentiment' 또는 'summary' 키가 없습니다.")
+            
+            # 필수 키 검증
+            required_keys = ["sentiment", "summary", "evidence"]
+            missing_keys = [key for key in required_keys if key not in analysis]
+            if missing_keys:
+                raise KeyError(f"LLM 응답에 필수 키가 누락되었습니다: {missing_keys}")
+            
+            # sentiment 값 검증
+            valid_sentiments = ["positive", "negative", "neutral"]
+            if analysis["sentiment"] not in valid_sentiments:
+                raise ValueError(f"유효하지 않은 sentiment 값: {analysis['sentiment']}. 유효한 값: {valid_sentiments}")
+            
             analyzed_results[ticker] = analysis
             print(f"'{ticker}' 뉴스 분석 완료: {analysis}")
         except Exception as e:
-            error_message = f"'{ticker}' 뉴스 분석 중 심각한 오류 발생: {e}"
+            error_message = f"'{ticker}' 뉴스 분석 중 오류 발생: {e}"
             print(error_message)
             state["log"].append(error_message)
-            # 오류를 전파하여 워크플로우를 중단시킵니다.
-            raise e
+            raise ValueError(error_message)
 
     log_message = "모든 티커에 대한 뉴스 감성 분석 완료."
     print(log_message)

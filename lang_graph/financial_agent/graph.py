@@ -63,22 +63,35 @@ class FinancialAgentWorkflow:
 
 # 이 파일이 직접 실행될 때 테스트를 위한 코드
 if __name__ == "__main__":
+    import sys
     from datetime import datetime
 
     # 워크플로우 인스턴스 생성
     workflow_runner = FinancialAgentWorkflow()
 
-    # 분석할 대상을 동적으로 지정
-    target_tickers = ["NVDA", "AMD", "QCOM"] 
+    # 명령행 인자에서 설정값 읽기
+    if len(sys.argv) < 3:
+        print("사용법: python graph.py <tickers> <risk_profile>")
+        print("예시: python graph.py 'NVDA,AMD,QCOM' aggressive")
+        sys.exit(1)
+    
+    target_tickers = [ticker.strip() for ticker in sys.argv[1].split(',')]
+    risk_profile = sys.argv[2]
+    
+    # 유효한 리스크 프로필 검증
+    valid_profiles = ["conservative", "moderate", "aggressive"]
+    if risk_profile not in valid_profiles:
+        print(f"오류: 유효하지 않은 리스크 프로필입니다. 사용 가능한 값: {', '.join(valid_profiles)}")
+        sys.exit(1)
     
     # 초기 상태 정의
     initial_state = {
         "date": datetime.now().strftime("%Y-%m-%d"),
-        "risk_profile": "aggressive", # "conservative", "moderate", "aggressive"
-        "target_tickers": target_tickers, # 동적으로 티커 리스트 전달
+        "risk_profile": risk_profile,
+        "target_tickers": target_tickers,
         "log": [],
-        "technical_analysis": {}, # None 대신 빈 dict로 초기화
-        "news_data": {}, # None 대신 빈 dict로 초기화
+        "technical_analysis": {},
+        "news_data": {},
         "sentiment_analysis": None,
         "market_outlook": None,
         "investment_plan": None,
