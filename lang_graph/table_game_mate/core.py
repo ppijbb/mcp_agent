@@ -363,12 +363,8 @@ class GameEngine:
     def __init__(self):
         self.error_handler = ErrorHandler()
         self.active_games: Dict[str, GameState] = {}
-        self.game_types = {
-            "chess": self._init_chess,
-            "checkers": self._init_checkers,
-            "go": self._init_go,
-            "poker": self._init_poker
-        }
+        self.game_types = {}
+        self._load_game_types()
     
     async def initialize(self, game_config: GameConfig) -> bool:
         """게임 엔진 초기화"""
@@ -493,22 +489,41 @@ class GameEngine:
             await self.error_handler.handle_error(e, "game_engine")
             return False
     
-    async def _init_chess(self, config: GameConfig) -> None:
-        """체스 게임 초기화"""
-        # 체스 특화 초기화 로직
-        pass
+    def _load_game_types(self) -> None:
+        """게임 타입 동적 로드"""
+        try:
+            import json
+            import os
+            
+            # game_data.json에서 게임 타입 로드
+            data_file = os.path.join(os.path.dirname(__file__), 'data', 'game_data.json')
+            if os.path.exists(data_file):
+                with open(data_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    games = data.get('games', {})
+                    
+                    for game_id, game_info in games.items():
+                        self.game_types[game_id] = self._create_game_initializer(game_id, game_info)
+            else:
+                # 기본 게임 타입들
+                self.game_types = {
+                    "chess": self._create_game_initializer("chess", {"name": "Chess", "type": "strategy"}),
+                    "checkers": self._create_game_initializer("checkers", {"name": "Checkers", "type": "strategy"}),
+                    "go": self._create_game_initializer("go", {"name": "Go", "type": "strategy"}),
+                    "poker": self._create_game_initializer("poker", {"name": "Poker", "type": "card"})
+                }
+        except Exception as e:
+            # 기본 게임 타입들로 폴백
+            self.game_types = {
+                "chess": self._create_game_initializer("chess", {"name": "Chess", "type": "strategy"}),
+                "checkers": self._create_game_initializer("checkers", {"name": "Checkers", "type": "strategy"}),
+                "go": self._create_game_initializer("go", {"name": "Go", "type": "strategy"}),
+                "poker": self._create_game_initializer("poker", {"name": "Poker", "type": "card"})
+            }
     
-    async def _init_checkers(self, config: GameConfig) -> None:
-        """체커 게임 초기화"""
-        # 체커 특화 초기화 로직
-        pass
-    
-    async def _init_go(self, config: GameConfig) -> None:
-        """바둑 게임 초기화"""
-        # 바둑 특화 초기화 로직
-        pass
-    
-    async def _init_poker(self, config: GameConfig) -> None:
-        """포커 게임 초기화"""
-        # 포커 특화 초기화 로직
-        pass
+    def _create_game_initializer(self, game_id: str, game_info: dict):
+        """게임 초기화 함수 생성"""
+        async def init_func(config: GameConfig) -> None:
+            # 게임별 초기화 로직
+            pass
+        return init_func

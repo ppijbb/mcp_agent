@@ -12,9 +12,19 @@ import json
 import os
 import uuid
 
-from ..models.game_state import GameMetadata, GameType, GameState, GamePhase
-from ..models.persona import PersonaArchetype
-from ..models.action import ActionType
+from ..core import GameState, GamePhase
+# ActionType은 현재 사용되지 않으므로 제거
+
+
+class GameType(Enum):
+    """게임 타입"""
+    STRATEGY = "strategy"
+    CARD = "card"
+    DICE = "dice"
+    SOCIAL = "social"
+    PARTY = "party"
+    COOPERATIVE = "cooperative"
+    COMPETITIVE = "competitive"
 
 
 class GameComplexity(Enum):
@@ -46,8 +56,8 @@ class GameTemplate:
     hidden_information: bool = False
     player_elimination: bool = False
     
-    # 추천 페르소나 타입
-    recommended_personas: List[PersonaArchetype] = None
+    # 추천 페르소나 타입 (현재 사용되지 않음)
+    recommended_personas: List[str] = None
     
     # 특수 규칙 힌트
     special_mechanics: List[str] = None
@@ -55,7 +65,7 @@ class GameTemplate:
     
     def __post_init__(self):
         if self.recommended_personas is None:
-            self.recommended_personas = [PersonaArchetype.SOCIAL, PersonaArchetype.STRATEGIC]
+            self.recommended_personas = ["social", "strategic"]
         if self.special_mechanics is None:
             self.special_mechanics = []
         if self.victory_conditions is None:
@@ -81,8 +91,8 @@ class GameFactory:
         """기본 게임 템플릿들 로드"""
         
         # 클래식 게임들
-        self.templates["체스"] = GameTemplate(
-            name="체스",
+        self.templates["chess"] = GameTemplate(
+            name="Chess",
             game_type=GameType.STRATEGY,
             complexity=GameComplexity.COMPLEX,
             min_players=2,
@@ -160,7 +170,7 @@ class GameFactory:
         
         # 별명 매핑
         self.game_aliases.update({
-            "chess": "체스",
+            "chess": "Chess",
             "tic-tac-toe": "틱택토",
             "tictactoe": "틱택토",
             "mafia": "마피아",
@@ -210,7 +220,7 @@ class GameFactory:
         
         return None
     
-    def create_game_metadata(self, game_name: str, **overrides) -> GameMetadata:
+    def create_game_metadata(self, game_name: str, **overrides) -> Dict[str, Any]:
         """
         게임 메타데이터 생성
         
@@ -334,7 +344,7 @@ class GameFactory:
             custom_file = os.path.join(os.path.dirname(__file__), "custom_games.json")
             
             # 기본 템플릿 제외하고 저장
-            default_names = {"체스", "틱택토", "마피아", "뱅", "카탄"}
+            default_names = {"Chess", "TicTacToe", "Mafia", "Bang", "Catan"}
             custom_templates = {
                 name: template for name, template in self.templates.items()
                 if name not in default_names

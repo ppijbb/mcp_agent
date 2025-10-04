@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta
 from enum import Enum
 
-from core import GameState, AnalysisState, MonitoringState, GamePhase, GameStatus, ErrorHandler, ErrorSeverity, ErrorCategory
+from .core import GameState, AnalysisState, MonitoringState, GamePhase, GameStatus, ErrorHandler, ErrorSeverity, ErrorCategory
 
 
 # ============================================================================

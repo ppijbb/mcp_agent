@@ -9,8 +9,8 @@ import sys
 from typing import Dict, List, Any
 from datetime import datetime
 
-from agents import GameAgent, AnalysisAgent, MonitoringAgent
-from core import GameConfig, Player, SystemState, ErrorHandler, ErrorSeverity, ErrorCategory
+from .agents import GameAgent, AnalysisAgent, MonitoringAgent
+from .core import GameConfig, Player, SystemState, ErrorHandler, ErrorSeverity, ErrorCategory
 
 
 class TableGameMate:
@@ -173,7 +173,7 @@ async def main():
         
         # 데모 게임 실행
         print("\n🎮 데모 게임을 시작합니다...")
-        game_result = await system.play_game("체스", ["Alice", "Bob"])
+        game_result = await system.play_game("chess", ["Player1", "Player2"])
         
         if game_result["success"]:
             print("✅ 데모 게임이 성공적으로 완료되었습니다")

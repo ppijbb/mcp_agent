@@ -8,7 +8,6 @@ LangGraph 기반 멀티 에이전트 보드게임 플랫폼
 table_game_mate/
 ├── agents.py              # 통합 에이전트 시스템 (3개 에이전트)
 ├── core.py                # 통합 코어 시스템 (상태관리, 에러처리, 게임엔진)
-├── tests.py               # 통합 테스트 시스템
 ├── dashboard.py           # Streamlit 대시보드
 ├── data/                  # 데이터 저장소
 │   ├── game_data.json     # 게임 데이터
@@ -31,11 +30,6 @@ python main.py
 streamlit run dashboard.py
 ```
 
-## 테스트 실행
-
-```bash
-pytest tests.py
-```
 
 ## 특징
 
@@ -43,4 +37,5 @@ pytest tests.py
 - **에이전트 중심 설계**: 각 기능이 독립적인 에이전트로 구현
 - **LangGraph 패턴**: LangGraph의 모범 사례를 따르는 구조
 - **No Fallback**: 명확한 에러 처리, fallback 없음
+- **동적 게임 로딩**: JSON 설정 파일에서 게임 타입 동적 로드
 - **확장 가능**: 새로운 에이전트와 게임 쉽게 추가

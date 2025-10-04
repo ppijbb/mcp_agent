@@ -14,8 +14,8 @@ import os
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents import GameAgent, AnalysisAgent, MonitoringAgent
-from core import GameConfig, Player
+from .agents import GameAgent, AnalysisAgent, MonitoringAgent
+from .core import GameConfig, Player
 
 
 class TableGameMateDashboard:
@@ -86,7 +86,7 @@ class TableGameMateDashboard:
             # 게임 선택
             game_type = st.selectbox(
                 "게임 선택",
-                ["체스", "체커", "바둑", "포커"],
+                ["chess", "checkers", "go", "poker"],
                 index=0
             )
             
@@ -97,7 +97,7 @@ class TableGameMateDashboard:
             st.subheader("플레이어 설정")
             player_names = []
             for i in range(player_count):
-                name = st.text_input(f"플레이어 {i+1} 이름", value=f"Player {i+1}", key=f"player_{i}")
+                name = st.text_input(f"플레이어 {i+1} 이름", value=f"Player{i+1}", key=f"player_{i}")
                 player_names.append(name)
             
             # 게임 시작 버튼
@@ -314,12 +314,12 @@ class TableGameMateDashboard:
         """샘플 게임 데이터 반환"""
         return {
             "moves": [
-                {"type": "move", "player": "Alice", "duration": 5, "strategic": True},
-                {"type": "move", "player": "Bob", "duration": 3, "strategic": False},
-                {"type": "move", "player": "Alice", "duration": 7, "strategic": True},
-                {"type": "move", "player": "Bob", "duration": 4, "strategic": True}
+                {"type": "move", "player": "Player1", "duration": 5, "strategic": True},
+                {"type": "move", "player": "Player2", "duration": 3, "strategic": False},
+                {"type": "move", "player": "Player1", "duration": 7, "strategic": True},
+                {"type": "move", "player": "Player2", "duration": 4, "strategic": True}
             ],
-            "players": ["Alice", "Bob"],
+            "players": ["Player1", "Player2"],
             "duration": 120,
             "rounds": 4
         }
