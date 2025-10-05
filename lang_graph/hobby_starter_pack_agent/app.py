@@ -151,34 +151,6 @@ class HSPAgentApplication:
         server = uvicorn.Server(config)
         await server.serve()
     
-    async def run_test_workflow(self):
-        """테스트 워크플로우 실행"""
-        print("🧪 테스트 워크플로우 실행 중...")
-        
-        test_input = "나는 30대 직장인이고, 주말에 할 수 있는 새로운 취미를 찾고 있어요."
-        test_profile = {
-            "age": 30,
-            "occupation": "office_worker",
-            "location": "Seoul",
-            "interests": ["reading", "technology"],
-            "available_time": "weekends"
-        }
-        
-        try:
-            result = await self.langgraph_workflow.run_workflow(
-                user_input=test_input,
-                user_profile=test_profile,
-                a2a_bridge=self.a2a_bridge,
-                mcp_manager=self.mcp_manager
-            )
-            
-            print("✅ 테스트 워크플로우 완료!")
-            print(f"📊 결과: {result}")
-            return result
-            
-        except Exception as e:
-            print(f"❌ 테스트 워크플로우 실패: {e}")
-            return None
     
     def print_system_info(self):
         """시스템 정보 출력"""
@@ -217,23 +189,8 @@ async def main():
         print("❌ 애플리케이션 초기화 실패")
         return
     
-    # 실행 모드 선택
-    mode = os.getenv("HSP_MODE", "server")  # server, test, both
-    
-    if mode == "test":
-        # 테스트 모드
-        await app_instance.run_test_workflow()
-    elif mode == "server":
-        # 서버 모드
-        await app_instance.start_api_server()
-    elif mode == "both":
-        # 테스트 후 서버 실행
-        await app_instance.run_test_workflow()
-        print("\n🔄 테스트 완료, API 서버 시작...\n")
-        await app_instance.start_api_server()
-    else:
-        print(f"❌ 알 수 없는 실행 모드: {mode}")
-        print("   지원되는 모드: server, test, both")
+    # API 서버 시작
+    await app_instance.start_api_server()
 
 if __name__ == "__main__":
     try:

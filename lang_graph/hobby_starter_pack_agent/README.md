@@ -70,15 +70,6 @@ HSP_MODE=server python app.py
 ```
 서버가 http://localhost:8000 에서 실행됩니다.
 
-#### 2. 테스트 모드
-```bash
-HSP_MODE=test python app.py
-```
-
-#### 3. 테스트 후 서버 실행
-```bash
-HSP_MODE=both python app.py
-```
 
 ## 📡 API 엔드포인트
 
@@ -176,28 +167,6 @@ READING_PLATFORM_API_KEY=your_reading_api_key
 RECIPE_API_KEY=your_recipe_api_key
 ```
 
-## 🧪 테스트
-
-### 단위 테스트
-```bash
-cd tests/unit
-pytest test_autogen_agents.py
-pytest test_mcp_manager.py
-pytest test_a2a_bridge.py
-```
-
-### 통합 테스트
-```bash
-cd tests/integration
-pytest test_workflow_integration.py
-pytest test_api_endpoints.py
-```
-
-### E2E 테스트
-```bash
-cd tests/e2e
-pytest test_full_workflow.py
-```
 
 ## 📁 프로젝트 구조
 
@@ -219,10 +188,6 @@ langgraph/hobby_start_pack_agent/
 │   └── manager.py        # 10개 외부 서비스 연동
 ├── db/                    # 💾 데이터베이스 모델
 │   └── models.py         # SQLAlchemy 모델
-└── tests/                 # 🧪 테스트 코드
-    ├── unit/
-    ├── integration/
-    └── e2e/
 ```
 
 ## 🎯 주요 특징
@@ -231,7 +196,7 @@ langgraph/hobby_start_pack_agent/
 - **빈 값 우선 (Empty Value First)**: 모든 초기값은 빈 값으로 시작
 - **에이전트 기반 의사결정**: 하드코딩 없이 LLM이 모든 결정
 - **프레임워크 중립성**: AutoGen과 LangGraph의 장점만 결합
-- **에러 내성**: 모든 단계에서 빈 값 fallback 지원
+- **에러 내성**: 명확한 에러 처리 및 즉시 실패
 
 ### 🔄 하이브리드 아키텍처 장점
 1. **AutoGen**: 다중 에이전트 합의를 통한 높은 품질의 의사결정
@@ -240,9 +205,9 @@ langgraph/hobby_start_pack_agent/
 4. **MCP 연동**: 실제 외부 서비스와의 데이터 교환
 
 ### 🛡️ 에러 처리
-- MCP 서버 연결 실패 시 빈 값 반환
-- 에이전트 합의 실패 시 기본 라우팅 적용
-- 인증 실패 시 graceful degradation
+- MCP 서버 연결 실패 시 명확한 에러 메시지와 함께 실패
+- 에이전트 합의 실패 시 워크플로우 중단
+- 인증 실패 시 즉시 실패 처리
 - 모든 단계에서 상세한 에러 로깅
 
 ## 🤝 기여하기

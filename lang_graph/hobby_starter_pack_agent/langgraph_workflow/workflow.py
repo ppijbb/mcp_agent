@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import List, Dict, Any, Optional
-from langgraph import StateGraph, END
+from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import InMemorySaver
 from datetime import datetime
 

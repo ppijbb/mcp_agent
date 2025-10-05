@@ -6,10 +6,11 @@ LangChain 기반 벡터 데이터베이스 및 텍스트 분할기
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma, FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
-from langchain.retrievers import VectorStoreRetriever
+# VectorStoreRetriever는 현재 사용되지 않으므로 제거
 import os
 import json
 from datetime import datetime

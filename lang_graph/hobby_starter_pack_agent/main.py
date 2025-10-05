@@ -9,9 +9,7 @@ Hobby Starter Pack Agent - 레거시 메인 실행 스크립트
 python app.py
 
 또는 직접 모드 설정:
-HSP_MODE=test python app.py    # 테스트만 실행
 HSP_MODE=server python app.py  # API 서버만 실행  
-HSP_MODE=both python app.py    # 테스트 후 서버 실행
 """
 
 import asyncio

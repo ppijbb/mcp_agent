@@ -11,7 +11,7 @@ from langchain.tools import BaseTool, tool
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import MessagesPlaceholder, ChatPromptTemplate
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -180,18 +180,22 @@ class HSPLangChainAgent:
     def _initialize_llm(self):
         """LLM 초기화"""
         try:
-            # OpenAI 모델 사용 (실제 구현에서는 환경변수에서 API 키 로드)
+            # OpenAI 모델 사용 (환경변수에서 API 키 로드)
+            import os
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
+            
             self.llm = ChatOpenAI(
                 model=self.llm_config.get("model", "gpt-4"),
                 temperature=self.llm_config.get("temperature", 0.7),
-                openai_api_key="your-api-key"  # 환경변수에서 로드해야 함
+                openai_api_key=api_key
             )
             logger.info(f"LLM 초기화 완료: {self.llm_config.get('model')}")
             
         except Exception as e:
             logger.error(f"LLM 초기화 실패: {e}")
-            # 더미 LLM 사용
-            self.llm = None
+            raise ValueError(f"LLM 초기화 실패: {e}")
     
     def _initialize_tools(self):
         """도구 초기화"""

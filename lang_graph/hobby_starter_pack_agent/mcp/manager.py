@@ -229,7 +229,7 @@ class MCPServerManager:
                         
         except Exception as e:
             print(f"Authentication header generation failed for {server_name}: {e}")
-            # 빈 값 fallback - 기본 헤더만 반환
+            raise ValueError(f"인증 헤더 생성 실패: {e}")
         
         return headers
         
@@ -251,11 +251,13 @@ class MCPServerManager:
             env_var = token_env_map.get(server_name, "")
             token = os.getenv(env_var, "")
             
-            # 토큰이 없으면 빈 값 반환 (에러 처리)
+            # 토큰이 없으면 에러 발생
+            if not token:
+                raise ValueError(f"OAuth2 토큰을 찾을 수 없습니다: {server_name}")
             return token
             
-        except Exception:
-            return ""  # 빈 값 fallback
+        except Exception as e:
+            raise ValueError(f"OAuth2 토큰 획득 실패: {e}")
     
     async def _get_api_key(self, server_name: str) -> str:
         """API 키 획득"""
@@ -273,11 +275,13 @@ class MCPServerManager:
             env_var = api_key_env_map.get(server_name, "")
             api_key = os.getenv(env_var, "")
             
-            # API 키가 없으면 빈 값 반환 (에러 처리)
+            # API 키가 없으면 에러 발생
+            if not api_key:
+                raise ValueError(f"API 키를 찾을 수 없습니다: {server_name}")
             return api_key
             
-        except Exception:
-            return ""  # 빈 값 fallback
+        except Exception as e:
+            raise ValueError(f"API 키 획득 실패: {e}")
 
     def get_available_capabilities(self) -> Dict[str, List[str]]:
         """사용 가능한 모든 MCP 서버 기능 목록"""
@@ -318,11 +322,13 @@ class MCPManager:
                 elif isinstance(result, dict) and "hobbies" in result:
                     suggestions.extend(result["hobbies"])
             
-            return suggestions if suggestions else self._get_fallback_hobbies(user_profile)
+            if not suggestions:
+                raise ValueError("취미 추천을 받을 수 없습니다")
+            return suggestions
             
         except Exception as e:
             logger.error(f"취미 제안 실패: {e}")
-            return self._get_fallback_hobbies(user_profile)
+            raise ValueError(f"취미 제안 실패: {e}")
     
     async def _call_mcp_server(self, server_name: str, request: Dict) -> Any:
         """실제 MCP 서버 호출 with 서킷 브레이커"""
@@ -424,37 +430,3 @@ class MCPManager:
         if server_name in self.circuit_breaker:
             self.circuit_breaker[server_name]["failure_count"] = 0
     
-    def _get_fallback_hobbies(self, user_profile: Dict) -> List[Dict]:
-        """MCP 실패시 폴백 취미 목록"""
-        interests = user_profile.get("interests", ["general"])
-        skill_level = user_profile.get("skill_level", "beginner")
-        
-        fallback_hobbies = {
-            "music": [
-                {"name": "기타 연주", "difficulty": "beginner", "cost": "medium"},
-                {"name": "노래 부르기", "difficulty": "beginner", "cost": "low"}
-            ],
-            "sports": [
-                {"name": "조깅", "difficulty": "beginner", "cost": "low"},
-                {"name": "요가", "difficulty": "beginner", "cost": "medium"}
-            ],
-            "art": [
-                {"name": "그림 그리기", "difficulty": "beginner", "cost": "low"},
-                {"name": "도자기 만들기", "difficulty": "intermediate", "cost": "medium"}
-            ]
-        }
-        
-        suggestions = []
-        for interest in interests:
-            if interest in fallback_hobbies:
-                suggestions.extend(fallback_hobbies[interest])
-        
-        # 기본 제안이 없으면 범용 취미 추가
-        if not suggestions:
-            suggestions = [
-                {"name": "독서", "difficulty": "beginner", "cost": "low"},
-                {"name": "산책", "difficulty": "beginner", "cost": "free"},
-                {"name": "요리", "difficulty": "beginner", "cost": "medium"}
-            ]
-        
-        return suggestions 

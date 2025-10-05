@@ -29,12 +29,20 @@ class AutoGenDecisionEngine:
             return self.llm_cache[cache_key]
         
         try:
-            # 실제 LLM API 호출 (OpenAI/Claude 등)
+            # 실제 LLM API 호출 (환경변수에서 모델 설정)
             import openai
-            client = openai.AsyncOpenAI()
+            import os
+            
+            model_name = os.getenv("LLM_MODEL", "gpt-4")
+            api_key = os.getenv("OPENAI_API_KEY")
+            
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
+            
+            client = openai.AsyncOpenAI(api_key=api_key)
             
             response = await client.chat.completions.create(
-                model="gemini-4-turbo-preview",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": f"{agent_type} 전문가로서 답변해주세요."},
                     {"role": "user", "content": prompt}
@@ -53,17 +61,8 @@ class AutoGenDecisionEngine:
             
         except Exception as e:
             logger.error(f"LLM 호출 실패: {e}")
-            # 안전한 폴백 (빈 값보다는 의미있는 기본값)
-            return self._get_fallback_response(prompt, agent_type)
+            raise ValueError(f"LLM 호출 실패: {e}")
     
-    def _get_fallback_response(self, prompt: str, agent_type: str) -> str:
-        """LLM 실패시 의미있는 폴백 응답"""
-        fallback_responses = {
-            "profile_analyst": "일반적인 취미 활동에 관심이 있으신 것 같습니다.",
-            "hobby_discoverer": "다양한 취미 옵션을 탐색해보시는 것을 추천합니다.",
-            "community_matcher": "지역 커뮤니티 참여를 고려해보세요."
-        }
-        return fallback_responses.get(agent_type, "추가 정보가 필요합니다.")
     
     async def analyze_user_profile(self, user_input: str) -> Dict[str, Any]:
         """사용자 프로필 분석 - 병렬 처리"""
@@ -96,11 +95,7 @@ class AutoGenDecisionEngine:
             
         except Exception as e:
             logger.error(f"프로필 분석 실패: {e}")
-            return {
-                "interests": ["general"],
-                "skill_level": "beginner", 
-                "time_availability": "flexible"
-            }
+            raise ValueError(f"프로필 분석 실패: {e}")
     
     async def filter_hobbies(self, hobby_list: List[Dict], user_profile: Dict) -> List[Dict]:
         """취미 필터링 및 개인화"""
@@ -120,8 +115,7 @@ class AutoGenDecisionEngine:
             
         except Exception as e:
             logger.error(f"취미 필터링 실패: {e}")
-            # 안전한 폴백: 첫 3개 취미 반환
-            return hobby_list[:3] if hobby_list else []
+            raise ValueError(f"취미 필터링 실패: {e}")
     
     def _extract_interests(self, analysis_text: str) -> List[str]:
         """관심사 추출 로직"""
@@ -210,11 +204,7 @@ class AutoGenDecisionEngine:
             
         except Exception as e:
             logger.error(f"최종 추천 생성 실패: {e}")
-            return {
-                "final_recommendations": "개인화된 취미 추천을 준비했습니다.",
-                "recommended_hobbies": hobbies[:3] if hobbies else [],
-                "matched_communities": communities[:2] if communities else []
-            }
+            raise ValueError(f"최종 추천 생성 실패: {e}")
 
 class AgentDecisionEngine:
     """모든 판단을 에이전트가 LLM 호출로 수행하는 엔진"""

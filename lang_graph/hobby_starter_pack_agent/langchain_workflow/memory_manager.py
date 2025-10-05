@@ -23,12 +23,8 @@ class HSPMemoryManager:
             max_token_limit=max_token_limit
         )
         
-        # 장기 메모리 (요약 기반)
-        self.summary_memory = ConversationSummaryMemory(
-            llm=None,  # LLM은 나중에 설정
-            memory_key="conversation_summary",
-            return_messages=True
-        )
+        # 장기 메모리는 현재 사용하지 않음
+        self.summary_memory = None
         
         # 사용자별 메모리 저장소
         self.user_memories = {}
