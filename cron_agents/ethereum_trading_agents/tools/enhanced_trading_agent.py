@@ -226,32 +226,17 @@ class EnhancedTradingAgent:
     def _prepare_historical_data(self, market_data: Dict[str, Any]) -> Any:
         """Prepare historical data for technical analysis"""
         try:
-            # This would convert market data to pandas DataFrame
-            # For now, return mock data structure
             import pandas as pd
-            import numpy as np
             
-            # Create mock historical data
-            dates = pd.date_range(start=datetime.now() - timedelta(days=100), end=datetime.now(), freq='D')
-            np.random.seed(42)
+            # Extract real historical data from market_data
+            historical_data = market_data.get("historical_data", [])
+            if not historical_data:
+                raise ValueError("No historical data available for analysis")
             
-            # Generate mock price data
-            base_price = market_data.get("aggregated_data", {}).get("price_usd", 3000)
-            price_changes = np.random.normal(0, 0.02, len(dates))
-            prices = [base_price]
-            
-            for change in price_changes[1:]:
-                prices.append(prices[-1] * (1 + change))
-            
-            # Create DataFrame
-            df = pd.DataFrame({
-                'date': dates,
-                'open': prices,
-                'high': [p * (1 + abs(np.random.normal(0, 0.01))) for p in prices],
-                'low': [p * (1 - abs(np.random.normal(0, 0.01))) for p in prices],
-                'close': prices,
-                'volume': np.random.uniform(1000000, 5000000, len(dates))
-            })
+            # Convert to pandas DataFrame
+            df = pd.DataFrame(historical_data)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df.set_index('timestamp', inplace=True)
             
             return df
             
@@ -445,49 +430,35 @@ class EnhancedTradingAgent:
     async def _perform_risk_assessment(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Perform comprehensive risk assessment"""
         try:
-            # This would use the risk manager with actual portfolio data
-            # For now, return mock risk assessment
-            return {
-                "status": "success",
-                "overall_risk": "medium",
-                "risk_score": 0.5,
-                "risk_factors": [
-                    "Market volatility",
-                    "Liquidity risk",
-                    "Concentration risk"
-                ],
-                "recommendations": [
-                    "Monitor position sizes",
-                    "Diversify portfolio",
-                    "Set stop-loss orders"
-                ]
-            }
+            if not self.risk_management:
+                raise ValueError("Risk management not initialized")
+            
+            # Use real risk management with actual portfolio data
+            portfolio_data = analysis.get("portfolio_data", {})
+            market_data = analysis.get("market_data", {})
+            
+            return self.risk_management.calculate_comprehensive_risk(portfolio_data, market_data)
             
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            logger.error(f"Risk assessment failed: {e}")
+            raise ValueError(f"Risk assessment failed: {e}")
     
     async def _analyze_portfolio(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze current portfolio"""
         try:
-            # This would use the portfolio manager with actual portfolio data
-            # For now, return mock portfolio analysis
-            return {
-                "status": "success",
-                "total_value": 10000,
-                "positions": [],
-                "diversification_score": 0.7,
-                "performance": {
-                    "total_return": 0.05,
-                    "volatility": 0.15
-                },
-                "recommendations": [
-                    "Consider rebalancing",
-                    "Add more diversification"
-                ]
-            }
+            if not self.portfolio_management:
+                raise ValueError("Portfolio management not initialized")
+            
+            # Use real portfolio management with actual portfolio data
+            portfolio_data = analysis.get("portfolio_data", {})
+            market_data = analysis.get("market_data", {})
+            risk_metrics = analysis.get("risk_metrics", {})
+            
+            return self.portfolio_management.manage_portfolio(portfolio_data, market_data, risk_metrics)
             
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            logger.error(f"Portfolio analysis failed: {e}")
+            raise ValueError(f"Portfolio analysis failed: {e}")
     
     async def execute_trade(self, recommendation: Dict[str, Any], 
                            market_data: Dict[str, Any]) -> Dict[str, Any]:

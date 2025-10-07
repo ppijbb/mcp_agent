@@ -42,9 +42,9 @@ class Config:
     MCP_ETHEREUM_TRADING_URL = os.getenv('MCP_ETHEREUM_TRADING_URL')
     MCP_MARKET_DATA_URL = os.getenv('MCP_MARKET_DATA_URL')
     
-    # Agent Configuration - Fixed values only
-    AGENT_EXECUTION_INTERVAL_MINUTES = 5
-    MAX_CONCURRENT_AGENTS = 3
+    # Agent Configuration - Environment variables
+    AGENT_EXECUTION_INTERVAL_MINUTES = int(os.getenv('AGENT_EXECUTION_INTERVAL_MINUTES', '5'))
+    MAX_CONCURRENT_AGENTS = int(os.getenv('MAX_CONCURRENT_AGENTS', '3'))
     
     # Risk Management - NO FALLBACKS
     MAX_DAILY_TRADES = os.getenv('MAX_DAILY_TRADES')

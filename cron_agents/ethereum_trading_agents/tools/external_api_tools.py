@@ -485,17 +485,23 @@ class ExternalAPIManager:
     async def _get_social_sentiment_data(self, symbol: str) -> Dict[str, Any]:
         """Get social sentiment data from various sources"""
         try:
-            # This would integrate with Twitter API, Reddit API, etc.
-            # For now, return mock data structure
+            sentiment_data = {}
+            
+            # Try Twitter API if available
+            if self.config.twitter_api_key:
+                sentiment_data['twitter'] = await self._get_twitter_sentiment(symbol)
+            
+            # Try Reddit API if available
+            if self.config.reddit_api_key:
+                sentiment_data['reddit'] = await self._get_reddit_sentiment(symbol)
+            
+            if not sentiment_data:
+                raise ValueError("No social media API keys configured")
+            
             return {
                 "status": "success",
                 "source": "social_sentiment",
-                "data": {
-                    "twitter_sentiment": {"score": 0.2, "mentions": 1500},
-                    "reddit_sentiment": {"score": 0.1, "mentions": 800},
-                    "overall_sentiment": "bullish",
-                    "sentiment_score": 0.15
-                }
+                "data": sentiment_data
             }
             
         except Exception as e:

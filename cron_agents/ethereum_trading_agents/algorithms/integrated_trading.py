@@ -62,7 +62,6 @@ class IntegratedTradingConfig:
     
     # Strategy selection
     primary_strategy: TradingStrategy = TradingStrategy.TECHNICAL_ANALYSIS
-    fallback_strategy: TradingStrategy = TradingStrategy.AMM
     
     # Market adaptation
     market_adaptation_enabled: bool = True
@@ -132,7 +131,7 @@ class IntegratedTradingAlgorithm:
             
         except Exception as e:
             logger.error(f"Market condition analysis failed: {e}")
-            return MarketCondition.SIDEWAYS
+            raise ValueError(f"Market condition analysis failed: {e}")
     
     async def select_optimal_strategy(
         self, 

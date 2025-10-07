@@ -22,10 +22,10 @@ if sys.version_info < (3, 9):
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from ..agents.multi_agent_orchestrator import MultiAgentOrchestrator
-from ..agents.trading_agent import TradingAgent
-from ..agents.langchain_agent import TradingAgentChain
-from ..utils.config import Config
+from agents.multi_agent_orchestrator import MultiAgentOrchestrator
+from agents.trading_agent import TradingAgent
+from agents.langchain_agent import TradingAgentChain
+from utils.config import Config
 
 # Configure logging
 logging.basicConfig(

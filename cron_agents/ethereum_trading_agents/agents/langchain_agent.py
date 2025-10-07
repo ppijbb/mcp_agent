@@ -18,15 +18,15 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.tools import tool
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools import BaseTool
-from langgraph import Graph, StateGraph
-from langgraph.prebuilt import ToolExecutor
+from langgraph.graph import StateGraph
+# ToolExecutor is not available in this version of langgraph
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field, field_validator
 
-from .gemini_agent import GeminiAgent
-from ..utils.mcp_client import MCPClient
-from ..utils.database import TradingDatabase
-from ..utils.config import Config
+from agents.gemini_agent import GeminiAgent
+from utils.mcp_client import MCPClient
+from utils.database import TradingDatabase
+from utils.config import Config
 
 logger = logging.getLogger(__name__)
 

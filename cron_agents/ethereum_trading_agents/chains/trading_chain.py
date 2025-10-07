@@ -19,7 +19,7 @@ from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.runnable.config import RunnableConfig
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
+# ToolExecutor is not available in this version of langgraph
 # Using MemorySaver instead of SqliteSaver for now
 from langgraph.checkpoint.memory import MemorySaver
 import asyncio
@@ -28,11 +28,11 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Import advanced algorithms
-from ..algorithms.integrated_trading import IntegratedTradingAlgorithm, IntegratedTradingConfig
-from ..algorithms.amm_algorithm import AMMAlgorithm, AMMConfig
-from ..algorithms.technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig
-from ..algorithms.parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig
-from ..algorithms.advanced_risk import AdvancedRiskAlgorithm, RiskConfig
+from algorithms.integrated_trading import IntegratedTradingAlgorithm, IntegratedTradingConfig
+from algorithms.amm_algorithm import AMMAlgorithm, AMMConfig
+from algorithms.technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig
+from algorithms.parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig
+from algorithms.advanced_risk import AdvancedRiskAlgorithm, RiskConfig
 
 logger = logging.getLogger(__name__)
 

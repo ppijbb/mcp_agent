@@ -12,14 +12,13 @@ This package contains utility functions and tools:
 from .database import TradingDatabase
 from .mcp_client import MCPClient
 from .config import Config
-from .cron_scheduler import CronScheduler
+# from .cron_scheduler import CronScheduler  # Commented out to avoid circular import
 from .data_collector import DataCollector, collect_market_data, collect_news_sentiment
 
 __all__ = [
     'TradingDatabase',
     'MCPClient',
     'Config',
-    'CronScheduler',
     'DataCollector',
     'collect_market_data',
     'collect_news_sentiment'

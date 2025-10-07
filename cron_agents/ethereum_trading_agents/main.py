@@ -26,21 +26,21 @@ sys.path.insert(0, str(project_root))
 load_dotenv()
 
 # Import from new modular structure
-from .agents.multi_agent_orchestrator import MultiAgentOrchestrator
-from .agents.trading_agent import TradingAgent
-from .agents.langchain_agent import TradingAgentChain
-from .agents.gemini_agent import GeminiAgent
-from .agents.trading_report_agent import TradingReportAgent
-from .chains.trading_chain import TradingChain
-from .chains.analysis_chain import AnalysisChain
-from .memory.trading_memory import TradingMemory
-from .prompts import get_prompt, list_available_prompts
-from .utils.config import Config
-from .utils.database import TradingDatabase
-from .utils.mcp_client import MCPClient
-from .utils.cron_scheduler import CronScheduler
-from .utils.email_service import EmailService
-from .utils.trading_monitor import TradingMonitor
+from agents.multi_agent_orchestrator import MultiAgentOrchestrator
+from agents.trading_agent import TradingAgent
+from agents.langchain_agent import TradingAgentChain
+from agents.gemini_agent import GeminiAgent
+from agents.trading_report_agent import TradingReportAgent
+from chains.trading_chain import TradingChain
+from chains.analysis_chain import AnalysisChain
+from memory.trading_memory import TradingMemory
+from prompts import get_prompt, list_available_prompts
+from utils.config import Config
+from utils.database import TradingDatabase
+from utils.mcp_client import MCPClient
+from utils.cron_scheduler import CronScheduler
+from utils.email_service import EmailService
+from utils.trading_monitor import TradingMonitor
 
 # Configure logging
 logging.basicConfig(

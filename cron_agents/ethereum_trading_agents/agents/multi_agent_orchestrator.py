@@ -12,9 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 import signal
 import sys
 
-from .trading_agent import TradingAgent
-from ..utils.database import TradingDatabase
-from ..utils.config import Config
+from agents.trading_agent import TradingAgent
+from utils.database import TradingDatabase
+from utils.config import Config
 
 logger = logging.getLogger(__name__)
 
