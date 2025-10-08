@@ -14,9 +14,9 @@ import numpy as np
 from dataclasses import dataclass
 from enum import Enum
 import re
-from textblob import TextBlob
-import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
+# from textblob import TextBlob  # Optional dependency
+# import nltk  # Optional dependency
+# from nltk.sentiment import SentimentIntensityAnalyzer
 
 logger = logging.getLogger(__name__)
 

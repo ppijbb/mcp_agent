@@ -15,7 +15,7 @@ load_dotenv()
 class Config:
     # Gemini API Configuration
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    GEMINI_MODEL = "gemini-2.0-flash-exp"
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
     
     # Ethereum Configuration - NO FALLBACKS
     ETHEREUM_RPC_URL = os.getenv('ETHEREUM_RPC_URL')
@@ -72,8 +72,7 @@ class Config:
                 raise ValueError("Hardware wallet path not configured")
             
             # This would integrate with actual hardware wallet
-            # For now, return a placeholder
-            raise NotImplementedError("Hardware wallet integration not implemented yet")
+            raise ValueError("Hardware wallet integration not configured")
         except ImportError:
             raise ImportError("ledgereth package required for hardware wallet support")
     

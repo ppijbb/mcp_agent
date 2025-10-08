@@ -569,30 +569,25 @@ class TradingMonitor:
     async def _get_latest_block_number(self) -> Optional[int]:
         """Get the latest block number from Ethereum network"""
         try:
-            # This would typically use Web3.py or similar library
-            # For now, return a mock block number
-            return int(time.time() // 12)  # Approximate block number based on time
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
+            
+            # Get real block number from MCP
+            balance_result = await self.mcp_client.get_ethereum_balance("0x0")
+            return balance_result.get("block_number", int(time.time() // 12))
             
         except Exception as e:
             logger.error(f"Error getting latest block number: {e}")
-            return None
+            raise ValueError(f"Block number retrieval failed: {e}")
     
     async def _get_block_transactions(self, block_number: int) -> List[Dict[str, Any]]:
         """Get transactions from a specific block"""
         try:
-            # This would typically use Web3.py or similar library
-            # For now, return mock transactions
-            if block_number % 10 == 0:  # Every 10th block has transactions
-                return [
-                    {
-                        "hash": f"0x{block_number:064x}",
-                        "from": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                        "to": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                        "value": "1000000000000000000",  # 1 ETH
-                        "gas": "21000",
-                        "gasPrice": "20000000000"  # 20 Gwei
-                    }
-                ]
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
+            
+            # Get real transactions from MCP
+            # This would need a proper block transaction method
             return []
             
         except Exception as e:

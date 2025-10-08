@@ -274,39 +274,19 @@ class TradingAgent:
             # Execute trade via MCP
             async with self.mcp_client:
                 if action == "buy":
-                    # For demo purposes, we'll simulate a buy order
-                    # In production, this would execute the actual trade
-                    execution_result = {
-                        "status": "success",
-                        "action": "buy",
-                        "amount_eth": decision["amount_eth"],
-                        "target_price": decision["target_price"],
-                        "stop_loss": decision["stop_loss"],
-                        "take_profit": decision["take_profit"],
-                        "reason": decision["reason"],
-                        "timestamp": datetime.now().isoformat(),
-                        "note": "Trade simulated - not executed on blockchain"
-                    }
+                    execution_result = await self.mcp_client.send_ethereum_transaction(
+                        to_address=decision.get("to_address", ""),
+                        amount_eth=decision["amount_eth"],
+                        gas_limit=decision.get("gas_limit", 21000)
+                    )
                 elif action == "sell":
-                    # Simulate sell order
-                    execution_result = {
-                        "status": "success",
-                        "action": "sell",
-                        "amount_eth": decision["amount_eth"],
-                        "target_price": decision["target_price"],
-                        "stop_loss": decision["stop_loss"],
-                        "take_profit": decision["take_profit"],
-                        "reason": decision["reason"],
-                        "timestamp": datetime.now().isoformat(),
-                        "note": "Trade simulated - not executed on blockchain"
-                    }
+                    execution_result = await self.mcp_client.send_ethereum_transaction(
+                        to_address=decision.get("to_address", ""),
+                        amount_eth=decision["amount_eth"],
+                        gas_limit=decision.get("gas_limit", 21000)
+                    )
                 else:
-                    execution_result = {
-                        "status": "error",
-                        "action": "unknown",
-                        "reason": f"Unknown action: {action}",
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    raise ValueError(f"Unknown action: {action}")
             
             return execution_result
             

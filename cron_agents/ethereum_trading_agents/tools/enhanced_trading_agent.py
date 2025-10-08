@@ -467,19 +467,19 @@ class EnhancedTradingAgent:
             # Prepare trade decision
             trade_decision = {
                 "action": recommendation.get("action", "hold"),
-                "amount_eth": 0.1,  # Default amount
+                "amount_eth": recommendation.get("amount_eth", 0),
                 "target_price": market_data.get("aggregated_data", {}).get("price_usd", 0),
-                "stop_loss": 0,
-                "take_profit": 0,
+                "stop_loss": recommendation.get("stop_loss", 0),
+                "take_profit": recommendation.get("take_profit", 0),
                 "reason": recommendation.get("reason", ""),
-                "risk_level": "medium"
+                "risk_level": recommendation.get("risk_level", "medium")
             }
             
-            # Mock account info
-            account_info = {
-                "balance_eth": 1.0,
-                "total_value": 10000
-            }
+            # Get real account info
+            if not self.execution_manager:
+                raise ValueError("Execution manager not initialized")
+            
+            account_info = await self._get_account_info()
             
             # Execute trade
             execution_result = self.execution_manager.execute_trade(
@@ -489,4 +489,26 @@ class EnhancedTradingAgent:
             return execution_result
             
         except Exception as e:
-            return {"status": "error", "error": str(e)}
+            logger.error(f"Trade execution failed: {e}")
+            raise ValueError(f"Trade execution failed: {e}")
+    
+    async def _get_account_info(self) -> Dict[str, Any]:
+        """Get real account information"""
+        try:
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
+            
+            # Get real account balance
+            balance_result = await self.mcp_client.get_ethereum_balance(
+                self.config.external_api_config.ethereum_address
+            )
+            
+            return {
+                "balance_eth": balance_result.get("balance_eth", 0),
+                "total_value": balance_result.get("total_value", 0),
+                "address": self.config.external_api_config.ethereum_address
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get account info: {e}")
+            raise ValueError(f"Account info retrieval failed: {e}")

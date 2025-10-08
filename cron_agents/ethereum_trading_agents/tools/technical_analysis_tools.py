@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 from enum import Enum
-import talib
+# import talib  # Optional dependency
 
 logger = logging.getLogger(__name__)
 

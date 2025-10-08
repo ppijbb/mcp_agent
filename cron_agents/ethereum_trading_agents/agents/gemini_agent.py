@@ -276,12 +276,11 @@ class GeminiAgent:
                 json_str = response[json_start:json_end]
                 return json.loads(json_str)
             else:
-                # Fallback parsing
-                return self._fallback_parse_analysis(response)
+                raise ValueError("No valid JSON found in analysis response")
                 
         except Exception as e:
             logger.error(f"Failed to parse analysis response: {e}")
-            return self._fallback_parse_analysis(response)
+            raise ValueError(f"Analysis parsing failed: {e}")
     
     def _parse_decision_response(self, response: str) -> Dict[str, Any]:
         """Parse AI decision response"""
@@ -294,12 +293,11 @@ class GeminiAgent:
                 json_str = response[json_start:json_end]
                 return json.loads(json_str)
             else:
-                # Fallback parsing
-                return self._fallback_parse_decision(response)
+                raise ValueError("No valid JSON found in decision response")
                 
         except Exception as e:
             logger.error(f"Failed to parse decision response: {e}")
-            return self._fallback_parse_decision(response)
+            raise ValueError(f"Decision parsing failed: {e}")
     
     def _parse_search_response(self, response: str) -> Dict[str, Any]:
         """Parse AI search response"""
@@ -312,48 +310,14 @@ class GeminiAgent:
                 json_str = response[json_start:json_end]
                 return json.loads(json_str)
             else:
-                # Fallback parsing
-                return self._fallback_parse_search(response)
+                raise ValueError("No valid JSON found in search response")
                 
         except Exception as e:
             logger.error(f"Failed to parse search response: {e}")
-            return self._fallback_parse_search(response)
+            raise ValueError(f"Search parsing failed: {e}")
     
-    def _fallback_parse_analysis(self, response: str) -> Dict[str, Any]:
-        """Fallback parsing for analysis response"""
-        return {
-            "market_sentiment": "neutral",
-            "technical_summary": "Unable to parse technical analysis",
-            "risk_factors": ["parsing_error"],
-            "opportunity_score": 50,
-            "confidence_score": 30,
-            "recommended_action": "hold",
-            "reasoning": f"Fallback due to parsing error. Raw response: {response[:200]}...",
-            "risk_assessment": "high"
-        }
     
-    def _fallback_parse_decision(self, response: str) -> Dict[str, Any]:
-        """Fallback parsing for decision response"""
-        return {
-            "action": "hold",
-            "amount_eth": 0.0,
-            "target_price": 0.0,
-            "stop_loss": 0.0,
-            "take_profit": 0.0,
-            "reason": f"Fallback due to parsing error. Raw response: {response[:200]}...",
-            "risk_level": "high",
-            "expected_return": "0%"
-        }
     
-    def _fallback_parse_search(self, response: str) -> Dict[str, Any]:
-        """Fallback parsing for search response"""
-        return {
-            "summary": f"Fallback response due to parsing error: {response[:200]}...",
-            "relevance_score": 0,
-            "sentiment": "neutral",
-            "trading_implications": "Unable to determine implications",
-            "confidence": "low"
-        }
     
     def _validate_decision(self, decision: Dict, risk_profile: Dict, account_balance: float) -> Dict:
         """Validate trading decision against risk limits"""

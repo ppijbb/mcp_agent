@@ -761,16 +761,27 @@ class TradingAgentChain:
     async def _execute_trade(self, agent_result: Dict, account_info: Dict) -> Dict[str, Any]:
         """Execute trade based on agent decision"""
         try:
-            # For now, simulate trade execution
-            # In production, this would use the actual trading MCP server
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
             
-            return {
-                "status": "success",
-                "action": "hold",
-                "reason": "Trade execution simulated - LangChain agent analysis completed",
-                "timestamp": datetime.now().isoformat(),
-                "note": "Trade simulated - not executed on blockchain"
-            }
+            # Execute real trade via MCP
+            decision = agent_result.get("decision", {})
+            action = decision.get("action", "hold")
+            
+            if action in ["buy", "sell"]:
+                execution_result = await self.mcp_client.send_ethereum_transaction(
+                    to_address=decision.get("to_address", ""),
+                    amount_eth=decision.get("amount_eth", 0),
+                    gas_limit=decision.get("gas_limit", 21000)
+                )
+                return execution_result
+            else:
+                return {
+                    "status": "success",
+                    "action": "hold",
+                    "reason": "No trade action required",
+                    "timestamp": datetime.now().isoformat()
+                }
             
         except Exception as e:
             logger.error(f"Failed to execute trade: {e}")
@@ -1064,18 +1075,15 @@ class TradingAgentChain:
                 action = decision.get("action", "hold")
                 
                 if action != "hold":
-                    # Simulate trade execution
-                    execution_result = {
-                        "status": "success",
-                        "action": action,
-                        "amount_eth": decision.get("amount_eth", 0),
-                        "target_price": decision.get("target_price", 0),
-                        "stop_loss": decision.get("stop_loss", 0),
-                        "take_profit": decision.get("take_profit", 0),
-                        "reason": decision.get("reason", ""),
-                        "timestamp": datetime.now().isoformat(),
-                        "note": "Trade simulated - LangGraph workflow execution"
-                    }
+                    # Execute real trade via MCP
+                    if not self.mcp_client:
+                        raise ValueError("MCP client not initialized")
+                    
+                    execution_result = await self.mcp_client.send_ethereum_transaction(
+                        to_address=decision.get("to_address", ""),
+                        amount_eth=decision.get("amount_eth", 0),
+                        gas_limit=decision.get("gas_limit", 21000)
+                    )
                 else:
                     execution_result = {
                         "status": "success",

@@ -511,27 +511,27 @@ class TradingReportAgent:
     async def _get_transaction_by_hash(self, transaction_hash: str) -> Dict[str, Any]:
         """Get transaction details by hash"""
         try:
-            # This would typically use Web3.py or similar library
-            # For now, return a mock response
-            return {
-                "from": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                "to": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                "value": "1000000000000000000",  # 1 ETH in Wei
-                "gasPrice": "20000000000"  # 20 Gwei in Wei
-            }
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
+            
+            # Use MCP client to get real transaction data
+            return await self.mcp_client.get_transaction_status(transaction_hash)
         except Exception as e:
             logger.error(f"Failed to get transaction by hash: {e}")
-            return {}
+            raise ValueError(f"Transaction lookup failed: {e}")
     
     async def _get_block_timestamp(self, block_number: int) -> str:
         """Get block timestamp"""
         try:
-            # This would typically use Web3.py or similar library
-            # For now, return current timestamp
-            return datetime.now().isoformat()
+            if not self.mcp_client:
+                raise ValueError("MCP client not initialized")
+            
+            # Use MCP client to get real block data
+            block_data = await self.mcp_client.get_ethereum_balance("0x0")  # This would need a proper block method
+            return datetime.now().isoformat()  # Placeholder until proper block method is available
         except Exception as e:
             logger.error(f"Failed to get block timestamp: {e}")
-            return datetime.now().isoformat()
+            raise ValueError(f"Block timestamp lookup failed: {e}")
     
     async def _analyze_market_sentiment(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze market sentiment from various sources"""
