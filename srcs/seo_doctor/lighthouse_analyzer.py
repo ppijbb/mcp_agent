@@ -10,7 +10,7 @@ import tempfile
 import os
 from typing import Dict, Any, Optional
 from datetime import datetime
-from .lighthouse_config import MOBILE_CONFIG, DESKTOP_CONFIG, THRESHOLDS, REPORT_CONFIG
+from .config_loader import seo_config
 
 class PlaywrightLighthouseAnalyzer:
     """Playwright-Lighthouse를 사용한 웹사이트 분석기"""
@@ -31,8 +31,14 @@ class PlaywrightLighthouseAnalyzer:
             분석 결과 딕셔너리
         """
         try:
-            # Lighthouse 설정 선택
-            config = MOBILE_CONFIG if strategy == "mobile" else DESKTOP_CONFIG
+            if not url:
+                raise ValueError("분석할 URL이 필요합니다")
+            
+            if strategy not in ["mobile", "desktop"]:
+                raise ValueError(f"잘못된 strategy: {strategy}. 'mobile' 또는 'desktop'만 가능합니다")
+            
+            # 설정 파일에서 Lighthouse 설정 로드
+            config = seo_config.get_lighthouse_config(strategy)
             
             # Node.js 스크립트로 Lighthouse 실행
             lighthouse_script = self._create_lighthouse_script(url, config, strategy)
@@ -46,12 +52,8 @@ class PlaywrightLighthouseAnalyzer:
             return analyzed_data
             
         except Exception as e:
-            return {
-                "error": str(e),
-                "url": url,
-                "strategy": strategy,
-                "timestamp": datetime.now().isoformat()
-            }
+            error_msg = f"Lighthouse 분석 실패: {str(e)}"
+            raise Exception(error_msg)
     
     def _create_lighthouse_script(self, url: str, config: Dict, strategy: str) -> str:
         """Node.js Lighthouse 스크립트 생성"""
@@ -229,30 +231,13 @@ runLighthouse().catch(console.error);
         return issues[:8]  # 최대 8개까지만 표시
     
     def _estimate_recovery_time(self, score: int, issue_count: int) -> int:
-        """회복 시간 예측"""
-        
-        if score >= 80:
-            return 7 + issue_count * 2
-        elif score >= 60:
-            return 14 + issue_count * 3
-        elif score >= 40:
-            return 30 + issue_count * 5
-        else:
-            return 60 + issue_count * 7
+        """회복 시간 예측 - 설정 기반"""
+        return seo_config.calculate_recovery_time(score, issue_count)
     
     def _determine_emergency_level(self, score: int) -> str:
-        """응급 레벨 결정"""
-        
-        if score >= 85:
-            return "🚀 완벽"
-        elif score >= 70:
-            return "✅ 안전"
-        elif score >= 55:
-            return "⚠️ 위험"
-        elif score >= 40:
-            return "🚨 응급실"
-        else:
-            return "💀 위험"
+        """응급 레벨 결정 - 설정 기반"""
+        emergency_info = seo_config.determine_emergency_level(score)
+        return f"{emergency_info['emoji']} {emergency_info['label']}"
     
     def __del__(self):
         """임시 디렉토리 정리"""

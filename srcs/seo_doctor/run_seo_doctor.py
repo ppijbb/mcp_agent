@@ -12,6 +12,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from srcs.seo_doctor.seo_doctor_agent import SEODoctorAgent
+from srcs.seo_doctor.config_loader import seo_config
 from srcs.core.utils import EnhancedJSONEncoder
 
 # Dataclass를 dict로 변환하기 위한 헬퍼
@@ -73,31 +74,35 @@ async def run_agent(args):
                 else:
                     raise Exception(f"MCP upload failed: {upload_result.get('message')}")
         except Exception as e:
-            print(f"❌ Failed to upload result JSON to Google Drive: {e}")
-            print("--- FALLBACK: FINAL RESULT JSON ---")
-            print(json_content_to_upload)
-            print("------------------------------------")
+            error_msg = f"❌ Failed to upload result JSON to Google Drive: {e}"
+            print(error_msg)
             final_result["success"] = False
             final_result["error"] = f"Failed to upload result JSON: {e}"
+            raise Exception(error_msg)
         
         if not final_result["success"]:
             sys.exit(1)
 
 def main():
     """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
-    parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent.")
+    # 설정에서 기본값 로드
+    mcp_servers = seo_config.get_mcp_servers_config()
+    google_drive_url = mcp_servers.get('google_drive', {}).get('url', 'http://localhost:3001')
+    seo_url = mcp_servers.get('seo', {}).get('url', 'http://localhost:3002')
+    
+    parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent with AI-powered analysis.")
     parser.add_argument("--url", required=True, help="The URL to analyze.")
     parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
-    parser.add_argument("--competitor-urls", nargs='*', help="List of competitor URLs.")
+    parser.add_argument("--competitor-urls", nargs='*', default=[], help="List of competitor keywords or URLs.")
     parser.add_argument(
         "--google-drive-mcp-url",
-        default="http://localhost:3001",
-        help="The URL for the Google Drive MCP server."
+        default=google_drive_url,
+        help=f"The URL for the Google Drive MCP server (default: {google_drive_url})."
     )
     parser.add_argument(
         "--seo-mcp-url",
-        default="http://localhost:3002",
-        help="The URL for the SEO MCP server."
+        default=seo_url,
+        help=f"The URL for the SEO MCP server (default: {seo_url})."
     )
     
     args = parser.parse_args()

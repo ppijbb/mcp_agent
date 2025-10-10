@@ -1,0 +1,152 @@
+# SEO Doctor Configuration
+# 2025년 10월 기준 최신 설정
+
+# Lighthouse 설정
+lighthouse:
+  mobile:
+    set_view: "lighthouse:default"
+    extends: "lighthouse:default"
+    settings:
+      only_categories:
+        - "performance"
+        - "seo"
+        - "accessibility"
+        - "best-practices"
+      emulated_form_factor: "mobile"
+      throttling:
+        rtt_ms: 40
+        throughput_kbps: 1024
+        request_latency_ms: 0
+        download_throughput_kbps: 0
+        upload_throughput_kbps: 0
+        cpu_slowdown_multiplier: 1
+  
+  desktop:
+    set_view: "lighthouse:default"
+    extends: "lighthouse:default"
+    settings:
+      only_categories:
+        - "performance"
+        - "seo"
+        - "accessibility"
+        - "best-practices"
+      emulated_form_factor: "desktop"
+      throttling:
+        rtt_ms: 40
+        throughput_kbps: 10240
+        request_latency_ms: 0
+        download_throughput_kbps: 0
+        upload_throughput_kbps: 0
+        cpu_slowdown_multiplier: 1
+
+# 성능 임계값
+thresholds:
+  performance: 80
+  accessibility: 70
+  best_practices: 70
+  seo: 80
+
+# 보고서 설정
+report:
+  formats:
+    json: true
+    html: false  # 메모리 절약
+    csv: false
+
+# MCP 서버 설정
+mcp_servers:
+  google_drive:
+    url: "http://localhost:3001"
+    description: "Google Drive MCP Server"
+  seo:
+    url: "http://localhost:3002"
+    description: "SEO MCP Server"
+  puppeteer:
+    server_name: "puppeteer"
+    description: "Puppeteer MCP Server for Lighthouse"
+  g_search:
+    server_name: "g-search"
+    description: "Google Search MCP Server"
+
+# AI 설정
+ai:
+  model: "gemini-2.0-flash-exp"
+  api_key_env: "GOOGLE_API_KEY"
+  max_tokens: 8192
+  temperature: 0.7
+  analysis_prompts:
+    seo_analysis: |
+      다음 Lighthouse SEO 데이터를 분석하여 상세한 진단을 제공해주세요:
+      - 현재 SEO 상태 평가
+      - 주요 문제점 식별
+      - 우선순위별 개선 방안
+      - 예상 회복 시간
+      - 경쟁 우위 확보 전략
+    competitor_analysis: |
+      다음 경쟁사 데이터를 분석하여 전략적 인사이트를 제공해주세요:
+      - 경쟁사 SEO 강점/약점 분석
+      - 훔칠 만한 전술 식별
+      - 콘텐츠 갭 분석
+      - 차별화 전략 제안
+
+# 응급 레벨 분류
+emergency_levels:
+  excellent:
+    min_score: 85
+    emoji: "🚀"
+    label: "완벽"
+  safe:
+    min_score: 70
+    emoji: "✅"
+    label: "안전"
+  caution:
+    min_score: 55
+    emoji: "⚡"
+    label: "주의"
+  danger:
+    min_score: 40
+    emoji: "⚠️"
+    label: "위험"
+  critical:
+    min_score: 0
+    emoji: "🚨"
+    label: "응급실"
+
+# 회복 시간 계산
+recovery_time:
+  base:
+    excellent: 7  # days
+    safe: 14
+    caution: 30
+    danger: 60
+    critical: 90
+  issue_multiplier:
+    excellent: 2
+    safe: 3
+    caution: 5
+    danger: 7
+    critical: 10
+
+# 로깅 설정
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  output_dir: "seo_doctor_reports"
+
+# 성능 메트릭 임계값
+metrics:
+  lcp:  # Largest Contentful Paint
+    good: 2.5  # seconds
+    needs_improvement: 4.0
+  fcp:  # First Contentful Paint
+    good: 1.8
+    needs_improvement: 3.0
+  cls:  # Cumulative Layout Shift
+    good: 0.1
+    needs_improvement: 0.25
+  tbt:  # Total Blocking Time
+    good: 200  # ms
+    needs_improvement: 600
+  speed_index:
+    good: 3.4  # seconds
+    needs_improvement: 5.8

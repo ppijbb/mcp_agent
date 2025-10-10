@@ -25,7 +25,7 @@ class TravelSearchUtils:
     """여행 검색 유틸리티 - 통합 및 현대화"""
     
     @staticmethod
-    def load_destination_options() -> List[str]:
+def load_destination_options() -> List[str]:
         """목적지 옵션 로드 - 설정 파일에서"""
         return config.get_destination_options()
     
@@ -508,30 +508,30 @@ class TravelSearchUtils:
             
             flights.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
             return flights
-            
-        except Exception as e:
+        
+    except Exception as e:
             logger.warning(f"항공편 순위 매기기 오류: {e}")
             return flights
     
     @staticmethod
     def save_travel_report(content: str, filename: str, reports_dir: str = None) -> str:
-        """여행 검색 보고서를 파일로 저장"""
-        try:
+    """여행 검색 보고서를 파일로 저장"""
+    try:
             if reports_dir is None:
                 reports_dir = config.get_logging_config().get('reports_dir', 'travel_scout_reports')
             
-            # 디렉토리 생성
-            os.makedirs(reports_dir, exist_ok=True)
-            
-            # 파일명에 타임스탬프 추가
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if not filename.endswith('.md'):
-                filename = f"{filename}_{timestamp}.md"
-            
-            file_path = os.path.join(reports_dir, filename)
-            
-            # 보고서 헤더 생성
-            report_header = f"""# 🧳 Travel Scout Search Report
+        # 디렉토리 생성
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        # 파일명에 타임스탬프 추가
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if not filename.endswith('.md'):
+            filename = f"{filename}_{timestamp}.md"
+        
+        file_path = os.path.join(reports_dir, filename)
+        
+        # 보고서 헤더 생성
+        report_header = f"""# 🧳 Travel Scout Search Report
 
 **Generated**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  
 **Agent Type**: Travel Scout MCP Agent  
@@ -541,87 +541,87 @@ class TravelSearchUtils:
 ---
 
 """
-            
-            # 메타데이터 생성
-            metadata = {
-                "report_id": f"travel_search_{timestamp}",
-                "generated_at": datetime.now().isoformat(),
-                "agent_type": "Travel Scout MCP Agent",
-                "data_source": "MCP Browser + Real-time Travel Sites",
-                "content_length": len(content),
-                "file_path": file_path,
+        
+        # 메타데이터 생성
+        metadata = {
+            "report_id": f"travel_search_{timestamp}",
+            "generated_at": datetime.now().isoformat(),
+            "agent_type": "Travel Scout MCP Agent",
+            "data_source": "MCP Browser + Real-time Travel Sites",
+            "content_length": len(content),
+            "file_path": file_path,
                 "user_location": TravelSearchUtils.get_user_location(),
                 "destination_options": TravelSearchUtils.load_destination_options(),
                 "origin_options": TravelSearchUtils.load_origin_options(),
-                "report_sections": [
-                    "Search Summary",
-                    "Hotel Results",
-                    "Flight Results", 
-                    "Price Analysis",
-                    "Recommendations",
-                    "Booking Strategy",
-                    "Total Cost Estimate"
-                ]
-            }
-            
-            # Markdown 보고서 저장
-            full_content = report_header + content
-            
-            # 보고서 메타데이터 추가
-            full_content += f"\n\n---\n\n### Report Metadata\n\n```json\n{json.dumps(metadata, indent=2, ensure_ascii=False)}\n```"
-            
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(full_content)
-            
-            # 메타데이터 JSON 저장
-            metadata_file = file_path.replace('.md', '_metadata.json')
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, ensure_ascii=False, indent=2)
-            
-            return file_path
-            
-        except Exception as e:
+            "report_sections": [
+                "Search Summary",
+                "Hotel Results",
+                "Flight Results", 
+                "Price Analysis",
+                "Recommendations",
+                "Booking Strategy",
+                "Total Cost Estimate"
+            ]
+        }
+        
+        # Markdown 보고서 저장
+        full_content = report_header + content
+        
+        # 보고서 메타데이터 추가
+        full_content += f"\n\n---\n\n### Report Metadata\n\n```json\n{json.dumps(metadata, indent=2, ensure_ascii=False)}\n```"
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(full_content)
+        
+        # 메타데이터 JSON 저장
+        metadata_file = file_path.replace('.md', '_metadata.json')
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+        return file_path
+        
+    except Exception as e:
             raise TravelSearchError(f"여행 보고서 저장 실패: {str(e)}")
-    
+
     @staticmethod
-    def generate_travel_report_content(results: dict, search_params: dict) -> str:
-        """여행 검색 보고서 내용 생성"""
-        try:
-            # 기본 정보 추출
-            hotels = results.get('hotels', [])
-            flights = results.get('flights', [])
-            recommendations = results.get('recommendations', {})
-            analysis = results.get('analysis', {})
+def generate_travel_report_content(results: dict, search_params: dict) -> str:
+    """여행 검색 보고서 내용 생성"""
+    try:
+        # 기본 정보 추출
+        hotels = results.get('hotels', [])
+        flights = results.get('flights', [])
+        recommendations = results.get('recommendations', {})
+        analysis = results.get('analysis', {})
 
             # 보고서 내용 생성
-            content = f"## ✈️🌍 Travel Search Summary for {search_params.get('destination', 'N/A')}\n\n"
-            content += f"- **Destination**: {search_params.get('destination', 'N/A')}\n"
-            content += f"- **Origin**: {search_params.get('origin', 'N/A')}\n"
-            content += f"- **Check-in**: {search_params.get('check_in', 'N/A')}\n"
-            content += f"- **Check-out**: {search_params.get('check_out', 'N/A')}\n\n"
+        content = f"## ✈️🌍 Travel Search Summary for {search_params.get('destination', 'N/A')}\n\n"
+        content += f"- **Destination**: {search_params.get('destination', 'N/A')}\n"
+        content += f"- **Origin**: {search_params.get('origin', 'N/A')}\n"
+        content += f"- **Check-in**: {search_params.get('check_in', 'N/A')}\n"
+        content += f"- **Check-out**: {search_params.get('check_out', 'N/A')}\n\n"
 
-            # 호텔 결과
-            content += "### 🏨 Hotel Results\n\n"
-            if hotels:
-                for hotel in hotels[:5]:
-                    content += f"- **{hotel.get('name', 'N/A')}**\n"
-                    content += f"  - Price: {hotel.get('price', 'N/A')}\n"
-                    content += f"  - Rating: {hotel.get('rating', 'N/A')}\n"
-                    content += f"  - Location: {hotel.get('location', 'N/A')}\n\n"
-            else:
-                content += "No hotel results found.\n\n"
+        # 호텔 결과
+        content += "### 🏨 Hotel Results\n\n"
+        if hotels:
+            for hotel in hotels[:5]:
+                content += f"- **{hotel.get('name', 'N/A')}**\n"
+                content += f"  - Price: {hotel.get('price', 'N/A')}\n"
+                content += f"  - Rating: {hotel.get('rating', 'N/A')}\n"
+                content += f"  - Location: {hotel.get('location', 'N/A')}\n\n"
+        else:
+            content += "No hotel results found.\n\n"
 
-            # 항공편 결과
-            content += "### ✈️ Flight Results\n\n"
-            if flights:
-                for flight in flights[:5]:
-                    content += f"- **{flight.get('airline', 'N/A')}**\n"
-                    content += f"  - Price: {flight.get('price', 'N/A')}\n"
-                    content += f"  - Duration: {flight.get('duration', 'N/A')}\n"
-                    content += f"  - Stops: {flight.get('stops', 'N/A')}\n\n"
-            else:
-                content += "No flight results found.\n\n"
-                
-            return content
-        except Exception as e:
+        # 항공편 결과
+        content += "### ✈️ Flight Results\n\n"
+        if flights:
+            for flight in flights[:5]:
+                content += f"- **{flight.get('airline', 'N/A')}**\n"
+                content += f"  - Price: {flight.get('price', 'N/A')}\n"
+                content += f"  - Duration: {flight.get('duration', 'N/A')}\n"
+                content += f"  - Stops: {flight.get('stops', 'N/A')}\n\n"
+        else:
+            content += "No flight results found.\n\n"
+            
+        return content
+    except Exception as e:
             return f"보고서 내용 생성 중 오류 발생: {e}"
