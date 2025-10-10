@@ -1,0 +1,153 @@
+# Travel Scout Configuration
+# 2025년 10월 기준 최신 설정
+
+# 브라우저 설정
+browser:
+  headless: true
+  disable_gpu: true
+  timeout: 30000
+  window_size: [1280, 720]
+  debug_screenshots: true
+  max_screenshots: 20
+
+# MCP 서버 설정
+mcp_server:
+  possible_paths:
+    - "node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+    - "../node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+    - "/usr/local/lib/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+    - "~/.npm-global/lib/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+
+# 도시 목록
+cities:
+  destinations:
+    - "Seoul (서울)"
+    - "Tokyo (도쿄)"
+    - "Osaka (오사카)"
+    - "Bangkok (방콕)"
+    - "Singapore (싱가포르)"
+    - "Hong Kong (홍콩)"
+    - "Shanghai (상하이)"
+    - "Beijing (베이징)"
+    - "Taipei (타이베이)"
+    - "Kuala Lumpur (쿠알라룸푸르)"
+    - "Manila (마닐라)"
+    - "Ho Chi Minh City (호치민)"
+    - "Jakarta (자카르타)"
+    - "London (런던)"
+    - "Paris (파리)"
+    - "Rome (로마)"
+    - "Barcelona (바르셀로나)"
+    - "Amsterdam (암스테르담)"
+    - "Berlin (베를린)"
+    - "Vienna (비엔나)"
+    - "Prague (프라하)"
+    - "Zurich (취리히)"
+    - "Stockholm (스톡홀름)"
+    - "Copenhagen (코펜하겐)"
+    - "Oslo (오슬로)"
+    - "New York (뉴욕)"
+    - "Los Angeles (로스앤젤레스)"
+    - "San Francisco (샌프란시스코)"
+    - "Las Vegas (라스베이거스)"
+    - "Chicago (시카고)"
+    - "Miami (마이애미)"
+    - "Toronto (토론토)"
+    - "Vancouver (밴쿠버)"
+    - "Sydney (시드니)"
+    - "Melbourne (멜버른)"
+    - "Auckland (오클랜드)"
+    - "Dubai (두바이)"
+    - "Istanbul (이스탄불)"
+    - "Cairo (카이로)"
+    - "Cape Town (케이프타운)"
+
+  origins:
+    - "Seoul (서울)"
+    - "Busan (부산)"
+    - "Incheon (인천)"
+    - "Daegu (대구)"
+    - "Gwangju (광주)"
+    - "Daejeon (대전)"
+    - "Ulsan (울산)"
+    - "Jeju (제주)"
+    - "Tokyo (도쿄)"
+    - "Osaka (오사카)"
+    - "Bangkok (방콕)"
+    - "Singapore (싱가포르)"
+    - "Hong Kong (홍콩)"
+    - "Shanghai (상하이)"
+    - "Beijing (베이징)"
+    - "Taipei (타이베이)"
+    - "London (런던)"
+    - "Paris (파리)"
+    - "Frankfurt (프랑크푸르트)"
+    - "Amsterdam (암스테르담)"
+    - "Rome (로마)"
+    - "Barcelona (바르셀로나)"
+    - "New York (뉴욕)"
+    - "Los Angeles (로스앤젤레스)"
+    - "San Francisco (샌프란시스코)"
+    - "Toronto (토론토)"
+    - "Vancouver (밴쿠버)"
+    - "Sydney (시드니)"
+    - "Melbourne (멜버른)"
+    - "Dubai (두바이)"
+    - "Doha (도하)"
+
+# 스크레이핑 설정
+scraping:
+  booking_com:
+    base_url: "https://www.booking.com/searchresults.html"
+    selectors:
+      property_card: '[data-testid="property-card"]'
+      title: '[data-testid="title"]'
+      price: '[data-testid="price-and-discounted-price"]'
+      rating: '[data-testid="review-score"] .ac78a73c96'
+    wait_time: 3
+    max_results: 10
+
+  google_flights:
+    base_url: "https://www.google.com/travel/flights"
+    selectors:
+      result_item: 'div.gws-flights-results__result-item-inner'
+      airline_name: '.gws-flights-results__airline-name'
+      price: '.gws-flights-results__price'
+      duration: '.gws-flights-results__duration'
+    wait_time: 5
+    max_results: 10
+
+# AI 설정
+ai:
+  model: "gemini-2.0-flash-exp"
+  api_key_env: "GOOGLE_API_KEY"
+  max_tokens: 8192
+  temperature: 0.7
+  analysis_prompts:
+    hotel_analysis: |
+      다음 호텔 데이터를 분석하여 최적의 선택을 추천해주세요:
+      - 가격 대비 품질 분석
+      - 위치 및 편의성 평가
+      - 고객 평점 고려
+      - 예산별 추천 순위
+    flight_analysis: |
+      다음 항공편 데이터를 분석하여 최적의 선택을 추천해주세요:
+      - 가격 대비 편의성 분석
+      - 항공사 신뢰도 평가
+      - 소요시간 고려
+      - 예산별 추천 순위
+
+# 사용자 기본 설정
+user_defaults:
+  origin: "Seoul (서울)"
+  country: "South Korea"
+  timezone: "Asia/Seoul"
+  currency: "KRW"
+  language: "ko"
+
+# 로깅 설정
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  screenshots_dir: "tmp/debug_screenshots"
+  reports_dir: "travel_scout_reports"

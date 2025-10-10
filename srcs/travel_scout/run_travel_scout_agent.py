@@ -45,6 +45,12 @@ async def run_agent(args):
                 raise ValueError("Missing required arguments for flight search.")
             print(f"✈️ Searching flights from {args.origin} to {args.destination}...")
             data = await agent.search_flights(args.origin, args.destination, args.departure_date, args.return_date)
+        
+        elif args.task == 'search_complete_travel':
+            if not all([args.origin, args.destination, args.check_in, args.check_out, args.guests]):
+                raise ValueError("Missing required arguments for complete travel search.")
+            print(f"🧳 Searching complete travel package from {args.origin} to {args.destination}...")
+            data = await agent.search_complete_travel(args.origin, args.destination, args.check_in, args.check_out, args.guests)
 
         print("✅ Task completed.")
         
@@ -69,7 +75,7 @@ async def run_agent(args):
 def main():
     """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
     parser = argparse.ArgumentParser(description="Run the Travel Scout Agent from the command line.")
-    parser.add_argument("--task", required=True, choices=['search_hotels', 'search_flights'], help="The task for the agent to perform.")
+    parser.add_argument("--task", required=True, choices=['search_hotels', 'search_flights', 'search_complete_travel'], help="The task for the agent to perform.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
     
     # 호텔 검색 인자

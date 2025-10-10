@@ -25,6 +25,7 @@ except ImportError:
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from .config_loader import config
 
 logger = logging.getLogger(__name__)
 
@@ -33,23 +34,24 @@ class MCPBrowserClient:
     """MCP Browser Client - 설정 기반"""
     
     def __init__(self, 
-                 headless: bool = True, 
-                 disable_gpu: bool = True,
+                 headless: bool = None, 
+                 disable_gpu: bool = None,
                  streamlit_container = None,
                  screenshot_dir: Optional[str] = None):
         
-        # 기본 설정값 직접 지정
+        # 설정 파일에서 브라우저 설정 로드
+        browser_config = config.get_browser_config()
         self.browser_settings = {
-            'headless': headless,
-            'disable_gpu': disable_gpu,
-            'timeout': 30000,
-            'window_size': [1280, 720],
-            'debug_screenshots': True
+            'headless': headless if headless is not None else browser_config.get('headless', True),
+            'disable_gpu': disable_gpu if disable_gpu is not None else browser_config.get('disable_gpu', True),
+            'timeout': browser_config.get('timeout', 30000),
+            'window_size': browser_config.get('window_size', [1280, 720]),
+            'debug_screenshots': browser_config.get('debug_screenshots', True)
         }
         
         # 브라우저 설정
-        self.headless = headless
-        self.disable_gpu = disable_gpu
+        self.headless = self.browser_settings['headless']
+        self.disable_gpu = self.browser_settings['disable_gpu']
         
         # Streamlit 통합
         self.streamlit_container = streamlit_container
@@ -63,11 +65,11 @@ class MCPBrowserClient:
         self.screenshots: List[str] = [] # 파일 경로만 저장하도록 변경
         
         # 성능 설정
-        self.max_screenshots = 20 # 스크린샷 최대 개수 증가
-        self.timeout = self.browser_settings.get('timeout', 30000)
+        self.max_screenshots = browser_config.get('max_screenshots', 20)
+        self.timeout = self.browser_settings['timeout']
         
         # 디버그 설정
-        self.debug_screenshots = self.browser_settings.get('debug_screenshots', True)
+        self.debug_screenshots = self.browser_settings['debug_screenshots']
         self.screenshots_dir = screenshot_dir or self._setup_screenshots_dir()
     
     def _setup_screenshots_dir(self) -> str:
@@ -77,33 +79,33 @@ class MCPBrowserClient:
         return base_dir
     
     def _get_server_command(self) -> List[str]:
-        """MCP 서버 명령어 생성 - 하드코딩 제거"""
-        possible_paths = [
-            "node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js",
-            "../node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js",
-            "/usr/local/lib/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js",
-            os.path.expanduser("~/.npm-global/lib/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js")
-        ]
+        """MCP 서버 명령어 생성 - 설정 기반"""
+        mcp_config = config.get_mcp_server_config()
+        possible_paths = mcp_config.get('possible_paths', [])
         
         for path in possible_paths:
-            if os.path.exists(path):
-                return ["node", path]
+            # ~ 경로 확장
+            expanded_path = os.path.expanduser(path)
+            if os.path.exists(expanded_path):
+                return ["node", expanded_path]
         
-        # 마지막 시도: npm으로 설치된 패키지 찾기
+        # npm으로 설치된 패키지 찾기
         try:
             result = subprocess.run(
                 ["npm", "list", "@modelcontextprotocol/server-puppeteer", "--depth=0", "--json"],
-                capture_output=True, text=True, check=False
+                capture_output=True, text=True, check=True
             )
-            if result.returncode == 0:
-                npm_data = json.loads(result.stdout)
-                if "dependencies" in npm_data and "@modelcontextprotocol/server-puppeteer" in npm_data["dependencies"]:
-                    return ["npx", "@modelcontextprotocol/server-puppeteer"]
-        except Exception as e:
-            logger.warning(f"npm 패키지 검색 실패: {e}")
+            npm_data = json.loads(result.stdout)
+            if "dependencies" in npm_data and "@modelcontextprotocol/server-puppeteer" in npm_data["dependencies"]:
+                return ["npx", "@modelcontextprotocol/server-puppeteer"]
+        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            logger.error(f"npm 패키지 검색 실패: {e}")
         
-        # 기본 fallback
-        return ["npx", "@modelcontextprotocol/server-puppeteer"]
+        # 명시적 에러 발생 - fallback 제거
+        raise FileNotFoundError(
+            "MCP Puppeteer 서버를 찾을 수 없습니다. "
+            "다음 명령어로 설치하세요: npm install @modelcontextprotocol/server-puppeteer"
+        )
     
     def _get_browser_args(self) -> List[str]:
         """브라우저 인수 생성 - 설정 기반"""
