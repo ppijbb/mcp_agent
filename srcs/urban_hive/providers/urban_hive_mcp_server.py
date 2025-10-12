@@ -53,7 +53,7 @@ PUBLIC_DATA_APIS = {
 async def fetch_real_data(endpoint: str, params: Optional[Dict] = None) -> Dict:
     """
     Fetch data from public APIs using the PublicDataClient.
-    Falls back to simulated data if APIs are unavailable.
+    No fallbacks - raises explicit errors when data is unavailable.
     """
     try:
         # Use the new PublicDataClient for actual data
@@ -76,19 +76,15 @@ async def fetch_real_data(endpoint: str, params: Optional[Dict] = None) -> Dict:
         elif endpoint == "urban-data/safety":
             return await public_data_client.fetch_safety_data()
         else:
-            # Try fallback to internal API
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{API_BASE_URL}/{endpoint}")
-                if response.status_code == 200:
-                    return response.json()
+            # No fallback - raise explicit error for unknown endpoints
+            raise ExternalDataUnavailableError(
+                f"Unknown endpoint '{endpoint}' - no data source configured"
+            )
     except Exception as e:
         # Bubble up detailed error – no silent fallback
         raise ExternalDataUnavailableError(
             f"Could not fetch data for endpoint '{endpoint}': {e}"
         )
-    
-    # Should never reach here – added to satisfy type checker
-    raise ExternalDataUnavailableError(f"Unhandled error fetching data for {endpoint}")
 
 @server.list_resources()
 async def list_resources() -> List[Resource]:
@@ -264,12 +260,24 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         api_type = arguments["api_type"]
         location = arguments["location"]
         
-        # This would connect to real public APIs
-        # For now, return simulated real-time data
-        result = f"Real-time {api_type} data for {location}:\n"
-        result += f"- Status: Active monitoring\n"
-        result += f"- Last updated: {datetime.now().isoformat()}\n"
-        result += f"- Data source: Public API integration"
+        # Connect to real public APIs - no simulation
+        try:
+            if api_type == "air_quality":
+                data = await fetch_real_data("urban-data/air-quality")
+            elif api_type == "traffic_live":
+                data = await fetch_real_data("urban-data/traffic")
+            elif api_type == "emergency_alerts":
+                data = await fetch_real_data("urban-data/emergency")
+            else:
+                raise ExternalDataUnavailableError(f"Unknown API type: {api_type}")
+            
+            result = f"Real-time {api_type} data for {location}:\n"
+            result += f"- Data: {json.dumps(data, indent=2)}\n"
+            result += f"- Last updated: {datetime.now().isoformat()}\n"
+            result += f"- Data source: Public API integration"
+            
+        except Exception as e:
+            raise ExternalDataUnavailableError(f"Failed to fetch real-time {api_type} data: {e}")
         
         return [TextContent(type="text", text=result)]
     

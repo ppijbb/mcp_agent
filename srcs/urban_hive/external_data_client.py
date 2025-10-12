@@ -199,20 +199,24 @@ class ExternalDataManager:
         # Try API first
         try:
             districts = await self.api_client.fetch_districts(region)
-        except ExternalDataUnavailableError:
-            districts = []
+            if districts:
+                self._update_cache(cache_key, districts)
+                return districts
+        except ExternalDataUnavailableError as e:
+            self.logger.warning(f"API failed for districts in {region}: {e}")
         
         # Try MCP as fallback
-        if not districts:
+        try:
             districts = await self.mcp_client.get_districts_from_mcp(region)
+            if districts:
+                self._update_cache(cache_key, districts)
+                return districts
+        except Exception as e:
+            self.logger.warning(f"MCP failed for districts in {region}: {e}")
         
-        # Only cache if we actually got data
-        if districts:
-            self._update_cache(cache_key, districts)
-            return districts
-        
+        # No data available from any source
         raise ExternalDataUnavailableError(
-            f"No external data available for districts in {region}"
+            f"No external data available for districts in {region} from any source"
         )
     
     async def get_community_data(self) -> Dict[str, List]:
@@ -225,21 +229,23 @@ class ExternalDataManager:
         # Try API first
         try:
             data = await self.api_client.fetch_community_data()
-        except ExternalDataUnavailableError:
-            data = {"members": [], "groups": []}
+            if data.get("members") or data.get("groups"):
+                self._update_cache(cache_key, data)
+                return data
+        except ExternalDataUnavailableError as e:
+            self.logger.warning(f"API failed for community data: {e}")
         
         # Try MCP as fallback
-        if not data.get("members") and not data.get("groups"):
+        try:
             mcp_data = await self.mcp_client.get_community_from_mcp()
-            if mcp_data:
-                data = mcp_data
+            if mcp_data and (mcp_data.get("members") or mcp_data.get("groups")):
+                self._update_cache(cache_key, mcp_data)
+                return mcp_data
+        except Exception as e:
+            self.logger.warning(f"MCP failed for community data: {e}")
         
-        # Only cache if we actually got data
-        if data.get("members") or data.get("groups"):
-            self._update_cache(cache_key, data)
-            return data
-        
-        raise ExternalDataUnavailableError("No external community data available")
+        # No data available from any source
+        raise ExternalDataUnavailableError("No external community data available from any source")
     
     async def get_resource_data(self) -> Dict[str, List]:
         """Get resource data from external sources only."""
@@ -251,21 +257,23 @@ class ExternalDataManager:
         # Try API first
         try:
             data = await self.api_client.fetch_resource_data()
-        except ExternalDataUnavailableError:
-            data = {"available": [], "requests": []}
+            if data.get("available") or data.get("requests"):
+                self._update_cache(cache_key, data)
+                return data
+        except ExternalDataUnavailableError as e:
+            self.logger.warning(f"API failed for resource data: {e}")
         
         # Try MCP as fallback
-        if not data.get("available") and not data.get("requests"):
+        try:
             mcp_data = await self.mcp_client.get_resources_from_mcp()
-            if mcp_data:
-                data = mcp_data
+            if mcp_data and (mcp_data.get("available") or mcp_data.get("requests")):
+                self._update_cache(cache_key, mcp_data)
+                return mcp_data
+        except Exception as e:
+            self.logger.warning(f"MCP failed for resource data: {e}")
         
-        # Only cache if we actually got data
-        if data.get("available") or data.get("requests"):
-            self._update_cache(cache_key, data)
-            return data
-        
-        raise ExternalDataUnavailableError("No external resource data available")
+        # No data available from any source
+        raise ExternalDataUnavailableError("No external resource data available from any source")
     
     async def get_activity_data(self, category: str = None) -> List[Dict]:
         """Get activity data from external sources only."""
@@ -277,14 +285,13 @@ class ExternalDataManager:
         # Only try API - no MCP equivalent for activities
         try:
             activities = await self.api_client.fetch_activity_data(category)
-        except ExternalDataUnavailableError:
-            activities = []
+            if activities:
+                self._update_cache(cache_key, activities)
+                return activities
+        except ExternalDataUnavailableError as e:
+            self.logger.warning(f"API failed for activity data (category: {category}): {e}")
         
-        # Only cache if we actually got data
-        if activities:
-            self._update_cache(cache_key, activities)
-            return activities
-        
+        # No data available
         raise ExternalDataUnavailableError(
             f"No external activity data available for category: {category}"
         )

@@ -1,7 +1,7 @@
 """
-AI Text Analyzer
+AI Text Analyzer - Gemini 2.5 Flash Lite 전용
 
-Uses LLM to analyze text for:
+Uses Google Gemini 2.5 Flash Lite to analyze text for:
 1. Resource query intent classification (offer/request)
 2. Interest categorization for social connections
 3. Context understanding without hard-coded keywords
@@ -12,43 +12,28 @@ import os
 from typing import Dict, List, Tuple, Optional
 import asyncio
 from datetime import datetime
+import google.generativeai as genai
+from .config import get_llm_config
+from .exceptions import ExternalDataUnavailableError
 
 
 class AITextAnalyzer:
-    """AI-powered text analysis for Urban Hive agents."""
+    """AI-powered text analysis using Google Gemini 2.5 Flash Lite."""
     
-    def __init__(self, llm_provider="anthropic"):
-        """Initialize the AI text analyzer with specified LLM provider."""
-        self.llm_provider = llm_provider
-        self._setup_llm_client()
+    def __init__(self):
+        """Initialize the AI text analyzer with Gemini configuration."""
+        self.config = get_llm_config()
+        self._setup_gemini_client()
     
-    def _setup_llm_client(self):
-        """Setup LLM client based on provider preference."""
-        try:
-            if self.llm_provider == "anthropic":
-                try:
-                    import anthropic
-                    self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-                    self.model = "claude-3-haiku-20240307"
-                except ImportError:
-                    print("Anthropic not available, falling back to OpenAI")
-                    self._setup_openai_client()
-            else:
-                self._setup_openai_client()
-        except Exception as e:
-            print(f"Error setting up LLM client: {e}")
-            self.client = None
-    
-    def _setup_openai_client(self):
-        """Setup OpenAI client as fallback."""
-        try:
-            import openai
-            self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = "gemini-2.5-flash-lite-preview-06-07"
-            self.llm_provider = "openai"
-        except ImportError:
-            print("No LLM client available")
-            self.client = None
+    def _setup_gemini_client(self):
+        """Setup Gemini client with configuration."""
+        if not self.config.api_key:
+            raise ExternalDataUnavailableError(
+                "GOOGLE_API_KEY environment variable is required for AI text analysis"
+            )
+        
+        genai.configure(api_key=self.config.api_key)
+        self.model = genai.GenerativeModel(self.config.model)
     
     async def analyze_resource_intent(self, query: str) -> Tuple[str, Dict]:
         """
@@ -59,9 +44,6 @@ class AITextAnalyzer:
             - intent_type: "offer", "request", or "general"
             - analysis_result: detailed analysis including extracted items and context
         """
-        if not self.client:
-            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
-        
         try:
             prompt = f"""
 사용자의 텍스트를 분석하여 의도를 파악해주세요.
@@ -86,11 +68,7 @@ class AITextAnalyzer:
 한국어와 영어 모두 이해하여 분석해주세요.
 """
             
-            if self.llm_provider == "anthropic":
-                response = await self._call_anthropic(prompt)
-            else:
-                response = await self._call_openai(prompt)
-            
+            response = await self._call_gemini(prompt)
             result = json.loads(response)
             
             return result.get("intent", "general"), {
@@ -103,9 +81,7 @@ class AITextAnalyzer:
             }
             
         except Exception as e:
-            print(f"Error in AI resource intent analysis: {e}")
-            # No fallback - raise the actual error for proper handling
-            raise RuntimeError(f"Resource intent analysis failed: {e}") from e
+            raise ExternalDataUnavailableError(f"Resource intent analysis failed: {e}") from e
     
     async def analyze_interests(self, interests_text: str) -> List[str]:
         """
@@ -114,9 +90,6 @@ class AITextAnalyzer:
         Returns:
             List[str]: List of interest categories
         """
-        if not self.client:
-            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
-        
         try:
             prompt = f"""
 사용자의 관심사 텍스트를 분석하여 적절한 카테고리로 분류해주세요.
@@ -153,18 +126,12 @@ class AITextAnalyzer:
 한국어와 영어 모두 분석 가능합니다.
 """
             
-            if self.llm_provider == "anthropic":
-                response = await self._call_anthropic(prompt)
-            else:
-                response = await self._call_openai(prompt)
-            
+            response = await self._call_gemini(prompt)
             result = json.loads(response)
             return result.get("categories", ["social"])
             
         except Exception as e:
-            print(f"Error in AI interests analysis: {e}")
-            # No fallback - raise the actual error for proper handling
-            raise RuntimeError(f"Interests analysis failed: {e}") from e
+            raise ExternalDataUnavailableError(f"Interests analysis failed: {e}") from e
     
     async def assess_isolation_risk(self, user_profile: Dict) -> Tuple[str, str]:
         """
@@ -173,9 +140,6 @@ class AITextAnalyzer:
         Returns:
             Tuple[str, str]: (risk_level, reasoning)
         """
-        if not self.client:
-            raise RuntimeError("AI client not configured. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable.")
-        
         try:
             interests = user_profile.get('interests', '')
             name = user_profile.get('name', 'Unknown')
@@ -206,53 +170,27 @@ class AITextAnalyzer:
 한국어와 영어 모두 분석 가능합니다.
 """
             
-            if self.llm_provider == "anthropic":
-                response = await self._call_anthropic(prompt)
-            else:
-                response = await self._call_openai(prompt)
-            
+            response = await self._call_gemini(prompt)
             result = json.loads(response)
             return result.get("risk_level", "low"), result.get("reasoning", "AI 분석 완료")
             
         except Exception as e:
-            print(f"Error in AI isolation risk assessment: {e}")
-            # No fallback - raise the actual error for proper handling
-            raise RuntimeError(f"Isolation risk assessment failed: {e}") from e
+            raise ExternalDataUnavailableError(f"Isolation risk assessment failed: {e}") from e
     
-    async def _call_anthropic(self, prompt: str) -> str:
-        """Call Anthropic Claude API."""
+    async def _call_gemini(self, prompt: str) -> str:
+        """Call Google Gemini API."""
         try:
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=1000,
-                temperature=0.1,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.config.temperature,
+                    max_output_tokens=self.config.max_tokens,
+                )
             )
-            return message.content[0].text
+            return response.text
         except Exception as e:
-            raise Exception(f"Anthropic API error: {e}")
-    
-    async def _call_openai(self, prompt: str) -> str:
-        """Call OpenAI GPT API."""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{
-                    "role": "user", 
-                    "content": prompt
-                }],
-                max_tokens=1000,
-                temperature=0.1
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"OpenAI API error: {e}")
-    
-# All fallback methods removed - Urban Hive now uses real AI analysis only
+            raise ExternalDataUnavailableError(f"Gemini API error: {e}") from e
 
 
 # Global instance
-ai_text_analyzer = AITextAnalyzer() 
+ai_text_analyzer = AITextAnalyzer()

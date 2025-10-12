@@ -11,6 +11,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.urban_hive.urban_hive_agent import UrbanHiveMCPAgent, UrbanDataCategory
+from srcs.urban_hive.config import get_llm_config
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 class DataclassJSONEncoder(json.JSONEncoder):
@@ -45,7 +46,10 @@ async def main():
     result_json_path = Path(args.result_json_path)
     result_json_path.parent.mkdir(parents=True, exist_ok=True)
     
-    agent = UrbanHiveMCPAgent(output_dir=str(result_json_path.parent))
+    # Get LLM configuration
+    llm_config = get_llm_config()
+    
+    agent = UrbanHiveMCPAgent()
 
     parsing_prompt = f"""
 You are a helpful assistant that parses user queries for urban data analysis.
@@ -71,9 +75,12 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
 """
     try:
         print("1. Parsing prompt to extract parameters...")
-        parsed_params_str = await agent.parser_llm.generate_str(
+        parsed_params_str = await agent.app.llm_factory.create_llm().generate_str(
             message=parsing_prompt,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.0)
+            request_params=RequestParams(
+                model=llm_config.model, 
+                temperature=llm_config.temperature
+            )
         )
         parsed_params_str = parsed_params_str.strip().removeprefix("```json").removesuffix("```").strip()
         params = json.loads(parsed_params_str)
@@ -89,11 +96,13 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
         category = UrbanDataCategory[category_str]
         
         print("\n2. Running urban data analysis...")
-        analysis_result = await agent.analyze_urban_data(
-            category=category,
-            location=location,
-            time_range=time_range
-        )
+        # Use the agent's run method with proper context
+        context = {
+            "category": category,
+            "location": location,
+            "time_range": time_range
+        }
+        analysis_result = await agent.run(context)
         print("   - Analysis complete.")
 
         print("\n3. Saving results...")

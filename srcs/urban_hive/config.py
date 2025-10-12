@@ -101,12 +101,27 @@ class UrbanDataConfig:
 
 
 @dataclass
+class LLMConfig:
+    """LLM configuration settings."""
+    provider: str = os.getenv("LLM_PROVIDER", "google")
+    model: str = os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
+    temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+    max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+    api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    
+    def __post_init__(self):
+        if not self.api_key and self.provider == "google":
+            raise ValueError("GOOGLE_API_KEY environment variable is required for Google LLM provider")
+
+
+@dataclass
 class SystemConfig:
     """Overall system configuration."""
     api: APIConfig = None
     cache: CacheConfig = None
     data_generation: DataGenerationConfig = None
     urban_data: UrbanDataConfig = None
+    llm: LLMConfig = None
     
     # Logging settings
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
@@ -125,6 +140,8 @@ class SystemConfig:
             self.data_generation = DataGenerationConfig()
         if self.urban_data is None:
             self.urban_data = UrbanDataConfig()
+        if self.llm is None:
+            self.llm = LLMConfig()
 
 
 # Global configuration instance
@@ -150,6 +167,11 @@ def get_data_generation_config() -> DataGenerationConfig:
 def get_urban_data_config() -> UrbanDataConfig:
     """Get urban data configuration."""
     return config.urban_data
+
+
+def get_llm_config() -> LLMConfig:
+    """Get LLM configuration."""
+    return config.llm
 
 
 def update_config_from_env():
@@ -187,6 +209,28 @@ def update_config_from_env():
     
     if os.getenv("PROVIDER_BASE_URL"):  
         config.provider_base_url = os.getenv("PROVIDER_BASE_URL")
+    
+    # LLM settings
+    if os.getenv("LLM_PROVIDER"):
+        config.llm.provider = os.getenv("LLM_PROVIDER")
+    
+    if os.getenv("LLM_MODEL"):
+        config.llm.model = os.getenv("LLM_MODEL")
+    
+    if os.getenv("LLM_TEMPERATURE"):
+        try:
+            config.llm.temperature = float(os.getenv("LLM_TEMPERATURE"))
+        except ValueError:
+            pass
+    
+    if os.getenv("LLM_MAX_TOKENS"):
+        try:
+            config.llm.max_tokens = int(os.getenv("LLM_MAX_TOKENS"))
+        except ValueError:
+            pass
+    
+    if os.getenv("GOOGLE_API_KEY"):
+        config.llm.api_key = os.getenv("GOOGLE_API_KEY")
 
 
 def get_region_specific_config(region: str = "seoul") -> Dict:

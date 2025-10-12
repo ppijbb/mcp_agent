@@ -236,19 +236,11 @@ class PublicDataClient:
 
     async def fetch_community_data(self) -> Dict:
         """Fetch community member and group data from external sources only."""
-        try:
-            return await external_data_manager.get_community_data()
-        except Exception as e:
-            print(f"Error fetching community data from external sources: {e}")
-            return {"members": [], "groups": []}
+        return await external_data_manager.get_community_data()
 
     async def fetch_resource_data(self) -> Dict:
         """Fetch resource sharing data from external sources only."""
-        try:
-            return await external_data_manager.get_resource_data()
-        except Exception as e:
-            print(f"Error fetching resource data from external sources: {e}")
-            return {"available": [], "requests": []}
+        return await external_data_manager.get_resource_data()
 
     async def fetch_seoul_districts(self) -> List[str]:
         """
