@@ -23,9 +23,9 @@ class BusinessDataScoutMCPAgent:
         
     async def run_data_collection(self, keywords, regions=None):
         async with self.app.run() as scout_app:
-            # Use standard MCPAgent orchestration
+            # Use standard MCPAgent orchestration with Gemini 2.5 Flash
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=lambda: OpenAIAugmentedLLM(model="gemini-2.5-flash"),
                 available_agents=agents,
                 plan_type="full"
             )

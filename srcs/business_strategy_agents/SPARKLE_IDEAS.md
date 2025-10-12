@@ -241,7 +241,7 @@ python run_streamlit.py --debug
 ## 🎯 **기술 스택 & 요구사항**
 
 ### **현재 기술 스택**
-- **Backend**: Python, OpenAI GPT-4, Async/Await
+- **Backend**: Python, Google Gemini 2.5 Flash, Async/Await
 - **Frontend**: Streamlit, Plotly, Pandas
 - **Extensions**: Custom Agent Personality System
 - **Testing**: Pytest, Mock System

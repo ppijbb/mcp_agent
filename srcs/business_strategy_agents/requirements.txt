@@ -1,0 +1,35 @@
+# Business Strategy Agents Requirements
+# 2025년 10월 기준 최신 의존성
+
+# Core dependencies
+mcp-agent>=1.0.0
+PyYAML>=6.0
+
+# AI/ML dependencies
+google-generativeai>=0.8.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# HTTP and API clients
+aiohttp>=3.8.0
+httpx>=0.24.0
+
+# Async support
+asyncio-mqtt>=0.13.0
+
+# Logging and monitoring
+structlog>=23.0.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.0.0
+
+# Optional: Enhanced functionality
+# redis>=4.5.0  # For caching
+# celery>=5.3.0  # For background tasks
+# prometheus-client>=0.16.0  # For metrics

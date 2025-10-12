@@ -38,29 +38,35 @@ class TrendAnalyzerAgent(BaseAgent):
     async def run_workflow(self, focus_areas: List[str], time_horizon: str):
         """
         The core workflow for analyzing business trends.
+        각 에이전트가 독립적으로 판단하고 동작
         """
         async with self.app.run() as app_context:
-            self.logger.info(f"Starting trend analysis for: {focus_areas}")
+            self.logger.info(f"Starting independent trend analysis for: {focus_areas}")
             
             os.makedirs(self.output_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = f"trend_analysis_report_{timestamp}.md"
             output_path = os.path.join(self.output_dir, output_file)
 
-            # 1. Define specialized sub-agents
-            agents = self._create_trend_agents(focus_areas, time_horizon, output_path, app_context.llm_factory)
-            
-            # 2. Get a quality-controlled orchestrator
-            orchestrator = self.get_orchestrator(agents)
+            try:
+                # 1. Define specialized sub-agents with independent judgment
+                agents = self._create_trend_agents(focus_areas, time_horizon, output_path, app_context.llm_factory)
+                
+                # 2. Get a quality-controlled orchestrator with independent decision making
+                orchestrator = self.get_orchestrator(agents)
 
-            # 3. Define the main task
-            task = self._create_analysis_task(focus_areas, time_horizon, output_path)
+                # 3. Define the main task with independent agent requirements
+                task = self._create_analysis_task(focus_areas, time_horizon, output_path)
 
-            # 4. Run the orchestrator
-            final_report = await orchestrator.run(task)
-            
-            self.logger.info(f"Trend analysis complete. Report saved to {output_path}")
-            return {"report_path": output_path, "content": final_report}
+                # 4. Run the orchestrator with independent agent execution
+                final_report = await orchestrator.run(task)
+                
+                self.logger.info(f"Independent trend analysis complete. Report saved to {output_path}")
+                return {"report_path": output_path, "content": final_report}
+                
+            except Exception as e:
+                self.logger.error(f"Independent trend analysis failed: {e}")
+                raise
 
     def _create_trend_agents(self, focus_areas: List[str], time_horizon: str, output_path: str, llm_factory) -> List[Agent]:
         """Create specialized trend analysis agents"""

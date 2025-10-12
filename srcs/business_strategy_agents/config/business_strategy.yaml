@@ -1,0 +1,356 @@
+# Business Strategy Agents Configuration
+# 2025년 10월 기준 최신 설정
+
+system:
+  name: "Most Hooking Business Strategy Agent"
+  version: "2.0.0"
+  environment: "production"
+  log_level: "INFO"
+  data_retention_days: 30
+
+# AI 모델 설정 - Gemini 2.5 Flash 전용
+ai_model:
+  default_model: "gemini-2.5-flash"
+  temperature: 0.7
+  top_p: 0.9
+  max_output_tokens: 2048
+  safety_settings: []
+
+# 모니터링 설정
+monitoring:
+  collection_interval: 300  # seconds
+  batch_size: 100
+  max_concurrent_requests: 10
+  hooking_score_threshold: 0.7
+  sentiment_threshold: 0.5
+  keywords:
+    - "AI"
+    - "artificial intelligence"
+    - "machine learning"
+    - "deep learning"
+    - "startup"
+    - "unicorn"
+    - "IPO"
+    - "funding"
+    - "investment"
+    - "venture capital"
+    - "technology"
+    - "fintech"
+    - "healthtech"
+    - "edtech"
+    - "climate tech"
+    - "market trend"
+    - "consumer behavior"
+    - "digital transformation"
+    - "e-commerce"
+    - "social commerce"
+    - "creator economy"
+    - "Web3"
+    - "blockchain"
+    - "cryptocurrency"
+    - "NFT"
+    - "metaverse"
+    - "sustainability"
+    - "ESG"
+    - "green technology"
+    - "renewable energy"
+
+# 지역 설정
+regions:
+  enabled:
+    - "east_asia"
+    - "north_america"
+  timezones:
+    east_asia: "Asia/Seoul"
+    north_america: "America/New_York"
+  languages:
+    east_asia: ["ko", "ja", "zh"]
+    north_america: ["en"]
+  market_hours:
+    east_asia:
+      open: "09:00"
+      close: "18:00"
+    north_america:
+      open: "09:30"
+      close: "16:00"
+
+# API 설정
+apis:
+  news:
+    reuters:
+      base_url: "https://api.reuters.com/v1/"
+      rate_limit: 100
+      timeout: 30
+      retry_count: 3
+    bloomberg:
+      base_url: "https://api.bloomberg.com/v1/"
+      rate_limit: 50
+      timeout: 30
+      retry_count: 3
+    naver:
+      base_url: "https://openapi.naver.com/v1/search/"
+      rate_limit: 25000
+      timeout: 30
+      retry_count: 3
+  social:
+    twitter:
+      base_url: "https://api.twitter.com/2/"
+      rate_limit: 300
+      timeout: 30
+      retry_count: 3
+    linkedin:
+      base_url: "https://api.linkedin.com/v2/"
+      rate_limit: 100
+      timeout: 30
+      retry_count: 3
+    weibo:
+      base_url: "https://api.weibo.com/2/"
+      rate_limit: 150
+      timeout: 30
+      retry_count: 3
+  community:
+    reddit:
+      base_url: "https://www.reddit.com/api/v1/"
+      rate_limit: 60
+      timeout: 30
+      retry_count: 3
+    hackernews:
+      base_url: "https://hacker-news.firebaseio.com/v0/"
+      rate_limit: 1000
+      timeout: 30
+      retry_count: 3
+  trends:
+    google_trends:
+      base_url: "https://trends.googleapis.com/trends/api/"
+      rate_limit: 100
+      timeout: 30
+      retry_count: 3
+  business:
+    crunchbase:
+      base_url: "https://api.crunchbase.com/api/v4/"
+      rate_limit: 200
+      timeout: 30
+      retry_count: 3
+    pitchbook:
+      base_url: "https://api.pitchbook.com/v1/"
+      rate_limit: 100
+      timeout: 30
+      retry_count: 3
+
+# MCP 서버 설정
+mcp_servers:
+  google_drive:
+    server_name: "google_drive"
+    url: "http://localhost:3001"
+  data_sourcing:
+    server_name: "data_sourcing"
+    url: "http://localhost:3005"
+  g_search:
+    server_name: "g-search"
+    url: "http://localhost:3002"
+  fetch:
+    server_name: "fetch"
+    url: "http://localhost:3003"
+  filesystem:
+    server_name: "filesystem"
+    url: "http://localhost:3004"
+
+# Notion 설정
+notion:
+  database_templates:
+    daily_insights:
+      properties:
+        Title:
+          title: {}
+        Date:
+          date: {}
+        Region:
+          select:
+            options: []
+        Category:
+          select:
+            options: []
+        Hooking Score:
+          number:
+            format: "percent"
+        Business Opportunity:
+          select:
+            options: []
+        Key Insights:
+          rich_text: {}
+        Action Items:
+          rich_text: {}
+        ROI Prediction:
+          rich_text: {}
+        Status:
+          select:
+            options: []
+
+# 출력 설정
+output:
+  notion:
+    enabled: true
+    update_frequency: "daily"
+  slack:
+    enabled: true
+    critical_alerts: true
+    daily_summary: true
+  email:
+    enabled: false
+    recipients: []
+
+# 키워드 분류 패턴
+keyword_categories:
+  기술:
+    - "ai"
+    - "artificial intelligence"
+    - "machine learning"
+    - "ml"
+    - "deep learning"
+    - "neural network"
+    - "python"
+    - "javascript"
+    - "react"
+    - "node.js"
+    - "docker"
+    - "kubernetes"
+    - "aws"
+    - "cloud"
+    - "blockchain"
+    - "cryptocurrency"
+    - "iot"
+    - "5g"
+    - "quantum"
+    - "automation"
+    - "robotics"
+    - "api"
+    - "microservices"
+    - "devops"
+    - "cicd"
+    - "git"
+    - "database"
+    - "sql"
+    - "nosql"
+    - "cybersecurity"
+    - "encryption"
+    - "data science"
+    - "big data"
+    - "analytics"
+    - "visualization"
+  비즈니스:
+    - "strategy"
+    - "전략"
+    - "business model"
+    - "revenue"
+    - "profit"
+    - "growth"
+    - "expansion"
+    - "market share"
+    - "competition"
+    - "competitive advantage"
+    - "roi"
+    - "kpi"
+    - "metrics"
+    - "sales"
+    - "marketing"
+    - "branding"
+    - "customer"
+    - "client"
+    - "partnership"
+    - "merger"
+    - "acquisition"
+    - "investment"
+    - "funding"
+    - "venture capital"
+    - "ipo"
+    - "valuation"
+    - "operations"
+    - "efficiency"
+    - "productivity"
+    - "cost reduction"
+    - "optimization"
+  마케팅:
+    - "seo"
+    - "sem"
+    - "social media"
+    - "content marketing"
+    - "email marketing"
+    - "influencer"
+    - "advertising"
+    - "campaign"
+    - "brand awareness"
+    - "lead generation"
+    - "conversion"
+    - "funnel"
+    - "customer acquisition"
+    - "retention"
+    - "engagement"
+    - "viral"
+    - "trending"
+    - "analytics"
+    - "tracking"
+    - "attribution"
+    - "personalization"
+    - "segmentation"
+    - "a/b testing"
+    - "landing page"
+    - "ctr"
+    - "cpc"
+    - "cpm"
+    - "roas"
+    - "ltv"
+  산업:
+    - "healthcare"
+    - "fintech"
+    - "edtech"
+    - "e-commerce"
+    - "retail"
+    - "manufacturing"
+    - "automotive"
+    - "energy"
+    - "renewable"
+    - "sustainability"
+    - "green tech"
+    - "cleantech"
+    - "real estate"
+    - "construction"
+    - "logistics"
+    - "supply chain"
+    - "transportation"
+    - "hospitality"
+    - "tourism"
+    - "entertainment"
+    - "gaming"
+    - "media"
+    - "publishing"
+    - "agriculture"
+    - "food tech"
+    - "biotech"
+    - "pharmaceutical"
+    - "medical device"
+  트렌드:
+    - "remote work"
+    - "hybrid"
+    - "digital transformation"
+    - "sustainability"
+    - "esg"
+    - "diversity"
+    - "inclusion"
+    - "mental health"
+    - "wellness"
+    - "work-life balance"
+    - "gig economy"
+    - "freelance"
+    - "subscription"
+    - "saas"
+    - "platform economy"
+    - "circular economy"
+    - "sharing economy"
+    - "experience economy"
+    - "creator economy"
+    - "metaverse"
+    - "nft"
+    - "web3"
+    - "decentralized"
+    - "dao"
+    - "defi"

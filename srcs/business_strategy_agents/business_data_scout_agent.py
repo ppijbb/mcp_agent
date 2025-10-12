@@ -59,29 +59,35 @@ class BusinessDataScoutAgent(BaseAgent):
     async def run_workflow(self, keywords: List[str], regions: List[str] | None = None):
         """
         The core workflow for scouting and collecting business data.
+        각 에이전트가 독립적으로 판단하고 동작
         """
         async with self.app.run() as app_context:
-            self.logger.info(f"Starting data scouting for keywords: {keywords}")
+            self.logger.info(f"Starting independent data scouting for keywords: {keywords}")
             
             os.makedirs(self.output_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = f"business_data_scout_report_{timestamp}.md"
             output_path = os.path.join(self.output_dir, output_file)
 
-            # 1. Define specialized sub-agents
-            agents = self._create_specialized_agents(keywords, regions, output_path, app_context.llm_factory)
-            
-            # 2. Get an orchestrator to manage them
-            orchestrator = self.get_orchestrator(agents)
+            try:
+                # 1. Define specialized sub-agents with independent judgment
+                agents = self._create_specialized_agents(keywords, regions, output_path, app_context.llm_factory)
+                
+                # 2. Get an orchestrator to manage them with independent decision making
+                orchestrator = self.get_orchestrator(agents)
 
-            # 3. Define the main task
-            task = self._create_data_collection_task(keywords, regions, output_path)
+                # 3. Define the main task with independent agent requirements
+                task = self._create_data_collection_task(keywords, regions, output_path)
 
-            # 4. Run the orchestrator
-            final_report = await orchestrator.run(task)
-            
-            self.logger.info(f"Data scouting complete. Report saved to {output_path}")
-            return {"report_path": output_path, "content": final_report}
+                # 4. Run the orchestrator with independent agent execution
+                final_report = await orchestrator.run(task)
+                
+                self.logger.info(f"Independent data scouting complete. Report saved to {output_path}")
+                return {"report_path": output_path, "content": final_report}
+                
+            except Exception as e:
+                self.logger.error(f"Independent data scouting failed: {e}")
+                raise
 
     def _create_specialized_agents(self, keywords, regions, output_path, llm_factory):
         """Create specialized agents for data collection"""
@@ -299,7 +305,7 @@ async def run_business_data_scout(
     """Asynchronously run the Business Data Scout MCPAgent."""
     os.makedirs(output_dir, exist_ok=True)
 
-    llm_factory = lambda: OpenAIAugmentedLLM(model="gemini-2.0-flash-lite-001")
+    llm_factory = lambda: OpenAIAugmentedLLM(model="gemini-2.5-flash")
 
     async with MCPApp(settings=get_settings("configs/mcp_agent.config.yaml")).run() as app:
         # Create agents
@@ -337,7 +343,7 @@ async def run_business_data_scout(
             # Run orchestrator
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.0-flash-lite-001"),
+                request_params=RequestParams(model="gemini-2.5-flash"),
             )
 
             # Save result

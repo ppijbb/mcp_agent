@@ -9,7 +9,7 @@ import os
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
-import json
+import yaml
 
 
 @dataclass
@@ -65,170 +65,33 @@ class Config:
     
     def _get_default_config_path(self) -> str:
         """기본 설정 파일 경로"""
-        return os.path.join(os.path.dirname(__file__), '..', '..', 'configs', 'business_strategy.json')
+        return os.path.join(os.path.dirname(__file__), 'config', 'business_strategy.yaml')
     
     def _load_config(self):
-        """설정 파일 로드"""
+        """설정 파일 로드 - 명시적 에러 처리"""
+        if not os.path.exists(self.config_path):
+            raise FileNotFoundError(f"Configuration file not found at {self.config_path}")
+        
         try:
-            if os.path.exists(self.config_path):
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    self.raw_config = json.load(f)
-            else:
-                self.raw_config = self._get_default_config()
-                self._save_config()
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                self.raw_config = yaml.safe_load(f)
         except Exception as e:
-            print(f"Failed to load config: {e}")
-            self.raw_config = self._get_default_config()
+            raise ValueError(f"Failed to load configuration: {e}")
     
-    def _get_default_config(self) -> Dict[str, Any]:
-        """기본 설정 반환"""
-        return {
-            "system": {
-                "name": "Most Hooking Business Strategy Agent",
-                "version": "1.0.0",
-                "environment": "development",
-                "log_level": "INFO",
-                "data_retention_days": 30
-            },
-            "monitoring": {
-                "collection_interval": 300,
-                "batch_size": 100,
-                "max_concurrent_requests": 10,
-                "hooking_score_threshold": 0.7,
-                "sentiment_threshold": 0.5,
-                "keywords": [
-                    "AI", "artificial intelligence", "machine learning", "deep learning",
-                    "startup", "unicorn", "IPO", "funding", "investment", "venture capital",
-                    "technology", "fintech", "healthtech", "edtech", "climate tech",
-                    "market trend", "consumer behavior", "digital transformation",
-                    "e-commerce", "social commerce", "creator economy",
-                    "Web3", "blockchain", "cryptocurrency", "NFT", "metaverse",
-                    "sustainability", "ESG", "green technology", "renewable energy"
-                ]
-            },
-            "regions": {
-                "enabled": ["east_asia", "north_america"],
-                "timezones": {
-                    "east_asia": "Asia/Seoul",
-                    "north_america": "America/New_York"
-                },
-                "languages": {
-                    "east_asia": ["ko", "ja", "zh"],
-                    "north_america": ["en"]
-                },
-                "market_hours": {
-                    "east_asia": {
-                        "open": "09:00",
-                        "close": "18:00"
-                    },
-                    "north_america": {
-                        "open": "09:30",
-                        "close": "16:00"
-                    }
-                }
-            },
-            "apis": {
-                "news": {
-                    "reuters": {
-                        "base_url": "https://api.reuters.com/v1/",
-                        "rate_limit": 100
-                    },
-                    "bloomberg": {
-                        "base_url": "https://api.bloomberg.com/v1/",
-                        "rate_limit": 50
-                    },
-                    "naver": {
-                        "base_url": "https://openapi.naver.com/v1/search/",
-                        "rate_limit": 25000
-                    }
-                },
-                "social": {
-                    "twitter": {
-                        "base_url": "https://api.twitter.com/2/",
-                        "rate_limit": 300
-                    },
-                    "linkedin": {
-                        "base_url": "https://api.linkedin.com/v2/",
-                        "rate_limit": 100
-                    },
-                    "weibo": {
-                        "base_url": "https://api.weibo.com/2/",
-                        "rate_limit": 150
-                    }
-                },
-                "community": {
-                    "reddit": {
-                        "base_url": "https://www.reddit.com/api/v1/",
-                        "rate_limit": 60
-                    },
-                    "hackernews": {
-                        "base_url": "https://hacker-news.firebaseio.com/v0/",
-                        "rate_limit": 1000
-                    }
-                },
-                "trends": {
-                    "google_trends": {
-                        "base_url": "https://trends.googleapis.com/trends/api/",
-                        "rate_limit": 100
-                    }
-                },
-                "business": {
-                    "crunchbase": {
-                        "base_url": "https://api.crunchbase.com/api/v4/",
-                        "rate_limit": 200
-                    },
-                    "pitchbook": {
-                        "base_url": "https://api.pitchbook.com/v1/",
-                        "rate_limit": 100
-                    }
-                }
-            },
-            "notion": {
-                "database_templates": {
-                    "daily_insights": {
-                        "properties": {
-                            "Title": {"title": {}},
-                            "Date": {"date": {}},
-                            "Region": {"select": {"options": []}},
-                            "Category": {"select": {"options": []}},
-                            "Hooking Score": {"number": {"format": "percent"}},
-                            "Business Opportunity": {"select": {"options": []}},
-                            "Key Insights": {"rich_text": {}},
-                            "Action Items": {"rich_text": {}},
-                            "ROI Prediction": {"rich_text": {}},
-                            "Status": {"select": {"options": []}}
-                        }
-                    }
-                }
-            },
-            "output": {
-                "notion": {
-                    "enabled": True,
-                    "update_frequency": "daily"
-                },
-                "slack": {
-                    "enabled": True,
-                    "critical_alerts": True,
-                    "daily_summary": True
-                },
-                "email": {
-                    "enabled": False,
-                    "recipients": []
-                }
-            }
-        }
+    def get_ai_model_config(self) -> Dict[str, Any]:
+        """AI 모델 설정 반환"""
+        return self.raw_config.get('ai_model', {})
     
-    def _save_config(self):
-        """설정 저장"""
-        try:
-            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(self.raw_config, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Failed to save config: {e}")
+    def get_mcp_servers_config(self) -> Dict[str, Any]:
+        """MCP 서버 설정 반환"""
+        return self.raw_config.get('mcp_servers', {})
+    
+    def get_keyword_categories_config(self) -> Dict[str, List[str]]:
+        """키워드 카테고리 설정 반환"""
+        return self.raw_config.get('keyword_categories', {})
     
     def _setup_api_configs(self):
-        """API 설정 초기화"""
+        """API 설정 초기화 - YAML 기반"""
         self.api_configs: Dict[str, APIConfig] = {}
         
         apis = self.raw_config.get('apis', {})
@@ -246,7 +109,7 @@ class Config:
                 )
     
     def _setup_monitoring_config(self):
-        """모니터링 설정 초기화"""
+        """모니터링 설정 초기화 - YAML 기반"""
         monitoring = self.raw_config.get('monitoring', {})
         self.monitoring = MonitoringConfig(
             collection_interval=monitoring.get('collection_interval', 300),
@@ -259,7 +122,7 @@ class Config:
         self.monitoring_keywords = monitoring.get('keywords', [])
     
     def _setup_region_config(self):
-        """지역 설정 초기화"""
+        """지역 설정 초기화 - YAML 기반"""
         regions = self.raw_config.get('regions', {})
         self.region = RegionConfig(
             enabled_regions=regions.get('enabled', []),
@@ -269,7 +132,7 @@ class Config:
         )
     
     def _setup_notion_config(self):
-        """Notion 설정 초기화"""
+        """Notion 설정 초기화 - YAML 기반"""
         notion_data = self.raw_config.get('notion', {})
         
         # 환경변수에서 Notion 설정 로드
@@ -292,12 +155,12 @@ class Config:
         return self.api_configs.get(api_name)
     
     def get_keywords_by_category(self, category: str) -> List[str]:
-        """카테고리별 키워드 반환"""
-        # TODO: 카테고리별 키워드 분류 로직 구현
-        return self.monitoring_keywords
+        """카테고리별 키워드 반환 - YAML 기반"""
+        keyword_categories = self.get_keyword_categories_config()
+        return keyword_categories.get(category, [])
     
     def update_config(self, key_path: str, value: Any):
-        """설정 업데이트"""
+        """설정 업데이트 - YAML 기반"""
         keys = key_path.split('.')
         current = self.raw_config
         
@@ -307,7 +170,13 @@ class Config:
             current = current[key]
         
         current[keys[-1]] = value
-        self._save_config()
+        # YAML 파일로 저장
+        try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(self.raw_config, f, default_flow_style=False, allow_unicode=True, indent=2)
+        except Exception as e:
+            raise ValueError(f"Failed to save configuration: {e}")
     
     def get_system_info(self) -> Dict[str, Any]:
         """시스템 정보 반환"""
@@ -386,46 +255,11 @@ def validate_config() -> List[str]:
     return issues 
 
 def classify_keywords_by_category(keywords: List[str]) -> Dict[str, List[str]]:
-    """카테고리별 키워드 분류 로직 구현"""
+    """카테고리별 키워드 분류 로직 구현 - YAML 기반"""
     
-    # 카테고리별 키워드 패턴 정의
-    category_patterns = {
-        "기술": [
-            "ai", "artificial intelligence", "machine learning", "ml", "deep learning", "neural network",
-            "python", "javascript", "react", "node.js", "docker", "kubernetes", "aws", "cloud",
-            "blockchain", "cryptocurrency", "iot", "5g", "quantum", "automation", "robotics",
-            "api", "microservices", "devops", "cicd", "git", "database", "sql", "nosql",
-            "cybersecurity", "encryption", "data science", "big data", "analytics", "visualization"
-        ],
-        "비즈니스": [
-            "strategy", "전략", "business model", "revenue", "profit", "growth", "expansion",
-            "market share", "competition", "competitive advantage", "roi", "kpi", "metrics",
-            "sales", "marketing", "branding", "customer", "client", "partnership", "merger",
-            "acquisition", "investment", "funding", "venture capital", "ipo", "valuation",
-            "operations", "efficiency", "productivity", "cost reduction", "optimization"
-        ],
-        "마케팅": [
-            "seo", "sem", "social media", "content marketing", "email marketing", "influencer",
-            "advertising", "campaign", "brand awareness", "lead generation", "conversion",
-            "funnel", "customer acquisition", "retention", "engagement", "viral", "trending",
-            "analytics", "tracking", "attribution", "personalization", "segmentation",
-            "a/b testing", "landing page", "ctr", "cpc", "cpm", "roas", "ltv"
-        ],
-        "산업": [
-            "healthcare", "fintech", "edtech", "e-commerce", "retail", "manufacturing",
-            "automotive", "energy", "renewable", "sustainability", "green tech", "cleantech",
-            "real estate", "construction", "logistics", "supply chain", "transportation",
-            "hospitality", "tourism", "entertainment", "gaming", "media", "publishing",
-            "agriculture", "food tech", "biotech", "pharmaceutical", "medical device"
-        ],
-        "트렌드": [
-            "remote work", "hybrid", "digital transformation", "sustainability", "esg",
-            "diversity", "inclusion", "mental health", "wellness", "work-life balance",
-            "gig economy", "freelance", "subscription", "saas", "platform economy",
-            "circular economy", "sharing economy", "experience economy", "creator economy",
-            "metaverse", "nft", "web3", "decentralized", "dao", "defi"
-        ]
-    }
+    # 설정에서 카테고리 패턴 로드
+    config_instance = get_config()
+    category_patterns = config_instance.get_keyword_categories_config()
     
     # 결과 딕셔너리 초기화
     categorized = {category: [] for category in category_patterns.keys()}

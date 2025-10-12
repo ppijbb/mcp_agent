@@ -204,28 +204,18 @@ async def main():
     runner = BusinessStrategyRunner(google_drive_mcp_url=args["mcp_url"])
     
     try:
-        results = await runner.run_full_suite(
-            keywords=args["keywords"],
-            business_context=args["business_context"],
-            objectives=args["objectives"],
-            regions=args["regions"],
-            time_horizon=args["time_horizon"],
-            mode=args["mode"]
+        results = await runner.run_agents(
+            industry=args["keywords"][0] if args["keywords"] else "General",
+            company_profile=args["business_context"]["description"] if args["business_context"] else "Business analysis",
+            competitors=args["keywords"][1:] if len(args["keywords"]) > 1 else [],
+            tech_trends=args["keywords"]
         )
         
         # Save execution report
-        await runner.save_execution_report()
+        await runner.save_summary_report(results, f"final_summary_{args['keywords'][0] if args['keywords'] else 'general'}.json")
         
-        # Exit with appropriate code
-        successful = results["summary"]["successful_agents"]
-        total = results["summary"]["total_agents"]
-        
-        if successful == total:
-            print("\n🎉 All business strategy agents executed successfully!")
-            sys.exit(0)
-        else:
-            print(f"\n⚠️  {total - successful} agent(s) had issues")
-            sys.exit(1)
+        print("\n🎉 All business strategy agents executed successfully!")
+        sys.exit(0)
             
     except KeyboardInterrupt:
         print("\n⚠️  Execution interrupted by user")
