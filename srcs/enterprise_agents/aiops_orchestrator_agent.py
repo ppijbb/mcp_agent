@@ -10,7 +10,7 @@ from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 class AIOpsOrchestratorAgent:
@@ -114,7 +114,7 @@ class AIOpsOrchestratorAgent:
 
             # 2. Create an Orchestrator to manage the agents
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=GoogleAugmentedLLM,
                 available_agents=[monitoring_agent, rca_agent],
                 plan_type="full" # Let the LLM create a full plan
             )

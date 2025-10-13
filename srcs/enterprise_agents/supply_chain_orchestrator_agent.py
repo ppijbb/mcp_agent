@@ -8,7 +8,7 @@ from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -402,7 +402,7 @@ async def main():
         supply_chain_quality_controller = EvaluatorOptimizerLLM(
             optimizer=supply_chain_monitor_agent,
             evaluator=supply_chain_evaluator,
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             min_rating=QualityRating.GOOD,
         )
         
@@ -410,7 +410,7 @@ async def main():
         logger.info(f"Initializing supply chain orchestrator workflow for {COMPANY_NAME}")
         
         orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             available_agents=[
                 supply_chain_quality_controller,
                 demand_planning_agent,

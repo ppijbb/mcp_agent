@@ -9,7 +9,7 @@ from mcp_agent.config import get_settings
 # Import Orchestrator from orchestrator module, QualityRating from evaluator_optimizer
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -90,7 +90,7 @@ class HRRecruitmentAgent:
             
             # Create orchestrator
             orchestrator = Orchestrator(
-                llm_factory=OpenAIAugmentedLLM,
+                llm_factory=GoogleAugmentedLLM,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
@@ -359,7 +359,7 @@ class HRRecruitmentAgent:
         agents['quality_controller'] = EvaluatorOptimizerLLM(
             optimizer=agents['job_creator'],
             evaluator=agents['hr_evaluator'],
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             min_rating=QualityRating.GOOD,
         )
         
@@ -471,7 +471,7 @@ async def main():
         logger.info(f"Initializing HR recruitment workflow for {POSITION_NAME}")
         
         orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             available_agents=list(agents.values()),
             plan_type="full",
         )

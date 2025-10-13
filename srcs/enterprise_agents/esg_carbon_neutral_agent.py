@@ -8,7 +8,7 @@ from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -418,7 +418,7 @@ async def main():
         esg_quality_controller = EvaluatorOptimizerLLM(
             optimizer=carbon_footprint_agent,
             evaluator=esg_evaluator,
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             min_rating=QualityRating.GOOD,
         )
         
@@ -426,7 +426,7 @@ async def main():
         logger.info(f"Initializing ESG and carbon neutrality workflow for {COMPANY_NAME}")
         
         orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             available_agents=[
                 esg_quality_controller,
                 esg_reporting_agent,

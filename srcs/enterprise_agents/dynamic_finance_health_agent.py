@@ -25,7 +25,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -317,7 +317,7 @@ async def main():
         # --- ORCHESTRATOR SETUP ---
         
         orchestrator = Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             available_agents=[
                 market_analyzer,
                 product_discovery, 
@@ -330,7 +330,7 @@ async def main():
         # --- EVALUATOR SETUP ---
         
         evaluator = EvaluatorOptimizerLLM(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=GoogleAugmentedLLM,
             context=context,
             evaluation_criteria=[
                 "Market analysis accuracy and timeliness",
