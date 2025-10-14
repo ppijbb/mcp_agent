@@ -1,0 +1,40 @@
+{
+    "success": true,
+    "mission": "서울숲 공원 상공을 50m 고도로 비행하며 주요 시설물의 현재 상태를 촬영하고 보고서를 작성해줘. 비행 고도는 50m로 유지해.",
+    "status": "Completed Successfully",
+    "trajectory": [
+        [
+            126.978,
+            37.5665,
+            10.0
+        ],
+        [
+            126.98,
+            37.568,
+            50.0
+        ],
+        [
+            126.982,
+            37.57,
+            50.0
+        ],
+        [
+            126.984,
+            37.572,
+            50.0
+        ],
+        [
+            126.978,
+            37.5665,
+            5.0
+        ]
+    ],
+    "assigned_drones": [
+        "drone_001",
+        "drone_002",
+        "drone_003"
+    ],
+    "report_path": "drone_scout_reports",
+    "summary": "\n            # Drone Mission Report\n            \n            ## Mission Summary\n            Mission ID: f0ba7404-5601-42e1-aa61-53c933dbb536\n            Status: completed\n            Duration: 0.50 seconds\n            \n            ## Execution Details\n            - Total waypoints completed: 5\n            - Data points collected: 3\n            - Assigned drones: drone_001, drone_002, drone_003\n            \n            ## Performance Metrics\n            - Mission success rate: 100%\n            - Safety incidents: 0\n            - Data quality: Excellent\n            \n            ## Recommendations\n            - Continue current flight patterns\n            - Maintain safety protocols\n            - Regular maintenance schedule recommended\n            ",
+    "timestamp": "2025-10-14T09:25:59.067597"
+}
