@@ -10,3 +10,6 @@
 [submodule "open_researcher/DeepResearch"]
 	path = open_researcher/DeepResearch
 	url = https://github.com/Alibaba-NLP/DeepResearch.git
+[submodule "open_researcher/open-agent"]
+	path = open_researcher/open-agent
+	url = https://github.com/AFK-surf/open-agent.git
