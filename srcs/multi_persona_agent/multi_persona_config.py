@@ -17,7 +17,7 @@ class PersonaConfig:
     
     def __post_init__(self):
         if self.enabled_personas is None:
-            self.enabled_personas = ["advocate", "critic", "skeptic", "synthesizer", "meta_observer"]
+            self.enabled_personas = ["Advocate", "Critic", "Skeptic", "Synthesizer", "MetaObserver"]
 
 
 @dataclass
