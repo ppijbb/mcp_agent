@@ -14,8 +14,9 @@ sys.path.insert(0, str(project_root))
 
 from mcp_agent.agents.agent import Agent
 from mcp_agent.app import MCPApp
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.utils import setup_agent_app
-# from srcs.core.agent.base import BaseAgent  # Temporarily disabled for testing
+# from srcs.core.agent.base import BaseAgent  # Temporarily disabled due to settings issue
 from .multi_persona_config import config, get_persona_config, get_dialogue_config, get_llm_config
 from .personas import PERSONA_INSTRUCTIONS
 from .dialogue_manager import DialogueManager
@@ -60,54 +61,69 @@ class MultiPersonaDialogueAgent:
     
     async def run_dialogue(self, topic: str, max_rounds: int) -> Dict[str, Any]:
         """
-        Conducts a multi-persona dialogue on a given topic.
+        Conducts a multi-persona dialogue on a given topic using real LLM.
         """
-        print(f"Starting multi-persona dialogue on topic: '{topic}'")
+        async with self.app.run() as app_context:
+            logger = app_context.logger
+            logger.info(f"Starting multi-persona dialogue on topic: '{topic}'")
+            logger.info(f"Using {len(self.persona_agents)} personas: {list(self.persona_agents.keys())}")
+            logger.info(f"Configuration: max_rounds={max_rounds}, turns_per_round={self.dialogue_config.turns_per_round}")
 
-        # Create mock dialogue for testing
-        dialogue_history = []
-        
-        # Simulate dialogue turns
-        for i in range(max_rounds * self.dialogue_config.turns_per_round):
-            print(f"--- Dialogue Turn {i+1} ---")
+            # Create Agent instances within MCPApp context
+            agents = {}
+            for name, persona_info in self.persona_agents.items():
+                agent = Agent(
+                    name=persona_info["name"],
+                    instruction=persona_info["instruction"],
+                    server_names=self.server_names
+                )
+                # Set the LLM using GoogleAugmentedLLM
+                agent.llm = GoogleAugmentedLLM(app=self.app)
+                agents[name] = agent
             
-            # Get current persona
-            persona_names = list(self.persona_agents.keys())
-            current_persona = persona_names[i % len(persona_names)]
-            
-            # Create mock response
-            mock_response = f"[{current_persona}] This is a mock response for turn {i+1} discussing '{topic}'"
-            print(f"{mock_response}\n")
-            
-            dialogue_history.append({
-                "persona_name": current_persona,
-                "content": mock_response
-            })
-        
-        print("--- Dialogue Concluded ---")
-        
-        # Mock meta commentary
-        meta_commentary = f"Mock meta-commentary: The dialogue on '{topic}' was productive with {len(dialogue_history)} turns."
-        print(f"Meta-Observer's Commentary:\n{meta_commentary}\n")
-        
-        # Mock final summary
-        final_summary = f"Mock final summary: After {len(dialogue_history)} turns of discussion on '{topic}', we have reached a comprehensive understanding."
-        print(f"Final Summary:\n{final_summary}")
-        
-        print("Dialogue process complete.")
+            dialogue_manager = DialogueManager(
+                topic=topic,
+                personas=list(agents.values()),
+                llm_config=self.llm_config
+            )
 
-        return {
-            "topic": topic,
-            "history": dialogue_history,
-            "meta_commentary": meta_commentary,
-            "summary": final_summary,
-        }
+            # Run Dialogue Rounds
+            for i in range(max_rounds * self.dialogue_config.turns_per_round):
+                logger.info(f"--- Dialogue Turn {i+1} ---")
+                turn = await dialogue_manager.run_dialogue_round()
+                print(f"{turn}\n")
+            
+            logger.info("--- Dialogue Concluded ---")
+
+            # Get Meta-Observer Commentary
+            meta_commentary = await dialogue_manager.get_meta_commentary()
+            if meta_commentary:
+                logger.info(f"Meta-Observer's Commentary:\n{meta_commentary}")
+
+            # Get Final Synthesized Summary
+            logger.info("Generating final summary...")
+            final_summary = await dialogue_manager.get_summary()
+            
+            logger.info("Dialogue process complete.")
+
+            return {
+                "topic": topic,
+                "history": [turn.__dict__ for turn in dialogue_manager.history],
+                "meta_commentary": meta_commentary,
+                "summary": final_summary,
+            }
 
 async def main():
     """A simple runner for the MultiPersonaDialogueAgent."""
+    import sys
+    
     agent = MultiPersonaDialogueAgent()
     
-    topic = "Is a fully autonomous, self-replicating AI a net-positive for humanity's future?"
+    # Get topic from command line argument or use default
+    if len(sys.argv) > 1:
+        topic = " ".join(sys.argv[1:])
+    else:
+        topic = "The impact of artificial intelligence on modern society"
     
     result = await agent.run_workflow(topic, max_rounds=2)
     
