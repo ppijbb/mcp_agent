@@ -5,7 +5,7 @@ import asyncio
 from typing import List, Dict, Any, Tuple
 
 from mcp_agent.agents.agent import Agent
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
+import google.generativeai as genai
 from .multi_persona_config import LLMConfig
 
 class DialogueTurn:
@@ -51,13 +51,18 @@ class DialogueManager:
         # Combine instruction and prompt into a single message.
         full_prompt = f"{persona_agent.instruction}\n\n{prompt}"
         
-        response_content = await persona_agent.llm.generate_str(
-            message=full_prompt,
-            request_params=RequestParams(
-                model=self.llm_config.dialogue_model, 
-                temperature=self.llm_config.dialogue_temperature
-            ),
+        # Use direct Gemini API call
+        model = genai.GenerativeModel(self.llm_config.dialogue_model)
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, 
+            lambda: model.generate_content(
+                full_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.llm_config.dialogue_temperature
+                )
+            )
         )
+        response_content = response.text
         
         new_turn = DialogueTurn(persona_agent.name, response_content)
         self.history.append(new_turn)
@@ -99,13 +104,17 @@ class DialogueManager:
         """
         
         full_summary_prompt = f"{synthesizer.instruction}\n\n{prompt}"
-        summary = await synthesizer.llm.generate_str(
-            message=full_summary_prompt,
-            request_params=RequestParams(
-                model=self.llm_config.synthesis_model,
-                temperature=self.llm_config.synthesis_temperature
-            ),
+        model = genai.GenerativeModel(self.llm_config.synthesis_model)
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: model.generate_content(
+                full_summary_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.llm_config.synthesis_temperature
+                )
+            )
         )
+        summary = response.text
         return summary
 
     async def get_meta_commentary(self) -> str:
@@ -118,11 +127,15 @@ class DialogueManager:
         prompt = f"Observing the following dialogue about '{self.topic}':\n{history_str}\n\nProvide your meta-level analysis of the conversation process itself."
         
         full_meta_prompt = f"{observer.instruction}\n\n{prompt}"
-        commentary = await observer.llm.generate_str(
-            message=full_meta_prompt,
-            request_params=RequestParams(
-                model=self.llm_config.meta_model,
-                temperature=self.llm_config.meta_temperature
-            ),
+        model = genai.GenerativeModel(self.llm_config.meta_model)
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: model.generate_content(
+                full_meta_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.llm_config.meta_temperature
+                )
+            )
         )
+        commentary = response.text
         return commentary 
