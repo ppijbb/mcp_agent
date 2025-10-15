@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Tuple
 
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from .multi_persona_config import LLMConfig
 
 class DialogueTurn:
     """Represents a single turn in the dialogue."""
@@ -19,9 +20,10 @@ class DialogueTurn:
 class DialogueManager:
     """Orchestrates the conversation between personas."""
     
-    def __init__(self, topic: str, personas: List[Agent]):
+    def __init__(self, topic: str, personas: List[Agent], llm_config: LLMConfig):
         self.topic = topic
         self.personas = {p.name: p for p in personas}
+        self.llm_config = llm_config
         self.history: List[DialogueTurn] = []
 
     async def run_dialogue_round(self) -> DialogueTurn:
@@ -51,7 +53,10 @@ class DialogueManager:
         
         response_content = await persona_agent.llm.generate_str(
             message=full_prompt,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-17", temperature=0.7),
+            request_params=RequestParams(
+                model=self.llm_config.dialogue_model, 
+                temperature=self.llm_config.dialogue_temperature
+            ),
         )
         
         new_turn = DialogueTurn(persona_agent.name, response_content)
@@ -96,7 +101,10 @@ class DialogueManager:
         full_summary_prompt = f"{synthesizer.instruction}\n\n{prompt}"
         summary = await synthesizer.llm.generate_str(
             message=full_summary_prompt,
-            request_params=RequestParams(model="gemini-2.5-pro-preview-06-17", temperature=0.5),
+            request_params=RequestParams(
+                model=self.llm_config.synthesis_model,
+                temperature=self.llm_config.synthesis_temperature
+            ),
         )
         return summary
 
@@ -112,6 +120,9 @@ class DialogueManager:
         full_meta_prompt = f"{observer.instruction}\n\n{prompt}"
         commentary = await observer.llm.generate_str(
             message=full_meta_prompt,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-17", temperature=0.3),
+            request_params=RequestParams(
+                model=self.llm_config.meta_model,
+                temperature=self.llm_config.meta_temperature
+            ),
         )
         return commentary 

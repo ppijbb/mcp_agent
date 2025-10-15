@@ -5,36 +5,52 @@ import asyncio
 import json
 from typing import List, Dict, Any
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from srcs.common.utils import setup_agent_app
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
-
-from .personas import PERSONA_BUILDERS
+from srcs.core.agent.base import BaseAgent
+from .multi_persona_config import config, get_persona_config, get_dialogue_config, get_llm_config
+from .personas import PERSONA_INSTRUCTIONS
 from .dialogue_manager import DialogueManager
 
-class MultiPersonaDialogueAgent:
+class MultiPersonaDialogueAgent(BaseAgent):
     """
     An agent system that uses a dialogue between multiple personas 
     to explore a topic from different angles and produce a comprehensive result.
     """
-    def __init__(self, personas_file: str = 'personas.json'):
-        self.app = setup_agent_app("multi_persona_agent")
-        with open(personas_file, 'r') as f:
-            self.personas = json.load(f)
-        self.agents = {}
+    def __init__(self):
+        # Load configurations
+        self.config = config
+        self.persona_config = get_persona_config()
+        self.dialogue_config = get_dialogue_config()
+        self.llm_config = get_llm_config()
+        
+        # Initialize BaseAgent
+        super().__init__(
+            name="multi_persona_agent",
+            instruction="Multi-persona dialogue system for comprehensive topic analysis",
+            server_names=["g-search", "fetch"]
+        )
+        
+        # Initialize persona agents
+        self.persona_agents = {}
+        self._initialize_personas()
 
-    async def initialize_agents(self):
-        async with self.app.run() as app_context:
-            for name, instruction in self.personas.items():
-                self.agents[name] = Agent(
-                    name=name,
-                    instruction=instruction,
-                    server_names=["g-search", "fetch"],
-                    llm_factory=app_context.llm_factory,
-                )
+    def _initialize_personas(self):
+        """Initialize persona instructions from configuration."""
+        for name in self.persona_config.enabled_personas:
+            if name in PERSONA_INSTRUCTIONS:
+                self.persona_agents[name] = {
+                    "name": name,
+                    "instruction": PERSONA_INSTRUCTIONS[name]
+                }
 
-    async def run_dialogue(self, topic: str, max_rounds: int = 3) -> Dict[str, Any]:
+    async def run_workflow(self, topic: str, max_rounds: int = None) -> Dict[str, Any]:
+        """BaseAgent 추상 메서드 구현."""
+        if max_rounds is None:
+            max_rounds = self.dialogue_config.max_rounds
+        
+        return await self.run_dialogue(topic, max_rounds)
+    
+    async def run_dialogue(self, topic: str, max_rounds: int) -> Dict[str, Any]:
         """
         Conducts a multi-persona dialogue on a given topic.
         """
@@ -42,18 +58,23 @@ class MultiPersonaDialogueAgent:
             logger = app_context.logger
             logger.info(f"Starting multi-persona dialogue on topic: '{topic}'")
 
-            # Attach the app's LLM to each persona agent
-            llm = GoogleAugmentedLLM(app=self.app)
-            for persona in self.all_personas:
-                persona.llm = llm
+            # Create Agent instances within MCPApp context
+            agents = {}
+            for name, persona_info in self.persona_agents.items():
+                agents[name] = Agent(
+                    name=persona_info["name"],
+                    instruction=persona_info["instruction"],
+                    server_names=self.server_names
+                )
             
             dialogue_manager = DialogueManager(
                 topic=topic,
-                personas=self.all_personas,
+                personas=list(agents.values()),
+                llm_config=self.llm_config
             )
 
             # Run Dialogue Rounds
-            for i in range(max_rounds * 3):
+            for i in range(max_rounds * self.dialogue_config.turns_per_round):
                 logger.info(f"--- Dialogue Turn {i+1} ---")
                 turn = await dialogue_manager.run_dialogue_round()
                 print(f"{turn}\n")
@@ -84,7 +105,7 @@ async def main():
     
     topic = "Is a fully autonomous, self-replicating AI a net-positive for humanity's future?"
     
-    result = await agent.run_dialogue(topic, max_rounds=2)
+    result = await agent.run_workflow(topic, max_rounds=2)
     
     print("\n\n" + "="*80)
     print("                      FINAL REPORT")
