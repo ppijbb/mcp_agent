@@ -13,3 +13,6 @@
 [submodule "open_researcher/open-agent"]
 	path = open_researcher/open-agent
 	url = https://github.com/AFK-surf/open-agent.git
+[submodule "open_researcher/AgentFlow"]
+	path = open_researcher/AgentFlow
+	url = https://github.com/lupantech/AgentFlow.git
