@@ -18,48 +18,42 @@ from pathlib import Path
 import google.generativeai as genai
 import os
 
-from src.utils.config_manager import ConfigManager
-from src.utils.logger import setup_logger
+import sys
+from pathlib import Path
 
-logger = setup_logger("task_analyzer", log_level="INFO")
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from researcher_config import get_llm_config, get_agent_config
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TaskAnalyzerAgent:
     """Autonomous task analyzer agent for research objective extraction."""
     
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize the task analyzer agent.
+    def __init__(self):
+        """Initialize the task analyzer agent."""
+        # Load configurations
+        self.llm_config = get_llm_config()
+        self.agent_config = get_agent_config()
         
-        Args:
-            config_path: Path to configuration file
-        """
-        self.config_path = config_path
-        self.config_manager = ConfigManager(config_path)
+        # Initialize Gemini
+        if not self.llm_config.api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable is required")
         
-        # Initialize LLM
-        self.llm = self._initialize_llm()
+        genai.configure(api_key=self.llm_config.api_key)
+        self.model = genai.GenerativeModel(self.llm_config.model)
         
         # Learning capabilities
         self.learning_data = []
         self.analysis_history = []
         
-        logger.info("Task Analyzer Agent initialized with LLM-based analysis")
+        logger.info("Task Analyzer Agent initialized with Gemini")
     
-    def _initialize_llm(self):
-        """Initialize the LLM client."""
-        try:
-            api_key = os.getenv('GEMINI_API_KEY')
-            if not api_key:
-                logger.warning("Gemini API key not found. Analysis functionality will be limited.")
-                return None
-            
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash-lite')
-            logger.info("LLM initialized for TaskAnalyzerAgent with model: gemini-2.5-flash-lite")
-            return model
-        except Exception as e:
-            logger.error(f"Failed to initialize LLM: {e}")
-            raise
+    # LLM initialization is now handled in __init__
     
     def _load_analysis_patterns(self) -> Dict[str, Any]:
         """Load analysis patterns for objective extraction.
@@ -273,7 +267,15 @@ class TaskAnalyzerAgent:
             }}
             """
             
-            response = await asyncio.to_thread(self.llm.generate_content, prompt)
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.model.generate_content(
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=self.llm_config.temperature
+                    )
+                )
+            )
             
             # Parse Gemini response properly
             response_text = response.text.strip()

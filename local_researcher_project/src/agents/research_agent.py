@@ -27,7 +27,14 @@ import random
 # Enhanced browser automation
 from src.automation.browser_manager import BrowserManager
 
-from src.utils.config_manager import ConfigManager, SearchAPI
+import sys
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from researcher_config import get_llm_config, get_research_config, SearchAPI
 from src.utils.logger import setup_logger
 
 logger = setup_logger("research_agent", log_level="INFO")
@@ -36,14 +43,11 @@ logger = setup_logger("research_agent", log_level="INFO")
 class ResearchAgent:
     """Autonomous research agent for data collection and analysis."""
     
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize the research agent.
-        
-        Args:
-            config_path: Path to configuration file
-        """
-        self.config_path = config_path
-        self.config_manager = ConfigManager(config_path)
+    def __init__(self):
+        """Initialize the research agent."""
+        # Load configurations
+        self.llm_config = get_llm_config()
+        self.research_config = get_research_config()
         
         # Initialize LLM
         self.llm = self._initialize_llm()
@@ -580,9 +584,9 @@ class ResearchAgent:
                     logger.warning(f"Search method {method.__name__} failed: {e}")
                     continue
             
-            # If all methods fail, use LLM as fallback
-            logger.warning("All search APIs failed, falling back to LLM-generated research")
-            return await self._perform_llm_fallback_search(query)
+            # If all methods fail, raise error
+            logger.error("All search APIs failed")
+            raise RuntimeError(f"All search methods failed for query: {query}. No fallback available.")
             
         except Exception as e:
             logger.error(f"Web search failed: {e}")
@@ -818,96 +822,7 @@ class ResearchAgent:
             logger.warning(f"Bing search failed: {e}")
             return {'success': False, 'error': str(e)}
     
-    async def _perform_llm_fallback_search(self, query: str) -> Dict[str, Any]:
-        """Fallback to LLM-generated research data when real search fails."""
-        try:
-            if not self.llm:
-                return {
-                    'success': False,
-                    'method': 'web_search',
-                    'query': query,
-                    'results': [],
-                    'error': 'LLM not available',
-                    'timestamp': datetime.now().isoformat()
-                }
-            
-            # Generate research data using LLM with Korean language preference
-            prompt = f"""
-            다음 연구 질문에 대해 실제적인 연구 데이터를 생성해주세요: "{query}"
-            
-            다음을 포함하여 생성해주세요:
-            1. 핵심 발견사항과 통찰
-            2. 관련 통계 및 데이터 포인트
-            3. 전문가 의견 및 분석
-            4. 현재 동향 및 발전사항
-            5. 중요한 출처 및 참고문헌
-            
-            다음 JSON 구조로 포맷해주세요:
-            {{
-                "key_findings": ["발견사항1", "발견사항2", "발견사항3"],
-                "statistics": {{"지표1": "값1", "지표2": "값2"}},
-                "expert_opinions": ["의견1", "의견2"],
-                "trends": ["동향1", "동향2"],
-                "sources": ["출처1", "출처2", "출처3"]
-            }}
-            """
-            
-            response_text = await self._call_llm_with_retry(prompt)
-            
-            # Try to parse JSON, with fallback
-            try:
-                research_data = json.loads(response_text)
-            except json.JSONDecodeError:
-                # If JSON parsing fails, create a basic structure
-                research_data = {
-                    "key_findings": [f"{query}에 대한 연구 발견사항"],
-                    "statistics": {"지표1": "값1"},
-                    "expert_opinions": [f"{query}에 대한 전문가 의견"],
-                    "trends": [f"{query} 관련 동향"],
-                    "sources": [f"{query} 관련 출처"]
-                }
-            
-            # Convert to search results format
-            results = []
-            
-            # Add key findings as results
-            for i, finding in enumerate(research_data.get('key_findings', [])[:3]):
-                results.append({
-                    'title': f"핵심 발견 {i+1}: {query}",
-                    'snippet': finding,
-                    'url': f"https://research-source-{i+1}.com",
-                    'source': 'llm_research'
-                })
-            
-            # Add expert opinions as results
-            for i, opinion in enumerate(research_data.get('expert_opinions', [])[:2]):
-                    results.append({
-                    'title': f"전문가 분석: {query}",
-                    'snippet': opinion,
-                    'url': f"https://expert-analysis-{i+1}.com",
-                    'source': 'llm_research'
-                    })
-            
-            return {
-                'success': True,
-                'method': 'llm_fallback',
-                'query': query,
-                'results': results,
-                'total_results': len(results),
-                'research_data': research_data,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"LLM fallback search failed: {e}")
-            return {
-                'success': False,
-                'method': 'web_search',
-                'query': query,
-                'results': [],
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
+    # LLM fallback method removed - no fallback responses allowed
     
     async def _perform_academic_search(self, query: str) -> Dict[str, Any]:
         """Perform academic search using real academic APIs."""

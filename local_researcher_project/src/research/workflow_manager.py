@@ -164,28 +164,8 @@ class ResearchWorkflowManager:
                 "discovery_complete": True
             }
         except Exception as e:
-            logger.warning(f"Web search failed: {e}, using mock sources")
-            # Return mock sources if search fails
-            mock_sources = [
-                {
-                    'title': f"Mock source 1 for {topic}",
-                    'url': f"https://example1.com/{topic.replace(' ', '-')}",
-                    'snippet': f"Mock content about {topic}",
-                    'source': 'mock'
-                },
-                {
-                    'title': f"Mock source 2 for {topic}",
-                    'url': f"https://example2.com/{topic.replace(' ', '-')}",
-                    'snippet': f"Another mock content about {topic}",
-                    'source': 'mock'
-                }
-            ]
-            
-            return {
-                "sources_found": len(mock_sources),
-                "source_types": ["mock"],
-                "sources": mock_sources,
-                "discovery_complete": True
+            logger.error(f"Web search failed: {e}")
+            raise RuntimeError(f"Web search failed: {e}. No fallback data available.")
             }
     
     async def _gather_content(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -243,15 +223,10 @@ class ResearchWorkflowManager:
                 logger.warning(f"Failed to gather content from {source.get('url', 'unknown')}: {e}")
                 continue
         
-        # If no content gathered, create mock content
+        # If no content gathered, raise error
         if not content_data:
-            content_data = [{
-                'title': f"Mock content for {topic}",
-                'content': f"This is mock content about {topic}. " * 50,
-                'url': 'mock://content'
-            }]
-            total_length = 1000
-            processed_sources = 1
+            logger.error("No content could be gathered from sources")
+            raise RuntimeError("No content available for analysis. Cannot proceed without real data.")
         
         return {
             "content_collected": True,
