@@ -15,6 +15,17 @@ from datetime import datetime
 import json
 from pathlib import Path
 from contextlib import AsyncExitStack
+from enum import Enum
+
+
+class ToolCategory(Enum):
+    """Tool categories for MCP tools."""
+    SEARCH = "search"
+    DATA = "data"
+    CODE = "code"
+    ACADEMIC = "academic"
+    BUSINESS = "business"
+    GENERAL = "general"
 
 # MCP imports
 try:
@@ -719,3 +730,28 @@ class MCPIntegrationManager:
             
         except Exception as e:
             logger.error(f"MCP cleanup failed: {e}")
+
+
+# Global instance for easy access
+mcp_manager = MCPIntegrationManager()
+
+
+# Convenience functions for easy access
+async def get_available_tools() -> List[str]:
+    """Get list of available MCP tools."""
+    return await mcp_manager.get_available_tools()
+
+
+async def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute an MCP tool with given parameters."""
+    return await mcp_manager.execute_tool(tool_name, params)
+
+
+async def get_best_tool_for_task(task_category: str) -> Optional[str]:
+    """Get the best tool for a specific task category."""
+    return await mcp_manager.get_best_tool_for_task(task_category)
+
+
+async def health_check() -> Dict[str, Any]:
+    """Perform health check on MCP integration."""
+    return await mcp_manager.get_health_status()

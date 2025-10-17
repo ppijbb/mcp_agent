@@ -99,7 +99,7 @@ class ResearchState(TypedDict):
     messages: Annotated[List[BaseMessage], "Messages in the conversation"]
 
 
-class LangGraphOrchestrator:
+class AutonomousOrchestrator:
     """8대 혁신을 통합한 LangGraph 오케스트레이터."""
     
     def __init__(self):
@@ -714,7 +714,7 @@ class LangGraphOrchestrator:
 
 
 # Global orchestrator instance
-orchestrator = LangGraphOrchestrator()
+orchestrator = AutonomousOrchestrator()
 
 
 async def run_research(user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

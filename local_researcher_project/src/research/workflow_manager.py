@@ -166,7 +166,6 @@ class ResearchWorkflowManager:
         except Exception as e:
             logger.error(f"Web search failed: {e}")
             raise RuntimeError(f"Web search failed: {e}. No fallback data available.")
-            }
     
     async def _gather_content(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """Gather content from sources."""

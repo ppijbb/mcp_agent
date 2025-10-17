@@ -18,7 +18,7 @@ from datetime import datetime
 from ..base_tool import BaseResearchTool, ToolResponse, ToolCategory
 from ...core.reliability import execute_with_reliability, CircuitBreaker
 from ...core.llm_manager import execute_llm_task, TaskType
-from ..mcp_integration import get_best_tool_for_task, execute_tool
+from src.core.mcp_integration import get_best_tool_for_task, execute_tool
 
 logger = logging.getLogger(__name__)
 

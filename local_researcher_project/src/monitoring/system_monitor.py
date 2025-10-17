@@ -113,11 +113,12 @@ class HealthMonitor:
         self.monitoring_thread = None
         
         # Circuit breaker for reliability
-        self.circuit_breaker = CircuitBreaker(
+        from src.core.reliability import CircuitBreakerConfig
+        circuit_config = CircuitBreakerConfig(
             failure_threshold=5,
-            recovery_timeout=60,
-            expected_exception=Exception
+            recovery_timeout=60
         )
+        self.circuit_breaker = CircuitBreaker("health_monitor", circuit_config)
         
         # Callbacks
         self.alert_callbacks: List[Callable[[Alert], None]] = []

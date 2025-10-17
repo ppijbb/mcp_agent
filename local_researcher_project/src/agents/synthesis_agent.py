@@ -184,17 +184,17 @@ class SynthesisAgent:
         # Phase 7: Quality Validation
         logger.info("7. ✅ Validating synthesis quality")
         validation_results = await self._validate_synthesis(compressed_content, deliverables)
-            
-            synthesis_result = {
+        
+        synthesis_result = {
             'synthesized_content': synthesized_content,
             'compressed_content': compressed_content,
             'deliverables': deliverables,
-                'insights': insights,
+            'insights': insights,
             'context_usage': context_usage,
             'validation_results': validation_results,
-                'synthesis_metadata': {
+            'synthesis_metadata': {
                 'deliverable_type': deliverable_type,
-                    'timestamp': datetime.now().isoformat(),
+                'timestamp': datetime.now().isoformat(),
                 'synthesis_version': '2.0',
                 'total_results_synthesized': len(execution_results),
                 'context_window_usage': context_usage.get('usage_ratio', 1.0),
@@ -211,7 +211,7 @@ class SynthesisAgent:
         }
         
         logger.info("✅ Synthesis completed successfully with 8 core innovations")
-            return synthesis_result
+        return synthesis_result
             
     async def _manage_context_window(
         self,
@@ -239,7 +239,7 @@ class SynthesisAgent:
             # 중요한 정보 우선 보존
             important_content = await self._extract_important_content(execution_results, evaluation_results)
             preserved_content = important_content
-                else:
+        else:
             preserved_content = total_content
         
         # 자동 압축
@@ -294,11 +294,11 @@ class SynthesisAgent:
         deliverable_type: str
     ) -> List[Dict[str, Any]]:
         """인사이트 생성 (Multi-Model Orchestration)."""
-            insights = []
+        insights = []
             
         # 패턴 분석
         pattern_insights = await self._analyze_patterns(integrated_data)
-            insights.extend(pattern_insights)
+        insights.extend(pattern_insights)
             
         # 비교 분석
         comparative_insights = await self._perform_comparative_analysis(integrated_data)
@@ -312,7 +312,7 @@ class SynthesisAgent:
         recommendation_insights = await self._generate_recommendations(integrated_data)
         insights.extend(recommendation_insights)
             
-            return insights
+        return insights
             
     async def _analyze_patterns(self, integrated_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """패턴 분석."""
@@ -526,11 +526,10 @@ class SynthesisAgent:
                 )
                 deliverables[format_name] = deliverable
                 
-        except Exception as e:
+            except Exception as e:
                 logger.warning(f"Failed to generate {format_name} deliverable: {e}")
                 continue
-        
-        return deliverables
+            return deliverables
     
     async def _generate_format_deliverable(
         self,
@@ -554,7 +553,7 @@ class SynthesisAgent:
             )
             
             if tool_result.success:
-            return {
+                return {
                     'format': format_name,
                     'content': tool_result.data,
                     'file_path': tool_result.data.get('file_path'),
@@ -604,7 +603,7 @@ class SynthesisAgent:
         # 품질 점수 추출 (실제 구현에서는 더 정교한 파싱)
         quality_score = 0.8  # 기본값
             
-            return {
+        return {
             'overall_quality': quality_score,
             'validation_feedback': result.content,
             'model_used': result.model_used,
