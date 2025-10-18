@@ -1,7 +1,6 @@
-# DevOps API Dependencies
-aiohttp>=3.9.0
+# MCP Agent Dependencies
 mcp-agent>=1.0.0
-google-generativeai>=0.5.0
+google-generativeai>=0.8.0
 
 # Environment and Config
 python-dotenv>=1.0.0
@@ -22,9 +21,16 @@ flake8>=6.0.0
 
 # Logging and monitoring
 structlog>=23.0.0
-prometheus-client>=0.17.0
 
 # Additional utilities
 click>=8.0.0
 rich>=13.0.0
-colorama>=0.4.6 
+colorama>=0.4.6
+
+# MCP Server Dependencies (installed via npm)
+# @modelcontextprotocol/server-aws-kb
+# @modelcontextprotocol/server-github
+# @modelcontextprotocol/server-prometheus
+# @modelcontextprotocol/server-kubernetes
+# @modelcontextprotocol/server-gcp
+# @modelcontextprotocol/server-azure 

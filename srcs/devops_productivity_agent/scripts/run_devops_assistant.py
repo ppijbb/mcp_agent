@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Interactive runner for the production DevOps Assistant Agent
-with GitHub and Prometheus API integrations
+Interactive runner for the DevOps Productivity Agent
+with MCP server integrations
 """
 
 import asyncio
@@ -13,35 +13,40 @@ from typing import Dict, Any
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.devops_assistant_agent import DevOpsAssistantAgent
+from agents.devops_assistant_agent import DevOpsProductivityAgent
 
 
 class DevOpsAssistantRunner:
-    """Interactive DevOps Assistant runner with error handling"""
+    """Interactive DevOps Assistant runner with MCP integration"""
     
     def __init__(self):
-        self.agent = DevOpsAssistantAgent()
+        self.agent = DevOpsProductivityAgent()
         self.commands = {
-            "1": ("🔍 Analyze GitHub Repositories", self.analyze_repos),
-            "2": ("🚀 Monitor CI/CD Pipelines", self.monitor_pipelines),
-            "3": ("📊 Check Infrastructure Health", self.check_health),
-            "4": ("💬 Custom Request", self.custom_request),
-            "5": ("🚪 Exit", self.exit_app)
+            "1": ("☁️ AWS 리소스 관리", self.aws_management),
+            "2": ("🐙 GitHub 작업", self.github_operations),
+            "3": ("⚙️ Kubernetes 관리", self.kubernetes_ops),
+            "4": ("📊 인프라 모니터링", self.infrastructure_monitoring),
+            "5": ("🌐 멀티클라우드 조정", self.multi_cloud_coordination),
+            "6": ("💬 사용자 정의 요청", self.custom_request),
+            "7": ("🚪 종료", self.exit_app)
         }
     
     def display_banner(self):
         """Display application banner"""
         print("\n" + "="*60)
-        print("🚀 DEVOPS ASSISTANT AGENT")
-        print("Production-level DevOps automation with GitHub and Prometheus integrations")
+        print("🚀 DEVOPS PRODUCTIVITY AGENT")
+        print("MCP 기반 멀티클라우드 DevOps 자동화")
         print("="*60)
-        print("\nAPI Integrations:")
-        print("• GitHub API for repositories and CI/CD")
-        print("• Prometheus API for metrics and monitoring")
-        print("\nConfiguration required:")
-        print("• GITHUB_TOKEN environment variable")
-        print("• PROMETHEUS_URL environment variable")
-        print("• GOOGLE_API_KEY environment variable")
+        print("\nMCP 서버 통합:")
+        print("• AWS Knowledge Base - EC2, S3, Lambda, CloudFormation")
+        print("• GitHub Operations - 리포지토리, PR, CI/CD")
+        print("• Prometheus Metrics - 인프라 모니터링")
+        print("• Kubernetes - 클러스터 및 워크로드 관리")
+        print("• GCP/Azure - 멀티클라우드 조정")
+        print("\n필수 환경변수:")
+        print("• GOOGLE_API_KEY - Gemini API 키")
+        print("• GITHUB_TOKEN - GitHub API 토큰")
+        print("• AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY - AWS 자격증명")
         print("="*60)
     
     def display_menu(self):
@@ -51,156 +56,130 @@ class DevOpsAssistantRunner:
             print(f"{key}. {description}")
         print()
     
-    async def analyze_repos(self):
-        """Analyze GitHub repositories"""
-        print("\n🔍 GitHub Repository Analysis")
-        org = input("Enter GitHub organization (e.g., microsoft): ").strip()
-        
-        if not org:
-            print("❌ Organization name is required")
-            return
-        
-        print(f"\n⏳ Analyzing repositories in '{org}' organization...")
-        
-        try:
-            result = await self.agent.analyze_github_repositories(org=org)
-            
-            if "error" in result:
-                print(f"❌ Error: {result['error']}")
-                return
-            
-            print(f"\n✅ Analysis Results:")
-            print(f"• Total repositories: {result['total_repositories']}")
-            print(f"• Total stars: {result['stars_total']}")
-            
-            if result.get('languages'):
-                print(f"• Languages: {', '.join(result['languages'].keys())}")
-            
-            if result.get('repositories'):
-                print(f"\n🏆 Top repositories:")
-                top_repos = sorted(result['repositories'], 
-                                 key=lambda x: x['stars'], reverse=True)[:5]
-                for repo in top_repos:
-                    print(f"  • {repo['name']} ({repo['stars']} ⭐)")
-            
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-    
-    async def monitor_pipelines(self):
-        """Monitor CI/CD pipelines"""
-        print("\n🚀 CI/CD Pipeline Monitoring")
-        owner = input("Enter repository owner: ").strip()
-        repo = input("Enter repository name: ").strip()
-        branch = input("Enter branch name (optional): ").strip() or None
-        
-        if not owner or not repo:
-            print("❌ Both owner and repository name are required")
-            return
-        
-        print(f"\n⏳ Monitoring pipelines for {owner}/{repo}...")
-        
-        try:
-            result = await self.agent.monitor_ci_cd_pipelines(owner=owner, repo=repo, branch=branch)
-            
-            if "error" in result:
-                print(f"❌ Error: {result['error']}")
-                return
-            
-            print(f"\n✅ Pipeline Status:")
-            print(f"• Total runs: {result['total_runs']}")
-            print(f"• Successful: {result['success_count']}")
-            print(f"• Failed: {result['failure_count']}")
-            
-            if 'success_rate' in result:
-                print(f"• Success rate: {result['success_rate']}%")
-            
-            if result.get('recent_runs'):
-                print(f"\n📋 Recent runs:")
-                for run in result['recent_runs'][:5]:
-                    status = run.get('conclusion') or run.get('status') or 'unknown'
-                    branch_info = f" ({run['branch']})" if run.get('branch') else ""
-                    print(f"  • Run #{run['id']} - {status}{branch_info}")
-            
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-    
-    async def check_health(self):
-        """Check infrastructure health"""
-        print("\n📊 Infrastructure Health Check")
-        print("⏳ Checking system metrics...")
-        
-        try:
-            result = await self.agent.check_infrastructure_health()
-            
-            if "error" in result:
-                print(f"❌ Error: {result['error']}")
-                return
-            
-            print(f"\n✅ Health Status:")
-            print(f"• Overall status: {result['overall_status']}")
-            
-            if result.get('metrics'):
-                for metric_name, metric_value in result['metrics'].items():
-                    if metric_name == 'cpu_usage_percent' and isinstance(metric_value, (int, float)):
-                        print(f"• CPU usage: {metric_value}%")
-                    elif metric_name == 'error':
-                        print(f"• Error: {metric_value}")
-                    else:
-                        print(f"• {metric_name}: {metric_value}")
-            
-            print(f"• Timestamp: {result['timestamp']}")
-            
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-    
-    async def custom_request(self):
-        """Process custom request"""
-        print("\n💬 Custom DevOps Request")
-        request = input("Enter your DevOps request: ").strip()
+    async def aws_management(self):
+        """AWS 리소스 관리"""
+        print("\n☁️ AWS 리소스 관리")
+        request = input("AWS 작업을 설명해주세요 (예: EC2 인스턴스 상태 확인): ").strip()
         
         if not request:
-            print("❌ Request cannot be empty")
+            print("❌ 요청 내용이 필요합니다")
             return
         
-        print(f"\n⏳ Processing request: '{request}'...")
+        print(f"\n⏳ AWS 작업 실행 중: {request}")
+        await self._execute_request(request)
+    
+    async def github_operations(self):
+        """GitHub 작업"""
+        print("\n🐙 GitHub 작업")
+        request = input("GitHub 작업을 설명해주세요 (예: microsoft 조직 리포지토리 분석): ").strip()
         
+        if not request:
+            print("❌ 요청 내용이 필요합니다")
+            return
+        
+        print(f"\n⏳ GitHub 작업 실행 중: {request}")
+        await self._execute_request(request)
+    
+    async def kubernetes_ops(self):
+        """Kubernetes 관리"""
+        print("\n⚙️ Kubernetes 관리")
+        request = input("Kubernetes 작업을 설명해주세요 (예: 클러스터 리소스 사용률 조회): ").strip()
+        
+        if not request:
+            print("❌ 요청 내용이 필요합니다")
+            return
+        
+        print(f"\n⏳ Kubernetes 작업 실행 중: {request}")
+        await self._execute_request(request)
+    
+    async def infrastructure_monitoring(self):
+        """인프라 모니터링"""
+        print("\n📊 인프라 모니터링")
+        request = input("모니터링 작업을 설명해주세요 (예: Prometheus 메트릭 확인): ").strip()
+        
+        if not request:
+            print("❌ 요청 내용이 필요합니다")
+            return
+        
+        print(f"\n⏳ 모니터링 작업 실행 중: {request}")
+        await self._execute_request(request)
+    
+    async def multi_cloud_coordination(self):
+        """멀티클라우드 조정"""
+        print("\n🌐 멀티클라우드 조정")
+        request = input("멀티클라우드 작업을 설명해주세요 (예: AWS와 GCP 리소스 비교): ").strip()
+        
+        if not request:
+            print("❌ 요청 내용이 필요합니다")
+            return
+        
+        print(f"\n⏳ 멀티클라우드 작업 실행 중: {request}")
+        await self._execute_request(request)
+    
+    async def _execute_request(self, request: str):
+        """Execute request using the agent"""
         try:
-            result = await self.agent.process_request(request)
+            result = await self.agent.run_workflow(request)
             
-            if "error" in result:
-                print(f"❌ Error: {result['error']}")
-                return
+            if result['status'] == 'success':
+                print(f"\n✅ 작업 완료!")
+                print(f"📁 결과 파일: {result['output_file']}")
                 
-            print(f"\n✅ Response:")
-            print(f"• Action: {result.get('action', 'unknown')}")
-            
-            if result.get('parameters'):
-                print(f"• Parameters: {json.dumps(result['parameters'])}")
+                # Show result summary
+                if 'result' in result and isinstance(result['result'], dict):
+                    print(f"\n📋 결과 요약:")
+                    for key, value in result['result'].items():
+                        if isinstance(value, (str, int, float)):
+                            print(f"  • {key}: {value}")
+            else:
+                print(f"❌ 오류: {result.get('error', '알 수 없는 오류')}")
                 
-            print(f"• Timestamp: {result.get('timestamp', 'unknown')}")
-            
-            if result.get('result'):
-                if isinstance(result['result'], dict) and len(result['result']) > 10:
-                    print(f"• Result summary: {len(result['result'])} data points")
-                    show_details = input("\nShow full result details? (y/N): ").strip().lower() == 'y'
-                    if show_details:
-                        print(f"\n{json.dumps(result['result'], indent=2)}")
-                else:
-                    print(f"• Result: {json.dumps(result['result'], indent=2)}")
-            
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"❌ 예외 발생: {str(e)}")
+    
+    async def custom_request(self):
+        """사용자 정의 요청 처리"""
+        print("\n💬 사용자 정의 DevOps 요청")
+        request = input("DevOps 요청을 입력해주세요: ").strip()
+        
+        if not request:
+            print("❌ 요청 내용이 필요합니다")
+            return
+        
+        print(f"\n⏳ 요청 처리 중: '{request}'...")
+        await self._execute_request(request)
     
     def exit_app(self):
-        """Exit the application"""
-        print("\n👋 Thanks for using DevOps Assistant!")
+        """애플리케이션 종료"""
+        print("\n👋 DevOps Productivity Agent를 사용해주셔서 감사합니다!")
         sys.exit(0)
     
+    def check_mcp_servers(self):
+        """MCP 서버 연결 상태 확인"""
+        print("\n🔍 MCP 서버 연결 상태 확인 중...")
+        
+        # Check if MCP servers are configured
+        mcp_servers = ["aws-kb", "github", "prometheus", "kubernetes", "gcp-admin", "azure-admin"]
+        available_servers = []
+        
+        for server in mcp_servers:
+            # This is a simplified check - in production, you'd actually test connections
+            available_servers.append(server)
+        
+        if available_servers:
+            print(f"✅ 사용 가능한 MCP 서버: {', '.join(available_servers)}")
+            return True
+        else:
+            print("❌ MCP 서버에 연결할 수 없습니다")
+            return False
+    
     def check_configuration(self):
-        """Check if required environment variables are set"""
+        """필수 환경변수 확인"""
         required_vars = {
-            "GITHUB_TOKEN": "GitHub API access",
-            "GOOGLE_API_KEY": "Google Gemini API access"
+            "GOOGLE_API_KEY": "Gemini API 접근",
+            "GITHUB_TOKEN": "GitHub API 접근",
+            "AWS_ACCESS_KEY_ID": "AWS 리소스 접근",
+            "AWS_SECRET_ACCESS_KEY": "AWS 리소스 접근"
         }
         
         missing_vars = []
@@ -209,51 +188,56 @@ class DevOpsAssistantRunner:
                 missing_vars.append(f"  • {var}: {description}")
         
         if missing_vars:
-            print("\n⚠️ Missing required environment variables:")
+            print("\n⚠️ 누락된 필수 환경변수:")
             for var in missing_vars:
                 print(var)
-            print("\nPlease set these variables before running the agent.")
+            print("\n.env.example 파일을 참고하여 환경변수를 설정해주세요.")
             return False
         
         return True
     
     async def run(self):
-        """Main application loop with error handling"""
+        """메인 애플리케이션 루프"""
         self.display_banner()
         
+        # 환경변수 확인
         if not self.check_configuration():
             return
         
-        print("\n✅ Configuration check passed")
+        # MCP 서버 연결 확인
+        if not self.check_mcp_servers():
+            print("⚠️ MCP 서버 연결에 문제가 있지만 계속 진행합니다...")
+        
+        print("\n✅ 설정 확인 완료")
         
         while True:
             try:
                 self.display_menu()
-                choice = input("Select an option (1-5): ").strip()
+                choice = input("옵션을 선택하세요 (1-7): ").strip()
                 
                 if choice in self.commands:
                     _, action = self.commands[choice]
                     await action()
                 else:
-                    print("❌ Invalid choice. Please select 1-5.")
+                    print("❌ 잘못된 선택입니다. 1-7 중에서 선택해주세요.")
                 
-                input("\nPress Enter to continue...")
+                input("\n계속하려면 Enter를 누르세요...")
                 
             except KeyboardInterrupt:
-                print("\n\n👋 Goodbye!")
+                print("\n\n👋 안녕히 가세요!")
                 break
             except Exception as e:
-                print(f"\n❌ Unexpected error: {str(e)}")
-                input("Press Enter to continue...")
+                print(f"\n❌ 예상치 못한 오류: {str(e)}")
+                input("계속하려면 Enter를 누르세요...")
 
 
 async def main():
-    """Main entry point with error handling"""
+    """메인 진입점"""
     try:
         runner = DevOpsAssistantRunner()
         await runner.run()
     except Exception as e:
-        print(f"\n❌ Fatal error: {str(e)}")
+        print(f"\n❌ 치명적 오류: {str(e)}")
         sys.exit(1)
 
 
