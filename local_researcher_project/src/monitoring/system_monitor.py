@@ -547,3 +547,53 @@ class HealthMonitor:
         except Exception as e:
             logger.error(f"Failed to export alerts: {e}")
             raise
+    
+    def get_system_health(self) -> Dict[str, Any]:
+        """Get overall system health status."""
+        try:
+            current_metrics = self.get_current_metrics()
+            recent_alerts = self.get_recent_alerts(hours=1)
+            
+            # Determine overall status
+            error_alerts = [a for a in recent_alerts if a.level == "error"]
+            warning_alerts = [a for a in recent_alerts if a.level == "warning"]
+            
+            if error_alerts:
+                overall_status = "critical"
+            elif warning_alerts:
+                overall_status = "warning"
+            else:
+                overall_status = "healthy"
+            
+            # Calculate health score (0-100)
+            health_score = 100
+            if current_metrics:
+                if current_metrics.cpu_usage > self.alert_thresholds['cpu_usage']:
+                    health_score -= 20
+                if current_metrics.memory_usage > self.alert_thresholds['memory_usage']:
+                    health_score -= 20
+                if current_metrics.disk_usage > self.alert_thresholds['disk_usage']:
+                    health_score -= 20
+                if current_metrics.error_count > 0:
+                    health_score -= min(30, current_metrics.error_count * 5)
+            
+            return {
+                "overall_status": overall_status,
+                "health_score": max(0, health_score),
+                "timestamp": datetime.now().isoformat(),
+                "metrics": current_metrics.__dict__ if current_metrics else {},
+                "recent_alerts_count": len(recent_alerts),
+                "error_alerts_count": len(error_alerts),
+                "warning_alerts_count": len(warning_alerts),
+                "monitoring_active": self.monitoring_active,
+                "circuit_breaker_status": self.circuit_breaker.state.value if hasattr(self.circuit_breaker, 'state') else "unknown"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get system health: {e}")
+            return {
+                "overall_status": "error",
+                "health_score": 0,
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }

@@ -467,7 +467,7 @@ class AutonomousResearchSystem:
                 logger.info(f"  {status_icon} {tool}: {health['success_rate']:.1%} success rate")
         
         # Check system health
-        system_health = await self.health_monitor.get_system_health()
+        system_health = self.health_monitor.get_system_health()
         logger.info(f"System Health: {system_health.get('overall_status', 'Unknown')}")
         
         # Check web app health
