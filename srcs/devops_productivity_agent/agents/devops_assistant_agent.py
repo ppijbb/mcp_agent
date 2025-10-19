@@ -18,6 +18,7 @@ from typing import Dict, List, Any, Optional
 
 # MCP Agent imports
 from srcs.core.agent.base import BaseAgent
+from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.google_augmented_llm import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -36,13 +37,6 @@ class DevOpsProductivityAgent(BaseAgent):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # Initialize Google LLM with latest Gemini model
-        self.model_name = "gemini-2.5-flash-latest"
-        self.llm = GoogleAugmentedLLM(
-            model_name=self.model_name,
-            api_key=os.getenv("GOOGLE_API_KEY", "")
-        )
-        
         # Define agent capabilities
         self.capabilities = {
             "aws_management": "AWS EC2, S3, Lambda, CloudFormation 관리",
@@ -52,49 +46,93 @@ class DevOpsProductivityAgent(BaseAgent):
             "multi_cloud_coordination": "AWS, GCP, Azure 간 리소스 조정"
         }
     
+    def _create_agents(self) -> Dict[str, Agent]:
+        """Create specialized DevOps agents according to mcp_agent standards"""
+        return {
+            "aws_manager": Agent(
+                name="aws_manager",
+                instruction="AWS EC2, S3, Lambda, CloudFormation 관리 전문가. AWS 리소스 상태 확인, 생성, 삭제, 모니터링을 담당합니다.",
+                server_names=["aws-kb"]
+            ),
+            "github_ops": Agent(
+                name="github_ops",
+                instruction="GitHub 리포지토리, PR, 이슈, CI/CD 파이프라인 관리 전문가. GitHub Actions 워크플로우 모니터링과 리포지토리 분석을 담당합니다.",
+                server_names=["github"]
+            ),
+            "prometheus_monitor": Agent(
+                name="prometheus_monitor",
+                instruction="Prometheus 메트릭 기반 인프라 모니터링 전문가. 시스템 메트릭 수집, 분석, 알림 관리를 담당합니다.",
+                server_names=["prometheus"]
+            ),
+            "k8s_ops": Agent(
+                name="k8s_ops",
+                instruction="Kubernetes 클러스터 및 워크로드 관리 전문가. Pod, Service, Deployment, ConfigMap 관리를 담당합니다.",
+                server_names=["kubernetes"]
+            ),
+            "cloud_coordinator": Agent(
+                name="cloud_coordinator",
+                instruction="멀티클라우드 리소스 조정 전문가. AWS, GCP, Azure 간 리소스 비교, 마이그레이션, 통합 관리를 담당합니다.",
+                server_names=["gcp-admin", "azure-admin"]
+            )
+        }
+    
     async def run_workflow(self, request: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Main workflow using Orchestrator for automatic tool selection and execution.
-        The LLM will automatically choose appropriate MCP tools based on the request.
+        mcp_agent 표준에 따른 워크플로우 실행
         """
         try:
-            self.logger.info(f"Processing DevOps request: {request}")
-            
-            # Create orchestrator for automatic tool selection
-            orchestrator = self.get_orchestrator([])
-            
-            # Prepare context for the orchestrator
-            workflow_context = {
-                "request": request,
-                "capabilities": self.capabilities,
-                "timestamp": datetime.now().isoformat(),
-                **(context or {})
-            }
-            
-            # Let the orchestrator handle the request using available MCP tools
-            result = await orchestrator.execute(request, workflow_context)
-            
-            # Save result to output directory
-            output_file = os.path.join(
-                self.output_dir, 
-                f"devops_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            )
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
-            
-            self.logger.info(f"DevOps workflow completed. Result saved to: {output_file}")
-            
-            return {
-                "status": "success",
-                "request": request,
-                "result": result,
-                "output_file": output_file,
-                "timestamp": datetime.now().isoformat()
-            }
-            
+            async with self.app.run() as devops_app:
+                app_context = devops_app.context
+                logger = devops_app.logger
+                
+                logger.info(f"Processing DevOps request: {request}")
+                
+                # 서버 설정
+                if "filesystem" in app_context.config.mcp.servers:
+                    app_context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
+                    logger.info("Filesystem server configured")
+                
+                # 전문 Agent 생성
+                agents = self._create_agents()
+                logger.info(f"Created {len(agents)} specialized agents: {list(agents.keys())}")
+                
+                # Orchestrator 생성
+                orchestrator = Orchestrator(
+                    llm_factory=GoogleAugmentedLLM,
+                    available_agents=list(agents.values()),
+                    plan_type="full"
+                )
+                
+                # 실행
+                result = await orchestrator.generate_str(
+                    message=request,
+                    request_params=RequestParams(
+                        model="gemini-2.5-flash-latest",
+                        temperature=0.1
+                    )
+                )
+                
+                # 결과 저장
+                output_file = os.path.join(
+                    self.output_dir,
+                    f"devops_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                )
+                
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(result)
+                
+                logger.info(f"Result saved to: {output_file}")
+                
+                return {
+                    "status": "success",
+                    "request": request,
+                    "result": result,
+                    "output_file": output_file,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
         except Exception as e:
-            self.logger.error(f"DevOps workflow failed: {str(e)}")
+            self.logger.error(f"Workflow failed: {str(e)}")
             return {
                 "status": "error",
                 "request": request,
@@ -104,7 +142,7 @@ class DevOpsProductivityAgent(BaseAgent):
 
 
 async def main():
-    """Test the DevOps assistant with MCP integration"""
+    """Test the DevOps assistant with mcp_agent standard integration"""
     agent = DevOpsProductivityAgent()
     
     # Test with sample requests
@@ -115,17 +153,23 @@ async def main():
         "Prometheus 메트릭을 통해 인프라 상태를 모니터링해주세요"
     ]
     
-    for request in test_requests:
-        print(f"\n🔄 Processing: {request}")
+    print("🚀 DevOps Productivity Agent - mcp_agent 표준 테스트")
+    print("=" * 60)
+    
+    for i, request in enumerate(test_requests, 1):
+        print(f"\n[{i}/{len(test_requests)}] 🔄 Processing: {request}")
         try:
             result = await agent.run_workflow(request)
             print(f"✅ Status: {result['status']}")
             if result['status'] == 'success':
                 print(f"📁 Output saved to: {result['output_file']}")
+                print(f"📄 Result preview: {result['result'][:200]}...")
             else:
                 print(f"❌ Error: {result.get('error', 'Unknown error')}")
         except Exception as e:
             print(f"❌ Exception: {str(e)}")
+    
+    print("\n🎉 모든 테스트 완료!")
 
 
 if __name__ == "__main__":

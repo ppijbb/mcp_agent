@@ -117,25 +117,32 @@ class DevOpsAssistantRunner:
         await self._execute_request(request)
     
     async def _execute_request(self, request: str):
-        """Execute request using the agent"""
+        """Execute request using the agent with mcp_agent standard"""
         try:
+            print(f"⏳ mcp_agent 표준으로 요청 처리 중...")
             result = await self.agent.run_workflow(request)
             
             if result['status'] == 'success':
                 print(f"\n✅ 작업 완료!")
                 print(f"📁 결과 파일: {result['output_file']}")
                 
-                # Show result summary
-                if 'result' in result and isinstance(result['result'], dict):
-                    print(f"\n📋 결과 요약:")
-                    for key, value in result['result'].items():
-                        if isinstance(value, (str, int, float)):
-                            print(f"  • {key}: {value}")
+                # Show result preview (Markdown format)
+                if 'result' in result and isinstance(result['result'], str):
+                    print(f"\n📄 결과 미리보기:")
+                    preview = result['result'][:300] + "..." if len(result['result']) > 300 else result['result']
+                    print(f"  {preview}")
+                    
+                    # Show file info
+                    if os.path.exists(result['output_file']):
+                        file_size = os.path.getsize(result['output_file'])
+                        print(f"  📊 파일 크기: {file_size:,} bytes")
             else:
                 print(f"❌ 오류: {result.get('error', '알 수 없는 오류')}")
                 
         except Exception as e:
             print(f"❌ 예외 발생: {str(e)}")
+            import traceback
+            print(f"🔍 상세 오류: {traceback.format_exc()}")
     
     async def custom_request(self):
         """사용자 정의 요청 처리"""
@@ -155,22 +162,43 @@ class DevOpsAssistantRunner:
         sys.exit(0)
     
     def check_mcp_servers(self):
-        """MCP 서버 연결 상태 확인"""
+        """MCP 서버 연결 상태 확인 (mcp_agent 표준)"""
         print("\n🔍 MCP 서버 연결 상태 확인 중...")
         
-        # Check if MCP servers are configured
+        # Check if MCP servers are configured in mcp_agent.config.yaml
         mcp_servers = ["aws-kb", "github", "prometheus", "kubernetes", "gcp-admin", "azure-admin"]
         available_servers = []
         
-        for server in mcp_servers:
-            # This is a simplified check - in production, you'd actually test connections
-            available_servers.append(server)
-        
-        if available_servers:
-            print(f"✅ 사용 가능한 MCP 서버: {', '.join(available_servers)}")
-            return True
-        else:
-            print("❌ MCP 서버에 연결할 수 없습니다")
+        try:
+            # Check if agent can access MCP servers through BaseAgent
+            if hasattr(self.agent, 'app') and hasattr(self.agent.app, 'settings'):
+                configured_servers = self.agent.app.settings.get('mcp', {}).get('servers', {})
+                for server in mcp_servers:
+                    if server in configured_servers and configured_servers[server].get('enabled', True):
+                        available_servers.append(server)
+            
+            if available_servers:
+                print(f"✅ 사용 가능한 MCP 서버: {', '.join(available_servers)}")
+                print(f"📋 서버 유형:")
+                for server in available_servers:
+                    if server == "aws-kb":
+                        print(f"  • {server}: AWS Knowledge Base")
+                    elif server == "github":
+                        print(f"  • {server}: GitHub Operations")
+                    elif server == "prometheus":
+                        print(f"  • {server}: Prometheus Metrics")
+                    elif server == "kubernetes":
+                        print(f"  • {server}: Kubernetes Cluster")
+                    elif server in ["gcp-admin", "azure-admin"]:
+                        print(f"  • {server}: Multi-cloud Management")
+                return True
+            else:
+                print("⚠️ MCP 서버가 설정되지 않았습니다")
+                print("💡 mcp_agent.config.yaml 파일을 확인해주세요")
+                return False
+                
+        except Exception as e:
+            print(f"❌ MCP 서버 확인 중 오류: {str(e)}")
             return False
     
     def check_configuration(self):
