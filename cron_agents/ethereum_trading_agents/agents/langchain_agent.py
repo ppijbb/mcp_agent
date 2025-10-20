@@ -16,7 +16,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.tools import tool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import AgentExecutor
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import BaseTool
 from langgraph.graph import StateGraph
 # ToolExecutor is not available in this version of langgraph
@@ -31,8 +32,9 @@ from utils.config import Config
 logger = logging.getLogger(__name__)
 
 class MarketData(BaseModel):
-    """Market data model using Pydantic 2"""
-    price_usd: float = Field(..., description="Current Ethereum price in USD")
+    """Market data model using Pydantic 2 - supports ETH/BTC"""
+    cryptocurrency: str = Field(..., description="Cryptocurrency type (ethereum/bitcoin)")
+    price_usd: float = Field(..., description="Current price in USD")
     price_change_24h_percent: float = Field(..., description="24h price change percentage")
     volume_24h: float = Field(..., description="24h trading volume")
     trend: str = Field(..., description="Market trend (bullish/bearish/neutral)")
@@ -47,9 +49,10 @@ class MarketData(BaseModel):
         return v
 
 class TradingDecision(BaseModel):
-    """Trading decision model using Pydantic 2"""
+    """Trading decision model using Pydantic 2 - supports ETH/BTC"""
+    cryptocurrency: str = Field(..., description="Cryptocurrency type (ethereum/bitcoin)")
     action: str = Field(..., description="Trading action (buy/sell/hold)")
-    amount_eth: float = Field(..., description="Amount of ETH to trade")
+    amount: float = Field(..., description="Amount to trade")
     target_price: float = Field(..., description="Target price for the trade")
     stop_loss: float = Field(..., description="Stop loss price")
     take_profit: float = Field(..., description="Take profit price")
@@ -65,7 +68,7 @@ class TradingDecision(BaseModel):
             raise ValueError(f'Action must be one of {valid_actions}')
         return v
     
-    @field_validator('amount_eth')
+    @field_validator('amount')
     @classmethod
     def validate_amount(cls, v: float) -> float:
         if v < 0:
@@ -180,12 +183,16 @@ class TradingAgentChain:
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ])
             
-            # Create agent with validation
-            self.agent = create_openai_tools_agent(
-                llm=self.gemini_agent.model,
-                tools=self.tools,
-                prompt=self.prompt
+            # Create Gemini LLM
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash-lite",
+                google_api_key=self.config.GEMINI_API_KEY,
+                temperature=0.1,
+                max_tokens=4000
             )
+            
+            # Create agent with Gemini LLM
+            self.agent = self._create_gemini_agent()
             
             if not self.agent:
                 raise ValueError("Failed to create agent")
@@ -206,11 +213,26 @@ class TradingAgentChain:
             # Validate all components
             self._validate_langchain_components()
             
-            logger.info("LangChain components initialized successfully")
+    def _create_gemini_agent(self):
+        """Create Gemini-based agent"""
+        try:
+            from langchain.agents import create_tool_calling_agent
+            
+            agent = create_tool_calling_agent(
+                llm=self.llm,
+                tools=self.tools,
+                prompt=self.prompt
+            )
+            
+            return agent
             
         except Exception as e:
-            logger.error(f"Failed to setup LangChain components: {e}")
-            raise
+            logger.error(f"Failed to create Gemini agent: {e}")
+            raise RuntimeError(f"Gemini agent creation failed: {e}")
+    
+    def get_llm(self):
+        """Get the LLM instance"""
+        return self.llm
     
     def _validate_langchain_components(self):
         """Validate all LangChain components are properly initialized"""

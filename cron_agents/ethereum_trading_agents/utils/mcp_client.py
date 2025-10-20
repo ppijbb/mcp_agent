@@ -13,10 +13,11 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 class MCPClient:
-    def __init__(self, ethereum_trading_url: str = None, market_data_url: str = None):
-        """Initialize MCP client"""
+    def __init__(self, ethereum_trading_url: str = None, market_data_url: str = None, bitcoin_trading_url: str = None):
+        """Initialize MCP client with Bitcoin support"""
         self.ethereum_trading_url = ethereum_trading_url or os.getenv("MCP_ETHEREUM_TRADING_URL", "http://localhost:3005")
         self.market_data_url = market_data_url or os.getenv("MCP_MARKET_DATA_URL", "http://localhost:3006")
+        self.bitcoin_trading_url = bitcoin_trading_url or os.getenv("MCP_BITCOIN_TRADING_URL", "http://localhost:3008")
         self.session = None
     
     async def __aenter__(self):
@@ -53,10 +54,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Ethereum balance request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Ethereum MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get Ethereum balance: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Ethereum balance retrieval failed: {e}")
     
     async def get_gas_price(self) -> Dict[str, Any]:
         """Get current gas price via MCP"""
@@ -65,10 +67,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Gas price request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Ethereum MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get gas price: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Gas price retrieval failed: {e}")
     
     async def send_ethereum_transaction(self, to_address: str, amount_eth: float, 
                                       gas_limit: int = 21000) -> Dict[str, Any]:
@@ -85,10 +88,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Ethereum transaction request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Ethereum MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to send Ethereum transaction: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Ethereum transaction failed: {e}")
     
     async def get_transaction_status(self, tx_hash: str) -> Dict[str, Any]:
         """Get transaction status via MCP"""
@@ -97,10 +101,85 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Transaction status request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Ethereum MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get transaction status: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Transaction status retrieval failed: {e}")
+    
+    # Bitcoin MCP Methods - NO FALLBACKS
+    async def get_bitcoin_balance(self, address: str) -> Dict[str, Any]:
+        """Get Bitcoin balance via MCP"""
+        try:
+            async with self.session.get(f"{self.bitcoin_trading_url}/balance/{address}") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin balance request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Bitcoin MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin balance: {e}")
+            raise RuntimeError(f"Bitcoin balance retrieval failed: {e}")
+    
+    async def get_bitcoin_fee_estimate(self) -> Dict[str, Any]:
+        """Get Bitcoin fee estimate via MCP"""
+        try:
+            async with self.session.get(f"{self.bitcoin_trading_url}/fee-estimate") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin fee estimate request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Bitcoin MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin fee estimate: {e}")
+            raise RuntimeError(f"Bitcoin fee estimation failed: {e}")
+    
+    async def send_bitcoin_transaction(self, to_address: str, amount_btc: float, 
+                                     fee_rate: float = None) -> Dict[str, Any]:
+        """Send Bitcoin transaction via MCP"""
+        try:
+            payload = {
+                "to_address": to_address,
+                "amount_btc": amount_btc,
+                "fee_rate": fee_rate
+            }
+            
+            async with self.session.post(f"{self.bitcoin_trading_url}/send-transaction", 
+                                       json=payload) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin transaction request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Bitcoin MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to send Bitcoin transaction: {e}")
+            raise RuntimeError(f"Bitcoin transaction failed: {e}")
+    
+    async def get_bitcoin_transaction_status(self, tx_hash: str) -> Dict[str, Any]:
+        """Get Bitcoin transaction status via MCP"""
+        try:
+            async with self.session.get(f"{self.bitcoin_trading_url}/transaction-status/{tx_hash}") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin transaction status request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Bitcoin MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin transaction status: {e}")
+            raise RuntimeError(f"Bitcoin transaction status retrieval failed: {e}")
+    
+    async def get_bitcoin_market_data(self) -> Dict[str, Any]:
+        """Get Bitcoin market data via MCP"""
+        try:
+            async with self.session.get(f"{self.bitcoin_trading_url}/market-data") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin market data request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Bitcoin MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin market data: {e}")
+            raise RuntimeError(f"Bitcoin market data retrieval failed: {e}")
     
     async def get_ethereum_price(self) -> Dict[str, Any]:
         """Get Ethereum price via MCP"""
@@ -109,10 +188,24 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Ethereum price request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Market data MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get Ethereum price: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Ethereum price retrieval failed: {e}")
+    
+    async def get_bitcoin_price(self) -> Dict[str, Any]:
+        """Get Bitcoin price via MCP"""
+        try:
+            async with self.session.get(f"{self.market_data_url}/bitcoin-price") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logger.error(f"Bitcoin price request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Market data MCP server error: HTTP {response.status}")
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin price: {e}")
+            raise RuntimeError(f"Bitcoin price retrieval failed: {e}")
     
     async def get_market_trends(self, timeframe: str = "24h") -> Dict[str, Any]:
         """Get market trends via MCP"""
@@ -121,10 +214,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Market trends request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Market data MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get market trends: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Market trends retrieval failed: {e}")
     
     async def get_technical_indicators(self) -> Dict[str, Any]:
         """Get technical indicators via MCP"""
@@ -133,10 +227,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Technical indicators request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Market data MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to get technical indicators: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Technical indicators retrieval failed: {e}")
     
     async def search_market_news(self, query: str = "ethereum") -> Dict[str, Any]:
         """Search market news via MCP"""
@@ -145,10 +240,11 @@ class MCPClient:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    return {"status": "error", "message": f"HTTP {response.status}"}
+                    logger.error(f"Market news search request failed: HTTP {response.status}")
+                    raise RuntimeError(f"Market data MCP server error: HTTP {response.status}")
         except Exception as e:
             logger.error(f"Failed to search market news: {e}")
-            return {"status": "error", "message": str(e)}
+            raise RuntimeError(f"Market news search failed: {e}")
     
     async def enhanced_mcp_operations(self) -> Dict[str, Any]:
         """Execute enhanced MCP operations with parallel processing and retry logic"""
@@ -170,7 +266,8 @@ class MCPClient:
             
             low_priority_ops = [
                 self.search_market_news("ethereum"),
-                self.get_ethereum_balance("0x0000000000000000000000000000000000000000")  # Dummy address for testing
+                # Test MCP connection with actual address
+                test_result = await self.get_ethereum_balance(self.config.ETHEREUM_ADDRESS)
             ]
             
             # Execute operations with priority-based timeouts and enhanced error handling

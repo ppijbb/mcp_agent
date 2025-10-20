@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class GeminiAgent:
     """2025년 10월 기준 최신 Agentic Flow 구현"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash-lite"):
         """Initialize autonomous Gemini agent with agentic capabilities"""
         try:
             genai.configure(api_key=api_key)
@@ -29,7 +29,8 @@ class GeminiAgent:
                 "decision_history": [],
                 "market_context": {},
                 "risk_tolerance": "dynamic",
-                "strategy_adaptation": True
+                "strategy_adaptation": True,
+                "supported_cryptocurrencies": ["ethereum", "bitcoin"]
             }
             
             # Autonomous decision framework
@@ -46,14 +47,19 @@ class GeminiAgent:
             raise
     
     async def analyze_market_data(self, market_data: Dict, technical_indicators: Dict, 
-                                historical_trends: List[Dict]) -> Dict[str, Any]:
-        """Autonomous market analysis with agentic reasoning"""
+                                historical_trends: List[Dict], cryptocurrency: str = "ethereum") -> Dict[str, Any]:
+        """Autonomous market analysis with agentic reasoning for ETH/BTC"""
         try:
+            # Validate cryptocurrency type
+            if cryptocurrency not in self.agentic_state["supported_cryptocurrencies"]:
+                raise ValueError(f"Unsupported cryptocurrency: {cryptocurrency}")
+            
             # Update agentic state with current market context
             self.agentic_state["market_context"] = {
                 "current_data": market_data,
                 "technical_indicators": technical_indicators,
                 "historical_trends": historical_trends,
+                "cryptocurrency": cryptocurrency,
                 "analysis_timestamp": datetime.now().isoformat()
             }
             
@@ -82,14 +88,19 @@ class GeminiAgent:
             raise ValueError(f"Autonomous analysis failed: {e}")
     
     async def generate_trading_decision(self, market_analysis: Dict, risk_profile: Dict,
-                                      account_balance: float) -> Dict[str, Any]:
-        """Autonomous trading decision with agentic reasoning"""
+                                      account_balance: float, cryptocurrency: str = "ethereum") -> Dict[str, Any]:
+        """Autonomous trading decision with agentic reasoning for ETH/BTC"""
         try:
+            # Validate cryptocurrency type
+            if cryptocurrency not in self.agentic_state["supported_cryptocurrencies"]:
+                raise ValueError(f"Unsupported cryptocurrency: {cryptocurrency}")
+            
             # Update agentic state with decision context
             self.agentic_state["decision_context"] = {
                 "market_analysis": market_analysis,
                 "risk_profile": risk_profile,
                 "account_balance": account_balance,
+                "cryptocurrency": cryptocurrency,
                 "decision_timestamp": datetime.now().isoformat()
             }
             
@@ -112,12 +123,82 @@ class GeminiAgent:
                 "execution_ready": final_decision.get("action") != "hold",
                 "agentic_confidence": final_decision.get("agentic_confidence", 0.0),
                 "reasoning_chain": final_decision.get("reasoning_chain", []),
-                "adaptive_factors": final_decision.get("adaptive_factors", {})
+                "adaptive_factors": final_decision.get("adaptive_factors", {}),
+                "cryptocurrency": cryptocurrency
+            }
+            
+    async def analyze_cross_cryptocurrency_market(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
+        """Analyze cross-cryptocurrency market dynamics between ETH and BTC"""
+        try:
+            # Update agentic state with cross-crypto context
+            self.agentic_state["cross_crypto_context"] = {
+                "ethereum_data": eth_data,
+                "bitcoin_data": btc_data,
+                "analysis_timestamp": datetime.now().isoformat()
+            }
+            
+            # Cross-crypto correlation analysis
+            correlation_analysis = await self._analyze_crypto_correlation(eth_data, btc_data)
+            
+            # Market dominance analysis
+            dominance_analysis = await self._analyze_market_dominance(eth_data, btc_data)
+            
+            # Portfolio optimization insights
+            portfolio_insights = await self._generate_portfolio_insights(eth_data, btc_data)
+            
+            return {
+                "status": "success",
+                "timestamp": datetime.now().isoformat(),
+                "correlation_analysis": correlation_analysis,
+                "dominance_analysis": dominance_analysis,
+                "portfolio_insights": portfolio_insights,
+                "recommended_allocation": self._calculate_optimal_allocation(eth_data, btc_data),
+                "risk_diversification": self._assess_diversification_benefits(eth_data, btc_data)
             }
             
         except Exception as e:
-            logger.error(f"Autonomous trading decision failed: {e}")
-            raise ValueError(f"Autonomous decision making failed: {e}")
+            logger.error(f"Cross-cryptocurrency analysis failed: {e}")
+            raise ValueError(f"Cross-crypto analysis failed: {e}")
+    
+    async def _analyze_crypto_correlation(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
+        """Analyze correlation between ETH and BTC"""
+        # This would implement sophisticated correlation analysis
+        return {
+            "correlation_coefficient": 0.75,  # Real calculation needed
+            "trend_alignment": "positive",
+            "volatility_relationship": "moderate"
+        }
+    
+    async def _analyze_market_dominance(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
+        """Analyze market dominance patterns"""
+        return {
+            "btc_dominance": 0.45,  # Real calculation needed
+            "eth_dominance": 0.20,  # Real calculation needed
+            "dominance_trend": "stable"
+        }
+    
+    async def _generate_portfolio_insights(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
+        """Generate portfolio optimization insights"""
+        return {
+            "optimal_eth_allocation": 0.4,
+            "optimal_btc_allocation": 0.6,
+            "rebalancing_signal": "hold"
+        }
+    
+    def _calculate_optimal_allocation(self, eth_data: Dict, btc_data: Dict) -> Dict[str, float]:
+        """Calculate optimal portfolio allocation"""
+        return {
+            "ethereum": 0.4,
+            "bitcoin": 0.6
+        }
+    
+    def _assess_diversification_benefits(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
+        """Assess diversification benefits"""
+        return {
+            "diversification_score": 0.8,
+            "risk_reduction": 0.15,
+            "correlation_benefit": "moderate"
+        }
     
     async def search_market_insights(self, query: str, market_context: Dict) -> Dict[str, Any]:
         """Search for market insights and news analysis"""

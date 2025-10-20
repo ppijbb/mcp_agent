@@ -21,11 +21,12 @@ class TradingDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                # Agent execution records
+                # Agent execution records - supports ETH/BTC
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS agent_executions (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         agent_name TEXT NOT NULL,
+                        cryptocurrency TEXT NOT NULL DEFAULT 'ethereum',
                         execution_time TIMESTAMP NOT NULL,
                         status TEXT NOT NULL,
                         input_data TEXT,
@@ -35,11 +36,12 @@ class TradingDatabase:
                     )
                 """)
                 
-                # Trading decisions
+                # Trading decisions - supports ETH/BTC
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS trading_decisions (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         execution_id INTEGER,
+                        cryptocurrency TEXT NOT NULL DEFAULT 'ethereum',
                         decision_type TEXT NOT NULL,
                         decision_data TEXT NOT NULL,
                         market_conditions TEXT,
@@ -49,11 +51,12 @@ class TradingDatabase:
                     )
                 """)
                 
-                # Market data snapshots
+                # Market data snapshots - supports ETH/BTC
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS market_snapshots (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         execution_id INTEGER,
+                        cryptocurrency TEXT NOT NULL DEFAULT 'ethereum',
                         price_usd REAL,
                         price_change_24h REAL,
                         volume_24h REAL,
@@ -64,14 +67,68 @@ class TradingDatabase:
                     )
                 """)
                 
-                # Risk management records
+                # Risk management records - supports ETH/BTC
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS risk_records (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         execution_id INTEGER,
+                        cryptocurrency TEXT NOT NULL DEFAULT 'ethereum',
                         daily_trades_count INTEGER,
-                        daily_loss_eth REAL,
+                        daily_loss_amount REAL,
                         risk_level TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (execution_id) REFERENCES agent_executions (id)
+                    )
+                """)
+                
+                # Bitcoin-specific tables
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS bitcoin_transactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        execution_id INTEGER,
+                        tx_hash TEXT UNIQUE,
+                        from_address TEXT,
+                        to_address TEXT,
+                        amount_btc REAL,
+                        amount_sats INTEGER,
+                        fee_rate REAL,
+                        confirmation_count INTEGER,
+                        status TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (execution_id) REFERENCES agent_executions (id)
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS bitcoin_market_data (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        execution_id INTEGER,
+                        price_usd REAL,
+                        price_btc REAL,
+                        market_cap REAL,
+                        volume_24h REAL,
+                        dominance_percentage REAL,
+                        active_addresses INTEGER,
+                        transaction_count INTEGER,
+                        timestamp TIMESTAMP NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (execution_id) REFERENCES agent_executions (id)
+                    )
+                """)
+                
+                # Portfolio tracking
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        execution_id INTEGER,
+                        ethereum_balance REAL,
+                        bitcoin_balance REAL,
+                        ethereum_value_usd REAL,
+                        bitcoin_value_usd REAL,
+                        total_value_usd REAL,
+                        allocation_eth_percent REAL,
+                        allocation_btc_percent REAL,
+                        timestamp TIMESTAMP NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (execution_id) REFERENCES agent_executions (id)
                     )
@@ -84,18 +141,19 @@ class TradingDatabase:
             logger.error(f"Failed to initialize database: {e}")
             raise
     
-    def record_agent_execution(self, agent_name: str, status: str, input_data: Dict = None, 
-                              output_data: Dict = None, error_message: str = None) -> int:
+    def record_agent_execution(self, agent_name: str, status: str, cryptocurrency: str = "ethereum",
+                              input_data: Dict = None, output_data: Dict = None, error_message: str = None) -> int:
         """Record agent execution and return execution ID"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
-                    INSERT INTO agent_executions (agent_name, execution_time, status, input_data, output_data, error_message)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO agent_executions (agent_name, cryptocurrency, execution_time, status, input_data, output_data, error_message)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     agent_name,
+                    cryptocurrency,
                     datetime.now().isoformat(),
                     status,
                     json.dumps(input_data) if input_data else None,
@@ -105,7 +163,7 @@ class TradingDatabase:
                 
                 execution_id = cursor.lastrowid
                 conn.commit()
-                logger.info(f"Recorded execution for agent {agent_name} with ID {execution_id}")
+                logger.info(f"Recorded execution for agent {agent_name} ({cryptocurrency}) with ID {execution_id}")
                 return execution_id
                 
         except Exception as e:
@@ -247,3 +305,152 @@ class TradingDatabase:
         except Exception as e:
             logger.error(f"Failed to get daily trading summary: {e}")
             return {'total_trades': 0, 'sell_count': 0, 'buy_count': 0, 'date': datetime.now().date().isoformat()}
+    
+    # Bitcoin-specific methods
+    def record_bitcoin_transaction(self, execution_id: int, tx_hash: str, from_address: str,
+                                 to_address: str, amount_btc: float, amount_sats: int,
+                                 fee_rate: float, confirmation_count: int = 0, status: str = "pending"):
+        """Record Bitcoin transaction"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO bitcoin_transactions (execution_id, tx_hash, from_address, to_address, 
+                                                   amount_btc, amount_sats, fee_rate, confirmation_count, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (execution_id, tx_hash, from_address, to_address, amount_btc, amount_sats, 
+                      fee_rate, confirmation_count, status))
+                
+                conn.commit()
+                logger.info(f"Recorded Bitcoin transaction {tx_hash}")
+                
+        except Exception as e:
+            logger.error(f"Failed to record Bitcoin transaction: {e}")
+            raise
+    
+    def record_bitcoin_market_data(self, execution_id: int, price_usd: float, price_btc: float,
+                                 market_cap: float, volume_24h: float, dominance_percentage: float,
+                                 active_addresses: int, transaction_count: int):
+        """Record Bitcoin market data"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO bitcoin_market_data (execution_id, price_usd, price_btc, market_cap,
+                                                   volume_24h, dominance_percentage, active_addresses, 
+                                                   transaction_count, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (execution_id, price_usd, price_btc, market_cap, volume_24h, dominance_percentage,
+                      active_addresses, transaction_count, datetime.now().isoformat()))
+                
+                conn.commit()
+                logger.info(f"Recorded Bitcoin market data for execution {execution_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to record Bitcoin market data: {e}")
+            raise
+    
+    def record_portfolio_snapshot(self, execution_id: int, ethereum_balance: float, bitcoin_balance: float,
+                                ethereum_value_usd: float, bitcoin_value_usd: float, total_value_usd: float,
+                                allocation_eth_percent: float, allocation_btc_percent: float):
+        """Record portfolio snapshot"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO portfolio_snapshots (execution_id, ethereum_balance, bitcoin_balance,
+                                                   ethereum_value_usd, bitcoin_value_usd, total_value_usd,
+                                                   allocation_eth_percent, allocation_btc_percent, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (execution_id, ethereum_balance, bitcoin_balance, ethereum_value_usd, bitcoin_value_usd,
+                      total_value_usd, allocation_eth_percent, allocation_btc_percent, datetime.now().isoformat()))
+                
+                conn.commit()
+                logger.info(f"Recorded portfolio snapshot for execution {execution_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to record portfolio snapshot: {e}")
+            raise
+    
+    def get_bitcoin_transaction_history(self, hours: int = 24) -> List[Dict]:
+        """Get Bitcoin transaction history"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT tx_hash, from_address, to_address, amount_btc, amount_sats, 
+                           fee_rate, confirmation_count, status, created_at
+                    FROM bitcoin_transactions 
+                    WHERE created_at >= datetime('now', '-{} hours')
+                    ORDER BY created_at DESC
+                """.format(hours))
+                
+                rows = cursor.fetchall()
+                return [
+                    {
+                        'tx_hash': row[0],
+                        'from_address': row[1],
+                        'to_address': row[2],
+                        'amount_btc': row[3],
+                        'amount_sats': row[4],
+                        'fee_rate': row[5],
+                        'confirmation_count': row[6],
+                        'status': row[7],
+                        'created_at': row[8]
+                    }
+                    for row in rows
+                ]
+                
+        except Exception as e:
+            logger.error(f"Failed to get Bitcoin transaction history: {e}")
+            return []
+    
+    def get_cross_crypto_analysis(self, hours: int = 24) -> Dict:
+        """Get cross-cryptocurrency analysis data"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Get latest portfolio snapshot
+                cursor.execute("""
+                    SELECT ethereum_balance, bitcoin_balance, ethereum_value_usd, bitcoin_value_usd,
+                           total_value_usd, allocation_eth_percent, allocation_btc_percent
+                    FROM portfolio_snapshots 
+                    ORDER BY timestamp DESC LIMIT 1
+                """)
+                
+                portfolio_row = cursor.fetchone()
+                
+                # Get market data trends
+                cursor.execute("""
+                    SELECT cryptocurrency, AVG(price_usd) as avg_price, COUNT(*) as data_points
+                    FROM market_snapshots 
+                    WHERE timestamp >= datetime('now', '-{} hours')
+                    GROUP BY cryptocurrency
+                """.format(hours))
+                
+                market_rows = cursor.fetchall()
+                
+                return {
+                    'portfolio': {
+                        'ethereum_balance': portfolio_row[0] if portfolio_row else 0,
+                        'bitcoin_balance': portfolio_row[1] if portfolio_row else 0,
+                        'ethereum_value_usd': portfolio_row[2] if portfolio_row else 0,
+                        'bitcoin_value_usd': portfolio_row[3] if portfolio_row else 0,
+                        'total_value_usd': portfolio_row[4] if portfolio_row else 0,
+                        'allocation_eth_percent': portfolio_row[5] if portfolio_row else 0,
+                        'allocation_btc_percent': portfolio_row[6] if portfolio_row else 0
+                    },
+                    'market_trends': {
+                        row[0]: {'avg_price': row[1], 'data_points': row[2]} 
+                        for row in market_rows
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get cross-crypto analysis: {e}")
+            return {'portfolio': {}, 'market_trends': {}}

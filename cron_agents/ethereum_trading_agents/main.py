@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Main entry point for Ethereum Trading Multi-Agent System
-Enhanced with LangChain-based modular architecture
+Main entry point for Multi-Cryptocurrency Trading System
+Enhanced with LangChain-based modular architecture supporting ETH/BTC
 """
 
 import asyncio
@@ -54,8 +54,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-class EthereumTradingSystem:
-    """Main system orchestrator for Ethereum trading agents"""
+class MultiCryptocurrencyTradingSystem:
+    """Main system orchestrator for multi-cryptocurrency trading agents"""
     
     def __init__(self):
         self.config = Config()
@@ -69,21 +69,26 @@ class EthereumTradingSystem:
         self.email_service = None
         self.trading_monitor = None
         self.trading_report_agent = None
+        self.supported_cryptocurrencies = ["ethereum", "bitcoin"]
         
     async def initialize_system(self):
         """Initialize all system components"""
         try:
-            logger.info("Initializing Ethereum Trading System...")
+            logger.info("Initializing Multi-Cryptocurrency Trading System...")
             
             # Initialize database
             self.database = TradingDatabase()
             await self.database.connect()
             logger.info("Database initialized successfully")
             
-            # Initialize MCP client
-            self.mcp_client = MCPClient()
+            # Initialize MCP client with Bitcoin support
+            self.mcp_client = MCPClient(
+                ethereum_trading_url=self.config.MCP_ETHEREUM_TRADING_URL,
+                market_data_url=self.config.MCP_MARKET_DATA_URL,
+                bitcoin_trading_url=self.config.MCP_BITCOIN_TRADING_URL
+            )
             await self.mcp_client.connect()
-            logger.info("MCP client initialized successfully")
+            logger.info("MCP client initialized successfully with ETH/BTC support")
             
             # Initialize data collector
             from .utils.data_collector import DataCollector
@@ -120,9 +125,9 @@ class EthereumTradingSystem:
             )
             logger.info("Trading monitor initialized successfully")
             
-            # Initialize agents
+            # Initialize agents for ETH/BTC
             await self._initialize_agents()
-            logger.info("Agents initialized successfully")
+            logger.info("Multi-cryptocurrency agents initialized successfully")
             
             # Initialize chains
             await self._initialize_chains()
@@ -140,56 +145,68 @@ class EthereumTradingSystem:
             await self._setup_cron_jobs()
             logger.info("Cron jobs setup completed")
             
-            logger.info("Ethereum Trading System initialized successfully!")
+            logger.info("Multi-Cryptocurrency Trading System initialized successfully!")
             
         except Exception as e:
             logger.error(f"Failed to initialize system: {e}")
             raise
     
     async def _initialize_agents(self):
-        """Initialize all trading agents"""
+        """Initialize all trading agents for ETH/BTC"""
         try:
-            # Initialize traditional trading agents
-            self.agents['conservative_trader'] = TradingAgent("conservative_trader")
-            self.agents['aggressive_trader'] = TradingAgent("aggressive_trader")
-            self.agents['balanced_trader'] = TradingAgent("balanced_trader")
+            # Initialize Ethereum trading agents
+            self.agents['ethereum_conservative'] = TradingAgent("ethereum_conservative", "ethereum")
+            self.agents['ethereum_aggressive'] = TradingAgent("ethereum_aggressive", "ethereum")
+            self.agents['ethereum_balanced'] = TradingAgent("ethereum_balanced", "ethereum")
             
-            # Initialize LangChain enhanced agents
-            self.agents['langchain_conservative'] = TradingAgentChain("langchain_conservative")
-            self.agents['langchain_aggressive'] = TradingAgentChain("langchain_aggressive")
-            self.agents['langchain_balanced'] = TradingAgentChain("langchain_balanced")
+            # Initialize Bitcoin trading agents
+            self.agents['bitcoin_conservative'] = TradingAgent("bitcoin_conservative", "bitcoin")
+            self.agents['bitcoin_aggressive'] = TradingAgent("bitcoin_aggressive", "bitcoin")
+            self.agents['bitcoin_balanced'] = TradingAgent("bitcoin_balanced", "bitcoin")
             
-            # Initialize Gemini agent
+            # Initialize LangChain enhanced agents for ETH/BTC
+            self.agents['langchain_ethereum'] = TradingAgentChain("langchain_ethereum")
+            self.agents['langchain_bitcoin'] = TradingAgentChain("langchain_bitcoin")
+            
+            # Initialize Gemini agent with multi-crypto support
             self.agents['gemini'] = GeminiAgent(
                 database=self.database,
                 mcp_client=self.mcp_client,
                 memory=self.trading_memory
             )
             
-            logger.info(f"Initialized {len(self.agents)} agents")
+            logger.info(f"Initialized {len(self.agents)} multi-cryptocurrency agents")
             
         except Exception as e:
             logger.error(f"Failed to initialize agents: {e}")
             raise
     
     async def _initialize_chains(self):
-        """Initialize LangChain chains"""
+        """Initialize LangChain chains for ETH/BTC"""
         try:
             # Get LLM from LangChain agent
-            llm = self.agents['langchain_conservative'].get_llm()
+            llm = self.agents['langchain_ethereum'].get_llm()
             
-            # Initialize trading chain with config
-            self.chains['trading'] = TradingChain(
+            # Initialize Ethereum trading chain
+            self.chains['ethereum_trading'] = TradingChain(
                 llm=llm,
-                trading_agent=self.agents['conservative_trader'],
+                trading_agent=self.agents['ethereum_balanced'],
                 analysis_agent=self.agents['gemini'],
                 config=self.config
             )
             
-            # Initialize analysis chain
+            # Initialize Bitcoin trading chain
+            self.chains['bitcoin_trading'] = TradingChain(
+                llm=llm,
+                trading_agent=self.agents['bitcoin_balanced'],
+                analysis_agent=self.agents['gemini'],
+                config=self.config
+            )
+            
+            # Initialize analysis chain for cross-crypto analysis
             self.chains['analysis'] = AnalysisChain(llm=llm)
             
-            logger.info(f"Initialized {len(self.chains)} chains")
+            logger.info(f"Initialized {len(self.chains)} multi-cryptocurrency chains")
             
         except Exception as e:
             logger.error(f"Failed to initialize chains: {e}")

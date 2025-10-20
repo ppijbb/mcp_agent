@@ -1,20 +1,24 @@
 # Ethereum Trading Agents - Requirements
-# LangChain-based modular trading system
+# LangChain-based modular trading system with Bitcoin support
+# Updated for 2025.10 - Production Level
 
 # Core LangChain dependencies
 langchain>=0.3.27
 langchain-community>=0.3.27
 langchain-core>=0.3.74
-langchain-openai>=0.3.31
 langchain-google-genai>=2.1.9
 
 # LangGraph for advanced workflow management
 langgraph>=0.2.0
 
-# LLM providers
-openai>=1.101.0
+# LLM providers - Gemini 2.5 Flash-Lite only
 google-generativeai>=0.8.5
-anthropic>=0.64.0
+openrouter>=0.1.0
+
+# Bitcoin and Cryptocurrency libraries
+python-bitcoinlib>=0.12.0
+bitcoin>=1.1.42
+bitcoin-utils>=0.6.0
 
 # Database and storage
 redis>=6.4.0
@@ -37,11 +41,15 @@ scipy>=1.10.0
 # Advanced algorithms (simplified)
 scikit-learn>=1.7.1
 
-# Financial and trading
-ccxt>=4.5.1
+# Financial and trading - Updated for 2025.10
+ccxt>=5.0.0
 ta>=0.11.0
 yfinance>=0.2.65
 alpha-vantage>=3.0.0
+
+# Bitcoin-specific trading
+bitcoin-core>=0.1.0
+bitcoin-rpc>=0.1.0
 
 # Web scraping and data collection
 beautifulsoup4>=4.13.4
@@ -92,9 +100,9 @@ orjson>=3.11.2
 ujson>=5.11.0
 msgpack>=1.1.1
 
-# Machine learning and AI
-torch>=2.8.0
-transformers>=4.55.0
+# Machine learning and AI - Updated for 2025.10
+torch>=2.5.0
+transformers>=4.60.0
 tensorflow>=2.20.0
 
 # Visualization
@@ -140,5 +148,10 @@ google-cloud-storage>=3.3.0
 pre-commit>=4.3.0
 tox>=4.28.4
 coverage>=7.10.4
-ledgereth
+# Hardware wallet support
+ledgereth>=0.1.0
 langgraph-checkpoint-sqlite>=2.0.11
+
+# Model Context Protocol support
+mcp>=1.0.0
+mcp-client>=1.0.0

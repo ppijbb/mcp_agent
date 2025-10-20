@@ -17,13 +17,18 @@ from utils.config import Config
 logger = logging.getLogger(__name__)
 
 class TradingAgent:
-    """2025년 10월 기준 최신 Agentic Trading Agent"""
+    """2025년 10월 기준 최신 Agentic Trading Agent - supports ETH/BTC"""
     
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, cryptocurrency: str = "ethereum"):
         """Initialize autonomous trading agent with agentic capabilities"""
         self.agent_name = agent_name
+        self.cryptocurrency = cryptocurrency
         self.config = Config()
         self.database = TradingDatabase()
+        
+        # Validate cryptocurrency type
+        if cryptocurrency not in ["ethereum", "bitcoin"]:
+            raise ValueError(f"Unsupported cryptocurrency: {cryptocurrency}")
         
         # Agentic capabilities
         self.agentic_capabilities = {
@@ -31,7 +36,8 @@ class TradingAgent:
             "adaptive_learning": True,
             "multi_agent_collaboration": True,
             "self_optimization": True,
-            "dynamic_strategy_adaptation": True
+            "dynamic_strategy_adaptation": True,
+            "multi_cryptocurrency_support": True
         }
         
         # Agentic state management
@@ -43,7 +49,8 @@ class TradingAgent:
             "strategy_evolution": True,
             "performance_tracking": {},
             "learning_insights": [],
-            "collaboration_history": []
+            "collaboration_history": [],
+            "cryptocurrency": cryptocurrency
         }
         
         # Initialize autonomous components
@@ -57,7 +64,8 @@ class TradingAgent:
         
         self.mcp_client = MCPClient(
             ethereum_trading_url=self.config.MCP_ETHEREUM_TRADING_URL,
-            market_data_url=self.config.MCP_MARKET_DATA_URL
+            market_data_url=self.config.MCP_MARKET_DATA_URL,
+            bitcoin_trading_url=self.config.MCP_BITCOIN_TRADING_URL
         )
         
         # Load and analyze last execution data for learning
@@ -153,65 +161,78 @@ class TradingAgent:
             }
     
     async def _collect_market_data(self) -> Dict[str, Any]:
-        """Collect comprehensive market data"""
+        """Collect comprehensive market data for ETH/BTC"""
         try:
             async with self.mcp_client:
-                # Get batch market data
-                market_data = await self.mcp_client.batch_market_data()
-                
-                if market_data["status"] != "success":
-                    return market_data
-                
-                # Extract and format data
-                ethereum_price = market_data["ethereum_price"]
-                market_trends = market_data["market_trends"]
-                technical_indicators = market_data["technical_indicators"]
-                
-                # Validate data quality
-                if (ethereum_price["status"] != "success" or 
-                    market_trends["status"] != "success" or 
-                    technical_indicators["status"] != "success"):
+                if self.cryptocurrency == "ethereum":
+                    # Ethereum market data
+                    eth_price = await self.mcp_client.get_ethereum_price()
+                    market_trends = await self.mcp_client.get_market_trends()
+                    technical_indicators = await self.mcp_client.get_technical_indicators()
+                    
                     return {
-                        "status": "error",
-                        "message": "One or more data sources failed"
+                        "status": "success",
+                        "cryptocurrency": "ethereum",
+                        "timestamp": datetime.now().isoformat(),
+                        "price_data": eth_price,
+                        "market_trends": market_trends,
+                        "technical_indicators": technical_indicators
                     }
-                
-                return {
-                    "status": "success",
-                    "timestamp": datetime.now().isoformat(),
-                    "ethereum_price": ethereum_price,
-                    "market_trends": market_trends,
-                    "technical_indicators": technical_indicators
-                }
-                
+                    
+                elif self.cryptocurrency == "bitcoin":
+                    # Bitcoin market data
+                    btc_price = await self.mcp_client.get_bitcoin_price()
+                    market_trends = await self.mcp_client.get_market_trends()
+                    technical_indicators = await self.mcp_client.get_technical_indicators()
+                    
+                    return {
+                        "status": "success",
+                        "cryptocurrency": "bitcoin",
+                        "timestamp": datetime.now().isoformat(),
+                        "price_data": btc_price,
+                        "market_trends": market_trends,
+                        "technical_indicators": technical_indicators
+                    }
+                    
         except Exception as e:
-            logger.error(f"Failed to collect market data: {e}")
-            return {"status": "error", "message": str(e)}
+            logger.error(f"Failed to collect market data for {self.cryptocurrency}: {e}")
+            return {"status": "error", "cryptocurrency": self.cryptocurrency, "message": str(e)}
     
     async def _get_account_info(self) -> Dict[str, Any]:
-        """Get account information and balance"""
+        """Get account information and balance for ETH/BTC"""
         try:
             async with self.mcp_client:
-                # Get account balance
-                balance = await self.mcp_client.get_ethereum_balance(self.config.ETHEREUM_ADDRESS)
-                
-                if balance["status"] != "success":
-                    return balance
-                
-                # Get gas price for cost estimation
-                gas_price = await self.mcp_client.get_gas_price()
-                
-                return {
-                    "status": "success",
-                    "address": self.config.ETHEREUM_ADDRESS,
-                    "balance_eth": float(balance.get("balance_eth", 0)),
-                    "balance_wei": balance.get("balance_wei", "0"),
-                    "gas_price_gwei": float(gas_price.get("gas_price_gwei", 0)) if gas_price["status"] == "success" else 0
-                }
-                
+                if self.cryptocurrency == "ethereum":
+                    # Ethereum account info
+                    balance = await self.mcp_client.get_ethereum_balance(self.config.ETHEREUM_ADDRESS)
+                    gas_price = await self.mcp_client.get_gas_price()
+                    
+                    return {
+                        "status": "success",
+                        "cryptocurrency": "ethereum",
+                        "address": self.config.ETHEREUM_ADDRESS,
+                        "balance_eth": float(balance.get("balance_eth", 0)),
+                        "balance_wei": balance.get("balance_wei", "0"),
+                        "gas_price_gwei": float(gas_price.get("gas_price_gwei", 0)) if gas_price["status"] == "success" else 0
+                    }
+                    
+                elif self.cryptocurrency == "bitcoin":
+                    # Bitcoin account info
+                    balance = await self.mcp_client.get_bitcoin_balance(self.config.BITCOIN_ADDRESS)
+                    fee_estimate = await self.mcp_client.get_bitcoin_fee_estimate()
+                    
+                    return {
+                        "status": "success",
+                        "cryptocurrency": "bitcoin",
+                        "address": self.config.BITCOIN_ADDRESS,
+                        "balance_btc": float(balance.get("balance_btc", 0)),
+                        "balance_sats": balance.get("balance_sats", "0"),
+                        "fee_rate": float(fee_estimate.get("fee_rate", 0)) if fee_estimate["status"] == "success" else 0
+                    }
+                    
         except Exception as e:
-            logger.error(f"Failed to get account info: {e}")
-            return {"status": "error", "message": str(e)}
+            logger.error(f"Failed to get account info for {self.cryptocurrency}: {e}")
+            return {"status": "error", "cryptocurrency": self.cryptocurrency, "message": str(e)}
     
     async def _analyze_market_conditions(self, market_data: Dict) -> Dict[str, Any]:
         """Analyze market conditions using AI"""

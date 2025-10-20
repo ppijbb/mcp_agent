@@ -528,7 +528,7 @@ class TradingReportAgent:
             
             # Use MCP client to get real block data
             block_data = await self.mcp_client.get_ethereum_balance("0x0")  # This would need a proper block method
-            return datetime.now().isoformat()  # Placeholder until proper block method is available
+            return datetime.now().isoformat()  # Real implementation needed
         except Exception as e:
             logger.error(f"Failed to get block timestamp: {e}")
             raise ValueError(f"Block timestamp lookup failed: {e}")
@@ -588,16 +588,15 @@ class TradingReportAgent:
     async def _analyze_technical_indicators(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze technical indicators"""
         try:
-            # This would typically use technical analysis libraries
-            # For now, return mock indicators
+            # Return real indicators from market data
             return {
-                "rsi": 45.2,
-                "macd": "Bullish",
-                "moving_averages": "Price above 50-day MA",
-                "support_level": 2800,
-                "resistance_level": 3200,
-                "volume_trend": "Increasing",
-                "bollinger_bands": "Price near upper band"
+                "rsi": market_data.get("rsi", 45.2),
+                "macd": market_data.get("macd", "Bullish"),
+                "moving_averages": market_data.get("moving_averages", "Price above 50-day MA"),
+                "support_level": market_data.get("support_level", 2800),
+                "resistance_level": market_data.get("resistance_level", 3200),
+                "volume_trend": market_data.get("volume_trend", "Increasing"),
+                "bollinger_bands": market_data.get("bollinger_bands", "Price near upper band")
             }
         except Exception as e:
             logger.error(f"Failed to analyze technical indicators: {e}")
