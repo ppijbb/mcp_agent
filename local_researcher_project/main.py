@@ -101,6 +101,31 @@ class MCPIntegrationManager:
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
             return False
+
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """MCP 도구 실행 - mcp_hub을 통해 실행."""
+        if not self.mcp_hub:
+            logger.error("MCP Hub not initialized")
+            return {"success": False, "error": "MCP Hub not initialized"}
+
+        try:
+            result = await self.mcp_hub.execute_tool(tool_name, parameters)
+            return {
+                "success": result.success,
+                "data": result.data,
+                "error": result.error,
+                "execution_time": result.execution_time,
+                "confidence": getattr(result, 'confidence', 0.0)
+            }
+        except Exception as e:
+            logger.error(f"MCP tool execution failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "data": None,
+                "execution_time": 0.0,
+                "confidence": 0.0
+            }
     
     async def start_mcp_client(self):
         """MCP 클라이언트 시작 - OpenRouter와 Gemini 2.5 Flash Lite 기반"""

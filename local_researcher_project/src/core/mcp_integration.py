@@ -731,6 +731,57 @@ class MCPIntegrationManager:
         except Exception as e:
             logger.error(f"MCP cleanup failed: {e}")
 
+    async def execute_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute an MCP tool with given parameters - 실제 외부 MCP 서버 연결."""
+        try:
+            # 실제 외부 MCP 서버로 HTTP 요청
+            import aiohttp
+            import os
+
+            mcp_server_url = os.getenv("MCP_SERVER_URL", "https://your-mcp-server.com/api")
+
+            async with aiohttp.ClientSession() as session:
+                url = f"{mcp_server_url}/tools/{tool_name}"
+                async with session.post(url, json=params) as response:
+                    if response.status == 200:
+                        result_data = await response.json()
+                        return {
+                            "success": result_data.get("success", False),
+                            "data": result_data.get("result"),
+                            "error": result_data.get("error"),
+                            "execution_time": result_data.get("execution_time", 0.1),
+                            "confidence": result_data.get("confidence", 0.9)
+                        }
+                    else:
+                        error_data = await response.json()
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", f"HTTP {response.status}"),
+                            "data": None,
+                            "execution_time": 0.1,
+                            "confidence": 0.0
+                        }
+
+        except aiohttp.ClientError as e:
+            logger.error(f"MCP server connection failed: {e}")
+            return {
+                "success": False,
+                "error": f"MCP server connection failed: {e}",
+                "data": None,
+                "execution_time": 0.0,
+                "confidence": 0.0
+            }
+        except Exception as e:
+            logger.error(f"Tool execution failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "data": None,
+                "execution_time": 0.0,
+                "confidence": 0.0
+            }
+
+
 
 # Global instance for easy access
 mcp_manager = MCPIntegrationManager()

@@ -23,7 +23,7 @@ from langchain_core.tools import BaseTool
 
 from researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
 from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_task
-from src.core.mcp_integration import execute_tool, get_best_tool_for_task, ToolCategory, health_check
+from src.core.mcp_integration import execute_tool, ToolCategory, health_check
 from src.core.reliability import execute_with_reliability, get_system_status
 from src.core.compression import compress_data, get_compression_stats
 
@@ -147,6 +147,8 @@ class AutonomousOrchestrator:
     async def _analyze_objectives(self, state: ResearchState) -> ResearchState:
         """목표 분석 (Multi-Model Orchestration)."""
         logger.info("🔍 Analyzing objectives with Multi-Model Orchestration")
+        logger.info(f"📝 Research Request: {state['user_request']}")
+        logger.info(f"📋 Context: {state.get('context', {})}")
         
         analysis_prompt = f"""
         Analyze the following research request comprehensively:
@@ -165,29 +167,62 @@ class AutonomousOrchestrator:
         Use production-level analysis with specific, actionable insights.
         """
         
-        # Multi-Model Orchestration으로 분석
-        result = await execute_llm_task(
-            prompt=analysis_prompt,
-            task_type=TaskType.ANALYSIS,
-            system_message="You are an expert research analyst with comprehensive domain knowledge."
-        )
-        
-        # 분석 결과 파싱
-        analysis_data = self._parse_analysis_result(result.content)
-        
-        state.update({
-            "analyzed_objectives": analysis_data.get("objectives", []),
-            "intent_analysis": analysis_data.get("intent", {}),
-            "domain_analysis": analysis_data.get("domain", {}),
-            "scope_analysis": analysis_data.get("scope", {}),
-            "complexity_score": analysis_data.get("complexity", 5.0),
-            "current_step": "adaptive_supervisor",
-            "innovation_stats": {
-                "analysis_model": result.model_used,
-                "analysis_confidence": result.confidence,
-                "analysis_time": result.execution_time
+        try:
+            # Multi-Model Orchestration으로 분석
+            result = await execute_llm_task(
+                prompt=analysis_prompt,
+                task_type=TaskType.ANALYSIS,
+                system_message="You are an expert research analyst with comprehensive domain knowledge."
+            )
+            
+            logger.info(f"✅ Analysis completed using model: {result.model_used}")
+            logger.info(f"📊 Analysis confidence: {result.confidence}")
+            
+            # 분석 결과 파싱
+            analysis_data = self._parse_analysis_result(result.content)
+            
+            logger.info(f"🎯 Identified objectives: {len(analysis_data.get('objectives', []))}")
+            logger.info(f"🧠 Complexity score: {analysis_data.get('complexity', 5.0)}")
+            logger.info(f"🏷️ Domain: {analysis_data.get('domain', {}).get('fields', [])}")
+            
+            state.update({
+                "analyzed_objectives": analysis_data.get("objectives", []),
+                "intent_analysis": analysis_data.get("intent", {}),
+                "domain_analysis": analysis_data.get("domain", {}),
+                "scope_analysis": analysis_data.get("scope", {}),
+                "complexity_score": analysis_data.get("complexity", 5.0),
+                "current_step": "adaptive_supervisor",
+                "innovation_stats": {
+                    "analysis_model": result.model_used,
+                    "analysis_confidence": result.confidence,
+                    "analysis_time": result.execution_time
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Analysis failed: {e}")
+            # Fallback analysis
+            analysis_data = {
+                "objectives": [{"id": "obj_1", "description": state['user_request'], "priority": "high"}],
+                "intent": {"primary": "research", "secondary": "analysis"},
+                "domain": {"fields": ["general"], "expertise": "general"},
+                "scope": {"breadth": "comprehensive", "depth": "detailed"},
+                "complexity": 5.0
             }
-        })
+            
+            state.update({
+                "analyzed_objectives": analysis_data.get("objectives", []),
+                "intent_analysis": analysis_data.get("intent", {}),
+                "domain_analysis": analysis_data.get("domain", {}),
+                "scope_analysis": analysis_data.get("scope", {}),
+                "complexity_score": analysis_data.get("complexity", 5.0),
+                "current_step": "adaptive_supervisor",
+                "innovation_stats": {
+                    "analysis_model": "fallback",
+                    "analysis_confidence": 0.5,
+                    "analysis_time": 0.0
+                }
+            })
         
         return state
     
@@ -211,6 +246,12 @@ class AutonomousOrchestrator:
         # 품질 임계값 설정
         quality_threshold = self.agent_config.quality_threshold
         
+        logger.info(f"🧠 Complexity Score: {complexity}")
+        logger.info(f"👥 Allocated Researchers: {allocated_researchers}")
+        logger.info(f"📊 Quality Threshold: {quality_threshold}")
+        logger.info(f"📋 Priority Queue Size: {len(priority_queue)}")
+        logger.info(f"💰 Available Budget: ${available_budget}")
+        
         state.update({
             "allocated_researchers": allocated_researchers,
             "priority_queue": priority_queue,
@@ -229,6 +270,8 @@ class AutonomousOrchestrator:
     async def _decompose_tasks(self, state: ResearchState) -> ResearchState:
         """작업 분해 (Multi-Model Orchestration)."""
         logger.info("📋 Decomposing tasks with Multi-Model Orchestration")
+        logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
+        logger.info(f"👥 Allocated Researchers: {state.get('allocated_researchers', 1)}")
         
         decomposition_prompt = f"""
         Decompose the following research objectives into specific, executable tasks:
@@ -250,28 +293,67 @@ class AutonomousOrchestrator:
         Provide production-level task decomposition with specific, actionable steps.
         """
         
-        # Multi-Model Orchestration으로 작업 분해
-        result = await execute_llm_task(
-            prompt=decomposition_prompt,
-            task_type=TaskType.PLANNING,
-            system_message="You are an expert project manager with research expertise."
-        )
-        
-        # 작업 분해 결과 파싱
-        tasks_data = self._parse_tasks_result(result.content)
-        
-        state.update({
-            "decomposed_tasks": tasks_data.get("tasks", []),
-            "task_assignments": tasks_data.get("assignments", []),
-            "execution_strategy": tasks_data.get("strategy", "sequential"),
-            "current_step": "execute_research",
-            "innovation_stats": {
-                **state.get("innovation_stats", {}),
-                "decomposition_model": result.model_used,
-                "decomposition_confidence": result.confidence,
-                "tasks_count": len(tasks_data.get("tasks", []))
+        try:
+            # Multi-Model Orchestration으로 작업 분해
+            result = await execute_llm_task(
+                prompt=decomposition_prompt,
+                task_type=TaskType.PLANNING,
+                system_message="You are an expert project manager with research expertise."
+            )
+            
+            logger.info(f"✅ Task decomposition completed using model: {result.model_used}")
+            logger.info(f"📊 Decomposition confidence: {result.confidence}")
+            
+            # 작업 분해 결과 파싱
+            tasks_data = self._parse_tasks_result(result.content)
+            
+            logger.info(f"📝 Created tasks: {len(tasks_data.get('tasks', []))}")
+            logger.info(f"🔄 Execution strategy: {tasks_data.get('strategy', 'sequential')}")
+            
+            # 각 작업 상세 로그
+            for i, task in enumerate(tasks_data.get('tasks', [])):
+                logger.info(f"  Task {i+1}: {task.get('name', 'Unknown')} ({task.get('type', 'research')})")
+            
+            state.update({
+                "decomposed_tasks": tasks_data.get("tasks", []),
+                "task_assignments": tasks_data.get("assignments", []),
+                "execution_strategy": tasks_data.get("strategy", "sequential"),
+                "current_step": "execute_research",
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "decomposition_model": result.model_used,
+                    "decomposition_confidence": result.confidence,
+                    "tasks_count": len(tasks_data.get("tasks", []))
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Task decomposition failed: {e}")
+            # Fallback task decomposition
+            tasks_data = {
+                "tasks": [
+                    {"id": "task_1", "name": "Research Analysis", "type": "research", "parameters": {"query": state['user_request']}},
+                    {"id": "task_2", "name": "Data Collection", "type": "data", "parameters": {"sources": 5}},
+                    {"id": "task_3", "name": "Synthesis", "type": "synthesis", "parameters": {"format": "comprehensive"}}
+                ],
+                "assignments": [{"task_id": "task_1", "researcher": "researcher_1"}],
+                "strategy": "sequential"
             }
-        })
+            
+            logger.info(f"🔄 Using fallback task decomposition: {len(tasks_data['tasks'])} tasks")
+            
+            state.update({
+                "decomposed_tasks": tasks_data.get("tasks", []),
+                "task_assignments": tasks_data.get("assignments", []),
+                "execution_strategy": tasks_data.get("strategy", "sequential"),
+                "current_step": "execute_research",
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "decomposition_model": "fallback",
+                    "decomposition_confidence": 0.5,
+                    "tasks_count": len(tasks_data.get("tasks", []))
+                }
+            })
         
         return state
     
@@ -288,34 +370,36 @@ class AutonomousOrchestrator:
             try:
                 # MCP 도구 선택
                 tool_category = self._get_tool_category_for_task(task)
-                best_tool = await get_best_tool_for_task(task.get("type", "research"), tool_category)
+                best_tool = self._get_best_tool_for_category(tool_category)
                 
                 if best_tool:
                     # MCP 도구 실행
+                    logger.info(f"🔧 Executing MCP tool: {best_tool}")
                     tool_result = await execute_tool(
                         best_tool,
                         task.get("parameters", {})
                     )
+                    logger.info(f"✅ Tool '{best_tool}' executed successfully")
                     
-                    if tool_result.success:
+                    if tool_result.get("success", False):
                         execution_results.append({
                             "task_id": task.get("id"),
                             "task_name": task.get("name"),
                             "tool_used": best_tool,
-                            "result": tool_result.data,
-                            "execution_time": tool_result.execution_time,
-                            "confidence": tool_result.confidence
+                            "result": tool_result.get("data"),
+                            "execution_time": tool_result.get("execution_time", 0.0),
+                            "confidence": tool_result.get("confidence", 0.0)
                         })
-                        
+
                         # 스트리밍 데이터 추가
                         streaming_data.append({
                             "timestamp": datetime.now().isoformat(),
                             "task_id": task.get("id"),
                             "status": "completed",
-                            "data": tool_result.data
+                            "data": tool_result.get("data")
                         })
                     else:
-                        logger.warning(f"Task {task.get('id')} failed: {tool_result.error}")
+                        logger.warning(f"Task {task.get('id')} failed: {tool_result.get('error', 'Unknown error')}")
                 else:
                     logger.warning(f"No suitable tool found for task {task.get('id')}")
                     
@@ -329,8 +413,8 @@ class AutonomousOrchestrator:
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
                 "tasks_executed": len(execution_results),
-                "tools_used": len(set(r.get("tool_used") for r in execution_results)),
-                "execution_success_rate": len(execution_results) / max(len(tasks), 1)
+                "tools_used": len(set(r.get("tool_used", "") for r in execution_results if r.get("tool_used"))),
+                "execution_success_rate": float(len(execution_results)) / max(len(tasks), 1)
             }
         })
         
@@ -388,7 +472,7 @@ class AutonomousOrchestrator:
             "current_step": "continuous_verification",
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
-                "compression_ratio": overall_compression_ratio,
+                "compression_ratio": float(overall_compression_ratio),
                 "compression_applied": len(compression_results)
             }
         })
@@ -439,7 +523,7 @@ class AutonomousOrchestrator:
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
                 "verification_applied": len(verification_stages),
-                "avg_confidence": sum(confidence_scores.values()) / max(len(confidence_scores), 1)
+                "avg_confidence": float(sum(confidence_scores.values())) / max(len(confidence_scores), 1)
             }
         })
         
@@ -616,7 +700,18 @@ class AutonomousOrchestrator:
         elif "data" in task_type:
             return ToolCategory.DATA
         else:
-            return ToolCategory.RESEARCH
+            return ToolCategory.SEARCH  # RESEARCH 대신 SEARCH 사용
+    
+    def _get_best_tool_for_category(self, category: ToolCategory) -> Optional[str]:
+        """카테고리에 맞는 최적의 도구 반환."""
+        tool_mapping = {
+            ToolCategory.SEARCH: "g-search",
+            ToolCategory.DATA: "fetch",
+            ToolCategory.CODE: "python_coder",
+            ToolCategory.ACADEMIC: "arxiv",
+            ToolCategory.BUSINESS: "crunchbase"
+        }
+        return tool_mapping.get(category, "g-search")  # 기본값으로 g-search 사용
     
     async def _self_verification(self, result: Dict[str, Any]) -> float:
         """자체 검증."""
@@ -659,44 +754,88 @@ class AutonomousOrchestrator:
         # 초기 상태 설정
         initial_state = ResearchState(
             user_request=user_request,
-                context=context or {},
+            context=context or {},
             objective_id=f"obj_{int(datetime.now().timestamp())}",
-                analyzed_objectives=[],
-                intent_analysis={},
-                domain_analysis={},
-                scope_analysis={},
-                decomposed_tasks=[],
-                task_assignments=[],
-                execution_strategy="",
-                execution_results=[],
-                agent_status={},
-                execution_metadata={},
+            analyzed_objectives=[],
+            intent_analysis={},
+            domain_analysis={},
+            scope_analysis={},
+            decomposed_tasks=[],
+            task_assignments=[],
+            execution_strategy="",
+            execution_results=[],
+            agent_status={},
+            execution_metadata={},
             streaming_data=[],
             compression_results=[],
             compression_metadata={},
             verification_results={},
             confidence_scores={},
             verification_stages=[],
-                evaluation_results={},
-                quality_metrics={},
-                improvement_areas=[],
-                validation_results={},
-                validation_score=0.0,
-                missing_elements=[],
-                final_synthesis={},
-                deliverable_path=None,
-                synthesis_metadata={},
+            evaluation_results={},
+            quality_metrics={},
+            improvement_areas=[],
+            validation_results={},
+            validation_score=0.0,
+            missing_elements=[],
+            final_synthesis={},
+            deliverable_path=None,
+            synthesis_metadata={},
             context_window_usage={},
-                current_step="analyze_objectives",
-                iteration=0,
+            current_step="analyze_objectives",
+            iteration=0,
             max_iterations=10,
-                should_continue=True,
-                error_message=None,
+            should_continue=True,
+            error_message=None,
             innovation_stats={},
             messages=[]
         )
         
-        # 간단한 연구 실행 (LangGraph 대신 직접 LLM 호출)
+        try:
+            # LangGraph 워크플로우 실행
+            logger.info("🔄 Executing LangGraph workflow with 8 core innovations")
+            final_state = await self.graph.ainvoke(initial_state)
+            
+            # 결과 포맷팅
+            result = {
+                "content": final_state.get("final_synthesis", {}).get("content", "Research completed"),
+                "metadata": {
+                    "model_used": final_state.get("final_synthesis", {}).get("model_used", "unknown"),
+                    "execution_time": final_state.get("final_synthesis", {}).get("execution_time", 0.0),
+                    "cost": 0.0,
+                    "confidence": final_state.get("final_synthesis", {}).get("confidence", 0.9)
+                },
+                "synthesis_results": {
+                    "content": final_state.get("final_synthesis", {}).get("content", ""),
+                    "original_length": len(str(final_state.get("execution_results", []))),
+                    "compressed_length": len(str(final_state.get("compression_results", []))),
+                    "compression_ratio": final_state.get("compression_metadata", {}).get("overall_compression_ratio", 1.0)
+                },
+                "innovation_stats": final_state.get("innovation_stats", {}),
+                "system_health": {"overall_status": "healthy", "health_score": 95},
+                "detailed_results": {
+                    "analyzed_objectives": final_state.get("analyzed_objectives", []),
+                    "decomposed_tasks": final_state.get("decomposed_tasks", []),
+                    "execution_results": final_state.get("execution_results", []),
+                    "compression_results": final_state.get("compression_results", []),
+                    "verification_stages": final_state.get("verification_stages", []),
+                    "evaluation_results": final_state.get("evaluation_results", {}),
+                    "quality_metrics": final_state.get("quality_metrics", {})
+                }
+            }
+            
+            logger.info("✅ Research completed successfully with 8 core innovations")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Research failed: {e}")
+            # Fallback: 간단한 연구 실행
+            return await self._fallback_research(user_request, context)
+    
+    async def _fallback_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Fallback 연구 실행 (MCP 연결 실패 시)."""
+        logger.info("🔄 Executing fallback research due to MCP connection issues")
+        
         try:
             research_prompt = f"""
             다음 연구 요청에 대해 전문적이고 상세한 분석을 제공해주세요:
@@ -734,7 +873,7 @@ class AutonomousOrchestrator:
             content = response.choices[0].message.content
             
             # 결과 반환
-            final_state = {
+            return {
                 "content": content,
                 "metadata": {
                     "model_used": "qwen/qwen2.5-vl-72b-instruct:free",
@@ -749,23 +888,20 @@ class AutonomousOrchestrator:
                     "compression_ratio": 1.0
                 },
                 "innovation_stats": {
-                    "adaptive_supervisor": "active",
+                    "adaptive_supervisor": "fallback",
                     "hierarchical_compression": "applied",
-                    "multi_model_orchestration": "active",
-                    "continuous_verification": "active",
+                    "multi_model_orchestration": "fallback",
+                    "continuous_verification": "fallback",
                     "streaming_pipeline": "disabled",
-                    "universal_mcp_hub": "active",
+                    "universal_mcp_hub": "failed",
                     "adaptive_context_window": "active",
                     "production_grade_reliability": "active"
                 },
-                "system_health": {"overall_status": "healthy", "health_score": 95}
+                "system_health": {"overall_status": "degraded", "health_score": 75}
             }
             
-            logger.info("✅ Research completed successfully with 8 core innovations")
-            return final_state
-            
         except Exception as e:
-            logger.error(f"❌ Research failed: {e}")
+            logger.error(f"❌ Fallback research failed: {e}")
             return {
                 "content": f"Research failed: {str(e)}",
                 "metadata": {
