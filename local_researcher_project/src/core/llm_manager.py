@@ -8,12 +8,16 @@ Multi-Model Orchestration (혁신 3)
 import asyncio
 import time
 import logging
+import os
+import json
+import requests
 from typing import Dict, Any, List, Optional, Union, Callable
 from dataclasses import dataclass
 from enum import Enum
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from openai import OpenAI
 
 from researcher_config import get_llm_config, get_agent_config
 from src.core.reliability import execute_with_reliability
@@ -31,6 +35,15 @@ class TaskType(Enum):
     RESEARCH = "research"
     ANALYSIS = "analysis"
     SYNTHESIS = "synthesis"
+
+
+class Provider(Enum):
+    """LLM 제공자."""
+    GOOGLE = "google"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    OPENROUTER = "openrouter"
+    LOCAL = "local"
 
 
 @dataclass
@@ -206,6 +219,55 @@ class MultiModelOrchestrator:
             quality_rating=8.0,
             capabilities=[TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
         )
+        
+        # OpenRouter 무료 모델들 (프로토타이핑용)
+        self.models["qwen2.5-vl-72b"] = ModelConfig(
+            name="qwen2.5-vl-72b",
+            provider="openrouter",
+            model_id="qwen/qwen2.5-vl-72b-instruct:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_token=0.0,  # 무료
+            speed_rating=7.0,
+            quality_rating=8.5,
+            capabilities=[TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
+        )
+        
+        self.models["deepseek-chat-v3"] = ModelConfig(
+            name="deepseek-chat-v3",
+            provider="openrouter",
+            model_id="deepseek/deepseek-chat-v3-0324:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_token=0.0,  # 무료
+            speed_rating=8.0,
+            quality_rating=8.0,
+            capabilities=[TaskType.PLANNING, TaskType.GENERATION, TaskType.RESEARCH]
+        )
+        
+        self.models["llama-3.3-70b"] = ModelConfig(
+            name="llama-3.3-70b",
+            provider="openrouter",
+            model_id="meta-llama/llama-3.3-70b-instruct:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_token=0.0,  # 무료
+            speed_rating=6.0,
+            quality_rating=9.0,
+            capabilities=[TaskType.DEEP_REASONING, TaskType.VERIFICATION, TaskType.SYNTHESIS]
+        )
+        
+        self.models["gemma-2-27b"] = ModelConfig(
+            name="gemma-2-27b",
+            provider="openrouter",
+            model_id="google/gemma-2-27b-it:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_token=0.0,  # 무료
+            speed_rating=7.5,
+            quality_rating=7.5,
+            capabilities=[TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
+        )
     
     def _initialize_clients(self):
         """모델 클라이언트 초기화."""
@@ -224,6 +286,17 @@ class MultiModelOrchestrator:
                         max_tokens=model_config.max_tokens,
                         google_api_key=self.llm_config.api_key
                     )
+                
+                elif model_config.provider == "openrouter":
+                    # OpenRouter 클라이언트
+                    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+                    if openrouter_api_key:
+                        self.model_clients[model_name] = OpenAI(
+                            base_url="https://openrouter.ai/api/v1",
+                            api_key=openrouter_api_key
+                        )
+                    else:
+                        logger.warning(f"OpenRouter API key not found for {model_name}")
             
             logger.info("Model clients initialized successfully")
             
@@ -251,7 +324,24 @@ class MultiModelOrchestrator:
             # 기본 모델 사용
             return "gemini-flash-lite"
         
-        # 복잡도에 따른 모델 선택
+        # OpenRouter 무료 모델 우선 선택 (프로토타이핑용)
+        openrouter_models = [
+            name for name in suitable_models
+            if self.models[name].provider == "openrouter" and self.models[name].cost_per_token == 0.0
+        ]
+        
+        if openrouter_models:
+            # 복잡도에 따른 OpenRouter 모델 선택
+            if complexity > 7.0 and "qwen2.5-vl-72b" in openrouter_models:
+                return "qwen2.5-vl-72b"
+            elif complexity > 6.0 and "llama-3.3-70b" in openrouter_models:
+                return "llama-3.3-70b"
+            elif complexity > 5.0 and "deepseek-chat-v3" in openrouter_models:
+                return "deepseek-chat-v3"
+            else:
+                return "gemma-2-27b" if "gemma-2-27b" in openrouter_models else openrouter_models[0]
+        
+        # OpenRouter 모델이 없으면 Google 모델 사용
         if complexity > 7.0 and "gemini-pro" in suitable_models:
             return "gemini-pro"
         elif complexity > 5.0 and "gemini-flash" in suitable_models:
@@ -271,8 +361,21 @@ class MultiModelOrchestrator:
         if model_name is None:
             model_name = self.select_model(task_type)
         
+        # OpenRouter 모델의 경우 API 키가 없으면 Google 모델로 폴백
         if model_name not in self.model_clients:
-            raise ValueError(f"Model {model_name} not available")
+            if self.models[model_name].provider == "openrouter":
+                logger.warning(f"OpenRouter model {model_name} not available, falling back to Google model")
+                # Google 모델로 폴백
+                fallback_models = [
+                    name for name, config in self.models.items()
+                    if config.provider == "google" and task_type in config.capabilities
+                ]
+                if fallback_models:
+                    model_name = fallback_models[0]
+                else:
+                    model_name = "gemini-flash-lite"
+            else:
+                raise ValueError(f"Model {model_name} not available")
         
         start_time = time.time()
         
@@ -281,6 +384,11 @@ class MultiModelOrchestrator:
             if model_name.endswith("_langchain"):
                 # LangChain 클라이언트 사용
                 result = await self._execute_langchain_model(
+                    model_name, prompt, system_message, **kwargs
+                )
+            elif self.models[model_name.replace("_langchain", "")].provider == "openrouter":
+                # OpenRouter 클라이언트 사용
+                result = await self._execute_openrouter_model(
                     model_name, prompt, system_message, **kwargs
                 )
             else:
@@ -358,6 +466,55 @@ class MultiModelOrchestrator:
                 "max_tokens": model_config.max_tokens
             }
         }
+    
+    async def _execute_openrouter_model(
+        self,
+        model_name: str,
+        prompt: str,
+        system_message: str = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """OpenRouter 모델 실행."""
+        client = self.model_clients[model_name]
+        model_config = self.models[model_name]
+        
+        # 메시지 구성
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            # OpenRouter API 호출
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model=model_config.model_id,
+                    messages=messages,
+                    temperature=model_config.temperature,
+                    max_tokens=model_config.max_tokens,
+                    **kwargs
+                )
+            )
+            
+            content = response.choices[0].message.content
+            
+            return {
+                "content": content,
+                "confidence": 0.8,
+                "quality_score": 0.8,
+                "metadata": {
+                    "model": model_name,
+                    "provider": "openrouter",
+                    "model_id": model_config.model_id,
+                    "tokens_used": len(content.split()),
+                    "usage": response.usage.__dict__ if hasattr(response, 'usage') else {}
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"OpenRouter API error: {e}")
+            raise RuntimeError(f"OpenRouter model {model_name} failed: {e}")
     
     async def _execute_langchain_model(
         self,
