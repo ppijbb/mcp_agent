@@ -8,9 +8,9 @@ Multi-Model Orchestration (혁신 3)
 import asyncio
 import time
 import logging
+import requests
 import os
 import json
-import requests
 from typing import Dict, Any, List, Optional, Union, Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -172,12 +172,30 @@ class MultiModelOrchestrator:
         self.llm_config = get_llm_config()
         self.agent_config = get_agent_config()
         
+        # Provider별 API 키 검증
+        self._validate_provider_config()
+        
         self.models: Dict[str, ModelConfig] = {}
         self.performance_tracker = ModelPerformanceTracker()
         self.model_clients: Dict[str, Any] = {}
         
         self._initialize_models()
         self._initialize_clients()
+    
+    def _validate_provider_config(self):
+        """Provider별 API 키 검증."""
+        if self.llm_config.provider == "openrouter":
+            if not os.getenv("OPENROUTER_API_KEY"):
+                raise ValueError("OPENROUTER_API_KEY is required for OpenRouter LLM provider")
+        elif self.llm_config.provider == "google":
+            if not self.llm_config.api_key:
+                raise ValueError("GOOGLE_API_KEY is required for Google LLM provider")
+        elif self.llm_config.provider == "openai":
+            if not self.llm_config.openai_api_key:
+                raise ValueError("OPENAI_API_KEY is required for OpenAI LLM provider")
+        elif self.llm_config.provider == "anthropic":
+            if not self.llm_config.anthropic_api_key:
+                raise ValueError("ANTHROPIC_API_KEY is required for Anthropic LLM provider")
     
     def _initialize_models(self):
         """모델 초기화."""
@@ -220,54 +238,181 @@ class MultiModelOrchestrator:
             capabilities=[TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
         )
         
-        # OpenRouter 무료 모델들 (프로토타이핑용)
-        self.models["qwen2.5-vl-72b"] = ModelConfig(
-            name="qwen2.5-vl-72b",
-            provider="openrouter",
-            model_id="qwen/qwen2.5-vl-72b-instruct:free",
-            temperature=0.1,
-            max_tokens=4000,
-            cost_per_token=0.0,  # 무료
-            speed_rating=7.0,
-            quality_rating=8.5,
-            capabilities=[TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
+        # OpenRouter 모델들은 폴백 모델로 시작 (API 호출은 나중에)
+        self._load_fallback_openrouter_models()
+    
+    def _load_openrouter_models(self):
+        """OpenRouter API에서 무료 모델들을 동적으로 로드."""
+        try:
+            openrouter_models = self._fetch_openrouter_models()
+            for model_data in openrouter_models:
+                if self._is_free_model(model_data):
+                    model_name = self._generate_model_name(model_data)
+                    model_config = self._create_model_config(model_data, model_name)
+                    self.models[model_name] = model_config
+                    logger.info(f"Loaded OpenRouter model: {model_name} ({model_data['id']})")
+        except Exception as e:
+            logger.warning(f"Failed to load OpenRouter models: {e}")
+            # 폴백: 기본 무료 모델들
+            self._load_fallback_openrouter_models()
+    
+    def _fetch_openrouter_models(self):
+        """OpenRouter API에서 모델 목록을 가져옴."""
+        
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found")
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(
+            "https://openrouter.ai/api/v1/models",
+            headers=headers,
+            timeout=10
         )
         
-        self.models["deepseek-chat-v3"] = ModelConfig(
-            name="deepseek-chat-v3",
-            provider="openrouter",
-            model_id="deepseek/deepseek-chat-v3-0324:free",
-            temperature=0.1,
-            max_tokens=4000,
-            cost_per_token=0.0,  # 무료
-            speed_rating=8.0,
-            quality_rating=8.0,
-            capabilities=[TaskType.PLANNING, TaskType.GENERATION, TaskType.RESEARCH]
-        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("data", [])
+        else:
+            raise Exception(f"OpenRouter API error: {response.status_code} - {response.text}")
+    
+    def _is_free_model(self, model_data):
+        """모델이 무료인지 확인."""
+        pricing = model_data.get("pricing", {})
+        prompt_price = pricing.get("prompt", "0")
+        completion_price = pricing.get("completion", "0")
         
-        self.models["llama-3.3-70b"] = ModelConfig(
-            name="llama-3.3-70b",
-            provider="openrouter",
-            model_id="meta-llama/llama-3.3-70b-instruct:free",
-            temperature=0.1,
-            max_tokens=4000,
-            cost_per_token=0.0,  # 무료
-            speed_rating=6.0,
-            quality_rating=9.0,
-            capabilities=[TaskType.DEEP_REASONING, TaskType.VERIFICATION, TaskType.SYNTHESIS]
-        )
+        # 무료 모델 조건: prompt와 completion 가격이 모두 0이거나 매우 낮음
+        try:
+            prompt_cost = float(prompt_price) if prompt_price else 0
+            completion_cost = float(completion_price) if completion_price else 0
+            return prompt_cost == 0 and completion_cost == 0
+        except (ValueError, TypeError):
+            return False
+    
+    def _generate_model_name(self, model_data):
+        """모델 데이터에서 고유한 이름 생성."""
+        model_id = model_data.get("id", "")
+        # "provider/model-name:tag" 형식을 "provider-model-name-tag"로 변환
+        name = model_id.replace("/", "-").replace(":", "-").replace("_", "-")
+        return name
+    
+    def _create_model_config(self, model_data, model_name):
+        """모델 데이터에서 ModelConfig 생성."""
+        model_id = model_data.get("id", "")
+        context_length = model_data.get("context_length", 4000)
         
-        self.models["gemma-2-27b"] = ModelConfig(
-            name="gemma-2-27b",
+        # 모델별 기본 설정
+        capabilities = self._determine_capabilities(model_id)
+        speed_rating = self._estimate_speed_rating(model_id)
+        quality_rating = self._estimate_quality_rating(model_id)
+        
+        return ModelConfig(
+            name=model_name,
             provider="openrouter",
-            model_id="google/gemma-2-27b-it:free",
+            model_id=model_id,
             temperature=0.1,
-            max_tokens=4000,
-            cost_per_token=0.0,  # 무료
-            speed_rating=7.5,
-            quality_rating=7.5,
-            capabilities=[TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
+            max_tokens=min(context_length, 4000),
+            cost_per_token=0.0,  # 무료 모델
+            speed_rating=speed_rating,
+            quality_rating=quality_rating,
+            capabilities=capabilities
         )
+    
+    def _determine_capabilities(self, model_id):
+        """모델 ID를 기반으로 capabilities 결정."""
+        capabilities = [TaskType.GENERATION]  # 기본
+        
+        # 모델명에 따른 capabilities 추가
+        if any(keyword in model_id.lower() for keyword in ["reasoning", "reason", "think"]):
+            capabilities.extend([TaskType.DEEP_REASONING, TaskType.ANALYSIS])
+        
+        if any(keyword in model_id.lower() for keyword in ["code", "coder", "programming"]):
+            capabilities.extend([TaskType.RESEARCH, TaskType.COMPRESSION])
+        
+        if any(keyword in model_id.lower() for keyword in ["verify", "check", "validate"]):
+            capabilities.extend([TaskType.VERIFICATION])
+        
+        if any(keyword in model_id.lower() for keyword in ["plan", "planning", "strategy"]):
+            capabilities.append(TaskType.PLANNING)
+        
+        # 기본적으로 모든 작업 가능
+        if not any(keyword in model_id.lower() for keyword in ["reasoning", "code", "verify", "plan"]):
+            capabilities = [TaskType.PLANNING, TaskType.DEEP_REASONING, TaskType.VERIFICATION, 
+                          TaskType.GENERATION, TaskType.COMPRESSION, TaskType.RESEARCH]
+        
+        return list(set(capabilities))  # 중복 제거
+    
+    def _estimate_speed_rating(self, model_id):
+        """모델 ID를 기반으로 속도 등급 추정."""
+        if any(keyword in model_id.lower() for keyword in ["flash", "fast", "lite", "small"]):
+            return 8.0
+        elif any(keyword in model_id.lower() for keyword in ["large", "big", "70b", "72b"]):
+            return 6.0
+        else:
+            return 7.0
+    
+    def _estimate_quality_rating(self, model_id):
+        """모델 ID를 기반으로 품질 등급 추정."""
+        if any(keyword in model_id.lower() for keyword in ["70b", "72b", "large", "pro"]):
+            return 9.0
+        elif any(keyword in model_id.lower() for keyword in ["27b", "medium"]):
+            return 7.5
+        else:
+            return 8.0
+    
+    def _load_fallback_openrouter_models(self):
+        """OpenRouter API 실패 시 기본 무료 모델들 로드."""
+        fallback_models = [
+            {
+                "id": "qwen/qwen2.5-vl-72b-instruct:free",
+                "name": "qwen2.5-vl-72b",
+                "capabilities": [TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
+            },
+            {
+                "id": "deepseek/deepseek-chat-v3-0324:free", 
+                "name": "deepseek-chat-v3",
+                "capabilities": [TaskType.PLANNING, TaskType.GENERATION, TaskType.RESEARCH]
+            },
+            {
+                "id": "meta-llama/llama-3.3-70b-instruct:free",
+                "name": "llama-3.3-70b", 
+                "capabilities": [TaskType.DEEP_REASONING, TaskType.VERIFICATION, TaskType.SYNTHESIS]
+            }
+        ]
+        
+        for model_data in fallback_models:
+            model_name = model_data["name"]
+            model_config = ModelConfig(
+                name=model_name,
+                provider="openrouter",
+                model_id=model_data["id"],
+                temperature=0.1,
+                max_tokens=4000,
+                cost_per_token=0.0,
+                speed_rating=7.0,
+                quality_rating=8.0,
+                capabilities=model_data["capabilities"]
+            )
+            self.models[model_name] = model_config
+            logger.info(f"Loaded fallback OpenRouter model: {model_name}")
+    
+    def refresh_openrouter_models(self):
+        """OpenRouter 모델 목록을 새로고침."""
+        logger.info("Refreshing OpenRouter models...")
+        # 기존 OpenRouter 모델들 제거
+        openrouter_models = [name for name, config in self.models.items() 
+                           if config.provider == "openrouter"]
+        for model_name in openrouter_models:
+            del self.models[model_name]
+        
+        # 새로 로드
+        self._load_openrouter_models()
+        logger.info(f"Refreshed OpenRouter models: {len([name for name, config in self.models.items() if config.provider == 'openrouter'])} models loaded")
     
     def _initialize_clients(self):
         """모델 클라이언트 초기화."""
@@ -361,19 +506,13 @@ class MultiModelOrchestrator:
         if model_name is None:
             model_name = self.select_model(task_type)
         
-        # OpenRouter 모델의 경우 API 키가 없으면 Google 모델로 폴백
+        # 모델 클라이언트 확인
         if model_name not in self.model_clients:
             if self.models[model_name].provider == "openrouter":
-                logger.warning(f"OpenRouter model {model_name} not available, falling back to Google model")
-                # Google 모델로 폴백
-                fallback_models = [
-                    name for name, config in self.models.items()
-                    if config.provider == "google" and task_type in config.capabilities
-                ]
-                if fallback_models:
-                    model_name = fallback_models[0]
+                if not os.getenv("OPENROUTER_API_KEY"):
+                    raise ValueError(f"OpenRouter API key not found for model {model_name}")
                 else:
-                    model_name = "gemini-flash-lite"
+                    raise ValueError(f"OpenRouter model {model_name} client not initialized")
             else:
                 raise ValueError(f"Model {model_name} not available")
         
@@ -646,16 +785,18 @@ async def execute_llm_task(
     **kwargs
 ) -> ModelResult:
     """LLM 작업 실행."""
-    return await execute_with_reliability(
-        llm_orchestrator.execute_with_model if not use_ensemble else llm_orchestrator.weighted_ensemble,
-        prompt,
-        task_type,
-        model_name,
-        system_message,
-        **kwargs,
-        component_name="llm_execution",
-        save_state=True
-    )
+    try:
+        if use_ensemble:
+            return await llm_orchestrator.weighted_ensemble(
+                prompt, task_type, model_name, system_message, **kwargs
+            )
+        else:
+            return await llm_orchestrator.execute_with_model(
+                prompt, task_type, model_name, system_message, **kwargs
+            )
+    except Exception as e:
+        logger.error(f"LLM task execution failed: {e}")
+        raise
 
 
 def get_best_model_for_task(task_type: TaskType) -> str:

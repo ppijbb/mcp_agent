@@ -25,30 +25,33 @@ class TaskType(Enum):
 @dataclass
 class LLMConfig:
     """LLM configuration settings - Multi-Model Orchestration (혁신 3)."""
-    # Primary provider (Gemini 중심)
-    provider: str = os.getenv("LLM_PROVIDER", "google")
-    primary_model: str = os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
+    # Primary provider (OpenRouter 기본)
+    provider: str = os.getenv("LLM_PROVIDER", "openrouter")
+    primary_model: str = os.getenv("LLM_MODEL", "google/gemini-2.5-flash-lite")
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "4000"))
     api_key: str = os.getenv("GOOGLE_API_KEY", "")
     
-    # Multi-Model Orchestration (혁신 3)
-    planning_model: str = os.getenv("PLANNING_MODEL", "gemini-2.5-flash-lite")
-    reasoning_model: str = os.getenv("REASONING_MODEL", "gemini-2.5-pro")
-    verification_model: str = os.getenv("VERIFICATION_MODEL", "claude-sonnet-4")
-    generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash-lite")
-    compression_model: str = os.getenv("COMPRESSION_MODEL", "gemini-2.5-flash-lite")
+    # Multi-Model Orchestration (혁신 3) - Gemini 2.5 Flash-Lite 우선
+    planning_model: str = os.getenv("PLANNING_MODEL", "google/gemini-2.5-flash-lite")
+    reasoning_model: str = os.getenv("REASONING_MODEL", "google/gemini-2.5-flash-lite")
+    verification_model: str = os.getenv("VERIFICATION_MODEL", "google/gemini-2.5-flash-lite")
+    generation_model: str = os.getenv("GENERATION_MODEL", "google/gemini-2.5-flash-lite")
+    compression_model: str = os.getenv("COMPRESSION_MODEL", "google/gemini-2.5-flash-lite")
     
-    # Fallback models
+    # OpenRouter API Key
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     
     # Cost optimization
     budget_limit: float = float(os.getenv("BUDGET_LIMIT", "100.0"))
     enable_cost_optimization: bool = os.getenv("ENABLE_COST_OPTIMIZATION", "true").lower() == "true"
     
     def __post_init__(self):
-        if not self.api_key and self.provider == "google":
+        if self.provider == "openrouter" and not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY environment variable is required for OpenRouter LLM provider")
+        elif self.provider == "google" and not self.api_key:
             raise ValueError("GOOGLE_API_KEY environment variable is required for Google LLM provider")
 
 
@@ -100,38 +103,40 @@ class MCPConfig:
     """MCP integration settings - Universal MCP Hub (혁신 6)."""
     enabled: bool = os.getenv("MCP_ENABLED", "true").lower() == "true"
     server_names: List[str] = field(default_factory=lambda: [
-        "g-search", "fetch", "filesystem", "python_coder", "code_interpreter",
-        "arxiv", "scholar", "pubmed", "crunchbase", "linkedin"
+        "g-search", "tavily", "exa", "fetch", "filesystem", 
+        "python_coder", "code_interpreter", "arxiv", "scholar", 
+        "crunchbase", "linkedin"
     ])
     connection_timeout: int = int(os.getenv("MCP_TIMEOUT", "30"))
     
-    # Universal MCP Hub (혁신 6)
+    # Universal MCP Hub (혁신 6) - MCP만 사용
     enable_plugin_architecture: bool = os.getenv("ENABLE_PLUGIN_ARCHITECTURE", "true").lower() == "true"
-    enable_auto_fallback: bool = os.getenv("ENABLE_AUTO_FALLBACK", "true").lower() == "true"
-    enable_performance_tracking: bool = os.getenv("ENABLE_PERFORMANCE_TRACKING", "true").lower() == "true"
     enable_smart_tool_selection: bool = os.getenv("ENABLE_SMART_TOOL_SELECTION", "true").lower() == "true"
     
     # Tool categories
-    search_tools: List[str] = field(default_factory=lambda: ["g-search", "tavily", "exa", "brave"])
-    data_tools: List[str] = field(default_factory=lambda: ["fetch", "filesystem", "database"])
+    search_tools: List[str] = field(default_factory=lambda: ["g-search", "tavily", "exa"])
+    data_tools: List[str] = field(default_factory=lambda: ["fetch", "filesystem"])
     code_tools: List[str] = field(default_factory=lambda: ["python_coder", "code_interpreter"])
-    academic_tools: List[str] = field(default_factory=lambda: ["arxiv", "scholar", "pubmed"])
+    academic_tools: List[str] = field(default_factory=lambda: ["arxiv", "scholar"])
     business_tools: List[str] = field(default_factory=lambda: ["crunchbase", "linkedin"])
 
 
 @dataclass
 class CompressionConfig:
     """Hierarchical Compression settings (혁신 2)."""
+    enabled: bool = os.getenv("ENABLE_HIERARCHICAL_COMPRESSION", "true").lower() == "true"
     enable_hierarchical_compression: bool = os.getenv("ENABLE_HIERARCHICAL_COMPRESSION", "true").lower() == "true"
     compression_levels: int = int(os.getenv("COMPRESSION_LEVELS", "3"))
     preserve_important_info: bool = os.getenv("PRESERVE_IMPORTANT_INFO", "true").lower() == "true"
     enable_compression_validation: bool = os.getenv("ENABLE_COMPRESSION_VALIDATION", "true").lower() == "true"
     compression_history_enabled: bool = os.getenv("COMPRESSION_HISTORY_ENABLED", "true").lower() == "true"
     min_compression_ratio: float = float(os.getenv("MIN_COMPRESSION_RATIO", "0.05"))
+    target_compression_ratio: float = float(os.getenv("TARGET_COMPRESSION_RATIO", "0.7"))
 
 @dataclass
 class VerificationConfig:
     """Continuous Verification settings (혁신 4)."""
+    enabled: bool = os.getenv("ENABLE_CONTINUOUS_VERIFICATION", "true").lower() == "true"
     enable_continuous_verification: bool = os.getenv("ENABLE_CONTINUOUS_VERIFICATION", "true").lower() == "true"
     verification_stages: int = int(os.getenv("VERIFICATION_STAGES", "3"))
     confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))
@@ -142,6 +147,7 @@ class VerificationConfig:
 @dataclass
 class ContextWindowConfig:
     """Adaptive Context Window settings (혁신 7)."""
+    enabled: bool = os.getenv("ENABLE_ADAPTIVE_CONTEXT", "true").lower() == "true"
     enable_adaptive_context: bool = os.getenv("ENABLE_ADAPTIVE_CONTEXT", "true").lower() == "true"
     min_tokens: int = int(os.getenv("MIN_TOKENS", "2000"))
     max_tokens: int = int(os.getenv("MAX_TOKENS", "1000000"))
@@ -152,7 +158,8 @@ class ContextWindowConfig:
 
 @dataclass
 class ReliabilityConfig:
-    """Production-Grade Reliability settings (혁신 8)."""
+    """Production-Grade Reliability settings (혁신 8) - MCP만 사용."""
+    enabled: bool = os.getenv("ENABLE_PRODUCTION_RELIABILITY", "true").lower() == "true"
     enable_circuit_breaker: bool = os.getenv("ENABLE_CIRCUIT_BREAKER", "true").lower() == "true"
     enable_exponential_backoff: bool = os.getenv("ENABLE_EXPONENTIAL_BACKOFF", "true").lower() == "true"
     enable_state_persistence: bool = os.getenv("ENABLE_STATE_PERSISTENCE", "true").lower() == "true"
@@ -278,13 +285,15 @@ def update_config_from_env():
     if os.getenv("LLM_PROVIDER"):
         config.llm.provider = os.getenv("LLM_PROVIDER")
     if os.getenv("LLM_MODEL"):
-        config.llm.model = os.getenv("LLM_MODEL")
+        config.llm.primary_model = os.getenv("LLM_MODEL")
     if os.getenv("LLM_TEMPERATURE"):
         config.llm.temperature = float(os.getenv("LLM_TEMPERATURE"))
     if os.getenv("LLM_MAX_TOKENS"):
         config.llm.max_tokens = int(os.getenv("LLM_MAX_TOKENS"))
     if os.getenv("GOOGLE_API_KEY"):
         config.llm.api_key = os.getenv("GOOGLE_API_KEY")
+    if os.getenv("OPENROUTER_API_KEY"):
+        config.llm.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     
     # Agent settings
     if os.getenv("AGENT_MAX_RETRIES"):

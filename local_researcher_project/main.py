@@ -33,24 +33,39 @@ sys.path.insert(0, str(project_root))
 from researcher_config import config, update_config_from_env
 from src.agents.autonomous_researcher import AutonomousResearcherAgent
 from src.core.autonomous_orchestrator import AutonomousOrchestrator
-from src.core.reliability import execute_with_reliability, HealthMonitor
+from src.core.reliability import execute_with_reliability
+from src.monitoring.system_monitor import HealthMonitor
 from src.core.llm_manager import execute_llm_task, TaskType
 from mcp_integration import get_available_tools, execute_tool
 
 # Configure logging for production-grade reliability
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/researcher.log'),
-        logging.StreamHandler()
-    ]
-)
+# Advanced logging setup: setup logger manually to ensure logs directory exists and avoid issues with logging.basicConfig (per best practices)
+log_dir = project_root / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "researcher.log"
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Remove existing handlers to avoid duplicate logs on reloads (e.g., under some app servers or noteboks)
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+# File handler
+file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
 
 
 class MCPIntegrationManager:
-    """MCP 통합 관리자 - Universal MCP Hub (Innovation 6) 구현"""
+    """MCP 통합 관리자 - 2025년 10월 최신 버전 (OpenRouter + Gemini 2.5 Flash Lite)"""
     
     def __init__(self):
         self.config = config
@@ -58,27 +73,29 @@ class MCPIntegrationManager:
         self.health_monitor = HealthMonitor()
         self.available_tools = []
         self.tool_performance = {}
+        self.mcp_hub = None
         
     async def start_mcp_server(self):
-        """MCP 서버 시작 - Production-Grade Reliability 적용"""
+        """MCP 서버 시작 - OpenRouter와 Gemini 2.5 Flash Lite 기반"""
         if not self.mcp_enabled:
             logger.error("MCP is disabled in configuration")
             return False
             
         try:
-            logger.info("🚀 Starting MCP Server with Universal MCP Hub...")
-            logger.info(f"Server names: {config.mcp.server_names}")
-            logger.info(f"Connection timeout: {config.mcp.connection_timeout}s")
-            logger.info(f"Plugin architecture: {config.mcp.enable_plugin_architecture}")
-            logger.info(f"Auto fallback: {config.mcp.enable_auto_fallback}")
+            logger.info("🚀 Starting MCP Server with OpenRouter and Gemini 2.5 Flash Lite...")
+            logger.info(f"Primary model: {config.llm.primary_model}")
+            logger.info(f"OpenRouter API: {'Configured' if config.llm.openrouter_api_key else 'Not configured'}")
+            logger.info(f"Tool categories: {len(config.mcp.search_tools + config.mcp.data_tools + config.mcp.code_tools + config.mcp.academic_tools + config.mcp.business_tools)}")
             
-            # Initialize MCP tools with reliability patterns
-            await self._initialize_mcp_tools()
+            # Initialize MCP Hub
+            from mcp_integration import UniversalMCPHub
+            self.mcp_hub = UniversalMCPHub()
+            await self.mcp_hub.initialize_mcp()
             
             # Start health monitoring
             await self.health_monitor.start_monitoring()
             
-            logger.info("✅ MCP Server started successfully with Universal MCP Hub")
+            logger.info("✅ MCP Server started successfully with OpenRouter and Gemini 2.5 Flash Lite")
             return True
             
         except Exception as e:
@@ -86,14 +103,19 @@ class MCPIntegrationManager:
             return False
     
     async def start_mcp_client(self):
-        """MCP 클라이언트 시작 - Smart Tool Selection 적용"""
+        """MCP 클라이언트 시작 - OpenRouter와 Gemini 2.5 Flash Lite 기반"""
         if not self.mcp_enabled:
             logger.error("MCP is disabled in configuration")
             return False
             
         try:
-            logger.info("🔗 Starting MCP Client with Smart Tool Selection...")
-            logger.info(f"Connecting to servers: {config.mcp.server_names}")
+            logger.info("🔗 Starting MCP Client with OpenRouter and Gemini 2.5 Flash Lite...")
+            logger.info(f"Primary model: {config.llm.primary_model}")
+            
+            # Initialize MCP Hub
+            from mcp_integration import UniversalMCPHub
+            self.mcp_hub = UniversalMCPHub()
+            await self.mcp_hub.initialize_mcp()
             
             # Discover available tools
             self.available_tools = await get_available_tools()
@@ -105,7 +127,7 @@ class MCPIntegrationManager:
             # Test tool connectivity
             await self._test_tool_connectivity()
             
-            logger.info("✅ MCP Client connected successfully with Smart Tool Selection")
+            logger.info("✅ MCP Client connected successfully with OpenRouter and Gemini 2.5 Flash Lite")
             return True
             
         except Exception as e:
@@ -113,25 +135,29 @@ class MCPIntegrationManager:
             return False
     
     async def _initialize_mcp_tools(self):
-        """Initialize MCP tools with Universal MCP Hub features."""
+        """Initialize MCP tools with OpenRouter and Gemini 2.5 Flash Lite."""
         try:
+            if not self.mcp_hub:
+                logger.warning("MCP Hub not initialized")
+                return
+                
             # Load all configured MCP tools
             for tool_name in config.mcp.server_names:
                 logger.info(f"Initializing MCP tool: {tool_name}")
                 
-                # Test tool availability
+                # Test tool availability with simple query
                 try:
-                    test_result = await execute_tool(tool_name, {"test": True})
-                    if test_result.get('success', False):
+                    test_params = {"query": "test", "max_results": 1}
+                    test_result = await self.mcp_hub.execute_tool(tool_name, test_params)
+                    if test_result.success:
                         logger.info(f"✅ {tool_name} initialized successfully")
                     else:
-                        logger.warning(f"⚠️ {tool_name} initialization failed: {test_result.get('error', 'Unknown error')}")
+                        logger.warning(f"⚠️ {tool_name} failed: {test_result.error}")
                 except Exception as e:
                     logger.warning(f"⚠️ {tool_name} test failed: {e}")
                     
         except Exception as e:
-            logger.error(f"Failed to initialize MCP tools: {e}")
-            raise
+            logger.warning(f"MCP tools initialization failed: {e}")
     
     async def _initialize_performance_tracking(self):
         """Initialize performance tracking for Smart Tool Selection."""
@@ -146,15 +172,21 @@ class MCPIntegrationManager:
     
     async def _test_tool_connectivity(self):
         """Test connectivity to all available tools."""
+        if not self.mcp_hub:
+            logger.warning("MCP Hub not initialized for connectivity test")
+            return
+            
         for tool in self.available_tools:
             try:
                 start_time = datetime.now()
-                result = await execute_tool(tool, {"ping": True})
+                # Use appropriate test parameters based on tool type
+                test_params = {"query": "connectivity test", "max_results": 1}
+                result = await self.mcp_hub.execute_tool(tool, test_params)
                 end_time = datetime.now()
                 
                 response_time = (end_time - start_time).total_seconds()
                 
-                if result.get('success', False):
+                if result.success:
                     self.tool_performance[tool]['success_count'] += 1
                     self.tool_performance[tool]['average_response_time'] = response_time
                     logger.info(f"✅ {tool}: {response_time:.2f}s response time")
@@ -323,10 +355,7 @@ class AutonomousResearchSystem:
             if streaming:
                 result = await self._run_streaming_research(request)
             else:
-                result = await execute_with_reliability(
-                    self.orchestrator.run_research,
-                    request=request
-                )
+                result = await self.orchestrator.run_research(request)
             
             # Apply hierarchical compression if enabled
             if self.config.compression.enabled:
@@ -339,7 +368,7 @@ class AutonomousResearchSystem:
                 self._display_results(result)
             
             # Get final health status
-            health_status = await self.health_monitor.get_system_health()
+            health_status = self.health_monitor.get_system_health()
             result['system_health'] = health_status
             
             logger.info("✅ Research completed successfully with 8 Core Innovations")
@@ -348,7 +377,7 @@ class AutonomousResearchSystem:
         except Exception as e:
             logger.error(f"Research failed: {e}")
             # Get error health status
-            error_health = await self.health_monitor.get_system_health()
+            error_health = self.health_monitor.get_system_health()
             logger.error(f"System health at failure: {error_health}")
             raise
     
@@ -384,8 +413,7 @@ class AutonomousResearchSystem:
         # Compress large text fields
         if 'synthesis_results' in result:
             compressed_synthesis = await compress_data(
-                result['synthesis_results'],
-                target_compression_ratio=self.config.compression.target_compression_ratio
+                result['synthesis_results']
             )
             result['synthesis_results_compressed'] = compressed_synthesis
         
@@ -413,10 +441,38 @@ class AutonomousResearchSystem:
         print("\n📋 Research Results with 8 Core Innovations:")
         print("=" * 80)
         
-        # Display synthesis results
-        if 'synthesis_results' in result:
+        # Display main research content
+        if 'content' in result and result['content']:
+            print("\n📝 Research Content:")
+            print("-" * 60)
+            print(result['content'])
+            print("-" * 60)
+        elif 'synthesis_results' in result:
             synthesis = result['synthesis_results']
-            print(f"📝 Synthesis: {synthesis.get('synthesis_results', 'N/A')}")
+            if isinstance(synthesis, dict) and 'content' in synthesis:
+                print("\n📝 Research Content:")
+                print("-" * 60)
+                print(synthesis['content'])
+                print("-" * 60)
+            else:
+                print(f"\n📝 Synthesis: {synthesis}")
+        else:
+            print("\n❌ No research content found in results")
+        
+        # Display research metadata
+        if 'metadata' in result:
+            metadata = result['metadata']
+            print(f"\n📊 Research Metadata:")
+            print(f"  • Model Used: {metadata.get('model_used', 'N/A')}")
+            print(f"  • Execution Time: {metadata.get('execution_time', 'N/A'):.2f}s")
+            print(f"  • Cost: ${metadata.get('cost', 0):.4f}")
+            print(f"  • Confidence: {metadata.get('confidence', 'N/A')}")
+        
+        # Display synthesis results
+        if 'synthesis_results' in result and isinstance(result['synthesis_results'], dict):
+            synthesis = result['synthesis_results']
+            if 'synthesis_results' in synthesis:
+                print(f"\n📝 Synthesis: {synthesis.get('synthesis_results', 'N/A')}")
         
         # Display innovation stats
         if 'innovation_stats' in result:
@@ -435,9 +491,8 @@ class AutonomousResearchSystem:
         if 'system_health' in result:
             health = result['system_health']
             print(f"\n🏥 System Health: {health.get('overall_status', 'Unknown')}")
-            print(f"  • Uptime: {health.get('uptime', 'N/A')}")
-            print(f"  • Memory Usage: {health.get('memory_usage', 'N/A')}")
-            print(f"  • CPU Usage: {health.get('cpu_usage', 'N/A')}")
+            print(f"  • Health Score: {health.get('health_score', 'N/A')}")
+            print(f"  • Monitoring Active: {health.get('monitoring_active', 'N/A')}")
         
         print("=" * 80)
     

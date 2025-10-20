@@ -30,6 +30,23 @@ class ToolType(Enum):
     UTILITY = "utility"
 
 
+@dataclass
+class ToolResult:
+    """도구 실행 결과."""
+    success: bool
+    data: Any = None
+    error: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_time: float = 0.0
+    confidence: float = 0.0
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """딕셔너리처럼 접근 가능."""
+        if isinstance(self.data, dict):
+            return self.data.get(key, default)
+        return default
+
+
 class ToolStatus(Enum):
     """도구 상태."""
     ACTIVE = "active"

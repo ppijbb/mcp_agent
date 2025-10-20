@@ -184,17 +184,17 @@ class SynthesisAgent:
         # Phase 7: Quality Validation
         logger.info("7. ✅ Validating synthesis quality")
         validation_results = await self._validate_synthesis(compressed_content, deliverables)
-        
+            
         synthesis_result = {
             'synthesized_content': synthesized_content,
             'compressed_content': compressed_content,
             'deliverables': deliverables,
-            'insights': insights,
+                'insights': insights,
             'context_usage': context_usage,
             'validation_results': validation_results,
-            'synthesis_metadata': {
+                'synthesis_metadata': {
                 'deliverable_type': deliverable_type,
-                'timestamp': datetime.now().isoformat(),
+                    'timestamp': datetime.now().isoformat(),
                 'synthesis_version': '2.0',
                 'total_results_synthesized': len(execution_results),
                 'context_window_usage': context_usage.get('usage_ratio', 1.0),
@@ -212,6 +212,7 @@ class SynthesisAgent:
         
         logger.info("✅ Synthesis completed successfully with 8 core innovations")
         return synthesis_result
+    
             
     async def _manage_context_window(
         self,

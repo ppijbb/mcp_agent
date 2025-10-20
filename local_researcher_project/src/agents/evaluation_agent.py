@@ -115,8 +115,8 @@ class EvaluationAgent:
     async def evaluate_results(
         self,
         execution_results: List[Dict[str, Any]],
-        original_objectives: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
+                             original_objectives: List[Dict[str, Any]],
+                             context: Optional[Dict[str, Any]] = None,
         objective_id: str = None
     ) -> Dict[str, Any]:
         """연구 결과 평가 (8대 혁신 통합)."""
@@ -147,31 +147,31 @@ class EvaluationAgent:
         
         # Phase 2: Individual Result Evaluation (Multi-Model Orchestration)
         logger.info("2. 📊 Evaluating individual results with Multi-Model Orchestration")
-        individual_evaluations = await self._evaluate_individual_results(execution_results, original_objectives)
-        
+            individual_evaluations = await self._evaluate_individual_results(execution_results, original_objectives)
+            
         # Phase 3: Overall Quality Assessment
         logger.info("3. 📈 Assessing overall quality")
-        overall_quality = await self._assess_overall_quality(individual_evaluations, original_objectives)
-        
+            overall_quality = await self._assess_overall_quality(individual_evaluations, original_objectives)
+            
         # Phase 4: Objective Alignment Check
         logger.info("4. 🎯 Checking objective alignment")
-        alignment_assessment = await self._check_objective_alignment(execution_results, original_objectives)
-        
+            alignment_assessment = await self._check_objective_alignment(execution_results, original_objectives)
+            
         # Phase 5: Gap Analysis
         logger.info("5. 🔍 Analyzing gaps")
-        gap_analysis = await self._analyze_gaps(execution_results, original_objectives)
-        
+            gap_analysis = await self._analyze_gaps(execution_results, original_objectives)
+            
         # Phase 6: Refinement Recommendations (Universal MCP Hub)
         logger.info("6. 💡 Generating refinement recommendations with Universal MCP Hub")
-        refinement_recommendations = await self._generate_refinement_recommendations(
-            individual_evaluations, overall_quality, alignment_assessment, gap_analysis
-        )
-        
+            refinement_recommendations = await self._generate_refinement_recommendations(
+                individual_evaluations, overall_quality, alignment_assessment, gap_analysis
+            )
+            
         # Phase 7: Recursion Decision
         logger.info("7. 🔄 Making recursion decision")
-        recursion_decision = await self._make_recursion_decision(
-            overall_quality, alignment_assessment, gap_analysis, refinement_recommendations
-        )
+            recursion_decision = await self._make_recursion_decision(
+                overall_quality, alignment_assessment, gap_analysis, refinement_recommendations
+            )
         
         # Phase 8: Hierarchical Compression (혁신 2)
         logger.info("8. 🗜️ Applying Hierarchical Compression to evaluation results")
@@ -183,19 +183,19 @@ class EvaluationAgent:
             'refinement_recommendations': refinement_recommendations,
             'recursion_decision': recursion_decision
         })
-        
-        evaluation_result = {
+            
+            evaluation_result = {
             'verification_results': verification_results,
-            'individual_evaluations': individual_evaluations,
-            'overall_quality': overall_quality,
-            'alignment_assessment': alignment_assessment,
-            'gap_analysis': gap_analysis,
-            'refinement_recommendations': refinement_recommendations,
-            'recursion_decision': recursion_decision,
+                'individual_evaluations': individual_evaluations,
+                'overall_quality': overall_quality,
+                'alignment_assessment': alignment_assessment,
+                'gap_analysis': gap_analysis,
+                'refinement_recommendations': refinement_recommendations,
+                'recursion_decision': recursion_decision,
             'compressed_evaluation': compressed_evaluation,
-            'evaluation_metadata': {
-                'objective_id': objective_id,
-                'timestamp': datetime.now().isoformat(),
+                'evaluation_metadata': {
+                    'objective_id': objective_id,
+                    'timestamp': datetime.now().isoformat(),
                 'evaluation_version': '2.0',
                 'total_results_evaluated': len(execution_results),
                 'verification_stages': self.verification_config.verification_stages,
@@ -210,7 +210,7 @@ class EvaluationAgent:
         }
         
         logger.info(f"✅ Evaluation completed with 8 core innovations: {recursion_decision.get('needs_recursion', False)}")
-        return evaluation_result
+            return evaluation_result
     
     async def _continuous_verification(
         self,
@@ -220,8 +220,8 @@ class EvaluationAgent:
         """Continuous Verification (혁신 4)."""
         verification_stages = []
         confidence_scores = {}
-        
-        for result in execution_results:
+            
+            for result in execution_results:
             result_id = result.get('task_id', str(uuid.uuid4()))
             
             # Stage 1: Self-Verification
@@ -249,8 +249,8 @@ class EvaluationAgent:
             })
             
             confidence_scores[result_id] = final_score
-        
-        return {
+            
+            return {
             'stages': verification_stages,
             'confidence_scores': confidence_scores,
             'overall_confidence': sum(confidence_scores.values()) / max(len(confidence_scores), 1),
@@ -318,40 +318,40 @@ class EvaluationAgent:
         original_objectives: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """전체 품질 평가."""
-        if not individual_evaluations:
-            return {'overall_score': 0.0, 'quality_level': 'poor'}
-        
+            if not individual_evaluations:
+                return {'overall_score': 0.0, 'quality_level': 'poor'}
+            
         # 가중 평균 계산
-        total_score = sum(eval.get('quality_score', 0) for eval in individual_evaluations)
-        overall_score = total_score / len(individual_evaluations)
-        
+            total_score = sum(eval.get('quality_score', 0) for eval in individual_evaluations)
+            overall_score = total_score / len(individual_evaluations)
+            
         # 품질 레벨 결정
-        if overall_score >= 0.9:
-            quality_level = 'excellent'
-        elif overall_score >= 0.7:
-            quality_level = 'good'
-        elif overall_score >= 0.5:
-            quality_level = 'acceptable'
-        else:
-            quality_level = 'poor'
-        
+            if overall_score >= 0.9:
+                quality_level = 'excellent'
+            elif overall_score >= 0.7:
+                quality_level = 'good'
+            elif overall_score >= 0.5:
+                quality_level = 'acceptable'
+            else:
+                quality_level = 'poor'
+            
         # 집계된 이슈와 강점
-        all_issues = []
-        all_strengths = []
-        
-        for eval_result in individual_evaluations:
-            all_issues.extend(eval_result.get('issues', []))
-            all_strengths.extend(eval_result.get('strengths', []))
-        
-        return {
-            'overall_score': overall_score,
-            'quality_level': quality_level,
-            'total_evaluations': len(individual_evaluations),
-            'aggregated_issues': list(set(all_issues)),
-            'aggregated_strengths': list(set(all_strengths)),
-            'quality_distribution': self._calculate_quality_distribution(individual_evaluations)
-        }
-    
+            all_issues = []
+            all_strengths = []
+            
+            for eval_result in individual_evaluations:
+                all_issues.extend(eval_result.get('issues', []))
+                all_strengths.extend(eval_result.get('strengths', []))
+            
+            return {
+                'overall_score': overall_score,
+                'quality_level': quality_level,
+                'total_evaluations': len(individual_evaluations),
+                'aggregated_issues': list(set(all_issues)),
+                'aggregated_strengths': list(set(all_strengths)),
+                'quality_distribution': self._calculate_quality_distribution(individual_evaluations)
+            }
+            
     async def _check_objective_alignment(
         self,
         execution_results: List[Dict[str, Any]],
@@ -359,32 +359,32 @@ class EvaluationAgent:
     ) -> Dict[str, Any]:
         """목표 정렬 확인."""
         alignment_scores = []
-        
-        for objective in original_objectives:
-            objective_id = objective.get('objective_id')
-            objective_description = objective.get('description', '')
             
+            for objective in original_objectives:
+                objective_id = objective.get('objective_id')
+                objective_description = objective.get('description', '')
+                
             # 해당 목표와 관련된 결과 찾기
-            related_results = [r for r in execution_results if r.get('objective_id') == objective_id]
-            
-            if related_results:
+                related_results = [r for r in execution_results if r.get('objective_id') == objective_id]
+                
+                if related_results:
                 # 목표 정렬 점수 계산
                 objective_score = await self._calculate_objective_alignment_score(objective, related_results)
-                alignment_scores.append(objective_score)
-            else:
+                    alignment_scores.append(objective_score)
+                else:
                 # 해당 목표에 대한 결과 없음
-                alignment_scores.append(0.0)
-        
+                    alignment_scores.append(0.0)
+            
         # 전체 정렬 계산
-        overall_alignment = sum(alignment_scores) / len(alignment_scores) if alignment_scores else 0.0
-        
-        return {
-            'overall_alignment': overall_alignment,
-            'objective_scores': alignment_scores,
-            'alignment_level': 'high' if overall_alignment >= 0.8 else 'medium' if overall_alignment >= 0.6 else 'low',
-            'misaligned_objectives': [i for i, score in enumerate(alignment_scores) if score < 0.6]
-        }
-    
+            overall_alignment = sum(alignment_scores) / len(alignment_scores) if alignment_scores else 0.0
+            
+            return {
+                'overall_alignment': overall_alignment,
+                'objective_scores': alignment_scores,
+                'alignment_level': 'high' if overall_alignment >= 0.8 else 'medium' if overall_alignment >= 0.6 else 'low',
+                'misaligned_objectives': [i for i, score in enumerate(alignment_scores) if score < 0.6]
+            }
+            
     async def _analyze_gaps(
         self,
         execution_results: List[Dict[str, Any]],
@@ -394,123 +394,123 @@ class EvaluationAgent:
         gaps = []
         
         # 누락된 목표 확인
-        covered_objectives = set(r.get('objective_id') for r in execution_results)
-        all_objectives = set(obj.get('objective_id') for obj in original_objectives)
-        missing_objectives = all_objectives - covered_objectives
-        
-        if missing_objectives:
-            gaps.append({
-                'type': 'missing_objectives',
-                'description': 'Some objectives were not addressed',
-                'severity': 'high',
-                'objectives': list(missing_objectives)
-            })
-        
+            covered_objectives = set(r.get('objective_id') for r in execution_results)
+            all_objectives = set(obj.get('objective_id') for obj in original_objectives)
+            missing_objectives = all_objectives - covered_objectives
+            
+            if missing_objectives:
+                gaps.append({
+                    'type': 'missing_objectives',
+                    'description': 'Some objectives were not addressed',
+                    'severity': 'high',
+                    'objectives': list(missing_objectives)
+                })
+            
         # 품질 갭 확인
-        quality_gaps = self._identify_quality_gaps(execution_results)
-        gaps.extend(quality_gaps)
-        
+            quality_gaps = self._identify_quality_gaps(execution_results)
+            gaps.extend(quality_gaps)
+            
         # 완성도 갭 확인
-        completeness_gaps = self._identify_completeness_gaps(execution_results, original_objectives)
-        gaps.extend(completeness_gaps)
-        
-        return {
-            'total_gaps': len(gaps),
-            'high_severity_gaps': len([g for g in gaps if g.get('severity') == 'high']),
-            'medium_severity_gaps': len([g for g in gaps if g.get('severity') == 'medium']),
-            'low_severity_gaps': len([g for g in gaps if g.get('severity') == 'low']),
-            'gaps': gaps
-        }
-    
+            completeness_gaps = self._identify_completeness_gaps(execution_results, original_objectives)
+            gaps.extend(completeness_gaps)
+            
+            return {
+                'total_gaps': len(gaps),
+                'high_severity_gaps': len([g for g in gaps if g.get('severity') == 'high']),
+                'medium_severity_gaps': len([g for g in gaps if g.get('severity') == 'medium']),
+                'low_severity_gaps': len([g for g in gaps if g.get('severity') == 'low']),
+                'gaps': gaps
+            }
+            
     async def _generate_refinement_recommendations(
         self,
         individual_evaluations: List[Dict[str, Any]],
-        overall_quality: Dict[str, Any],
-        alignment_assessment: Dict[str, Any],
+                                                 overall_quality: Dict[str, Any],
+                                                 alignment_assessment: Dict[str, Any],
         gap_analysis: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """개선 권장사항 생성 (Universal MCP Hub)."""
         recommendations = []
         
         # 품질 기반 권장사항
-        if overall_quality.get('overall_score', 0) < 0.7:
-            recommendations.append({
-                'type': 'quality_improvement',
-                'priority': 'high',
-                'description': 'Improve overall research quality',
-                'estimated_effort': 'medium',
+            if overall_quality.get('overall_score', 0) < 0.7:
+                recommendations.append({
+                    'type': 'quality_improvement',
+                    'priority': 'high',
+                    'description': 'Improve overall research quality',
+                    'estimated_effort': 'medium',
                 'strategy': 'enhanced_analysis',
                 'mcp_tools': ['python_coder', 'code_interpreter']
-            })
-        
+                })
+            
         # 정렬 기반 권장사항
-        if alignment_assessment.get('overall_alignment', 0) < 0.7:
-            recommendations.append({
-                'type': 'alignment_improvement',
-                'priority': 'high',
-                'description': 'Better align results with objectives',
-                'estimated_effort': 'high',
+            if alignment_assessment.get('overall_alignment', 0) < 0.7:
+                recommendations.append({
+                    'type': 'alignment_improvement',
+                    'priority': 'high',
+                    'description': 'Better align results with objectives',
+                    'estimated_effort': 'high',
                 'strategy': 'objective_refinement',
                 'mcp_tools': ['g-search', 'tavily', 'exa']
-            })
-        
+                })
+            
         # 갭 기반 권장사항
-        for gap in gap_analysis.get('gaps', []):
-            if gap.get('severity') == 'high':
-                recommendations.append({
-                    'type': 'gap_filling',
-                    'priority': 'high',
-                    'description': f"Address gap: {gap.get('description', '')}",
-                    'estimated_effort': 'medium',
+            for gap in gap_analysis.get('gaps', []):
+                if gap.get('severity') == 'high':
+                    recommendations.append({
+                        'type': 'gap_filling',
+                        'priority': 'high',
+                        'description': f"Address gap: {gap.get('description', '')}",
+                        'estimated_effort': 'medium',
                     'strategy': 'additional_research',
                     'mcp_tools': ['g-search', 'tavily', 'exa', 'arxiv', 'scholar']
-                })
-        
-        return recommendations
-    
+                    })
+            
+            return recommendations
+            
     async def _make_recursion_decision(
         self,
         overall_quality: Dict[str, Any],
-        alignment_assessment: Dict[str, Any],
-        gap_analysis: Dict[str, Any],
+                                     alignment_assessment: Dict[str, Any],
+                                     gap_analysis: Dict[str, Any],
         refinement_recommendations: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """재귀 결정."""
         # 결정 요인
-        quality_score = overall_quality.get('overall_score', 0)
-        alignment_score = alignment_assessment.get('overall_alignment', 0)
-        high_severity_gaps = gap_analysis.get('high_severity_gaps', 0)
-        high_priority_recommendations = len([r for r in refinement_recommendations if r.get('priority') == 'high'])
-        
+            quality_score = overall_quality.get('overall_score', 0)
+            alignment_score = alignment_assessment.get('overall_alignment', 0)
+            high_severity_gaps = gap_analysis.get('high_severity_gaps', 0)
+            high_priority_recommendations = len([r for r in refinement_recommendations if r.get('priority') == 'high'])
+            
         # 결정 로직
-        needs_recursion = False
-        recursion_reason = ""
-        
-        if quality_score < 0.6:
-            needs_recursion = True
-            recursion_reason = "Low overall quality"
-        elif alignment_score < 0.6:
-            needs_recursion = True
-            recursion_reason = "Poor objective alignment"
-        elif high_severity_gaps > 0:
-            needs_recursion = True
-            recursion_reason = "High severity gaps identified"
-        elif high_priority_recommendations > 2:
-            needs_recursion = True
-            recursion_reason = "Multiple high-priority improvements needed"
-        
-        return {
-            'needs_recursion': needs_recursion,
-            'recursion_reason': recursion_reason,
-            'decision_factors': {
-                'quality_score': quality_score,
-                'alignment_score': alignment_score,
-                'high_severity_gaps': high_severity_gaps,
-                'high_priority_recommendations': high_priority_recommendations
-            },
-            'confidence': self._calculate_recursion_confidence(quality_score, alignment_score, high_severity_gaps)
-        }
-    
+            needs_recursion = False
+            recursion_reason = ""
+            
+            if quality_score < 0.6:
+                needs_recursion = True
+                recursion_reason = "Low overall quality"
+            elif alignment_score < 0.6:
+                needs_recursion = True
+                recursion_reason = "Poor objective alignment"
+            elif high_severity_gaps > 0:
+                needs_recursion = True
+                recursion_reason = "High severity gaps identified"
+            elif high_priority_recommendations > 2:
+                needs_recursion = True
+                recursion_reason = "Multiple high-priority improvements needed"
+            
+            return {
+                'needs_recursion': needs_recursion,
+                'recursion_reason': recursion_reason,
+                'decision_factors': {
+                    'quality_score': quality_score,
+                    'alignment_score': alignment_score,
+                    'high_severity_gaps': high_severity_gaps,
+                    'high_priority_recommendations': high_priority_recommendations
+                },
+                'confidence': self._calculate_recursion_confidence(quality_score, alignment_score, high_severity_gaps)
+            }
+            
     async def _compress_evaluation_results(self, evaluation_data: Dict[str, Any]) -> Dict[str, Any]:
         """평가 결과 압축 (Hierarchical Compression)."""
         try:

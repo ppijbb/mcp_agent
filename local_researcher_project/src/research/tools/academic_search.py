@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # Import core modules for 8 innovations
-from ..base_tool import BaseResearchTool, ToolResponse, ToolCategory
+from ..base_tool import BaseResearchTool, ToolResponse, ToolCategory, ToolResult
 from ...core.reliability import execute_with_reliability, CircuitBreaker
 from ...core.llm_manager import execute_llm_task, TaskType
 from src.core.mcp_integration import get_best_tool_for_task, execute_tool
@@ -84,7 +84,7 @@ class AcademicSearchTool(BaseResearchTool):
         # Initialize API keys for fallback
         self.pubmed_api_key = os.getenv('PUBMED_API_KEY')
         self.ieee_api_key = os.getenv('IEEE_API_KEY')
-        
+    
         # Circuit breaker for reliability
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=5,
@@ -208,7 +208,7 @@ class AcademicSearchTool(BaseResearchTool):
                 except Exception as e:
                     self.logger.warning(f"Provider {provider.value} failed: {e}")
                     continue
-        
+            
         if all_results:
             return ToolResponse(
                 success=True,
@@ -291,7 +291,7 @@ class AcademicSearchTool(BaseResearchTool):
                     'timestamp': datetime.now().isoformat()
                 }
             )
-            
+                
         except Exception as e:
             self.logger.warning(f"Verification failed: {e}, returning unverified results")
             return ToolResponse(success=True, data=results)
