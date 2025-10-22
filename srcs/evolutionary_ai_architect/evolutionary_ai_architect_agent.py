@@ -8,7 +8,6 @@ import asyncio
 import os
 import json
 import time
-import random
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
@@ -24,70 +23,9 @@ from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.utils import setup_agent_app
 
 # Import existing components
-try:
-    from .genome import ArchitectureGenome, PerformanceMetrics
-    from .architect import AIArchitectureDesigner
-    from .improvement_engine import SelfImprovementEngine
-except ImportError:
-    # Fallback if imports fail
-    # Real components will be defined below
-    
-    @dataclass
-    class ArchitectureGenome:
-        unique_id: str = ""
-        layers: List[Dict[str, Any]] = None
-        hyperparameters: Dict[str, Any] = None
-        fitness_score: float = 0.0
-        
-        def __post_init__(self):
-            if self.layers is None:
-                self.layers = []
-            if self.hyperparameters is None:
-                self.hyperparameters = {}
-    
-    @dataclass
-    class PerformanceMetrics:
-        accuracy: float
-        training_time: float
-        inference_time: float
-        memory_usage: float
-        energy_efficiency: float
-    
-    class AIArchitectureDesigner:
-        def generate_random_architecture(self, architecture_type: str = "hybrid"):
-            return ArchitectureGenome(
-                unique_id=f"arch_{random.randint(1000, 9999)}",
-                layers=[{"type": architecture_type, "parameters": random.randint(100, 1000)}],
-                hyperparameters={"learning_rate": 0.01, "batch_size": 32},
-                fitness_score=random.uniform(0.5, 0.9)
-            )
-        
-        def evaluate_architecture(self, genome, context=None):
-            return random.uniform(0.6, 0.95)
-        
-        def crossover_architectures(self, parent1, parent2):
-            child = ArchitectureGenome(
-                unique_id=f"arch_{random.randint(1000, 9999)}",
-                layers=parent1.layers[:len(parent1.layers)//2] + parent2.layers[len(parent2.layers)//2:],
-                hyperparameters=parent1.hyperparameters.copy(),
-                fitness_score=0.0
-            )
-            return child
-        
-        def mutate_architecture(self, genome):
-            mutated = ArchitectureGenome(
-                unique_id=f"arch_{random.randint(1000, 9999)}",
-                layers=genome.layers.copy(),
-                hyperparameters=genome.hyperparameters.copy(),
-                fitness_score=0.0
-            )
-            # Simple mutation: add random layer
-            mutated.layers.append({"type": "dense", "parameters": random.randint(50, 500)})
-            return mutated
-    
-    class SelfImprovementEngine:
-        def assess_performance(self, results):
-            return PerformanceMetrics(0.8, time.time(), 0.1, 1000, 0.8)
+from .genome import ArchitectureGenome, PerformanceMetrics
+from .architect import AIArchitectureDesigner
+from .improvement_engine import SelfImprovementEngine
 
 class ArchitectureType(Enum):
     TRANSFORMER = "transformer"
@@ -251,7 +189,7 @@ class EvolutionaryAIArchitectMCP:
             
             thought_result = await reasoning_llm.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             reasoning_steps.append(f"Generation {generation} Thought: {thought_result}")
 
@@ -284,7 +222,7 @@ class EvolutionaryAIArchitectMCP:
             """
             observation_result = await reasoning_llm.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             reasoning_steps.append(f"Generation {generation} Observation: {observation_result}")
             
@@ -437,6 +375,64 @@ class EvolutionaryAIArchitectMCP:
 
         return len(unique_architectures) / len(population) if population else 0.0
     
+    async def _get_dataset_info(self, dataset_name: str) -> Dict[str, Any]:
+        """MCP를 통해 데이터셋 정보 조회"""
+        try:
+            # MCP를 통해 Hugging Face datasets 서버 호출
+            result = await self.app.execute_tool(
+                server_name="huggingface",
+                tool_name="get_dataset_info",
+                arguments={"dataset_name": dataset_name}
+            )
+            
+            if not result.get("success", False):
+                raise RuntimeError(f"Failed to get dataset info: {result.get('error', 'Unknown error')}")
+            
+            return result.get("data", {})
+            
+        except Exception as e:
+            raise RuntimeError(f"MCP call failed for dataset info: {str(e)}")
+    
+    async def _validate_dataset_size(self, dataset_name: str) -> int:
+        """데이터셋의 실제 토큰 수 계산"""
+        try:
+            dataset_info = await self._get_dataset_info(dataset_name)
+            
+            # 데이터셋 크기 추정
+            num_rows = dataset_info.get("num_rows", 0)
+            avg_tokens_per_row = dataset_info.get("avg_tokens_per_row", 100)  # 기본값
+            
+            total_tokens = num_rows * avg_tokens_per_row
+            
+            if total_tokens <= 0:
+                raise ValueError(f"Invalid dataset size calculation: {total_tokens}")
+            
+            return total_tokens
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to validate dataset size: {str(e)}")
+    
+    async def _get_optimal_architecture_for_dataset(self, dataset_name: str, target_loss: float, 
+                                                  compute_budget: float) -> Dict[str, Any]:
+        """데이터셋에 대한 최적 아키텍처 계산"""
+        try:
+            # 데이터셋 크기 확인
+            dataset_size = await self._validate_dataset_size(dataset_name)
+            
+            # Scaling Laws를 사용한 최적 아키텍처 계산
+            optimal_arch = self.architect.calculate_optimal_architecture(
+                dataset_size, target_loss, compute_budget
+            )
+            
+            return {
+                "dataset_name": dataset_name,
+                "dataset_size": dataset_size,
+                "optimal_architecture": optimal_arch
+            }
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to calculate optimal architecture: {str(e)}")
+
     async def _generate_recommendations(self, task: EvolutionaryTask, best_arch: ArchitectureGenome, history: List[Dict], llm: GoogleAugmentedLLM) -> List[str]:
         """
         Generates optimization recommendations using an LLM.

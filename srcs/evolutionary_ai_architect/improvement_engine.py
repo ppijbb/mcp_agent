@@ -8,7 +8,6 @@ import asyncio
 import os
 import json
 import time
-import random
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
@@ -20,7 +19,7 @@ from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.utils import setup_agent_app
 
 # Real PerformanceMetrics - No Mock Classes
@@ -39,9 +38,11 @@ class PerformanceMetrics:
         return (self.accuracy + self.efficiency + self.adaptability + self.creativity_score) / 4
 
 class SelfImprovementEngine:
-    """Real Self Improvement Engine - No Mock Implementation"""
+    """Self Improvement Engine with Progressive Validation System"""
     def __init__(self):
         self.performance_history = []
+        self.scaling_validation_results = []
+        self.small_scale_experiments = []
     
     def assess_performance(self, task_results):
         """Real performance assessment based on actual task results"""
@@ -58,6 +59,222 @@ class SelfImprovementEngine:
             resource_usage=task_results.get('resource_usage', 0.0),
             learning_speed=task_results.get('learning_speed', 0.0)
         )
+    
+    async def run_small_scale_experiment(self, architecture_genome, dataset_name: str, 
+                                       experiment_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        작은 규모 실험을 실행하여 아키텍처의 기본 성능을 측정
+        
+        Args:
+            architecture_genome: 테스트할 아키텍처
+            dataset_name: 사용할 데이터셋 이름
+            experiment_config: 실험 설정 (epochs, batch_size, learning_rate 등)
+            
+        Returns:
+            실험 결과 (loss, accuracy, training_time 등)
+        """
+        try:
+            # 작은 모델로 실험 (10M-100M 파라미터)
+            small_model_params = min(architecture_genome.estimated_parameters, 100_000_000)
+            
+            # 실험 설정
+            epochs = experiment_config.get('epochs', 10)
+            batch_size = experiment_config.get('batch_size', 32)
+            learning_rate = experiment_config.get('learning_rate', 0.001)
+            
+            # 실제 실험 실행 (MCP를 통해)
+            experiment_result = {
+                'architecture_id': architecture_genome.unique_id,
+                'model_parameters': small_model_params,
+                'dataset_name': dataset_name,
+                'epochs': epochs,
+                'batch_size': batch_size,
+                'learning_rate': learning_rate,
+                'final_loss': 0.0,
+                'final_accuracy': 0.0,
+                'training_time': 0.0,
+                'memory_usage': 0.0,
+                'experiment_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+            
+            # MCP를 통해 실제 모델 학습 실행
+            # TODO: 실제 MCP 서버와 연동하여 모델 학습
+            
+            # 실험 결과 저장
+            self.small_scale_experiments.append(experiment_result)
+            
+            return experiment_result
+            
+        except Exception as e:
+            raise RuntimeError(f"Small scale experiment failed: {str(e)}")
+    
+    async def extrapolate_to_full_scale(self, small_scale_results: Dict[str, Any], 
+                                      target_parameters: int, target_tokens: int) -> Dict[str, Any]:
+        """
+        작은 규모 실험 결과를 바탕으로 대규모 모델 성능 예측
+        
+        Args:
+            small_scale_results: 작은 규모 실험 결과
+            target_parameters: 목표 파라미터 수
+            target_tokens: 목표 토큰 수
+            
+        Returns:
+            대규모 모델 예측 결과
+        """
+        try:
+            # Scaling Laws를 사용한 예측
+            from .architect import ScalingLawsCalculator
+            
+            scaling_calc = ScalingLawsCalculator()
+            
+            # 작은 규모에서의 loss
+            small_loss = small_scale_results['final_loss']
+            small_params = small_scale_results['model_parameters']
+            small_tokens = small_scale_results.get('training_tokens', 100_000)
+            
+            # Scaling Laws로 대규모 예측
+            predicted_loss = scaling_calc.calculate_loss(target_parameters, target_tokens)
+            
+            # 학습 시간 예측 (대략적)
+            small_training_time = small_scale_results['training_time']
+            scale_factor = (target_parameters * target_tokens) / (small_params * small_tokens)
+            predicted_training_time = small_training_time * (scale_factor ** 0.8)  # 비선형 스케일링
+            
+            # 메모리 사용량 예측
+            small_memory = small_scale_results['memory_usage']
+            memory_scale_factor = target_parameters / small_params
+            predicted_memory = small_memory * memory_scale_factor
+            
+            extrapolation_result = {
+                'target_parameters': target_parameters,
+                'target_tokens': target_tokens,
+                'predicted_loss': predicted_loss,
+                'predicted_training_time': predicted_training_time,
+                'predicted_memory_usage': predicted_memory,
+                'scaling_factor': scale_factor,
+                'confidence_score': self._calculate_scaling_confidence(small_scale_results, target_parameters),
+                'extrapolation_timestamp': datetime.now(timezone.utc).isoformat()
+            }
+            
+            self.scaling_validation_results.append(extrapolation_result)
+            
+            return extrapolation_result
+            
+        except Exception as e:
+            raise RuntimeError(f"Scaling extrapolation failed: {str(e)}")
+    
+    def _calculate_scaling_confidence(self, small_scale_results: Dict[str, Any], 
+                                    target_parameters: int) -> float:
+        """스케일링 예측의 신뢰도 계산"""
+        try:
+            # 작은 규모 실험의 품질 평가
+            small_accuracy = small_scale_results.get('final_accuracy', 0.0)
+            small_loss = small_scale_results.get('final_loss', 1.0)
+            
+            # 기본 신뢰도
+            base_confidence = 0.7
+            
+            # 정확도 기반 조정
+            if small_accuracy > 0.8:
+                base_confidence += 0.1
+            elif small_accuracy < 0.5:
+                base_confidence -= 0.2
+            
+            # Loss 기반 조정
+            if small_loss < 0.5:
+                base_confidence += 0.1
+            elif small_loss > 2.0:
+                base_confidence -= 0.1
+            
+            # 스케일링 비율 기반 조정
+            scale_ratio = target_parameters / small_scale_results['model_parameters']
+            if scale_ratio > 100:  # 100배 이상 스케일링
+                base_confidence -= 0.2
+            elif scale_ratio < 10:  # 10배 미만 스케일링
+                base_confidence += 0.1
+            
+            return max(0.1, min(1.0, base_confidence))
+            
+        except Exception as e:
+            return 0.5  # 기본 신뢰도
+    
+    async def validate_scaling_assumptions(self, architecture_genome, 
+                                         small_scale_results: Dict[str, Any],
+                                         full_scale_prediction: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        스케일링 가정의 유효성 검증
+        
+        Args:
+            architecture_genome: 아키텍처 정보
+            small_scale_results: 작은 규모 실험 결과
+            full_scale_prediction: 대규모 예측 결과
+            
+        Returns:
+            검증 결과
+        """
+        try:
+            validation_result = {
+                'architecture_id': architecture_genome.unique_id,
+                'validation_timestamp': datetime.now(timezone.utc).isoformat(),
+                'assumptions_valid': True,
+                'warnings': [],
+                'recommendations': []
+            }
+            
+            # 1. Loss 스케일링 검증
+            small_loss = small_scale_results['final_loss']
+            predicted_loss = full_scale_prediction['predicted_loss']
+            
+            if predicted_loss < small_loss * 0.5:  # 예측 loss가 너무 낮음
+                validation_result['warnings'].append(
+                    f"Predicted loss ({predicted_loss:.4f}) is significantly lower than small scale ({small_loss:.4f})"
+                )
+                validation_result['assumptions_valid'] = False
+            
+            # 2. 메모리 사용량 검증
+            predicted_memory = full_scale_prediction['predicted_memory_usage']
+            if predicted_memory > 100_000_000_000:  # 100GB 이상
+                validation_result['warnings'].append(
+                    f"Predicted memory usage ({predicted_memory:.2e} bytes) may be too high"
+                )
+            
+            # 3. 학습 시간 검증
+            predicted_time = full_scale_prediction['predicted_training_time']
+            if predicted_time > 86400 * 30:  # 30일 이상
+                validation_result['warnings'].append(
+                    f"Predicted training time ({predicted_time/86400:.1f} days) may be too long"
+                )
+            
+            # 4. 신뢰도 검증
+            confidence = full_scale_prediction.get('confidence_score', 0.5)
+            if confidence < 0.6:
+                validation_result['warnings'].append(
+                    f"Low confidence in scaling prediction ({confidence:.2f})"
+                )
+                validation_result['assumptions_valid'] = False
+            
+            # 권장사항 생성
+            if not validation_result['assumptions_valid']:
+                validation_result['recommendations'].append(
+                    "Consider running additional small-scale experiments with different configurations"
+                )
+                validation_result['recommendations'].append(
+                    "Validate scaling assumptions with intermediate-scale experiments"
+                )
+            
+            return validation_result
+            
+        except Exception as e:
+            raise RuntimeError(f"Scaling validation failed: {str(e)}")
+    
+    def get_validation_summary(self) -> Dict[str, Any]:
+        """전체 검증 결과 요약"""
+        return {
+            'total_small_scale_experiments': len(self.small_scale_experiments),
+            'total_scaling_validations': len(self.scaling_validation_results),
+            'recent_experiments': self.small_scale_experiments[-5:] if self.small_scale_experiments else [],
+            'recent_validations': self.scaling_validation_results[-5:] if self.scaling_validation_results else []
+        }
 
 class ImprovementType(Enum):
     PERFORMANCE_ANALYSIS = "performance_analysis"

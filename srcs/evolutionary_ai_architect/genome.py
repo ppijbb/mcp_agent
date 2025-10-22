@@ -19,7 +19,7 @@ class ArchitectureGenome:
     
     This class stores the complete specification of an AI model architecture
     including layers, connections, and hyperparameters, along with metadata
-    for evolutionary tracking.
+    for evolutionary tracking and scaling laws integration.
     """
     layers: List[Dict[str, Any]]
     connections: List[Tuple[int, int]]
@@ -28,6 +28,13 @@ class ArchitectureGenome:
     generation: int = 0
     parent_ids: List[str] = None
     unique_id: str = None
+    
+    # Scaling Laws 관련 필드
+    estimated_parameters: int = 0
+    training_tokens: int = 0
+    predicted_loss: float = 0.0
+    compute_budget: float = 0.0
+    scaling_efficiency: float = 0.0
     
     def __post_init__(self):
         if self.unique_id is None:
@@ -60,6 +67,64 @@ class ArchitectureGenome:
     def get_layer_types(self) -> List[str]:
         """Get unique layer types in this architecture"""
         return list(set(layer['type'] for layer in self.layers))
+    
+    def calculate_parameter_count(self) -> int:
+        """Calculate total parameter count from layers"""
+        if self.estimated_parameters > 0:
+            return self.estimated_parameters
+        
+        total_params = 0
+        for layer in self.layers:
+            layer_params = layer.get('parameters', 0)
+            if isinstance(layer_params, (int, float)):
+                total_params += int(layer_params)
+            elif isinstance(layer_params, dict):
+                # 복잡한 파라미터 구조의 경우 추정
+                total_params += sum(int(v) for v in layer_params.values() if isinstance(v, (int, float)))
+        
+        return total_params
+    
+    def calculate_training_tokens(self, dataset_size: int = None) -> int:
+        """Calculate required training tokens"""
+        if self.training_tokens > 0:
+            return self.training_tokens
+        
+        if dataset_size is not None:
+            return dataset_size
+        
+        # 기본 추정: 파라미터 수의 10배
+        return self.calculate_parameter_count() * 10
+    
+    def calculate_compute_requirements(self) -> float:
+        """Calculate FLOPs requirements using scaling laws"""
+        if self.compute_budget > 0:
+            return self.compute_budget
+        
+        n_params = self.calculate_parameter_count()
+        n_tokens = self.calculate_training_tokens()
+        
+        # 6 * N * D 공식 (forward + backward pass)
+        return 6.0 * n_params * n_tokens
+    
+    def update_scaling_metrics(self, scaling_data: Dict[str, Any]) -> None:
+        """Update scaling-related metrics from external calculations"""
+        self.estimated_parameters = scaling_data.get('optimal_parameters', self.estimated_parameters)
+        self.training_tokens = scaling_data.get('optimal_tokens', self.training_tokens)
+        self.predicted_loss = scaling_data.get('predicted_loss', self.predicted_loss)
+        self.compute_budget = scaling_data.get('required_compute', self.compute_budget)
+        self.scaling_efficiency = scaling_data.get('efficiency_ratio', self.scaling_efficiency)
+    
+    def get_scaling_summary(self) -> Dict[str, Any]:
+        """Get comprehensive scaling information"""
+        return {
+            'estimated_parameters': self.estimated_parameters,
+            'training_tokens': self.training_tokens,
+            'predicted_loss': self.predicted_loss,
+            'compute_budget': self.compute_budget,
+            'scaling_efficiency': self.scaling_efficiency,
+            'parameter_count': self.calculate_parameter_count(),
+            'compute_requirements': self.calculate_compute_requirements()
+        }
 
 
 @dataclass
