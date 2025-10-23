@@ -25,19 +25,19 @@ class TaskType(Enum):
 @dataclass
 class LLMConfig:
     """LLM configuration settings - Multi-Model Orchestration (혁신 3)."""
-    # Primary provider (OpenRouter 기본)
-    provider: str = os.getenv("LLM_PROVIDER", "openrouter")
-    primary_model: str = os.getenv("LLM_MODEL", "google/gemini-2.5-flash-lite")
+    # Primary provider (Google Gemini 기본)
+    provider: str = os.getenv("LLM_PROVIDER", "google")
+    primary_model: str = os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "4000"))
     api_key: str = os.getenv("GOOGLE_API_KEY", "")
     
     # Multi-Model Orchestration (혁신 3) - Gemini 2.5 Flash-Lite 우선
-    planning_model: str = os.getenv("PLANNING_MODEL", "google/gemini-2.5-flash-lite")
-    reasoning_model: str = os.getenv("REASONING_MODEL", "google/gemini-2.5-flash-lite")
-    verification_model: str = os.getenv("VERIFICATION_MODEL", "google/gemini-2.5-flash-lite")
-    generation_model: str = os.getenv("GENERATION_MODEL", "google/gemini-2.5-flash-lite")
-    compression_model: str = os.getenv("COMPRESSION_MODEL", "google/gemini-2.5-flash-lite")
+    planning_model: str = os.getenv("PLANNING_MODEL", "gemini-2.5-flash-lite")
+    reasoning_model: str = os.getenv("REASONING_MODEL", "gemini-2.5-flash-lite")
+    verification_model: str = os.getenv("VERIFICATION_MODEL", "gemini-2.5-flash-lite")
+    generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash-lite")
+    compression_model: str = os.getenv("COMPRESSION_MODEL", "gemini-2.5-flash-lite")
     
     # OpenRouter API Key
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")

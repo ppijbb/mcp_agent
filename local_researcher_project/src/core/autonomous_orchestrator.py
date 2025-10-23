@@ -49,7 +49,16 @@ class ResearchState(TypedDict):
     domain_analysis: Dict[str, Any]
     scope_analysis: Dict[str, Any]
     
-    # Task Decomposition
+    # Planning Agent (새 필드)
+    preliminary_research: Dict[str, Any]  # MCP 도구로 수집한 사전 조사 결과
+    planned_tasks: List[Dict[str, Any]]  # 세부 task 목록
+    agent_assignments: Dict[str, List[str]]  # agent별 할당된 task
+    execution_plan: Dict[str, Any]  # 실행 전략 (순서, 병렬성)
+    plan_approved: bool  # Plan 검증 통과 여부
+    plan_feedback: Optional[str]  # Plan 검증 피드백
+    plan_iteration: int  # Plan 재작성 횟수
+    
+    # Task Decomposition (Legacy - 제거 예정)
     decomposed_tasks: List[Dict[str, Any]]
     task_assignments: List[Dict[str, Any]]
     execution_strategy: str
@@ -117,10 +126,11 @@ class AutonomousOrchestrator:
         # StateGraph 생성
         workflow = StateGraph(ResearchState)
         
-        # 노드 추가 (8대 혁신 통합)
+        # 노드 추가 (8대 혁신 통합 + Planning Agent)
         workflow.add_node("analyze_objectives", self._analyze_objectives)
+        workflow.add_node("planning_agent", self._planning_agent)
+        workflow.add_node("verify_plan", self._verify_plan)
         workflow.add_node("adaptive_supervisor", self._adaptive_supervisor)
-        workflow.add_node("decompose_tasks", self._decompose_tasks)
         workflow.add_node("execute_research", self._execute_research)
         workflow.add_node("hierarchical_compression", self._hierarchical_compression)
         workflow.add_node("continuous_verification", self._continuous_verification)
@@ -128,12 +138,25 @@ class AutonomousOrchestrator:
         workflow.add_node("validate_results", self._validate_results)
         workflow.add_node("synthesize_deliverable", self._synthesize_deliverable)
         
-        # 엣지 추가
+        # 엣지 추가 (Planning Agent 통합)
         workflow.set_entry_point("analyze_objectives")
         
-        workflow.add_edge("analyze_objectives", "adaptive_supervisor")
-        workflow.add_edge("adaptive_supervisor", "decompose_tasks")
-        workflow.add_edge("decompose_tasks", "execute_research")
+        # Planning Agent 워크플로우
+        workflow.add_edge("analyze_objectives", "planning_agent")
+        workflow.add_edge("planning_agent", "verify_plan")
+        
+        # Plan 검증 후 조건부 분기
+        workflow.add_conditional_edges(
+            "verify_plan",
+            lambda state: "approved" if state.get("plan_approved", False) else "planning_agent",
+            {
+                "approved": "adaptive_supervisor",
+                "planning_agent": "planning_agent"
+            }
+        )
+        
+        # 기존 워크플로우 (Planning Agent 통합)
+        workflow.add_edge("adaptive_supervisor", "execute_research")
         workflow.add_edge("execute_research", "hierarchical_compression")
         workflow.add_edge("hierarchical_compression", "continuous_verification")
         workflow.add_edge("continuous_verification", "evaluate_results")
@@ -165,6 +188,14 @@ class AutonomousOrchestrator:
         6. Success criteria and quality metrics
         
         Use production-level analysis with specific, actionable insights.
+        Return the result in JSON format with the following structure:
+        {{
+            "objectives": [{{"id": "obj_1", "description": "Research objective", "priority": "high"}}],
+            "intent": {{"primary": "research", "secondary": "analysis"}},
+            "domain": {{"fields": ["technology", "research"], "expertise": "general"}},
+            "scope": {{"breadth": "comprehensive", "depth": "detailed"}},
+            "complexity": 7.0
+        }}
         """
         
         try:
@@ -191,7 +222,7 @@ class AutonomousOrchestrator:
                 "domain_analysis": analysis_data.get("domain", {}),
                 "scope_analysis": analysis_data.get("scope", {}),
                 "complexity_score": analysis_data.get("complexity", 5.0),
-                "current_step": "adaptive_supervisor",
+                "current_step": "planning_agent",
                 "innovation_stats": {
                     "analysis_model": result.model_used,
                     "analysis_confidence": result.confidence,
@@ -201,30 +232,149 @@ class AutonomousOrchestrator:
             
         except Exception as e:
             logger.error(f"❌ Analysis failed: {e}")
-            # Fallback analysis
-            analysis_data = {
-                "objectives": [{"id": "obj_1", "description": state['user_request'], "priority": "high"}],
-                "intent": {"primary": "research", "secondary": "analysis"},
-                "domain": {"fields": ["general"], "expertise": "general"},
-                "scope": {"breadth": "comprehensive", "depth": "detailed"},
-                "complexity": 5.0
-            }
-            
-            state.update({
-                "analyzed_objectives": analysis_data.get("objectives", []),
-                "intent_analysis": analysis_data.get("intent", {}),
-                "domain_analysis": analysis_data.get("domain", {}),
-                "scope_analysis": analysis_data.get("scope", {}),
-                "complexity_score": analysis_data.get("complexity", 5.0),
-                "current_step": "adaptive_supervisor",
-                "innovation_stats": {
-                    "analysis_model": "fallback",
-                    "analysis_confidence": 0.5,
-                    "analysis_time": 0.0
-                }
-            })
+            state["error_message"] = str(e)
+            state["should_continue"] = False
+            raise  # Fail-fast
         
         return state
+    
+    async def _planning_agent(self, state: ResearchState) -> ResearchState:
+        """Planning Agent: MCP 기반 사전 조사 → Task 분해 → Agent 동적 할당."""
+        logger.info("🎯 Planning Agent: MCP-based research planning")
+        logger.info(f"📊 Complexity Score: {state.get('complexity_score', 5.0)}")
+        logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
+        
+        try:
+            # 1. MCP 도구로 사전 조사
+            preliminary_research = await self._conduct_preliminary_research(state)
+            logger.info(f"🔍 Preliminary research completed: {preliminary_research.get('sources_count', 0)} sources")
+            
+            # 2. Task 분해 (복잡도 기반)
+            tasks = await self._decompose_into_tasks(state, preliminary_research)
+            logger.info(f"📋 Tasks decomposed: {len(tasks)} tasks")
+            
+            # 3. Agent 동적 할당 (복잡도 기반)
+            agent_assignments = await self._assign_agents_dynamically(tasks, state)
+            logger.info(f"👥 Agent assignments: {len(agent_assignments)} task-agent mappings")
+            
+            # 4. 실행 전략 수립
+            execution_plan = await self._create_execution_plan(tasks, agent_assignments)
+            logger.info(f"📈 Execution strategy: {execution_plan.get('strategy', 'sequential')}")
+            
+            # Planning 결과를 state에 저장
+            state.update({
+                "preliminary_research": preliminary_research,
+                "planned_tasks": tasks,
+                "agent_assignments": agent_assignments,
+                "execution_plan": execution_plan,
+                "plan_approved": False,
+                "plan_feedback": None,
+                "plan_iteration": state.get("plan_iteration", 0) + 1,
+                "current_step": "verify_plan",
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "planning_agent": "active",
+                    "preliminary_sources": preliminary_research.get('sources_count', 0),
+                    "planned_tasks_count": len(tasks),
+                    "agent_assignments_count": len(agent_assignments),
+                    "execution_strategy": execution_plan.get('strategy', 'sequential')
+                }
+            })
+            
+            logger.info("✅ Planning Agent completed successfully")
+            return state
+            
+        except Exception as e:
+            logger.error(f"❌ Planning Agent failed: {e}")
+            state["error_message"] = str(e)
+            state["should_continue"] = False
+            raise  # Fail-fast
+    
+    async def _verify_plan(self, state: ResearchState) -> ResearchState:
+        """Plan 검증: LLM 기반 plan 타당성 검증."""
+        logger.info("✅ Verifying research plan")
+        logger.info(f"📋 Tasks to verify: {len(state.get('planned_tasks', []))}")
+        logger.info(f"👥 Agent assignments: {len(state.get('agent_assignments', {}))}")
+        
+        try:
+            verification_prompt = f"""
+            Verify the following research plan for quality and completeness:
+            
+            Research Request: {state.get('user_request', '')}
+            Objectives: {state.get('analyzed_objectives', [])}
+            Domain: {state.get('domain_analysis', {})}
+            Complexity Score: {state.get('complexity_score', 5.0)}
+            
+            Planned Tasks: {state.get('planned_tasks', [])}
+            Agent Assignments: {state.get('agent_assignments', {})}
+            Execution Plan: {state.get('execution_plan', {})}
+            
+            Check the following criteria:
+            1. Completeness: Are all research objectives covered by the tasks?
+            2. Agent Allocation: Is the number of agents appropriate for task complexity?
+            3. Execution Strategy: Is the execution order and parallelization logical?
+            4. Resource Efficiency: Are the estimated costs and time reasonable?
+            5. Dependencies: Are task dependencies properly handled?
+            6. MCP Tools: Are appropriate tools assigned to each task?
+            
+            Return your assessment in JSON format:
+            {{
+                "approved": boolean,
+                "confidence": float (0.0-1.0),
+                "feedback": "detailed feedback string",
+                "suggested_changes": ["list of specific improvements"],
+                "critical_issues": ["list of blocking issues if any"]
+            }}
+            """
+            
+            result = await execute_llm_task(
+                prompt=verification_prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert research planner and quality auditor with deep knowledge of research methodologies and resource optimization."
+            )
+            
+            logger.info(f"🔍 Plan verification completed using model: {result.model_used}")
+            logger.info(f"📊 Verification confidence: {result.confidence}")
+            
+            # 검증 결과 파싱
+            verification = self._parse_verification_result(result.content)
+            
+            if verification.get("approved", False):
+                state["plan_approved"] = True
+                state["plan_feedback"] = verification.get("feedback", "Plan approved")
+                logger.info("✅ Plan approved by verification")
+                logger.info(f"💬 Feedback: {verification.get('feedback', '')}")
+            else:
+                state["plan_approved"] = False
+                state["plan_feedback"] = verification.get("feedback", "Plan rejected")
+                logger.warning(f"❌ Plan rejected: {verification.get('feedback')}")
+                logger.warning(f"🔧 Suggested changes: {verification.get('suggested_changes', [])}")
+                
+                # 최대 재시도 횟수 확인 (무한 루프 방지)
+                max_iterations = 3
+                if state.get("plan_iteration", 0) >= max_iterations:
+                    logger.error(f"❌ Maximum plan iterations ({max_iterations}) reached. Proceeding with current plan.")
+                    state["plan_approved"] = True
+                    state["plan_feedback"] = f"Plan approved after {max_iterations} iterations (forced)"
+            
+            state.update({
+                "current_step": "adaptive_supervisor" if state.get("plan_approved", False) else "planning_agent",
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "plan_verification": "completed",
+                    "plan_approved": state.get("plan_approved", False),
+                    "verification_confidence": verification.get("confidence", 0.0),
+                    "verification_iteration": state.get("plan_iteration", 0)
+                }
+            })
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"❌ Plan verification failed: {e}")
+            state["error_message"] = str(e)
+            state["should_continue"] = False
+            raise  # Fail-fast
     
     async def _adaptive_supervisor(self, state: ResearchState) -> ResearchState:
         """Adaptive Supervisor (혁신 1)."""
@@ -256,7 +406,7 @@ class AutonomousOrchestrator:
             "allocated_researchers": allocated_researchers,
             "priority_queue": priority_queue,
             "quality_threshold": quality_threshold,
-            "current_step": "decompose_tasks",
+            "current_step": "execute_research",
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
                 "allocated_researchers": allocated_researchers,
@@ -267,101 +417,19 @@ class AutonomousOrchestrator:
         
         return state
     
-    async def _decompose_tasks(self, state: ResearchState) -> ResearchState:
-        """작업 분해 (Multi-Model Orchestration)."""
-        logger.info("📋 Decomposing tasks with Multi-Model Orchestration")
-        logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
-        logger.info(f"👥 Allocated Researchers: {state.get('allocated_researchers', 1)}")
-        
-        decomposition_prompt = f"""
-        Decompose the following research objectives into specific, executable tasks:
-        
-        Objectives: {state.get('analyzed_objectives', [])}
-        Intent: {state.get('intent_analysis', {})}
-        Domain: {state.get('domain_analysis', {})}
-        Scope: {state.get('scope_analysis', {})}
-        Allocated Researchers: {state.get('allocated_researchers', 1)}
-        
-        Create detailed task breakdown including:
-        1. Task identification and prioritization
-        2. Resource allocation per task
-        3. Dependencies and sequencing
-        4. Success criteria and quality metrics
-        5. MCP tool assignments for each task
-        6. Timeline and milestones
-        
-        Provide production-level task decomposition with specific, actionable steps.
-        """
-        
-        try:
-            # Multi-Model Orchestration으로 작업 분해
-            result = await execute_llm_task(
-                prompt=decomposition_prompt,
-                task_type=TaskType.PLANNING,
-                system_message="You are an expert project manager with research expertise."
-            )
-            
-            logger.info(f"✅ Task decomposition completed using model: {result.model_used}")
-            logger.info(f"📊 Decomposition confidence: {result.confidence}")
-            
-            # 작업 분해 결과 파싱
-            tasks_data = self._parse_tasks_result(result.content)
-            
-            logger.info(f"📝 Created tasks: {len(tasks_data.get('tasks', []))}")
-            logger.info(f"🔄 Execution strategy: {tasks_data.get('strategy', 'sequential')}")
-            
-            # 각 작업 상세 로그
-            for i, task in enumerate(tasks_data.get('tasks', [])):
-                logger.info(f"  Task {i+1}: {task.get('name', 'Unknown')} ({task.get('type', 'research')})")
-            
-            state.update({
-                "decomposed_tasks": tasks_data.get("tasks", []),
-                "task_assignments": tasks_data.get("assignments", []),
-                "execution_strategy": tasks_data.get("strategy", "sequential"),
-                "current_step": "execute_research",
-                "innovation_stats": {
-                    **state.get("innovation_stats", {}),
-                    "decomposition_model": result.model_used,
-                    "decomposition_confidence": result.confidence,
-                    "tasks_count": len(tasks_data.get("tasks", []))
-                }
-            })
-            
-        except Exception as e:
-            logger.error(f"❌ Task decomposition failed: {e}")
-            # Fallback task decomposition
-            tasks_data = {
-                "tasks": [
-                    {"id": "task_1", "name": "Research Analysis", "type": "research", "parameters": {"query": state['user_request']}},
-                    {"id": "task_2", "name": "Data Collection", "type": "data", "parameters": {"sources": 5}},
-                    {"id": "task_3", "name": "Synthesis", "type": "synthesis", "parameters": {"format": "comprehensive"}}
-                ],
-                "assignments": [{"task_id": "task_1", "researcher": "researcher_1"}],
-                "strategy": "sequential"
-            }
-            
-            logger.info(f"🔄 Using fallback task decomposition: {len(tasks_data['tasks'])} tasks")
-            
-            state.update({
-                "decomposed_tasks": tasks_data.get("tasks", []),
-                "task_assignments": tasks_data.get("assignments", []),
-                "execution_strategy": tasks_data.get("strategy", "sequential"),
-                "current_step": "execute_research",
-                "innovation_stats": {
-                    **state.get("innovation_stats", {}),
-                    "decomposition_model": "fallback",
-                    "decomposition_confidence": 0.5,
-                    "tasks_count": len(tasks_data.get("tasks", []))
-                }
-            })
-        
-        return state
-    
     async def _execute_research(self, state: ResearchState) -> ResearchState:
         """연구 실행 (Universal MCP Hub + Streaming Pipeline)."""
         logger.info("🔍 Executing research with Universal MCP Hub and Streaming Pipeline")
         
-        tasks = state.get("decomposed_tasks", [])
+        # Planning Agent에서 생성된 tasks 사용
+        tasks = state.get("planned_tasks", [])
+        agent_assignments = state.get("agent_assignments", {})
+        execution_plan = state.get("execution_plan", {})
+        
+        logger.info(f"📋 Executing {len(tasks)} planned tasks")
+        logger.info(f"👥 Agent assignments: {len(agent_assignments)} mappings")
+        logger.info(f"📈 Execution strategy: {execution_plan.get('strategy', 'sequential')}")
+        
         execution_results = []
         streaming_data = []
         
@@ -550,6 +618,12 @@ class AutonomousOrchestrator:
         6. Overall satisfaction score
         
         Use production-level evaluation with specific, actionable insights.
+        Return the result in JSON format with the following structure:
+        {{
+            "overall_score": 0.85,
+            "metrics": {{"quality": 0.8, "completeness": 0.9, "accuracy": 0.85}},
+            "improvements": ["Add more sources", "Improve analysis depth"]
+        }}
         """
         
         # Multi-Model Orchestration으로 평가
@@ -653,42 +727,401 @@ class AutonomousOrchestrator:
         
         return state
     
-    # 헬퍼 메서드들
-    def _parse_analysis_result(self, content: str) -> Dict[str, Any]:
-        """분석 결과 파싱."""
-        # 실제 구현에서는 더 정교한 파싱 로직 사용
+    # ==================== Planning Agent Helper Methods ====================
+    
+    async def _conduct_preliminary_research(self, state: ResearchState) -> Dict[str, Any]:
+        """MCP 도구로 사전 조사 수행."""
+        logger.info("🔍 Conducting preliminary research with MCP tools")
+        
+        objectives = state.get('analyzed_objectives', [])
+        domain = state.get('domain_analysis', {})
+        
+        # 핵심 키워드 추출
+        keywords = self._extract_keywords(objectives, domain)
+        logger.info(f"🔑 Extracted keywords: {keywords[:5]}")  # 상위 5개만 로그
+        
+        # MCP 도구로 검색
+        search_results = []
+        search_tools = ["g-search", "tavily", "exa"]  # 사용 가능한 검색 도구
+        
+        for i, keyword in enumerate(keywords[:3]):  # 상위 3개 키워드
+            tool_name = search_tools[i % len(search_tools)]  # 도구 순환 사용
+            
+            try:
+                result = await execute_tool(
+                    tool_name=tool_name,
+                    parameters={"query": keyword, "max_results": 5}
+                )
+                
+                if result.success:
+                    search_results.append({
+                        "keyword": keyword,
+                        "tool": tool_name,
+                        "data": result.data,
+                        "sources_count": len(result.data) if isinstance(result.data, list) else 1
+                    })
+                    logger.info(f"✅ {tool_name} search for '{keyword}': {len(result.data) if isinstance(result.data, list) else 1} results")
+                else:
+                    logger.warning(f"⚠️ {tool_name} search failed for '{keyword}': {result.error}")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ {tool_name} search error for '{keyword}': {e}")
+        
+        # 학술 검색 (arxiv, scholar)
+        academic_results = []
+        academic_tools = ["arxiv", "scholar"]
+        
+        for tool_name in academic_tools:
+            try:
+                result = await execute_tool(
+                    tool_name=tool_name,
+                    parameters={"query": " ".join(keywords[:2]), "max_results": 3}
+                )
+                
+                if result.success:
+                    academic_results.append({
+                        "tool": tool_name,
+                        "data": result.data,
+                        "sources_count": len(result.data) if isinstance(result.data, list) else 1
+                    })
+                    logger.info(f"✅ {tool_name} academic search: {len(result.data) if isinstance(result.data, list) else 1} results")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ {tool_name} academic search error: {e}")
+        
         return {
-            "objectives": [{"id": "obj_1", "description": "Research objective", "priority": "high"}],
-            "intent": {"primary": "research", "secondary": "analysis"},
-            "domain": {"fields": ["technology", "research"], "expertise": "general"},
-            "scope": {"breadth": "comprehensive", "depth": "detailed"},
-            "complexity": 7.0
+            "keywords": keywords,
+            "search_results": search_results,
+            "academic_results": academic_results,
+            "sources_count": len(search_results) + len(academic_results),
+            "total_results": sum(r.get("sources_count", 0) for r in search_results + academic_results)
         }
     
-    def _parse_tasks_result(self, content: str) -> Dict[str, Any]:
-        """작업 분해 결과 파싱."""
-        return {
-            "tasks": [
-                {"id": "task_1", "name": "Research task", "type": "research", "parameters": {}}
-            ],
-            "assignments": [{"task_id": "task_1", "researcher": "researcher_1"}],
-            "strategy": "parallel"
+    def _extract_keywords(self, objectives: List[Dict[str, Any]], domain: Dict[str, Any]) -> List[str]:
+        """목표와 도메인에서 핵심 키워드 추출."""
+        keywords = []
+        
+        # Objectives에서 키워드 추출
+        for obj in objectives:
+            description = obj.get('description', '')
+            # 간단한 키워드 추출 (실제로는 더 정교한 NLP 사용)
+            words = description.lower().split()
+            keywords.extend([w for w in words if len(w) > 3 and w not in ['the', 'and', 'for', 'with', 'from']])
+        
+        # Domain에서 키워드 추출
+        fields = domain.get('fields', [])
+        keywords.extend(fields)
+        
+        # 중복 제거 및 빈도순 정렬
+        from collections import Counter
+        keyword_counts = Counter(keywords)
+        return [kw for kw, count in keyword_counts.most_common(10)]
+    
+    async def _decompose_into_tasks(
+        self, 
+        state: ResearchState, 
+        preliminary_research: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """복잡도 기반 task 분해."""
+        logger.info("📋 Decomposing research into specific tasks")
+        
+        complexity = state.get('complexity_score', 5.0)
+        
+        # 복잡도에 따른 task 개수 결정
+        if complexity <= 5:
+            num_tasks = 3 + int(complexity)  # 3-8개
+        elif complexity <= 8:
+            num_tasks = 5 + int(complexity)  # 5-13개
+        else:
+            num_tasks = 8 + int(complexity * 0.5)  # 8-13개
+        
+        logger.info(f"📊 Target task count: {num_tasks} (complexity: {complexity})")
+        
+        # LLM으로 task 생성 (사전 조사 결과 포함)
+        decomposition_prompt = f"""
+        Based on preliminary research, decompose the research into {num_tasks} specific, executable tasks:
+        
+        Research Request: {state.get('user_request', '')}
+        Objectives: {state.get('analyzed_objectives', [])}
+        Domain: {state.get('domain_analysis', {})}
+        Complexity Score: {complexity}
+        
+        Preliminary Research:
+        - Keywords: {preliminary_research.get('keywords', [])}
+        - Search Results: {len(preliminary_research.get('search_results', []))} sources
+        - Academic Results: {len(preliminary_research.get('academic_results', []))} sources
+        
+        For each task, provide the following structure:
+        {{
+            "task_id": "task_1",
+            "name": "Specific task name",
+            "description": "Detailed task description",
+            "type": "academic|market|technical|data|synthesis",
+            "assigned_agent_type": "academic_researcher|market_analyst|technical_researcher|data_collector|synthesis_specialist",
+            "required_tools": ["g-search", "arxiv", "tavily"],
+            "dependencies": ["task_0"],
+            "estimated_complexity": 1-10,
+            "priority": "high|medium|low",
+            "estimated_time": 30,
+            "success_criteria": ["specific measurable criteria"]
+        }}
+        
+        Ensure tasks cover all research objectives and have logical dependencies.
+        Return as JSON array of task objects.
+        """
+        
+        result = await execute_llm_task(
+            prompt=decomposition_prompt,
+            task_type=TaskType.PLANNING,
+            system_message="You are an expert research project manager with deep knowledge of task decomposition and resource allocation."
+        )
+        
+        logger.info(f"✅ Task decomposition completed using model: {result.model_used}")
+        
+        # Task 결과 파싱
+        tasks = self._parse_tasks_result(result.content)
+        
+        # Task 검증 및 로깅
+        for i, task in enumerate(tasks):
+            logger.info(f"  Task {i+1}: {task.get('name', 'Unknown')} ({task.get('type', 'research')}) - {task.get('assigned_agent_type', 'unknown')} agent")
+        
+        return tasks
+    
+    async def _assign_agents_dynamically(
+        self,
+        tasks: List[Dict[str, Any]],
+        state: ResearchState
+    ) -> Dict[str, List[str]]:
+        """복잡도 기반 동적 agent 할당."""
+        logger.info("👥 Assigning agents dynamically based on task complexity")
+        
+        agent_assignments = {}
+        available_researchers = state.get('allocated_researchers', 1)
+        
+        for task in tasks:
+            task_id = task.get('task_id', 'unknown')
+            complexity = task.get('estimated_complexity', 5)
+            task_type = task.get('type', 'research')
+            
+            # 복잡도에 따른 agent 수 결정
+            if complexity <= 3:
+                num_agents = 1
+            elif complexity <= 7:
+                num_agents = min(2, available_researchers)
+            else:
+                num_agents = min(3, available_researchers)
+            
+            # Agent 유형 결정
+            agent_types = self._select_agent_types(task_type, num_agents)
+            
+            agent_assignments[task_id] = agent_types
+            
+            logger.info(f"  {task_id}: {num_agents} agents ({', '.join(agent_types)}) for complexity {complexity}")
+        
+        return agent_assignments
+    
+    def _select_agent_types(self, task_type: str, num_agents: int) -> List[str]:
+        """Task 유형에 따른 agent 유형 선택."""
+        agent_type_mapping = {
+            "academic": ["academic_researcher"],
+            "market": ["market_analyst"],
+            "technical": ["technical_researcher"],
+            "data": ["data_collector"],
+            "synthesis": ["synthesis_specialist"],
+            "research": ["academic_researcher", "technical_researcher"]
         }
+        
+        base_types = agent_type_mapping.get(task_type, ["academic_researcher"])
+        
+        # 필요한 수만큼 agent 유형 반환
+        if num_agents <= len(base_types):
+            return base_types[:num_agents]
+        else:
+            # 부족한 경우 다른 유형 추가
+            additional_types = ["market_analyst", "technical_researcher", "data_collector", "synthesis_specialist"]
+            result = base_types.copy()
+            for agent_type in additional_types:
+                if len(result) >= num_agents:
+                    break
+                if agent_type not in result:
+                    result.append(agent_type)
+            return result[:num_agents]
+    
+    async def _create_execution_plan(
+        self,
+        tasks: List[Dict[str, Any]],
+        agent_assignments: Dict[str, List[str]]
+    ) -> Dict[str, Any]:
+        """실행 전략 수립."""
+        logger.info("📈 Creating execution plan")
+        
+        # 의존성 분석
+        dependency_graph = self._build_dependency_graph(tasks)
+        
+        # 병렬 가능한 task 그룹 식별
+        parallel_groups = self._identify_parallel_groups(dependency_graph)
+        
+        # 실행 순서 결정
+        execution_order = self._determine_execution_order(tasks, dependency_graph)
+        
+        # 전략 결정
+        strategy = "hybrid" if parallel_groups else "sequential"
+        
+        # 예상 시간 계산
+        estimated_total_time = sum(task.get('estimated_time', 30) for task in tasks)
+        
+        execution_plan = {
+            "strategy": strategy,
+            "parallel_groups": parallel_groups,
+            "execution_order": execution_order,
+            "estimated_total_time": estimated_total_time,
+            "dependency_graph": dependency_graph,
+            "task_count": len(tasks),
+            "agent_count": len(set(agent for agents in agent_assignments.values() for agent in agents))
+        }
+        
+        logger.info(f"📊 Execution plan: {strategy} strategy, {len(parallel_groups)} parallel groups, {estimated_total_time}min total")
+        
+        return execution_plan
+    
+    def _build_dependency_graph(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """Task 의존성 그래프 구축."""
+        graph = {}
+        
+        for task in tasks:
+            task_id = task.get('task_id', '')
+            dependencies = task.get('dependencies', [])
+            graph[task_id] = dependencies
+        
+        return graph
+    
+    def _identify_parallel_groups(self, dependency_graph: Dict[str, List[str]]) -> List[List[str]]:
+        """병렬 실행 가능한 task 그룹 식별."""
+        # 간단한 구현: 의존성이 없는 task들을 그룹화
+        parallel_groups = []
+        processed = set()
+        
+        for task_id, dependencies in dependency_graph.items():
+            if task_id in processed:
+                continue
+                
+            if not dependencies:  # 의존성이 없는 task
+                group = [task_id]
+                # 다른 의존성 없는 task들 찾기
+                for other_task, other_deps in dependency_graph.items():
+                    if other_task != task_id and other_task not in processed and not other_deps:
+                        group.append(other_task)
+                        processed.add(other_task)
+                
+                if len(group) > 1:
+                    parallel_groups.append(group)
+                    processed.update(group)
+        
+        return parallel_groups
+    
+    def _determine_execution_order(self, tasks: List[Dict[str, Any]], dependency_graph: Dict[str, List[str]]) -> List[str]:
+        """의존성을 고려한 실행 순서 결정."""
+        # 위상 정렬을 사용한 실행 순서 결정
+        in_degree = {task_id: 0 for task_id in dependency_graph.keys()}
+        
+        # 진입 차수 계산
+        for task_id, dependencies in dependency_graph.items():
+            for dep in dependencies:
+                if dep in in_degree:
+                    in_degree[task_id] += 1
+        
+        # 위상 정렬
+        queue = [task_id for task_id, degree in in_degree.items() if degree == 0]
+        result = []
+        
+        while queue:
+            current = queue.pop(0)
+            result.append(current)
+            
+            # 현재 task에 의존하는 task들의 진입 차수 감소
+            for task_id, dependencies in dependency_graph.items():
+                if current in dependencies:
+                    in_degree[task_id] -= 1
+                    if in_degree[task_id] == 0:
+                        queue.append(task_id)
+        
+        return result
+    
+    # ==================== Helper Methods ====================
+    
+    def _parse_analysis_result(self, content: str) -> Dict[str, Any]:
+        """분석 결과 파싱."""
+        try:
+            import json
+            # JSON 파싱 시도
+            if content.strip().startswith('{'):
+                return json.loads(content)
+            else:
+                # JSON이 아닌 경우 에러 발생
+                raise ValueError("Invalid JSON format in analysis result")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse analysis result: {e}")
+            raise ValueError(f"Analysis parsing failed: {e}")
+    
+    def _parse_tasks_result(self, content: str) -> List[Dict[str, Any]]:
+        """Task 분해 결과 파싱."""
+        try:
+            import json
+            # JSON 배열로 파싱 시도
+            if content.strip().startswith('['):
+                return json.loads(content)
+            else:
+                # JSON이 아닌 경우 에러 발생
+                raise ValueError("Invalid JSON format in task decomposition result")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse tasks result: {e}")
+            raise ValueError(f"Task parsing failed: {e}")
+    
+    def _parse_verification_result(self, content: str) -> Dict[str, Any]:
+        """Plan 검증 결과 파싱."""
+        try:
+            import json
+            # JSON 파싱 시도
+            if content.strip().startswith('{'):
+                return json.loads(content)
+            else:
+                # JSON이 아닌 경우 에러 발생
+                raise ValueError("Invalid JSON format in verification result")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse verification result: {e}")
+            raise ValueError(f"Verification parsing failed: {e}")
     
     def _parse_evaluation_result(self, content: str) -> Dict[str, Any]:
         """평가 결과 파싱."""
-        return {
-            "overall_score": 0.85,
-            "metrics": {"quality": 0.8, "completeness": 0.9, "accuracy": 0.85},
-            "improvements": ["Add more sources", "Improve analysis depth"]
-        }
+        try:
+            import json
+            # JSON 파싱 시도
+            if content.strip().startswith('{'):
+                return json.loads(content)
+            else:
+                # JSON이 아닌 경우 에러 발생
+                raise ValueError("Invalid JSON format in evaluation result")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse evaluation result: {e}")
+            raise ValueError(f"Evaluation parsing failed: {e}")
     
     def _create_priority_queue(self, state: ResearchState) -> List[Dict[str, Any]]:
         """우선순위 큐 생성."""
-        return [
-            {"task_id": "task_1", "priority": 1, "estimated_time": 30},
-            {"task_id": "task_2", "priority": 2, "estimated_time": 45}
-        ]
+        tasks = state.get("planned_tasks", [])
+        priority_queue = []
+        
+        for task in tasks:
+            priority = 1 if task.get("priority") == "high" else 2 if task.get("priority") == "medium" else 3
+            priority_queue.append({
+                "task_id": task.get("task_id", ""),
+                "priority": priority,
+                "estimated_time": task.get("estimated_time", 30),
+                "complexity": task.get("estimated_complexity", 5)
+            })
+        
+        # 우선순위별로 정렬
+        priority_queue.sort(key=lambda x: (x["priority"], x["complexity"]))
+        return priority_queue
     
     def _get_tool_category_for_task(self, task: Dict[str, Any]) -> ToolCategory:
         """작업에 적합한 도구 카테고리 반환."""
@@ -715,37 +1148,168 @@ class AutonomousOrchestrator:
     
     async def _self_verification(self, result: Dict[str, Any]) -> float:
         """자체 검증."""
-        # 실제 구현에서는 더 정교한 검증 로직 사용
-        return 0.8
+        try:
+            # 데이터 품질 검증
+            data = result.get("compressed_data", {})
+            if not data:
+                return 0.0
+            
+            # 기본적인 데이터 검증
+            score = 0.5
+            
+            # 데이터 완성도 검증
+            if isinstance(data, dict) and len(data) > 0:
+                score += 0.2
+            
+            # 중요 정보 보존 검증
+            important_info = result.get("important_info_preserved", [])
+            if important_info and len(important_info) > 0:
+                score += 0.3
+            
+            return min(score, 1.0)
+        except Exception as e:
+            logger.error(f"❌ Self verification failed: {e}")
+            return 0.0
     
     async def _cross_verification(self, result: Dict[str, Any], all_results: List[Dict[str, Any]]) -> float:
         """교차 검증."""
-        # 실제 구현에서는 다른 결과와의 일치도 검사
-        return 0.85
+        try:
+            if not all_results or len(all_results) < 2:
+                return 0.5
+            
+            # 다른 결과와의 일치도 검사
+            current_data = result.get("compressed_data", {})
+            if not current_data:
+                return 0.0
+            
+            consistency_score = 0.0
+            comparison_count = 0
+            
+            for other_result in all_results:
+                if other_result.get("task_id") == result.get("task_id"):
+                    continue
+                
+                other_data = other_result.get("compressed_data", {})
+                if not other_data:
+                    continue
+                
+                # 간단한 일치도 검사 (실제로는 더 정교한 로직 필요)
+                if isinstance(current_data, dict) and isinstance(other_data, dict):
+                    common_keys = set(current_data.keys()) & set(other_data.keys())
+                    if common_keys:
+                        consistency_score += len(common_keys) / max(len(current_data.keys()), len(other_data.keys()))
+                        comparison_count += 1
+            
+            if comparison_count > 0:
+                return consistency_score / comparison_count
+            else:
+                return 0.5
+                
+        except Exception as e:
+            logger.error(f"❌ Cross verification failed: {e}")
+            return 0.0
     
     async def _external_verification(self, result: Dict[str, Any]) -> float:
         """외부 검증."""
-        # 실제 구현에서는 외부 소스와의 검증
-        return 0.9
+        try:
+            # MCP 도구를 사용한 외부 검증
+            task_id = result.get("task_id", "")
+            data = result.get("compressed_data", {})
+            
+            if not data or not task_id:
+                return 0.5
+            
+            # 간단한 외부 검증 (실제로는 MCP 도구 활용)
+            # 여기서는 기본적인 데이터 유효성만 검사
+            if isinstance(data, dict) and len(data) > 0:
+                return 0.8
+            elif isinstance(data, list) and len(data) > 0:
+                return 0.7
+            else:
+                return 0.6
+                
+        except Exception as e:
+            logger.error(f"❌ External verification failed: {e}")
+            return 0.0
     
     def _calculate_validation_score(self, state: ResearchState) -> float:
         """검증 점수 계산."""
-        # 실제 구현에서는 더 정교한 검증 로직 사용
-        return 0.85
+        try:
+            confidence_scores = state.get("confidence_scores", {})
+            if not confidence_scores:
+                return 0.0
+            
+            # 평균 신뢰도 점수 계산
+            total_score = sum(confidence_scores.values())
+            avg_score = total_score / len(confidence_scores)
+            
+            # 품질 메트릭 반영
+            quality_metrics = state.get("quality_metrics", {})
+            if quality_metrics:
+                quality_score = quality_metrics.get("overall_quality", 0.8)
+                avg_score = (avg_score + quality_score) / 2
+            
+            return min(avg_score, 1.0)
+        except Exception as e:
+            logger.error(f"❌ Validation score calculation failed: {e}")
+            return 0.0
     
     def _identify_missing_elements(self, state: ResearchState) -> List[str]:
         """누락된 요소 식별."""
-        # 실제 구현에서는 더 정교한 분석 로직 사용
-        return []
+        try:
+            missing_elements = []
+            
+            # 필수 필드 검사
+            required_fields = ["analyzed_objectives", "planned_tasks", "execution_results"]
+            for field in required_fields:
+                if not state.get(field):
+                    missing_elements.append(f"Missing {field}")
+            
+            # 실행 결과 검사
+            execution_results = state.get("execution_results", [])
+            if not execution_results:
+                missing_elements.append("No execution results found")
+            
+            # 압축 결과 검사
+            compression_results = state.get("compression_results", [])
+            if not compression_results:
+                missing_elements.append("No compression results found")
+            
+            # 검증 결과 검사
+            verification_stages = state.get("verification_stages", [])
+            if not verification_stages:
+                missing_elements.append("No verification results found")
+            
+            return missing_elements
+        except Exception as e:
+            logger.error(f"❌ Missing elements identification failed: {e}")
+            return ["Error in missing elements analysis"]
     
     def _calculate_context_usage(self, state: ResearchState, content: str) -> Dict[str, Any]:
         """컨텍스트 윈도우 사용량 계산."""
-        # 실제 구현에서는 토큰 수 계산
-        return {
-            "usage_ratio": 0.7,
-            "tokens_used": 1000,
-            "max_tokens": 4000
-        }
+        try:
+            # 간단한 토큰 수 추정 (실제로는 더 정교한 토큰화 필요)
+            estimated_tokens = len(content.split()) * 1.3  # 대략적인 토큰 수
+            
+            # 최대 토큰 수 (모델별로 다름)
+            max_tokens = 100000  # 기본값
+            
+            usage_ratio = min(estimated_tokens / max_tokens, 1.0)
+            
+            return {
+                "usage_ratio": usage_ratio,
+                "tokens_used": int(estimated_tokens),
+                "max_tokens": max_tokens,
+                "efficiency": 1.0 - usage_ratio
+            }
+        except Exception as e:
+            logger.error(f"❌ Context usage calculation failed: {e}")
+            return {
+                "usage_ratio": 0.0,
+                "tokens_used": 0,
+                "max_tokens": 100000,
+                "efficiency": 1.0
+            }
     
     async def run_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """연구 실행 (Production-Grade Reliability)."""
@@ -760,6 +1324,15 @@ class AutonomousOrchestrator:
             intent_analysis={},
             domain_analysis={},
             scope_analysis={},
+            # Planning Agent 필드
+            preliminary_research={},
+            planned_tasks=[],
+            agent_assignments={},
+            execution_plan={},
+            plan_approved=False,
+            plan_feedback=None,
+            plan_iteration=0,
+            # Legacy 필드 (제거 예정)
             decomposed_tasks=[],
             task_assignments=[],
             execution_strategy="",
@@ -790,128 +1363,41 @@ class AutonomousOrchestrator:
             innovation_stats={},
             messages=[]
         )
+
+        # LangGraph 워크플로우 실행
+        logger.info("🔄 Executing LangGraph workflow with 8 core innovations")
+        final_state = await self.graph.ainvoke(initial_state)
         
-        try:
-            # LangGraph 워크플로우 실행
-            logger.info("🔄 Executing LangGraph workflow with 8 core innovations")
-            final_state = await self.graph.ainvoke(initial_state)
-            
-            # 결과 포맷팅
-            result = {
-                "content": final_state.get("final_synthesis", {}).get("content", "Research completed"),
-                "metadata": {
-                    "model_used": final_state.get("final_synthesis", {}).get("model_used", "unknown"),
-                    "execution_time": final_state.get("final_synthesis", {}).get("execution_time", 0.0),
-                    "cost": 0.0,
-                    "confidence": final_state.get("final_synthesis", {}).get("confidence", 0.9)
-                },
-                "synthesis_results": {
-                    "content": final_state.get("final_synthesis", {}).get("content", ""),
-                    "original_length": len(str(final_state.get("execution_results", []))),
-                    "compressed_length": len(str(final_state.get("compression_results", []))),
-                    "compression_ratio": final_state.get("compression_metadata", {}).get("overall_compression_ratio", 1.0)
-                },
-                "innovation_stats": final_state.get("innovation_stats", {}),
-                "system_health": {"overall_status": "healthy", "health_score": 95},
-                "detailed_results": {
-                    "analyzed_objectives": final_state.get("analyzed_objectives", []),
-                    "decomposed_tasks": final_state.get("decomposed_tasks", []),
-                    "execution_results": final_state.get("execution_results", []),
-                    "compression_results": final_state.get("compression_results", []),
-                    "verification_stages": final_state.get("verification_stages", []),
-                    "evaluation_results": final_state.get("evaluation_results", {}),
-                    "quality_metrics": final_state.get("quality_metrics", {})
-                }
+        # 결과 포맷팅
+        result = {
+            "content": final_state.get("final_synthesis", {}).get("content", "Research completed"),
+            "metadata": {
+                "model_used": final_state.get("final_synthesis", {}).get("model_used", "unknown"),
+                "execution_time": final_state.get("final_synthesis", {}).get("execution_time", 0.0),
+                "cost": 0.0,
+                "confidence": final_state.get("final_synthesis", {}).get("confidence", 0.9)
+            },
+            "synthesis_results": {
+                "content": final_state.get("final_synthesis", {}).get("content", ""),
+                "original_length": len(str(final_state.get("execution_results", []))),
+                "compressed_length": len(str(final_state.get("compression_results", []))),
+                "compression_ratio": final_state.get("compression_metadata", {}).get("overall_compression_ratio", 1.0)
+            },
+            "innovation_stats": final_state.get("innovation_stats", {}),
+            "system_health": {"overall_status": "healthy", "health_score": 95},
+            "detailed_results": {
+                "analyzed_objectives": final_state.get("analyzed_objectives", []),
+                "planned_tasks": final_state.get("planned_tasks", []),
+                "execution_results": final_state.get("execution_results", []),
+                "compression_results": final_state.get("compression_results", []),
+                "verification_stages": final_state.get("verification_stages", []),
+                "evaluation_results": final_state.get("evaluation_results", {}),
+                "quality_metrics": final_state.get("quality_metrics", {})
             }
-            
-            logger.info("✅ Research completed successfully with 8 core innovations")
-            return result
-            
-        except Exception as e:
-            logger.error(f"❌ Research failed: {e}")
-            # Fallback: 간단한 연구 실행
-            return await self._fallback_research(user_request, context)
-    
-    async def _fallback_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Fallback 연구 실행 (MCP 연결 실패 시)."""
-        logger.info("🔄 Executing fallback research due to MCP connection issues")
+        }
         
-        try:
-            research_prompt = f"""
-            다음 연구 요청에 대해 전문적이고 상세한 분석을 제공해주세요:
-            
-            요청: {user_request}
-            컨텍스트: {context or {}}
-            
-            다음 구조로 답변해주세요:
-            1. 연구 목표 및 범위
-            2. 주요 동향 및 현황
-            3. 핵심 이슈 및 과제
-            4. 미래 전망 및 시사점
-            5. 결론 및 권고사항
-            """
-            
-            # 직접 OpenRouter API 호출
-            from openai import AsyncOpenAI
-            import os
-            
-            client = AsyncOpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=os.getenv("OPENROUTER_API_KEY")
-            )
-            
-            response = await client.chat.completions.create(
-                model="qwen/qwen2.5-vl-72b-instruct:free",
-                messages=[
-                    {"role": "system", "content": "당신은 전문 연구원입니다. 정확하고 신뢰할 수 있는 정보를 제공해주세요."},
-                    {"role": "user", "content": research_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=4000
-            )
-            
-            content = response.choices[0].message.content
-            
-            # 결과 반환
-            return {
-                "content": content,
-                "metadata": {
-                    "model_used": "qwen/qwen2.5-vl-72b-instruct:free",
-                    "execution_time": 0.0,
-                    "cost": 0.0,
-                    "confidence": 0.9
-                },
-                "synthesis_results": {
-                    "content": content,
-                    "original_length": len(content),
-                    "compressed_length": len(content),
-                    "compression_ratio": 1.0
-                },
-                "innovation_stats": {
-                    "adaptive_supervisor": "fallback",
-                    "hierarchical_compression": "applied",
-                    "multi_model_orchestration": "fallback",
-                    "continuous_verification": "fallback",
-                    "streaming_pipeline": "disabled",
-                    "universal_mcp_hub": "failed",
-                    "adaptive_context_window": "active",
-                    "production_grade_reliability": "active"
-                },
-                "system_health": {"overall_status": "degraded", "health_score": 75}
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Fallback research failed: {e}")
-            return {
-                "content": f"Research failed: {str(e)}",
-                "metadata": {
-                    "model_used": "error",
-                    "execution_time": 0,
-                    "cost": 0.0,
-                    "confidence": 0.0
-                },
-                "error": str(e)
-            }
+        logger.info("✅ Research completed successfully with 8 core innovations")
+        return result
 
 
 # Global orchestrator instance
@@ -921,3 +1407,4 @@ orchestrator = AutonomousOrchestrator()
 async def run_research(user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """연구 실행."""
     return await orchestrator.run_research(user_request, context)
+
