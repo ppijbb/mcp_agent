@@ -17,7 +17,6 @@ from enum import Enum
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from openai import OpenAI
 
 from researcher_config import get_llm_config, get_agent_config
 from src.core.reliability import execute_with_reliability
@@ -40,8 +39,6 @@ class TaskType(Enum):
 class Provider(Enum):
     """LLM 제공자."""
     GOOGLE = "google"
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
     OPENROUTER = "openrouter"
     LOCAL = "local"
 
@@ -190,12 +187,6 @@ class MultiModelOrchestrator:
         elif self.llm_config.provider == "google":
             if not self.llm_config.api_key:
                 raise ValueError("GOOGLE_API_KEY is required for Google LLM provider")
-        elif self.llm_config.provider == "openai":
-            if not self.llm_config.openai_api_key:
-                raise ValueError("OPENAI_API_KEY is required for OpenAI LLM provider")
-        elif self.llm_config.provider == "anthropic":
-            if not self.llm_config.anthropic_api_key:
-                raise ValueError("ANTHROPIC_API_KEY is required for Anthropic LLM provider")
     
     def _initialize_models(self):
         """모델 초기화."""
@@ -238,8 +229,8 @@ class MultiModelOrchestrator:
             capabilities=[TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
         )
         
-        # OpenRouter 모델들은 폴백 모델로 시작 (API 호출은 나중에)
-        self._load_fallback_openrouter_models()
+        # OpenRouter 모델들은 API에서 동적으로 로드
+        self._load_openrouter_models()
     
     def _load_openrouter_models(self):
         """OpenRouter API에서 무료 모델들을 동적으로 로드."""
@@ -252,9 +243,8 @@ class MultiModelOrchestrator:
                     self.models[model_name] = model_config
                     logger.info(f"Loaded OpenRouter model: {model_name} ({model_data['id']})")
         except Exception as e:
-            logger.warning(f"Failed to load OpenRouter models: {e}")
-            # 폴백: 기본 무료 모델들
-            self._load_fallback_openrouter_models()
+            logger.error(f"Failed to load OpenRouter models: {e}")
+            raise RuntimeError(f"OpenRouter model loading failed: {e}. Please check your OPENROUTER_API_KEY and network connection.")
     
     def _fetch_openrouter_models(self):
         """OpenRouter API에서 모델 목록을 가져옴."""
@@ -365,41 +355,6 @@ class MultiModelOrchestrator:
         else:
             return 8.0
     
-    def _load_fallback_openrouter_models(self):
-        """OpenRouter API 실패 시 기본 무료 모델들 로드."""
-        fallback_models = [
-            {
-                "id": "qwen/qwen2.5-vl-72b-instruct:free",
-                "name": "qwen2.5-vl-72b",
-                "capabilities": [TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
-            },
-            {
-                "id": "deepseek/deepseek-chat-v3-0324:free", 
-                "name": "deepseek-chat-v3",
-                "capabilities": [TaskType.PLANNING, TaskType.GENERATION, TaskType.RESEARCH]
-            },
-            {
-                "id": "meta-llama/llama-3.3-70b-instruct:free",
-                "name": "llama-3.3-70b", 
-                "capabilities": [TaskType.DEEP_REASONING, TaskType.VERIFICATION, TaskType.SYNTHESIS]
-            }
-        ]
-        
-        for model_data in fallback_models:
-            model_name = model_data["name"]
-            model_config = ModelConfig(
-                name=model_name,
-                provider="openrouter",
-                model_id=model_data["id"],
-                temperature=0.1,
-                max_tokens=4000,
-                cost_per_token=0.0,
-                speed_rating=7.0,
-                quality_rating=8.0,
-                capabilities=model_data["capabilities"]
-            )
-            self.models[model_name] = model_config
-            logger.info(f"Loaded fallback OpenRouter model: {model_name}")
     
     def refresh_openrouter_models(self):
         """OpenRouter 모델 목록을 새로고침."""
@@ -433,15 +388,12 @@ class MultiModelOrchestrator:
                     )
                 
                 elif model_config.provider == "openrouter":
-                    # OpenRouter 클라이언트
+                    # OpenRouter 클라이언트는 HTTP 요청으로 직접 처리
                     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-                    if openrouter_api_key:
-                        self.model_clients[model_name] = OpenAI(
-                            base_url="https://openrouter.ai/api/v1",
-                            api_key=openrouter_api_key
-                        )
-                    else:
-                        logger.warning(f"OpenRouter API key not found for {model_name}")
+                    if not openrouter_api_key:
+                        raise ValueError(f"OpenRouter API key not found for {model_name}")
+                    # OpenRouter는 HTTP 요청으로 직접 처리하므로 클라이언트 저장하지 않음
+                    logger.info(f"OpenRouter model {model_name} configured for HTTP requests")
             
             logger.info("Model clients initialized successfully")
             
@@ -507,14 +459,8 @@ class MultiModelOrchestrator:
             model_name = self.select_model(task_type)
         
         # 모델 클라이언트 확인
-        if model_name not in self.model_clients:
-            if self.models[model_name].provider == "openrouter":
-                if not os.getenv("OPENROUTER_API_KEY"):
-                    raise ValueError(f"OpenRouter API key not found for model {model_name}")
-                else:
-                    raise ValueError(f"OpenRouter model {model_name} client not initialized")
-            else:
-                raise ValueError(f"Model {model_name} not available")
+        if model_name not in self.model_clients and self.models[model_name].provider != "openrouter":
+            raise ValueError(f"Model {model_name} not available")
         
         start_time = time.time()
         
@@ -526,7 +472,7 @@ class MultiModelOrchestrator:
                     model_name, prompt, system_message, **kwargs
                 )
             elif self.models[model_name.replace("_langchain", "")].provider == "openrouter":
-                # OpenRouter 클라이언트 사용
+                # OpenRouter HTTP 요청 사용
                 result = await self._execute_openrouter_model(
                     model_name, prompt, system_message, **kwargs
                 )
@@ -614,7 +560,6 @@ class MultiModelOrchestrator:
         **kwargs
     ) -> Dict[str, Any]:
         """OpenRouter 모델 실행."""
-        client = self.model_clients[model_name]
         model_config = self.models[model_name]
         
         # 메시지 구성
@@ -623,20 +568,42 @@ class MultiModelOrchestrator:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
         
+        # OpenRouter API 직접 호출
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found")
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://mcp-agent.local",
+            "X-Title": "MCP Agent Hub"
+        }
+        
+        payload = {
+            "model": model_config.model_id,
+            "messages": messages,
+            "temperature": model_config.temperature,
+            "max_tokens": model_config.max_tokens,
+            **kwargs
+        }
+        
         try:
-            # OpenRouter API 호출
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: client.chat.completions.create(
-                    model=model_config.model_id,
-                    messages=messages,
-                    temperature=model_config.temperature,
-                    max_tokens=model_config.max_tokens,
-                    **kwargs
+                lambda: requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
                 )
             )
             
-            content = response.choices[0].message.content
+            if response.status_code != 200:
+                raise RuntimeError(f"OpenRouter API error: {response.status_code} - {response.text}")
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
             
             return {
                 "content": content,
@@ -647,7 +614,7 @@ class MultiModelOrchestrator:
                     "provider": "openrouter",
                     "model_id": model_config.model_id,
                     "tokens_used": len(content.split()),
-                    "usage": response.usage.__dict__ if hasattr(response, 'usage') else {}
+                    "usage": data.get("usage", {})
                 }
             }
             

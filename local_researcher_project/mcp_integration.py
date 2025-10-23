@@ -583,10 +583,47 @@ class UniversalMCPHub:
             else:
                 raise RuntimeError("OpenRouter connection test failed")
             
+            # 필수 도구 검증 및 실패 시 중단
+            await self._validate_essential_tools()
+            
         except Exception as e:
             logger.error(f"Failed to initialize MCP Hub: {e}")
             await self.cleanup()
             raise RuntimeError(f"MCP Hub initialization failed: {e}")
+    
+    async def _validate_essential_tools(self):
+        """필수 MCP 도구 검증 및 실패 시 중단."""
+        essential_tools = ["g-search", "fetch", "filesystem"]
+        failed_tools = []
+        
+        logger.info("Validating essential MCP tools...")
+        
+        for tool in essential_tools:
+            try:
+                # 간단한 테스트 실행
+                if tool == "g-search":
+                    test_result = await execute_tool(tool, {"query": "test", "max_results": 1})
+                elif tool == "fetch":
+                    test_result = await execute_tool(tool, {"url": "https://httpbin.org/get"})
+                elif tool == "filesystem":
+                    test_result = await execute_tool(tool, {"path": ".", "operation": "list"})
+                
+                if test_result.get('success', False):
+                    logger.info(f"✅ Essential tool {tool} validated successfully")
+                else:
+                    failed_tools.append(tool)
+                    logger.error(f"❌ Essential tool {tool} validation failed: {test_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                failed_tools.append(tool)
+                logger.error(f"❌ Essential tool {tool} validation failed: {e}")
+        
+        if failed_tools:
+            error_msg = f"Essential MCP tools failed validation: {', '.join(failed_tools)}. System cannot start without these tools."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        logger.info("✅ All essential MCP tools validated successfully")
     
     async def cleanup(self):
         """MCP 연결 정리."""
@@ -707,32 +744,85 @@ class UniversalMCPHub:
         return list(self.tools.keys())
     
     async def health_check(self) -> Dict[str, Any]:
-        """헬스 체크 - OpenRouter와 Gemini 2.5 Flash Lite."""
+        """강화된 헬스 체크 - OpenRouter, Gemini 2.5 Flash Lite, MCP 도구 검증."""
         try:
-            # OpenRouter 연결 테스트
-            test_messages = [
-                {"role": "system", "content": "Health check test."},
-                {"role": "user", "content": "Respond with 'OK' if you can process this request."}
-            ]
-            
-            test_response = await self.openrouter_client.generate_response(
-                model=self.llm_config.primary_model,
-                messages=test_messages,
-                temperature=0.1,
-                max_tokens=50
-            )
-            
-            openrouter_healthy = test_response and "choices" in test_response
-            
             health_status = {
                 "mcp_enabled": self.config.enabled,
                 "tools_available": len(self.tools),
-                "openrouter_connected": openrouter_healthy,
-                "primary_model": self.llm_config.primary_model,
-                "rate_limit_remaining": getattr(self.openrouter_client, 'rate_limit_remaining', 'unknown'),
-                "overall_health": "healthy" if openrouter_healthy else "unhealthy",
                 "timestamp": datetime.now().isoformat()
             }
+            
+            # 1. OpenRouter 연결 테스트
+            try:
+                test_messages = [
+                    {"role": "system", "content": "Health check test."},
+                    {"role": "user", "content": "Respond with 'OK' if you can process this request."}
+                ]
+                
+                test_response = await self.openrouter_client.generate_response(
+                    model=self.llm_config.primary_model,
+                    messages=test_messages,
+                    temperature=0.1,
+                    max_tokens=50
+                )
+                
+                openrouter_healthy = test_response and "choices" in test_response
+                health_status.update({
+                    "openrouter_connected": openrouter_healthy,
+                    "primary_model": self.llm_config.primary_model,
+                    "rate_limit_remaining": getattr(self.openrouter_client, 'rate_limit_remaining', 'unknown')
+                })
+                
+                if not openrouter_healthy:
+                    health_status["overall_health"] = "unhealthy"
+                    health_status["critical_error"] = "OpenRouter connection failed"
+                    return health_status
+                    
+            except Exception as e:
+                health_status.update({
+                    "openrouter_connected": False,
+                    "openrouter_error": str(e),
+                    "overall_health": "unhealthy",
+                    "critical_error": f"OpenRouter health check failed: {e}"
+                })
+                return health_status
+            
+            # 2. 필수 MCP 도구 검증
+            essential_tools = ["g-search", "fetch", "filesystem"]
+            tool_health = {}
+            failed_tools = []
+            
+            for tool in essential_tools:
+                try:
+                    # 간단한 테스트 실행
+                    if tool == "g-search":
+                        test_result = await execute_tool(tool, {"query": "test", "max_results": 1})
+                    elif tool == "fetch":
+                        test_result = await execute_tool(tool, {"url": "https://httpbin.org/get"})
+                    elif tool == "filesystem":
+                        test_result = await execute_tool(tool, {"path": ".", "operation": "list"})
+                    
+                    tool_health[tool] = test_result.get('success', False)
+                    if not test_result.get('success', False):
+                        failed_tools.append(tool)
+                        
+                except Exception as e:
+                    tool_health[tool] = False
+                    failed_tools.append(tool)
+                    logger.warning(f"Tool {tool} health check failed: {e}")
+            
+            health_status.update({
+                "tool_health": tool_health,
+                "failed_tools": failed_tools,
+                "essential_tools_healthy": len(failed_tools) == 0
+            })
+            
+            # 3. 전체 상태 결정
+            if len(failed_tools) > 0:
+                health_status["overall_health"] = "unhealthy"
+                health_status["critical_error"] = f"Essential tools failed: {', '.join(failed_tools)}"
+            else:
+                health_status["overall_health"] = "healthy"
             
             return health_status
             
@@ -743,6 +833,7 @@ class UniversalMCPHub:
                 "openrouter_connected": False,
                 "error": str(e),
                 "overall_health": "unhealthy",
+                "critical_error": f"Health check failed: {e}",
                 "timestamp": datetime.now().isoformat()
             }
 

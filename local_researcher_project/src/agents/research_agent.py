@@ -561,32 +561,38 @@ class ResearchAgent:
             return None
     
     async def _perform_web_search(self, query: str) -> Dict[str, Any]:
-        """Perform actual web search using real search APIs."""
+        """Perform web search using MCP tools."""
         try:
-            # Try multiple search methods in priority order
-            search_methods = [
-                self._search_with_tavily,
-                self._search_with_exa,
-                self._search_with_brave,
-                self._search_with_serper,
-                self._search_with_duckduckgo
-            ]
+            # Use MCP tools for web search
+            from src.core.mcp_integration import execute_tool
             
-            for method in search_methods:
+            # Try MCP search tools in priority order
+            mcp_tools = ['g-search', 'tavily', 'exa']
+            
+            for tool in mcp_tools:
                 try:
-                    result = await method(query)
-                    if isinstance(result, dict) and result.get('success') and result.get('results'):
-                        results = result.get('results', [])
+                    result = await execute_tool(tool, {
+                        'query': query,
+                        'max_results': 10
+                    })
+                    
+                    if result.get('success', False):
+                        results = result.get('data', {}).get('results', [])
                         if isinstance(results, list):
-                            logger.info(f"Search succeeded with {method.__name__}: {len(results)} results")
-                            return result
+                            logger.info(f"Search succeeded with MCP tool {tool}: {len(results)} results")
+                            return {
+                                'success': True,
+                                'query': query,
+                                'results': results,
+                                'tool_used': tool
+                            }
                 except Exception as e:
-                    logger.warning(f"Search method {method.__name__} failed: {e}")
+                    logger.warning(f"MCP tool {tool} failed: {e}")
                     continue
             
-            # If all methods fail, raise error
-            logger.error("All search APIs failed")
-            raise RuntimeError(f"All search methods failed for query: {query}. No fallback available.")
+            # If all MCP tools fail, raise error
+            logger.error("All MCP search tools failed")
+            raise RuntimeError(f"All MCP search tools failed for query: {query}. No fallback available.")
             
         except Exception as e:
             logger.error(f"Web search failed: {e}")
@@ -1890,32 +1896,31 @@ class ResearchAgent:
             return {'research': f'Research failed: {str(e)}', 'error': str(e)}
     
     async def _fetch_web_content(self, url: str) -> str:
-        """Fetch content from a web URL."""
+        """Fetch content from a web URL using MCP tools."""
         try:
-            import requests
+            # Use MCP tools for content fetching
+            from src.core.mcp_integration import execute_tool
             
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
+            result = await execute_tool("fetch", {"url": url})
             
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            
-            # Simple text extraction without BeautifulSoup
-            text = response.text
-            
-            # Basic HTML tag removal
-            import re
-            text = re.sub(r'<[^>]+>', '', text)
-            text = re.sub(r'\s+', ' ', text)
-            
-            # Clean up text
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = ' '.join(chunk for chunk in chunks if chunk)
-            
-            # Limit content length
-            return text[:5000] if len(text) > 5000 else text
+            if result.get('success', False):
+                content = result.get('data', {}).get('content', '')
+                
+                # Basic HTML tag removal
+                import re
+                text = re.sub(r'<[^>]+>', '', content)
+                text = re.sub(r'\s+', ' ', text)
+                
+                # Clean up text
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = ' '.join(chunk for chunk in chunks if chunk)
+                
+                # Limit content length
+                return text[:5000] if len(text) > 5000 else text
+            else:
+                logger.error(f"MCP fetch failed for {url}: {result.get('error', 'Unknown error')}")
+                return ""
             
         except Exception as e:
             logger.error(f"Failed to fetch content from {url}: {e}")

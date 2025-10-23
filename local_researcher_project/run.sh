@@ -104,28 +104,29 @@ setup_config() {
     # Create .env file if it doesn't exist
     if [ ! -f ".env" ]; then
         cat > .env << EOF
-# Local Researcher Environment Variables
+# Local Researcher Environment Variables (v2.0 - 8대 혁신)
 # Copy this file to .env and configure your API keys
 
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_ORG_ID=your_openai_org_id_here
+# OpenRouter Configuration (필수)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-# Anthropic Configuration
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# LLM Configuration (Gemini 2.5 Flash Lite 우선)
+LLM_PROVIDER=openrouter
+LLM_MODEL=google/gemini-2.5-flash-lite
+LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=4000
 
-# Google Configuration
-GOOGLE_API_KEY=your_google_api_key_here
-GOOGLE_PROJECT_ID=your_google_project_id_here
+# Multi-Model Orchestration (Gemini 2.5 Flash Lite)
+PLANNING_MODEL=google/gemini-2.5-flash-lite
+REASONING_MODEL=google/gemini-2.5-flash-lite
+VERIFICATION_MODEL=google/gemini-2.5-flash-lite
+GENERATION_MODEL=google/gemini-2.5-flash-lite
+COMPRESSION_MODEL=google/gemini-2.5-flash-lite
 
-# News API Configuration
-NEWSAPI_KEY=your_newsapi_key_here
-
-# Tavily Configuration
-TAVILY_API_KEY=your_tavily_api_key_here
-
-# Perplexity Configuration
-PERPLEXITY_API_KEY=your_perplexity_api_key_here
+# MCP Configuration (MCP Only - No Fallbacks)
+MCP_ENABLED=true
+MCP_TIMEOUT=30
+ENABLE_AUTO_FALLBACK=false
 
 # Application Configuration
 NODE_ENV=production

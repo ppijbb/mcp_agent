@@ -58,10 +58,6 @@ class ResearchState(TypedDict):
     plan_feedback: Optional[str]  # Plan 검증 피드백
     plan_iteration: int  # Plan 재작성 횟수
     
-    # Task Decomposition (Legacy - 제거 예정)
-    decomposed_tasks: List[Dict[str, Any]]
-    task_assignments: List[Dict[str, Any]]
-    execution_strategy: str
     
     # Execution (Universal MCP Hub + Streaming Pipeline)
     execution_results: List[Dict[str, Any]]
@@ -1332,10 +1328,6 @@ class AutonomousOrchestrator:
             plan_approved=False,
             plan_feedback=None,
             plan_iteration=0,
-            # Legacy 필드 (제거 예정)
-            decomposed_tasks=[],
-            task_assignments=[],
-            execution_strategy="",
             execution_results=[],
             agent_status={},
             execution_metadata={},

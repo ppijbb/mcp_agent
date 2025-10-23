@@ -169,28 +169,16 @@ class ResearchWorkflowManager:
     
     async def _gather_content(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """Gather content from sources."""
-        import requests
-        from bs4 import BeautifulSoup
-        import time
+        import asyncio
         
         topic = workflow_data["topic"]
         
         # Get sources from previous step
         sources = workflow_data.get('output', {}).get('source_discovery', {}).get('sources', [])
         
-        # If no sources, create mock content
+        # If no sources, raise error instead of creating mock content
         if not sources:
-            return {
-                "content_collected": True,
-                "total_content_length": 1000,
-                "sources_processed": 0,
-                "content_data": [{
-                    'title': f"Mock content for {topic}",
-                    'content': f"This is mock content about {topic}. " * 50,
-                    'url': 'mock://content'
-                }],
-                "gathering_complete": True
-            }
+            raise RuntimeError(f"No sources found for topic: {topic}. Please check your search configuration and try again.")
         
         # Gather content from sources
         content_data = []
@@ -199,24 +187,23 @@ class ResearchWorkflowManager:
         
         for source in sources[:3]:  # Limit to first 3 sources
             try:
-                if 'url' in source and not source['url'].startswith('mock://'):
-                    # Fetch content from URL
-                    response = requests.get(source['url'], timeout=10)
-                    if response.status_code == 200:
-                        soup = BeautifulSoup(response.content, 'html.parser')
-                        text_content = soup.get_text()
-                        clean_content = ' '.join(text_content.split())
-                        
-                        if len(clean_content) > 100:
+                if 'url' in source:
+                    # Use MCP tools to fetch content from URL
+                    from src.core.mcp_integration import execute_tool
+                    
+                    fetch_result = await execute_tool("fetch", {"url": source['url']})
+                    if fetch_result.get('success', False):
+                        content = fetch_result.get('data', {}).get('content', '')
+                        if len(content) > 100:
                             content_data.append({
                                 'title': source.get('title', ''),
-                                'content': clean_content[:1000],  # Limit content length
+                                'content': content[:1000],  # Limit content length
                                 'url': source['url']
                             })
-                            total_length += len(clean_content)
+                            total_length += len(content)
                             processed_sources += 1
                 
-                time.sleep(0.5)  # Be respectful
+                await asyncio.sleep(0.5)  # Be respectful
                 
             except Exception as e:
                 logger.warning(f"Failed to gather content from {source.get('url', 'unknown')}: {e}")

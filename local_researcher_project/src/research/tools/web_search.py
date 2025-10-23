@@ -39,18 +39,8 @@ class WebSearchTool(BaseResearchTool):
         super().__init__(config)
         self.tool_type = ToolType.SEARCH
         
-        # 검색 제공자 설정
+        # 검색 제공자 설정 (MCP 전용)
         self.primary_provider = SearchProvider(config.get('primary_provider', 'mcp_gsearch'))
-        self.fallback_providers = [
-            SearchProvider(p) for p in config.get('fallback_providers', [
-                'mcp_tavily', 'mcp_exa', 'tavily', 'exa', 'duckduckgo'
-            ])
-        ]
-        
-        # API 키 설정
-        self.tavily_api_key = os.getenv('TAVILY_API_KEY')
-        self.exa_api_key = os.getenv('EXA_API_KEY')
-        self.google_api_key = os.getenv('GOOGLE_API_KEY')
         
         # MCP 도구 매핑
         self.mcp_tool_mapping = {
@@ -69,198 +59,31 @@ class WebSearchTool(BaseResearchTool):
         include_answer = kwargs.get('include_answer', True)
         
         # Universal MCP Hub를 통한 검색
-        search_result = await self.execute_with_mcp_fallback(
+        search_result = await self.execute_with_mcp(
             operation='web_search',
             parameters={
                 'query': query,
                 'max_results': max_results,
                 'search_depth': search_depth,
                 'include_answer': include_answer
-            }
+            },
+            alternative_tools=['tavily', 'exa', 'g-search']
         )
         
-        if search_result['success']:
-            return self._convert_to_search_results(search_result['data'], query)
-        else:
-            # Fallback 검색 실행
-            return await self._fallback_search(query, max_results)
+        return self._convert_to_search_results(search_result['data'], query)
     
     async def get_content(self, url: str) -> Optional[str]:
         """URL에서 콘텐츠 가져오기 (Universal MCP Hub)."""
         # MCP fetch 도구 사용
-        fetch_result = await self.execute_with_mcp_fallback(
+        fetch_result = await self.execute_with_mcp(
             operation='data_fetch',
-            parameters={'url': url}
+            parameters={'url': url},
+            alternative_tools=['fetch', 'filesystem']
         )
         
-        if fetch_result['success']:
-            return fetch_result['data'].get('content', '')
-        
-        # API Fallback
-        try:
-            return await self._fetch_content_api(url)
-        except Exception as e:
-            logger.error(f"Content fetch failed for {url}: {e}")
-            return None
+        return fetch_result['data'].get('content', '')
     
-    async def _execute_api_fallback(self, operation: str, parameters: Dict[str, Any]) -> Optional[Any]:
-        """API Fallback 실행."""
-        query = parameters.get('query', '')
-        max_results = parameters.get('max_results', self.max_results)
-        
-        # 제공자별 검색 실행
-        if operation == 'web_search':
-            # Tavily API 시도
-            if self.tavily_api_key:
-                try:
-                    return await self._tavily_search_api(query, max_results)
-                except Exception as e:
-                    logger.warning(f"Tavily API failed: {e}")
-            
-            # Exa API 시도
-            if self.exa_api_key:
-                try:
-                    return await self._exa_search_api(query, max_results)
-                except Exception as e:
-                    logger.warning(f"Exa API failed: {e}")
-            
-            # DuckDuckGo 시도
-            try:
-                return await self._duckduckgo_search_api(query, max_results)
-            except Exception as e:
-                logger.warning(f"DuckDuckGo API failed: {e}")
-        
-        elif operation == 'data_fetch':
-            url = parameters.get('url', '')
-            return await self._fetch_content_api(url)
-        
-        return None
     
-    async def _tavily_search_api(self, query: str, max_results: int) -> Dict[str, Any]:
-        """Tavily API 검색."""
-        import aiohttp
-        
-        url = "https://api.tavily.com/search"
-        payload = {
-            "api_key": self.tavily_api_key,
-            "query": query,
-            "search_depth": "basic",
-            "include_answer": True,
-            "include_images": False,
-            "include_raw_content": False,
-            "max_results": max_results
-        }
-        
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
-            async with session.post(url, json=payload) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return {
-                        'results': data.get('results', []),
-                        'answer': data.get('answer', ''),
-                        'provider': 'tavily'
-                    }
-                else:
-                    raise Exception(f"Tavily API error: {response.status}")
-    
-    async def _exa_search_api(self, query: str, max_results: int) -> Dict[str, Any]:
-        """Exa API 검색."""
-        import aiohttp
-        
-        url = "https://api.exa.ai/search"
-        headers = {
-            "x-api-key": self.exa_api_key,
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "query": query,
-            "numResults": max_results,
-            "type": "search",
-            "useAutoprompt": True
-        }
-        
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return {
-                        'results': data.get('results', []),
-                        'provider': 'exa'
-                    }
-                else:
-                    raise Exception(f"Exa API error: {response.status}")
-    
-    async def _duckduckgo_search_api(self, query: str, max_results: int) -> Dict[str, Any]:
-        """DuckDuckGo API 검색."""
-        try:
-            from duckduckgo_search import DDGS
-            
-            results = []
-            with DDGS() as ddgs:
-                for result in ddgs.text(query, max_results=max_results):
-                    results.append({
-                        'title': result.get('title', ''),
-                        'url': result.get('href', ''),
-                        'content': result.get('body', ''),
-                        'score': 0.8  # DuckDuckGo는 점수를 제공하지 않음
-                    })
-            
-            return {
-                'results': results,
-                'provider': 'duckduckgo'
-            }
-        except ImportError:
-            raise Exception("duckduckgo_search not installed")
-    
-    async def _fetch_content_api(self, url: str) -> str:
-        """API를 통한 콘텐츠 가져오기."""
-        import aiohttp
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    return await response.text()
-                else:
-                    raise Exception(f"HTTP {response.status}")
-    
-    async def _fallback_search(self, query: str, max_results: int) -> List[SearchResult]:
-        """Fallback 검색 실행."""
-        results = []
-        
-        # 여러 제공자로 병렬 검색
-        search_tasks = []
-        
-        # Tavily API
-        if self.tavily_api_key:
-            search_tasks.append(self._tavily_search_api(query, max_results))
-        
-        # Exa API
-        if self.exa_api_key:
-            search_tasks.append(self._exa_search_api(query, max_results))
-        
-        # DuckDuckGo
-        search_tasks.append(self._duckduckgo_search_api(query, max_results))
-        
-        # 병렬 실행
-        try:
-            search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-            
-            for result in search_results:
-                if isinstance(result, dict) and 'results' in result:
-                    search_results_list = self._convert_to_search_results(result, query)
-                    results.extend(search_results_list)
-                    
-                    if len(results) >= max_results:
-                        break
-                        
-        except Exception as e:
-            logger.error(f"Fallback search failed: {e}")
-        
-        return results[:max_results]
     
     def _convert_to_search_results(self, data: Dict[str, Any], query: str) -> List[SearchResult]:
         """데이터를 SearchResult 객체로 변환."""
@@ -377,20 +200,9 @@ class WebSearchTool(BaseResearchTool):
         """사용 가능한 검색 제공자 반환."""
         providers = []
         
-        # MCP 제공자
+        # MCP 제공자만 사용
         if self.mcp_config.enabled:
             providers.extend(['mcp_gsearch', 'mcp_tavily', 'mcp_exa'])
-        
-        # API 제공자
-        if self.tavily_api_key:
-            providers.append('tavily')
-        if self.exa_api_key:
-            providers.append('exa')
-        if self.google_api_key:
-            providers.append('google')
-        
-        # 기본 제공자
-        providers.extend(['duckduckgo', 'google', 'bing'])
         
         return list(set(providers))
     
@@ -420,7 +232,7 @@ def create_web_search_tool(config: Dict[str, Any] = None) -> WebSearchTool:
             'timeout': 30,
             'max_results': 10,
             'primary_provider': 'mcp_gsearch',
-            'fallback_providers': ['mcp_tavily', 'mcp_exa', 'tavily', 'exa', 'duckduckgo']
+            'alternative_tools': ['mcp_tavily', 'mcp_exa']
         }
     
     return WebSearchTool(config)

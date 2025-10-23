@@ -46,6 +46,7 @@ A revolutionary autonomous multi-agent research system implementing 8 groundbrea
 
 ### 6. **Universal MCP Hub** (혁신 6) - **2025년 10월 최신 업데이트**
 - **OpenRouter + Gemini 2.5 Flash Lite**: Production 수준의 안정성과 신뢰성
+- **MCP-First Architecture**: 모든 도구가 MCP 프로토콜을 통해 연결 (API fallback 완전 제거)
 - **Direct API Connection**: MCP 서버 연결 실패 문제 완전 해결
 - **100+ MCP Tools Support**:
   - **검색 도구**: g-search, tavily, exa
@@ -353,11 +354,80 @@ The system can be configured through environment variables and YAML configuratio
 - Automated formatting and styling
 - Citation management
 
+## 🏭 Production Guide
+
+### Production Deployment Checklist
+
+#### 1. **Environment Configuration**
+```bash
+# 필수 환경 변수
+OPENROUTER_API_KEY=your_production_api_key
+LLM_PROVIDER=openrouter
+LLM_MODEL=google/gemini-2.5-flash-lite
+
+# 로깅 설정
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+LOG_FILE=logs/production.log
+MASK_SENSITIVE_DATA=true
+
+# MCP 설정
+MCP_ENABLED=true
+MCP_TIMEOUT=30
+
+# 안정성 설정
+ENABLE_CIRCUIT_BREAKER=true
+ENABLE_EXPONENTIAL_BACKOFF=true
+ENABLE_STATE_PERSISTENCE=true
+```
+
+#### 2. **System Requirements**
+- **Python**: 3.10+ (권장: 3.11+)
+- **Memory**: 최소 4GB RAM (권장: 8GB+)
+- **Storage**: 최소 2GB 여유 공간
+- **Network**: 안정적인 인터넷 연결 (OpenRouter API 접근)
+
+#### 3. **Security Best Practices**
+- API 키는 환경 변수로만 관리
+- 로그에서 민감한 데이터 자동 마스킹
+- HTTPS를 통한 모든 외부 통신
+- 정기적인 API 키 로테이션
+
+#### 4. **Monitoring & Logging**
+- JSON 형식 구조화 로깅
+- 성능 메트릭 수집
+- 에러 추적 및 알림
+- 리소스 사용량 모니터링
+
+#### 5. **Scaling Considerations**
+- 수평 확장을 위한 상태 저장소 (Redis)
+- 로드 밸런싱 설정
+- API 요청 제한 관리
+- 캐싱 전략 구현
+
+### Production Troubleshooting
+
+#### Common Issues
+1. **MCP 연결 실패**: OpenRouter API 키 확인
+2. **메모리 부족**: 시스템 리소스 확인
+3. **API 제한**: 요청 빈도 조정
+4. **로그 파일 크기**: 로그 로테이션 설정
+
+#### Health Check
+```bash
+# 시스템 상태 확인
+python main.py --health-check
+
+# MCP 도구 연결 테스트
+python main.py --test-mcp
+```
+
 ## 🚨 주의사항
 
 1. **OpenRouter API 키 필수**: `OPENROUTER_API_KEY` 환경 변수 설정 필요
 2. **인터넷 연결**: OpenRouter API 접근을 위한 인터넷 연결 필요
 3. **API 사용량**: OpenRouter의 사용량 제한 확인 필요
+4. **Production 환경**: 프로덕션 배포 시 위의 Production Guide 준수
 
 ## 📈 다음 단계
 

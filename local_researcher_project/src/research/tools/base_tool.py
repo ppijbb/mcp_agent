@@ -137,20 +137,30 @@ class BaseResearchTool(ABC):
         """URL에서 콘텐츠 가져오기."""
         pass
     
-    async def execute_with_mcp_fallback(
+    async def execute_with_mcp(
         self,
         operation: str,
         parameters: Dict[str, Any],
-        mcp_tool: str = None
+        mcp_tool: str = None,
+        alternative_tools: List[str] = None
     ) -> Dict[str, Any]:
-        """MCP 우선, API 차순위 실행."""
+        """MCP 전용 실행 (대체 도구 지원)."""
+        if not self.mcp_config.enabled:
+            raise RuntimeError("MCP is disabled. This tool requires MCP to function.")
+        
         if not mcp_tool:
             mcp_tool = self.mcp_tool_mapping.get(operation, operation)
         
-        # MCP 우선 시도
-        if self.mcp_config.enabled:
+        # 기본 도구 시도
+        tools_to_try = [mcp_tool]
+        if alternative_tools:
+            tools_to_try.extend(alternative_tools)
+        
+        last_error = None
+        
+        for tool in tools_to_try:
             try:
-                result = await execute_tool(mcp_tool, parameters)
+                result = await execute_tool(tool, parameters)
                 if result.success:
                     self.performance.successful_requests += 1
                     self.performance.last_used = datetime.now()
@@ -158,51 +168,23 @@ class BaseResearchTool(ABC):
                         'success': True,
                         'data': result.data,
                         'source': 'mcp',
-                        'tool_used': mcp_tool,
+                        'tool_used': tool,
                         'execution_time': result.execution_time,
                         'confidence': result.confidence
                     }
                 else:
-                    logger.warning(f"MCP tool {mcp_tool} failed: {result.error}")
+                    logger.warning(f"MCP tool {tool} failed: {result.error}")
+                    last_error = result.error
                     self.performance.failed_requests += 1
             except Exception as e:
-                logger.warning(f"MCP tool {mcp_tool} error: {e}")
+                logger.warning(f"MCP tool {tool} error: {e}")
+                last_error = str(e)
                 self.performance.failed_requests += 1
         
-        # API Fallback
-        try:
-            fallback_result = await self._execute_api_fallback(operation, parameters)
-            if fallback_result:
-                self.performance.successful_requests += 1
-                self.performance.last_used = datetime.now()
-                return {
-                    'success': True,
-                    'data': fallback_result,
-                    'source': 'api',
-                    'tool_used': f"{operation}_api",
-                    'execution_time': 0.0,
-                    'confidence': 0.8
-                }
-        except Exception as e:
-            logger.error(f"API fallback failed: {e}")
-            self.performance.failed_requests += 1
-        
-        # 완전 실패
+        # 모든 도구 실패
         self.performance.failed_requests += 1
-        return {
-            'success': False,
-            'data': None,
-            'source': 'none',
-            'tool_used': None,
-            'execution_time': 0.0,
-            'confidence': 0.0,
-            'error': 'All execution methods failed'
-        }
+        raise RuntimeError(f"All MCP tools failed for operation {operation}. Last error: {last_error}")
     
-    @abstractmethod
-    async def _execute_api_fallback(self, operation: str, parameters: Dict[str, Any]) -> Optional[Any]:
-        """API Fallback 실행."""
-        pass
     
     async def search_with_reliability(
         self,
@@ -343,47 +325,26 @@ class BaseResearchTool(ABC):
         method: str = 'GET',
         data: Dict[str, Any] = None
     ) -> Optional[Dict]:
-        """HTTP 요청 실행 (Production-Grade Reliability)."""
+        """HTTP 요청 실행 (MCP 도구 사용)."""
         try:
-            import aiohttp
+            # Use MCP tools for HTTP requests instead of direct aiohttp
+            from src.core.mcp_integration import execute_tool
             
-            if headers is None:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
+            result = await execute_tool("fetch", {
+                "url": url,
+                "method": method,
+                "headers": headers or {},
+                "data": data or {}
+            })
             
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-                connector=aiohttp.TCPConnector(limit=100, limit_per_host=30)
-            ) as session:
-                if method.upper() == 'GET':
-                    async with session.get(url, headers=headers) as response:
-                        return await self._handle_response(response)
-                elif method.upper() == 'POST':
-                    async with session.post(url, headers=headers, json=data) as response:
-                        return await self._handle_response(response)
-                else:
-                    logger.error(f"Unsupported HTTP method: {method}")
-                    return None
+            if result.get('success', False):
+                return result.get('data', {})
+            else:
+                logger.error(f"MCP fetch failed for {url}: {result.get('error', 'Unknown error')}")
+                return None
                         
-        except asyncio.TimeoutError:
-            logger.error(f"Request timeout for {url}")
-            return None
         except Exception as e:
             logger.error(f"Request failed for {url}: {e}")
-            return None
-    
-    async def _handle_response(self, response) -> Optional[Dict]:
-        """HTTP 응답 처리."""
-        if response.status == 200:
-            try:
-                return await response.json()
-            except:
-                # JSON이 아닌 경우 텍스트로 반환
-                text = await response.text()
-                return {'content': text, 'status': response.status}
-        else:
-            logger.warning(f"HTTP {response.status} for {response.url}")
             return None
     
     def update_status(self, status: ToolStatus):

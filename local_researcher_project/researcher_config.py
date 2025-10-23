@@ -8,9 +8,10 @@ Universal MCP Hub, Adaptive Context Window, Production-Grade Reliability.
 """
 
 import os
-from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
+from dataclasses import dataclass, field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class TaskType(Enum):
@@ -22,47 +23,48 @@ class TaskType(Enum):
     COMPRESSION = "compression"
     RESEARCH = "research"
 
-@dataclass
-class LLMConfig:
+class LLMConfig(BaseModel):
     """LLM configuration settings - Multi-Model Orchestration (혁신 3)."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
     # Primary provider (OpenRouter 기본)
-    provider: str = os.getenv("LLM_PROVIDER", "openrouter")
-    primary_model: str = os.getenv("LLM_MODEL", "google/gemini-2.5-flash-lite")
-    temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-    max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "4000"))
-    api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    provider: str = Field(default=os.getenv("LLM_PROVIDER", "openrouter"), description="LLM provider")
+    primary_model: str = Field(default=os.getenv("LLM_MODEL", "google/gemini-2.5-flash-lite"), description="Primary model")
+    temperature: float = Field(default=float(os.getenv("LLM_TEMPERATURE", "0.1")), ge=0.0, le=2.0, description="Temperature")
+    max_tokens: int = Field(default=int(os.getenv("LLM_MAX_TOKENS", "4000")), gt=0, description="Max tokens")
+    api_key: str = Field(default=os.getenv("GOOGLE_API_KEY", ""), description="Google API key")
     
     # Multi-Model Orchestration (혁신 3) - OpenRouter Gemini 2.5 Flash-Lite 우선
-    planning_model: str = os.getenv("PLANNING_MODEL", "google/gemini-2.5-flash-lite")
-    reasoning_model: str = os.getenv("REASONING_MODEL", "google/gemini-2.5-flash-lite")
-    verification_model: str = os.getenv("VERIFICATION_MODEL", "google/gemini-2.5-flash-lite")
-    generation_model: str = os.getenv("GENERATION_MODEL", "google/gemini-2.5-flash-lite")
-    compression_model: str = os.getenv("COMPRESSION_MODEL", "google/gemini-2.5-flash-lite")
+    planning_model: str = Field(default=os.getenv("PLANNING_MODEL", "google/gemini-2.5-flash-lite"), description="Planning model")
+    reasoning_model: str = Field(default=os.getenv("REASONING_MODEL", "google/gemini-2.5-flash-lite"), description="Reasoning model")
+    verification_model: str = Field(default=os.getenv("VERIFICATION_MODEL", "google/gemini-2.5-flash-lite"), description="Verification model")
+    generation_model: str = Field(default=os.getenv("GENERATION_MODEL", "google/gemini-2.5-flash-lite"), description="Generation model")
+    compression_model: str = Field(default=os.getenv("COMPRESSION_MODEL", "google/gemini-2.5-flash-lite"), description="Compression model")
     
-    # OpenRouter API Key
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+    # OpenRouter API Key (Required)
+    openrouter_api_key: str = Field(default=os.getenv("OPENROUTER_API_KEY", ""), description="OpenRouter API key")
     
     # Cost optimization
-    budget_limit: float = float(os.getenv("BUDGET_LIMIT", "100.0"))
-    enable_cost_optimization: bool = os.getenv("ENABLE_COST_OPTIMIZATION", "true").lower() == "true"
+    budget_limit: float = Field(default=float(os.getenv("BUDGET_LIMIT", "100.0")), gt=0, description="Budget limit")
+    enable_cost_optimization: bool = Field(default=os.getenv("ENABLE_COST_OPTIMIZATION", "true").lower() == "true", description="Enable cost optimization")
     
-    def __post_init__(self):
-        if self.provider == "openrouter" and not self.openrouter_api_key:
+    @field_validator('openrouter_api_key')
+    @classmethod
+    def validate_openrouter_api_key(cls, v):
+        if not v:
             raise ValueError("OPENROUTER_API_KEY environment variable is required for OpenRouter LLM provider")
-        elif self.provider == "google" and not self.api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable is required for Google LLM provider")
+        return v
 
 
-@dataclass
-class AgentConfig:
+class AgentConfig(BaseModel):
     """Agent-specific settings with Adaptive Supervisor (혁신 1)."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
     # Basic settings
-    max_retries: int = int(os.getenv("AGENT_MAX_RETRIES", "3"))
-    timeout_seconds: int = int(os.getenv("AGENT_TIMEOUT", "300"))
-    enable_self_planning: bool = os.getenv("ENABLE_SELF_PLANNING", "true").lower() == "true"
-    enable_agent_communication: bool = os.getenv("ENABLE_AGENT_COMMUNICATION", "true").lower() == "true"
+    max_retries: int = Field(default=int(os.getenv("AGENT_MAX_RETRIES", "3")), ge=0, description="Max retries")
+    timeout_seconds: int = Field(default=int(os.getenv("AGENT_TIMEOUT", "300")), gt=0, description="Timeout seconds")
+    enable_self_planning: bool = Field(default=os.getenv("ENABLE_SELF_PLANNING", "true").lower() == "true", description="Enable self planning")
+    enable_agent_communication: bool = Field(default=os.getenv("ENABLE_AGENT_COMMUNICATION", "true").lower() == "true", description="Enable agent communication")
     
     # Adaptive Supervisor (혁신 1)
     max_concurrent_research_units: int = int(os.getenv("MAX_CONCURRENT_RESEARCH_UNITS", "5"))
@@ -112,6 +114,7 @@ class MCPConfig:
     # Universal MCP Hub (혁신 6) - MCP만 사용
     enable_plugin_architecture: bool = os.getenv("ENABLE_PLUGIN_ARCHITECTURE", "true").lower() == "true"
     enable_smart_tool_selection: bool = os.getenv("ENABLE_SMART_TOOL_SELECTION", "true").lower() == "true"
+    enable_auto_fallback: bool = os.getenv("ENABLE_AUTO_FALLBACK", "false").lower() == "true"
     
     # Tool categories
     search_tools: List[str] = field(default_factory=lambda: ["g-search", "tavily", "exa"])
@@ -189,23 +192,24 @@ class OutputConfig:
     enable_latex_export: bool = os.getenv("ENABLE_LATEX", "false").lower() == "true"
 
 
-@dataclass
-class ResearcherSystemConfig:
+class ResearcherSystemConfig(BaseModel):
     """Overall system configuration with 8 core innovations."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
     # Core configurations
-    llm: LLMConfig = field(default_factory=LLMConfig)
-    agent: AgentConfig = field(default_factory=AgentConfig)
-    research: ResearchConfig = field(default_factory=ResearchConfig)
-    mcp: MCPConfig = field(default_factory=MCPConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig, description="LLM configuration")
+    agent: AgentConfig = Field(default_factory=AgentConfig, description="Agent configuration")
+    research: ResearchConfig = Field(default_factory=ResearchConfig, description="Research configuration")
+    mcp: MCPConfig = Field(default_factory=MCPConfig, description="MCP configuration")
+    output: OutputConfig = Field(default_factory=OutputConfig, description="Output configuration")
     
     # Innovation configurations
-    compression: CompressionConfig = field(default_factory=CompressionConfig)
-    verification: VerificationConfig = field(default_factory=VerificationConfig)
-    context_window: ContextWindowConfig = field(default_factory=ContextWindowConfig)
-    reliability: ReliabilityConfig = field(default_factory=ReliabilityConfig)
+    compression: CompressionConfig = Field(default_factory=CompressionConfig, description="Compression configuration")
+    verification: VerificationConfig = Field(default_factory=VerificationConfig, description="Verification configuration")
+    context_window: ContextWindowConfig = Field(default_factory=ContextWindowConfig, description="Context window configuration")
+    reliability: ReliabilityConfig = Field(default_factory=ReliabilityConfig, description="Reliability configuration")
     
-    def __post_init__(self):
+    def model_post_init(self, __context):
         # Ensure output directory exists
         os.makedirs(self.output.output_dir, exist_ok=True)
         
@@ -290,8 +294,6 @@ def update_config_from_env():
         config.llm.temperature = float(os.getenv("LLM_TEMPERATURE"))
     if os.getenv("LLM_MAX_TOKENS"):
         config.llm.max_tokens = int(os.getenv("LLM_MAX_TOKENS"))
-    if os.getenv("GOOGLE_API_KEY"):
-        config.llm.api_key = os.getenv("GOOGLE_API_KEY")
     if os.getenv("OPENROUTER_API_KEY"):
         config.llm.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     

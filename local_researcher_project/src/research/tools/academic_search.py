@@ -6,19 +6,39 @@ Implements 8 Core Innovations: Universal MCP Hub, Production-Grade Reliability, 
 import logging
 import asyncio
 import os
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Union
 from enum import Enum
-from urllib.parse import quote_plus
-import requests
 from dataclasses import dataclass
 from datetime import datetime
 
 # Import core modules for 8 innovations
-from ..base_tool import BaseResearchTool, ToolResponse, ToolCategory, ToolResult
+from .base_tool import BaseResearchTool, ToolResult, SearchResult
 from ...core.reliability import execute_with_reliability, CircuitBreaker
 from ...core.llm_manager import execute_llm_task, TaskType
 from src.core.mcp_integration import get_best_tool_for_task, execute_tool
+
+
+@dataclass
+class ToolResponse:
+    """Tool execution response."""
+    success: bool
+    data: Any = None
+    error: Optional[str] = None
+    metadata: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+
+
+class ToolCategory(Enum):
+    """Tool categories."""
+    SEARCH = "search"
+    DATA = "data"
+    CODE = "code"
+    ACADEMIC = "academic"
+    BUSINESS = "business"
+    UTILITY = "utility"
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +49,6 @@ class AcademicProvider(Enum):
     SCHOLAR_MCP = "scholar_mcp"
     PUBMED_MCP = "pubmed_mcp"
     IEEE_MCP = "ieee_mcp"
-    ARXIV_API = "arxiv_api"
-    SCHOLAR_API = "scholar_api"
-    PUBMED_API = "pubmed_api"
-    IEEE_API = "ieee_api"
 
 
 @dataclass
@@ -69,27 +85,22 @@ class AcademicSearchTool(BaseResearchTool):
         self.enable_verification = config.get('enable_verification', True)
         self.enable_confidence_scoring = config.get('enable_confidence_scoring', True)
         
-        # MCP-first provider priority
+        # MCP-only provider priority
         self.primary_provider = config.get('primary_provider', AcademicProvider.ARXIV_MCP)
-        self.fallback_providers = config.get('fallback_providers', [
+        self.alternative_providers = config.get('alternative_providers', [
             AcademicProvider.SCHOLAR_MCP,
             AcademicProvider.PUBMED_MCP,
-            AcademicProvider.IEEE_MCP,
-            AcademicProvider.ARXIV_API,
-            AcademicProvider.SCHOLAR_API,
-            AcademicProvider.PUBMED_API,
-            AcademicProvider.IEEE_API
+            AcademicProvider.IEEE_MCP
         ])
-        
-        # Initialize API keys for fallback
-        self.pubmed_api_key = os.getenv('PUBMED_API_KEY')
-        self.ieee_api_key = os.getenv('IEEE_API_KEY')
     
         # Circuit breaker for reliability
+        from ...core.reliability import CircuitBreakerConfig
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=60,
-            expected_exception=Exception
+            name="academic_search",
+            config=CircuitBreakerConfig(
+                failure_threshold=5,
+                recovery_timeout=60
+            )
         )
         
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -128,8 +139,8 @@ class AcademicSearchTool(BaseResearchTool):
                         return verified_result
                     return mcp_result
             
-            # Step 2: Fallback to API providers with smart selection
-            api_result = await self._try_api_search(query)
+            # Step 2: Try alternative MCP providers
+            api_result = await self._try_alternative_mcp_search(query)
             if api_result.success and api_result.data:
                 # Apply continuous verification
                 if self.enable_verification:
@@ -186,8 +197,8 @@ class AcademicSearchTool(BaseResearchTool):
             self.logger.warning(f"MCP academic search failed: {e}")
             return ToolResponse(success=False, data=[], error=str(e))
     
-    async def _try_api_search(self, query: str) -> ToolResponse:
-        """Try API providers with smart fallback strategy."""
+    async def _try_alternative_mcp_search(self, query: str) -> ToolResponse:
+        """Try alternative MCP providers."""
         all_results = []
         
         # Try primary provider first
@@ -195,9 +206,9 @@ class AcademicSearchTool(BaseResearchTool):
         if primary_result.success:
             all_results.extend(primary_result.data)
         
-        # Try fallback providers if needed
+        # Try alternative MCP providers if needed
         if len(all_results) < self.max_results:
-            for provider in self.fallback_providers:
+            for provider in self.alternative_providers:
                 if len(all_results) >= self.max_results:
                     break
                     
@@ -214,35 +225,27 @@ class AcademicSearchTool(BaseResearchTool):
                 success=True,
                 data=all_results[:self.max_results],
                 metadata={
-                    'provider': 'multi_api',
-                    'method': 'api',
+                    'provider': 'multi_mcp',
+                    'method': 'mcp',
                     'query': query,
                     'total_found': len(all_results),
                     'timestamp': datetime.now().isoformat()
                 }
             )
         else:
-            return ToolResponse(success=False, data=[], error="All API providers failed")
+            return ToolResponse(success=False, data=[], error="All MCP providers failed")
     
     async def _search_with_provider(self, provider: AcademicProvider, query: str) -> ToolResponse:
-        """Search with specific provider using circuit breaker pattern."""
+        """Search with specific MCP provider using circuit breaker pattern."""
         try:
             if provider == AcademicProvider.ARXIV_MCP:
                 return await self._arxiv_mcp_search(query)
-            elif provider == AcademicProvider.ARXIV_API:
-                return await self._arxiv_api_search(query)
             elif provider == AcademicProvider.SCHOLAR_MCP:
                 return await self._scholar_mcp_search(query)
-            elif provider == AcademicProvider.SCHOLAR_API:
-                return await self._scholar_api_search(query)
             elif provider == AcademicProvider.PUBMED_MCP:
                 return await self._pubmed_mcp_search(query)
-            elif provider == AcademicProvider.PUBMED_API:
-                return await self._pubmed_api_search(query)
             elif provider == AcademicProvider.IEEE_MCP:
                 return await self._ieee_mcp_search(query)
-            elif provider == AcademicProvider.IEEE_API:
-                return await self._ieee_api_search(query)
             else:
                 return ToolResponse(success=False, data=[], error=f"Unknown provider: {provider}")
         except Exception as e:
@@ -372,317 +375,8 @@ class AcademicSearchTool(BaseResearchTool):
         except Exception as e:
             return ToolResponse(success=False, data=[], error=str(e))
     
-    # API Fallback Methods (Production-Grade Reliability - Innovation 8)
-    async def _arxiv_api_search(self, query: str) -> ToolResponse:
-        """Perform search using ArXiv API with production-grade reliability."""
-        try:
-            # ArXiv API endpoint
-            base_url = "http://export.arxiv.org/api/query"
-            params = {
-                'search_query': f'all:{query}',
-                'start': 0,
-                'max_results': self.max_results,
-                'sortBy': 'relevance',
-                'sortOrder': 'descending'
-            }
-            
-            response = requests.get(base_url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            
-            # Parse XML response
-            root = ET.fromstring(response.content)
-            
-            # Define namespace
-            ns = {'atom': 'http://www.w3.org/2005/Atom'}
-            
-            results = []
-            entries = root.findall('atom:entry', ns)
-            
-            for entry in entries:
-                # Extract paper information
-                title_elem = entry.find('atom:title', ns)
-                title = title_elem.text.strip() if title_elem is not None else ''
-                
-                summary_elem = entry.find('atom:summary', ns)
-                abstract = summary_elem.text.strip() if summary_elem is not None else ''
-                
-                # Extract authors
-                authors = []
-                for author in entry.findall('atom:author', ns):
-                    name_elem = author.find('atom:name', ns)
-                    if name_elem is not None:
-                        authors.append(name_elem.text.strip())
-                
-                # Extract publication date
-                published_elem = entry.find('atom:published', ns)
-                published = published_elem.text.strip() if published_elem is not None else ''
-                
-                # Extract ArXiv ID and URL
-                id_elem = entry.find('atom:id', ns)
-                arxiv_id = ''
-                pdf_url = ''
-                if id_elem is not None:
-                    arxiv_id = id_elem.text.split('/')[-1]
-                    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
-                
-                # Extract categories
-                categories = []
-                for category in entry.findall('atom:category', ns):
-                    term = category.get('term')
-                    if term:
-                        categories.append(term)
-                
-                result = AcademicResult(
-                    title=title,
-                    authors=authors,
-                    abstract=abstract,
-                    published=published,
-                    arxiv_id=arxiv_id,
-                    pdf_url=pdf_url,
-                    categories=categories,
-                    source='arxiv_api',
-                    url=f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else ''
-                )
-                results.append(result)
-            
-            self.logger.info(f"ArXiv API search completed: {len(results)} results")
-            return ToolResponse(
-                success=True,
-                data=results,
-                metadata={'provider': 'arxiv_api', 'total_results': len(results)}
-            )
-            
-        except Exception as e:
-            self.logger.error(f"ArXiv API search failed: {e}")
-            return ToolResponse(success=False, data=[], error=str(e))
-    
-    async def _scholar_api_search(self, query: str) -> ToolResponse:
-        """Perform search using Google Scholar API with production-grade reliability."""
-        try:
-            from urllib.parse import quote_plus
-            import re
-            
-            # Google Scholar search URL
-            search_url = f"https://scholar.google.com/scholar?q={quote_plus(query)}&num={self.max_results}"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            
-            response = requests.get(search_url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
-            
-            # Parse HTML response using regex
-            results = []
-            
-            # Extract paper titles and links
-            title_pattern = r'<h3[^>]*class="gs_rt"[^>]*>(.*?)</h3>'
-            link_pattern = r'<a[^>]*href="([^"]*)"[^>]*class="gs_rt"[^>]*>'
-            snippet_pattern = r'<div[^>]*class="gs_rs"[^>]*>(.*?)</div>'
-            
-            titles = re.findall(title_pattern, response.text)
-            links = re.findall(link_pattern, response.text)
-            snippets = re.findall(snippet_pattern, response.text)
-            
-            for i, (title, link) in enumerate(zip(titles[:self.max_results], links[:self.max_results])):
-                if title and link:
-                    # Clean title
-                    title = re.sub(r'<[^>]+>', '', title)
-                    title = title.strip()
-                    
-                    # Get snippet if available
-                    snippet = snippets[i] if i < len(snippets) else ''
-                    snippet = re.sub(r'<[^>]+>', '', snippet).strip()
-                    
-                    result = AcademicResult(
-                        title=title,
-                        url=link,
-                        abstract=snippet,
-                        source='scholar_api',
-                        authors=[],  # Would need more complex parsing
-                        published='',  # Would need more complex parsing
-                        pdf_url=''
-                    )
-                    results.append(result)
-            
-            self.logger.info(f"Google Scholar API search completed: {len(results)} results")
-            return ToolResponse(
-                success=True,
-                data=results,
-                metadata={'provider': 'scholar_api', 'total_results': len(results)}
-            )
-            
-        except Exception as e:
-            self.logger.error(f"Google Scholar API search failed: {e}")
-            return ToolResponse(success=False, data=[], error=str(e))
-    
-    async def _pubmed_api_search(self, query: str) -> ToolResponse:
-        """Perform search using PubMed API with production-grade reliability."""
-        try:
-            if not self.pubmed_api_key:
-                return ToolResponse(success=False, data=[], error='PubMed API key not found')
-            
-            # PubMed E-utilities API
-            base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-            params = {
-                'db': 'pubmed',
-                'term': query,
-                'retmax': self.max_results,
-                'retmode': 'json',
-                'api_key': self.pubmed_api_key
-            }
-            
-            # First, get PMIDs
-            response = requests.get(base_url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            
-            data = response.json()
-            pmids = data.get('esearchresult', {}).get('idlist', [])
-            
-            if not pmids:
-                return ToolResponse(
-                    success=True,
-                    data=[],
-                    metadata={'provider': 'pubmed_api', 'total_results': 0}
-                )
-            
-            # Get detailed information for each PMID
-            fetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-            fetch_params = {
-                'db': 'pubmed',
-                'id': ','.join(pmids),
-                'retmode': 'xml',
-                'api_key': self.pubmed_api_key
-            }
-            
-            fetch_response = requests.get(fetch_url, params=fetch_params, timeout=self.timeout)
-            fetch_response.raise_for_status()
-            
-            # Parse XML response
-            root = ET.fromstring(fetch_response.content)
-            
-            results = []
-            articles = root.findall('.//PubmedArticle')
-            
-            for article in articles:
-                # Extract title
-                title_elem = article.find('.//ArticleTitle')
-                title = title_elem.text.strip() if title_elem is not None else ''
-                
-                # Extract abstract
-                abstract_elem = article.find('.//AbstractText')
-                abstract = abstract_elem.text.strip() if abstract_elem is not None else ''
-                
-                # Extract authors
-                authors = []
-                for author in article.findall('.//Author'):
-                    last_name = author.find('LastName')
-                    first_name = author.find('ForeName')
-                    if last_name is not None and first_name is not None:
-                        authors.append(f"{first_name.text} {last_name.text}")
-                
-                # Extract publication date
-                pub_date = article.find('.//PubDate')
-                published = ''
-                if pub_date is not None:
-                    year = pub_date.find('Year')
-                    month = pub_date.find('Month')
-                    day = pub_date.find('Day')
-                    if year is not None:
-                        published = year.text
-                        if month is not None:
-                            published += f"-{month.text}"
-                        if day is not None:
-                            published += f"-{day.text}"
-                
-                # Extract PMID
-                pmid_elem = article.find('.//PMID')
-                pmid = pmid_elem.text if pmid_elem is not None else ''
-                
-                result = AcademicResult(
-                    title=title,
-                    authors=authors,
-                    abstract=abstract,
-                    published=published,
-                    pmid=pmid,
-                    source='pubmed_api',
-                    url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}" if pmid else ''
-                )
-                results.append(result)
-            
-            self.logger.info(f"PubMed API search completed: {len(results)} results")
-            return ToolResponse(
-                success=True,
-                data=results,
-                metadata={'provider': 'pubmed_api', 'total_results': len(results)}
-            )
-            
-        except Exception as e:
-            self.logger.error(f"PubMed API search failed: {e}")
-            return ToolResponse(success=False, data=[], error=str(e))
-    
-    async def _ieee_api_search(self, query: str) -> ToolResponse:
-        """Perform search using IEEE Xplore API with production-grade reliability."""
-        try:
-            if not self.ieee_api_key:
-                return ToolResponse(success=False, data=[], error='IEEE API key not found')
-            
-            # IEEE Xplore API
-            base_url = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
-            params = {
-                'apikey': self.ieee_api_key,
-                'querytext': query,
-                'max_records': self.max_results,
-                'format': 'json'
-            }
-            
-            response = requests.get(base_url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            
-            data = response.json()
-            results = []
-            
-            for article in data.get('articles', []):
-                result = AcademicResult(
-                    title=article.get('title', ''),
-                    authors=[author.get('full_name', '') for author in article.get('authors', {}).get('authors', [])],
-                    abstract=article.get('abstract', ''),
-                    published=article.get('publication_date', ''),
-                    doi=article.get('doi', ''),
-                    source='ieee_api',
-                    url=article.get('html_url', ''),
-                    pdf_url=article.get('pdf_url', '')
-                )
-                results.append(result)
-            
-            self.logger.info(f"IEEE Xplore API search completed: {len(results)} results")
-            return ToolResponse(
-                success=True,
-                data=results,
-                metadata={'provider': 'ieee_api', 'total_results': len(results)}
-            )
-            
-        except Exception as e:
-            self.logger.error(f"IEEE Xplore API search failed: {e}")
-            return ToolResponse(success=False, data=[], error=str(e))
-    
-    # Additional utility methods for 8 innovations
-    def get_tool_category(self) -> ToolCategory:
-        """Return tool category for Universal MCP Hub."""
-        return ToolCategory.ACADEMIC_SEARCH
-    
-    def get_health_status(self) -> Dict[str, Any]:
-        """Return health status for Production-Grade Reliability."""
-        return {
-            'status': 'healthy',
-            'circuit_breaker_state': self.circuit_breaker.state,
-            'mcp_enabled': self.enable_mcp_priority,
-            'verification_enabled': self.enable_verification,
-            'confidence_scoring_enabled': self.enable_confidence_scoring,
-            'timestamp': datetime.now().isoformat()
-        }
-    
-    async def get_performance_metrics(self) -> Dict[str, Any]:
-        """Return performance metrics for monitoring."""
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics for monitoring."""
         return {
             'total_searches': getattr(self, '_total_searches', 0),
             'successful_searches': getattr(self, '_successful_searches', 0),
@@ -690,3 +384,45 @@ class AcademicSearchTool(BaseResearchTool):
             'average_response_time': getattr(self, '_average_response_time', 0.0),
             'verification_success_rate': getattr(self, '_verification_success_rate', 0.0)
         }
+    
+    async def search(self, query: str, **kwargs) -> List[SearchResult]:
+        """검색 작업 수행 (Universal MCP Hub 통합)."""
+        try:
+            result = await self.arun(query)
+            if result.success:
+                # Convert AcademicResult to SearchResult
+                search_results = []
+                for item in result.data:
+                    search_result = SearchResult(
+                        title=item.title,
+                        url=item.url,
+                        snippet=item.abstract,
+                        source=item.source,
+                        published_date=datetime.strptime(item.published, '%Y-%m-%d') if item.published else None,
+                        relevance_score=item.confidence_score,
+                        confidence_score=item.confidence_score,
+                        mcp_tool_used=item.source,
+                        verification_score=1.0 if item.verification_status == 'verified' else 0.0
+                    )
+                    search_results.append(search_result)
+                return search_results
+            else:
+                return []
+        except Exception as e:
+            self.logger.error(f"Search failed: {e}")
+            return []
+    
+    async def get_content(self, url: str) -> Optional[str]:
+        """URL에서 콘텐츠 가져오기."""
+        try:
+            # Use MCP fetch tool
+            from src.core.mcp_integration import execute_tool
+            result = await execute_tool("fetch", {"url": url})
+            if result.get('success', False):
+                return result.get('data', {}).get('content', '')
+            else:
+                self.logger.error(f"Failed to fetch content from {url}: {result.get('error', 'Unknown error')}")
+                return None
+        except Exception as e:
+            self.logger.error(f"Failed to fetch content from {url}: {e}")
+            return None

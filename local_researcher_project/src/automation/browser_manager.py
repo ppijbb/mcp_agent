@@ -81,7 +81,6 @@ class BrowserManager:
         
         # Browser status
         self.browser_available = False
-        self.fallback_mode = False
         
         logger.info(f"Browser Manager initialized - CLI: {self.is_cli}, Streamlit: {self.is_streamlit}, Background: {self.is_background}")
     
@@ -89,9 +88,7 @@ class BrowserManager:
         """Initialize browser with enhanced error handling and environment detection."""
         try:
             if not BROWSER_USE_AVAILABLE:
-                logger.warning("browser-use package not available. Using fallback mode.")
-                self.fallback_mode = True
-                return False
+                raise RuntimeError("browser-use package is required but not available. Please install it with: pip install browser-use")
             
             async with self.browser_lock:
                 if self.browser is None:
@@ -109,7 +106,7 @@ class BrowserManager:
                             logger.warning(f"Browser initialization attempt {attempt + 1} failed: {e}")
                             if attempt == max_retries - 1:
                                 logger.error("All browser initialization attempts failed. Using fallback mode.")
-                                self.fallback_mode = True
+                                raise RuntimeError("Browser initialization failed after multiple attempts")
                                 return False
                             await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 
@@ -124,7 +121,7 @@ class BrowserManager:
                 
         except Exception as e:
             logger.error(f"Browser initialization failed: {e}")
-            self.fallback_mode = True
+            raise RuntimeError("Browser initialization failed")
             return False
     
     def _get_optimized_browser_config(self, browser_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -182,7 +179,7 @@ class BrowserManager:
         )
     
     async def navigate_and_extract(self, url: str, extraction_goal: str, llm=None) -> Dict[str, Any]:
-        """Navigate to URL and extract content with fallback mechanisms.
+        """Navigate to URL and extract content using MCP tools only.
         
         Args:
             url: URL to navigate to
@@ -193,12 +190,11 @@ class BrowserManager:
             Dictionary containing extracted content and metadata
         """
         try:
-            # Try browser automation first
-            if self.browser_available and not self.fallback_mode:
+            # Use MCP tools for content extraction
+            if self.browser_available:
                 return await self._browser_extract(url, extraction_goal, llm)
             else:
-                # Use fallback method
-                return await self._requests_extract(url, extraction_goal, llm)
+                raise RuntimeError("Browser not available. Please ensure browser-use is properly installed and initialized.")
                 
         except Exception as e:
             logger.error(f"Content extraction failed: {e}")
@@ -257,81 +253,8 @@ class BrowserManager:
             
         except Exception as e:
             logger.error(f"Browser extraction failed: {e}")
-            # Fallback to requests
-            return await self._requests_extract(url, extraction_goal, llm)
+            raise RuntimeError(f"Browser extraction failed: {e}")
     
-    async def _requests_extract(self, url: str, extraction_goal: str, llm=None) -> Dict[str, Any]:
-        """Extract content using requests as fallback."""
-        try:
-            logger.info(f"Using requests fallback for URL: {url}")
-            
-            # Enhanced requests configuration
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-            
-            # Make request with timeout and retry
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = requests.get(url, headers=headers, timeout=30, allow_redirects=True)
-                    response.raise_for_status()
-                    break
-                except Exception as e:
-                    logger.warning(f"Requests attempt {attempt + 1} failed: {e}")
-                    if attempt == max_retries - 1:
-                        raise
-                    await asyncio.sleep(2 ** attempt)
-            
-            # Parse content
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Remove script and style elements
-            for script in soup(["script", "style"]):
-                script.decompose()
-            
-            # Extract text content
-            text_content = soup.get_text()
-            
-            # Clean up text
-            lines = (line.strip() for line in text_content.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text_content = ' '.join(chunk for chunk in chunks if chunk)
-            
-            max_content_length = self.config_manager.get_browser_config().get("max_content_length", 2000)
-            
-            # Process content with LLM if available
-            if llm:
-                extracted_data = await self._process_content_with_llm(text_content, extraction_goal, llm, max_content_length)
-            else:
-                extracted_data = {"raw_content": text_content[:max_content_length]}
-            
-            return {
-                "success": True,
-                "url": url,
-                "extraction_goal": extraction_goal,
-                "extracted_data": extracted_data,
-                "content_length": len(text_content),
-                "method": "requests",
-                "timestamp": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"Requests extraction failed: {e}")
-            return {
-                "success": False,
-                "url": url,
-                "extraction_goal": extraction_goal,
-                "error": str(e),
-                "method": "requests",
-                "timestamp": datetime.now().isoformat()
-            }
     
     async def _process_content_with_llm(self, content: str, extraction_goal: str, llm, max_content_length: int) -> Dict[str, Any]:
         """Process content using LLM."""
@@ -371,7 +294,7 @@ class BrowserManager:
     
     async def _ensure_browser_initialized(self) -> Optional[BrowserContext]:
         """Ensure browser is initialized."""
-        if not self.browser_available or self.fallback_mode:
+        if not self.browser_available:
             return None
         
         try:
@@ -419,17 +342,21 @@ class BrowserManager:
             return []
     
     async def _perform_web_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
-        """Perform web search using available search APIs."""
+        """Perform web search using MCP tools."""
         try:
-            # This would be implemented to use actual search APIs
-            # For now, return mock results
-            return [
-                {
-                    "title": f"Search result for: {query}",
-                    "url": f"https://example.com/search?q={query}",
-                    "snippet": f"This is a search result for {query}"
-                }
-            ]
+            # Use MCP tools for web search
+            from src.core.mcp_integration import execute_tool
+            
+            search_result = await execute_tool("g-search", {
+                "query": query,
+                "max_results": max_results
+            })
+            
+            if search_result.get('success', False):
+                return search_result.get('data', {}).get('results', [])
+            else:
+                logger.error(f"Web search failed: {search_result.get('error', 'Unknown error')}")
+                return []
             
         except Exception as e:
             logger.error(f"Web search failed: {e}")
@@ -714,7 +641,6 @@ class BrowserManager:
         """Get browser manager status."""
         return {
             "browser_available": self.browser_available,
-            "fallback_mode": self.fallback_mode,
             "is_cli": self.is_cli,
             "is_streamlit": self.is_streamlit,
             "is_background": self.is_background,
