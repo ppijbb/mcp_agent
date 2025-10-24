@@ -96,14 +96,18 @@ def main():
         st.header("Navigation")
         page = st.selectbox(
             "Choose a page",
-            ["Research Dashboard", "8 Innovations Monitor", "Data Visualization", "Report Generator", "System Health", "Settings"]
+            ["Research Dashboard", "Live Research Dashboard", "8 Innovations Monitor", "Creative Insights", "Data Visualization", "Report Generator", "System Health", "Settings"]
         )
     
     # Route to appropriate page
     if page == "Research Dashboard":
         research_dashboard()
+    elif page == "Live Research Dashboard":
+        live_research_dashboard()
     elif page == "8 Innovations Monitor":
         innovations_monitor()
+    elif page == "Creative Insights":
+        creative_insights_page()
     elif page == "Data Visualization":
         data_visualization()
     elif page == "Report Generator":
@@ -644,6 +648,260 @@ def cancel_research(objective_id: str):
         del st.session_state.active_research[objective_id]
         st.success("Research cancelled")
         st.rerun()
+
+
+def live_research_dashboard():
+    """Live Research Dashboard with real-time agent monitoring."""
+    st.header("🔴 Live Research Dashboard")
+    st.markdown("**Real-time monitoring of AI research agents**")
+    st.markdown("---")
+    
+    # Import agent visualizer
+    from src.web.components.agent_visualizer import AgentVisualizer
+    
+    # Initialize visualizer
+    visualizer = AgentVisualizer()
+    
+    # Workflow selection
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Get available workflows from session state or create demo
+        available_workflows = st.session_state.get('available_workflows', ['demo_workflow_1', 'demo_workflow_2'])
+        selected_workflow = st.selectbox(
+            "Select Workflow",
+            available_workflows,
+            key="workflow_selector"
+        )
+    
+    with col2:
+        if st.button("🔄 Refresh", key="refresh_workflow"):
+            st.rerun()
+    
+    # Demo workflow creation if none exists
+    if not st.session_state.get('available_workflows'):
+        st.session_state.available_workflows = ['demo_workflow_1', 'demo_workflow_2']
+        st.session_state.workflow_start_time = datetime.now()
+    
+    # Render live dashboard
+    if selected_workflow:
+        visualizer.render_live_dashboard(selected_workflow)
+        
+        # Additional controls
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📊 Timeline View", key="timeline_view"):
+                st.session_state.show_timeline = True
+        
+        with col2:
+            if st.button("🔄 Flow Diagram", key="flow_diagram"):
+                st.session_state.show_flow = True
+        
+        with col3:
+            if st.button("💡 Creative Insights", key="creative_insights"):
+                st.session_state.show_creative = True
+        
+        # Timeline view
+        if st.session_state.get('show_timeline', False):
+            st.markdown("### 📈 Progress Timeline")
+            visualizer.render_timeline_chart(selected_workflow)
+        
+        # Flow diagram
+        if st.session_state.get('show_flow', False):
+            st.markdown("### 🔄 Agent Flow Diagram")
+            visualizer.render_agent_flow_diagram(selected_workflow)
+        
+        # Creative insights
+        if st.session_state.get('show_creative', False):
+            st.markdown("### 💡 Creative Insights")
+            visualizer.render_creative_insights(selected_workflow)
+        
+        # Auto-refresh controls
+        st.markdown("---")
+        visualizer.start_auto_refresh(selected_workflow)
+    
+    else:
+        st.info("No workflows available. Start a research task to see live monitoring.")
+        
+        # Demo workflow creation
+        if st.button("🚀 Create Demo Workflow", key="create_demo"):
+            demo_workflow_id = f"demo_workflow_{int(time.time())}"
+            st.session_state.available_workflows.append(demo_workflow_id)
+            st.session_state.workflow_start_time = datetime.now()
+            st.success(f"Created demo workflow: {demo_workflow_id}")
+            st.rerun()
+
+
+def creative_insights_page():
+    """Creative Insights page for displaying generated creative insights."""
+    st.header("💡 Creative Insights - AI-Powered Innovation")
+    st.markdown("**Discover novel solutions through AI-generated creative insights**")
+    st.markdown("---")
+    
+    # Check if there are any research results with creative insights
+    if 'research_history' in st.session_state and st.session_state.research_history:
+        # Get the latest research result
+        latest_research = st.session_state.research_history[-1]
+        
+        if 'creative_insights' in latest_research and latest_research['creative_insights']:
+            insights = latest_research['creative_insights']
+            
+            # Display insights overview
+            st.subheader("🎯 Creative Insights Overview")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Insights", len(insights))
+            with col2:
+                avg_confidence = sum(insight['confidence'] for insight in insights) / len(insights)
+                st.metric("Avg Confidence", f"{avg_confidence:.2f}")
+            with col3:
+                avg_novelty = sum(insight['novelty_score'] for insight in insights) / len(insights)
+                st.metric("Avg Novelty", f"{avg_novelty:.2f}")
+            
+            # Display each insight
+            st.subheader("🔍 Detailed Insights")
+            
+            for i, insight in enumerate(insights):
+                with st.expander(f"💡 {insight['title']} ({insight['type'].replace('_', ' ').title()})"):
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**Description:** {insight['description']}")
+                        st.markdown(f"**Reasoning:** {insight['reasoning']}")
+                        
+                        if insight['examples']:
+                            st.markdown("**Examples:**")
+                            for example in insight['examples']:
+                                st.markdown(f"- {example}")
+                    
+                    with col2:
+                        # Confidence and novelty scores
+                        st.markdown("**Scores:**")
+                        st.progress(insight['confidence'])
+                        st.caption(f"Confidence: {insight['confidence']:.2f}")
+                        
+                        st.progress(insight['novelty_score'])
+                        st.caption(f"Novelty: {insight['novelty_score']:.2f}")
+                        
+                        st.progress(insight['applicability_score'])
+                        st.caption(f"Applicability: {insight['applicability_score']:.2f}")
+                        
+                        # Related concepts
+                        if insight['related_concepts']:
+                            st.markdown("**Related Concepts:**")
+                            for concept in insight['related_concepts']:
+                                st.markdown(f"- {concept}")
+            
+            # Insight type distribution
+            st.subheader("📊 Insight Type Distribution")
+            insight_types = [insight['type'] for insight in insights]
+            type_counts = {}
+            for insight_type in insight_types:
+                type_counts[insight_type] = type_counts.get(insight_type, 0) + 1
+            
+            if type_counts:
+                fig = px.pie(
+                    values=list(type_counts.values()),
+                    names=list(type_counts.keys()),
+                    title="Distribution of Creative Insight Types"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Novelty vs Applicability scatter plot
+            st.subheader("🎯 Novelty vs Applicability Analysis")
+            df = pd.DataFrame(insights)
+            fig = px.scatter(
+                df,
+                x='novelty_score',
+                y='applicability_score',
+                color='type',
+                size='confidence',
+                hover_data=['title'],
+                title="Insight Quality Analysis"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+        else:
+            st.info("No creative insights available. Complete a research task to generate creative insights.")
+            
+            # Demo creative insights
+            if st.button("🎨 Generate Demo Creative Insights", key="demo_creative"):
+                demo_insights = [
+                    {
+                        'insight_id': 'demo_1',
+                        'type': 'analogical',
+                        'title': 'Nature-Inspired Research Approach',
+                        'description': 'Apply evolutionary principles to research methodology, allowing ideas to adapt and evolve through iterative refinement.',
+                        'related_concepts': ['evolution', 'adaptation', 'research methodology'],
+                        'confidence': 0.85,
+                        'novelty_score': 0.78,
+                        'applicability_score': 0.82,
+                        'reasoning': 'Nature has perfected problem-solving through evolution, which can be applied to research processes.',
+                        'examples': ['Genetic algorithms for research optimization', 'Ecosystem-based collaboration models'],
+                        'metadata': {'analogical_source': 'biological', 'generation_method': 'analogical_reasoning'}
+                    },
+                    {
+                        'insight_id': 'demo_2',
+                        'type': 'cross_domain',
+                        'title': 'AI-Art Research Synthesis',
+                        'description': 'Combine artificial intelligence with artistic creativity to generate novel research perspectives and methodologies.',
+                        'related_concepts': ['AI', 'art', 'creativity', 'research synthesis'],
+                        'confidence': 0.92,
+                        'novelty_score': 0.88,
+                        'applicability_score': 0.75,
+                        'reasoning': 'AI and art represent different modes of thinking that can complement each other in research.',
+                        'examples': ['AI-generated research hypotheses', 'Artistic visualization of data patterns'],
+                        'metadata': {'domain1': 'technology', 'domain2': 'art', 'generation_method': 'cross_domain_synthesis'}
+                    }
+                ]
+                
+                st.session_state.demo_creative_insights = demo_insights
+                st.success("Demo creative insights generated!")
+                st.rerun()
+    
+    else:
+        st.info("No research history available. Start a research task to generate creative insights.")
+        
+        # Show creativity agent capabilities
+        st.subheader("🎨 Creativity Agent Capabilities")
+        st.markdown("""
+        The Creativity Agent can generate insights using:
+        
+        - **Analogical Reasoning**: Drawing parallels from different domains
+        - **Cross-Domain Synthesis**: Combining principles from different fields
+        - **Lateral Thinking**: Challenging conventional approaches
+        - **Convergent Thinking**: Finding unifying patterns
+        - **Divergent Thinking**: Exploring all possible variations
+        """)
+        
+        # Show creativity patterns
+        st.subheader("🔍 Creativity Patterns")
+        creativity_patterns = {
+            'Analogical': [
+                "How does this work in nature?",
+                "What if we applied this to a completely different field?",
+                "How do other industries solve similar problems?"
+            ],
+            'Cross-Domain': [
+                "Combine technology principles with business methods",
+                "Apply scientific thinking to artistic problems",
+                "Merge social concepts with technical solutions"
+            ],
+            'Lateral': [
+                "What if we did the opposite?",
+                "How can we make this more absurd?",
+                "What if we removed the main constraint?"
+            ]
+        }
+        
+        for pattern_type, patterns in creativity_patterns.items():
+            with st.expander(f"**{pattern_type} Thinking**"):
+                for pattern in patterns:
+                    st.markdown(f"- {pattern}")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import os
+from datetime import timezone
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -26,6 +27,7 @@ from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_
 from src.core.mcp_integration import execute_tool, ToolCategory, health_check
 from src.core.reliability import execute_with_reliability, get_system_status
 from src.core.compression import compress_data, get_compression_stats
+from src.core.streaming_manager import EventType, AgentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,7 @@ class ResearchState(TypedDict):
     agent_status: Dict[str, Any]
     execution_metadata: Dict[str, Any]
     streaming_data: List[Dict[str, Any]]
+    streaming_events: List[Dict[str, Any]]  # 실시간 스트리밍 이벤트
     
     # Hierarchical Compression (혁신 2)
     compression_results: List[Dict[str, Any]]
@@ -113,6 +116,21 @@ class AutonomousOrchestrator:
         self.agent_config = get_agent_config()
         self.research_config = get_research_config()
         self.mcp_config = get_mcp_config()
+        
+        # 스트리밍 매니저 초기화
+        from src.core.streaming_manager import get_streaming_manager
+        self.streaming_manager = get_streaming_manager()
+        
+        # 메모리 및 학습 시스템 초기화
+        from src.storage.hybrid_storage import HybridStorage
+        from src.learning.user_profiler import UserProfiler
+        from src.learning.research_recommender import ResearchRecommender
+        from src.agents.creativity_agent import CreativityAgent
+        
+        self.hybrid_storage = HybridStorage()
+        self.user_profiler = UserProfiler()
+        self.research_recommender = ResearchRecommender(self.hybrid_storage, self.user_profiler)
+        self.creativity_agent = CreativityAgent()
         
         self.graph = None
         self._build_langgraph_workflow()
@@ -169,6 +187,19 @@ class AutonomousOrchestrator:
         logger.info(f"📝 Research Request: {state['user_request']}")
         logger.info(f"📋 Context: {state.get('context', {})}")
         
+        # 스트리밍 이벤트: 분석 시작
+        await self.streaming_manager.stream_event(
+            event_type=EventType.WORKFLOW_START,
+            agent_id="orchestrator",
+            workflow_id=state['objective_id'],
+            data={
+                'stage': 'analysis',
+                'message': 'Starting objective analysis',
+                'request': state['user_request'][:100] + '...' if len(state['user_request']) > 100 else state['user_request']
+            },
+            priority=1
+        )
+        
         analysis_prompt = f"""
         Analyze the following research request comprehensively:
         
@@ -212,6 +243,12 @@ class AutonomousOrchestrator:
             logger.info(f"🧠 Complexity score: {analysis_data.get('complexity', 5.0)}")
             logger.info(f"🏷️ Domain: {analysis_data.get('domain', {}).get('fields', [])}")
             
+            # 유사 연구 검색
+            similar_research = await self._search_similar_research(
+                state['user_request'], 
+                state.get('user_id', 'default_user')
+            )
+            
             state.update({
                 "analyzed_objectives": analysis_data.get("objectives", []),
                 "intent_analysis": analysis_data.get("intent", {}),
@@ -219,12 +256,29 @@ class AutonomousOrchestrator:
                 "scope_analysis": analysis_data.get("scope", {}),
                 "complexity_score": analysis_data.get("complexity", 5.0),
                 "current_step": "planning_agent",
+                "similar_research": similar_research,  # 유사 연구 추가
                 "innovation_stats": {
                     "analysis_model": result.model_used,
                     "analysis_confidence": result.confidence,
                     "analysis_time": result.execution_time
                 }
             })
+            
+            # 스트리밍 이벤트: 분석 완료
+            await self.streaming_manager.stream_event(
+                event_type=EventType.AGENT_ACTION,
+                agent_id="orchestrator",
+                workflow_id=state['objective_id'],
+                data={
+                    'action': 'analysis_completed',
+                    'status': 'completed',
+                    'objectives_count': len(analysis_data.get("objectives", [])),
+                    'complexity_score': analysis_data.get("complexity", 5.0),
+                    'model_used': result.model_used,
+                    'confidence': result.confidence
+                },
+                priority=1
+            )
             
         except Exception as e:
             logger.error(f"❌ Analysis failed: {e}")
@@ -721,7 +775,86 @@ class AutonomousOrchestrator:
             }
         })
         
+        # 연구 결과를 메모리에 저장
+        await self._save_research_memory(state)
+        
+        # 창의적 인사이트 생성
+        await self._generate_creative_insights(state)
+        
         return state
+    
+    async def _generate_creative_insights(self, state: ResearchState) -> None:
+        """창의적 인사이트를 생성합니다."""
+        try:
+            context = state.get('user_request', '')
+            current_ideas = []
+            
+            # 기존 아이디어들 수집
+            if 'analyzed_objectives' in state:
+                for obj in state['analyzed_objectives']:
+                    if 'description' in obj:
+                        current_ideas.append(obj['description'])
+            
+            if 'execution_results' in state:
+                for result in state['execution_results']:
+                    if 'summary' in result:
+                        current_ideas.append(result['summary'])
+            
+            if not current_ideas:
+                logger.warning("No current ideas found for creativity generation")
+                return
+            
+            # 창의적 인사이트 생성
+            insights = await self.creativity_agent.generate_creative_insights(
+                context=context,
+                current_ideas=current_ideas[:5]  # 최대 5개 아이디어만 사용
+            )
+            
+            if insights:
+                # 인사이트를 상태에 저장
+                state['creative_insights'] = [
+                    {
+                        'insight_id': insight.insight_id,
+                        'type': insight.type.value,
+                        'title': insight.title,
+                        'description': insight.description,
+                        'related_concepts': insight.related_concepts,
+                        'confidence': insight.confidence,
+                        'novelty_score': insight.novelty_score,
+                        'applicability_score': insight.applicability_score,
+                        'reasoning': insight.reasoning,
+                        'examples': insight.examples,
+                        'metadata': insight.metadata
+                    }
+                    for insight in insights
+                ]
+                
+                logger.info(f"Generated {len(insights)} creative insights")
+                
+                # 스트리밍 이벤트 발생
+                await self.streaming_manager.stream_event(
+                    event_type=EventType.AGENT_ACTION,
+                    agent_id="creativity_agent",
+                    workflow_id=state['objective_id'],
+                    data={
+                        'action': 'creative_insights_generated',
+                        'insights_count': len(insights),
+                        'insights': [
+                            {
+                                'title': insight.title,
+                                'type': insight.type.value,
+                                'confidence': insight.confidence
+                            }
+                            for insight in insights
+                        ]
+                    },
+                    priority=2
+                )
+            else:
+                logger.warning("No creative insights generated")
+                
+        except Exception as e:
+            logger.error(f"Failed to generate creative insights: {e}")
     
     # ==================== Planning Agent Helper Methods ====================
     
@@ -1390,6 +1523,87 @@ class AutonomousOrchestrator:
         
         logger.info("✅ Research completed successfully with 8 core innovations")
         return result
+    
+    async def _search_similar_research(self, query: str, user_id: str) -> List[Dict[str, Any]]:
+        """유사한 과거 연구를 검색합니다."""
+        try:
+            # 하이브리드 스토리지에서 유사 연구 검색
+            similar_research = await self.hybrid_storage.search_similar_research(
+                query=query,
+                user_id=user_id,
+                limit=5,
+                similarity_threshold=0.3
+            )
+            
+            # 결과 포맷팅
+            formatted_results = []
+            for research in similar_research:
+                formatted_results.append({
+                    'research_id': research.research_id,
+                    'topic': research.metadata.get('topic', ''),
+                    'summary': research.summary,
+                    'similarity_score': research.similarity_score,
+                    'timestamp': research.timestamp.isoformat(),
+                    'confidence_score': research.metadata.get('confidence_score', 0.0)
+                })
+            
+            logger.info(f"Found {len(formatted_results)} similar research results")
+            return formatted_results
+            
+        except Exception as e:
+            logger.error(f"Failed to search similar research: {e}")
+            return []
+    
+    async def _save_research_memory(self, state: ResearchState) -> bool:
+        """연구 결과를 메모리에 저장합니다."""
+        try:
+            from src.storage.vector_store import ResearchMemory
+            
+            # 연구 메모리 생성
+            memory = ResearchMemory(
+                research_id=state['objective_id'],
+                user_id=state.get('user_id', 'default_user'),
+                topic=state['user_request'],
+                timestamp=datetime.now(timezone.utc),
+                embedding=[],  # 하이브리드 스토리지에서 생성
+                metadata={
+                    'complexity_score': state.get('complexity_score', 0.0),
+                    'objectives_count': len(state.get('analyzed_objectives', [])),
+                    'execution_results': state.get('execution_results', []),
+                    'verification_results': state.get('verification_results', {}),
+                    'quality_metrics': state.get('quality_metrics', {})
+                },
+                results=state.get('final_synthesis', {}),
+                content=state.get('final_synthesis', {}).get('content', ''),
+                summary=state.get('final_synthesis', {}).get('summary', ''),
+                keywords=state.get('final_synthesis', {}).get('keywords', []),
+                confidence_score=state.get('final_synthesis', {}).get('confidence', 0.0),
+                source_count=len(state.get('execution_results', [])),
+                verification_status=state.get('verification_results', {}).get('status', 'unverified')
+            )
+            
+            # 하이브리드 스토리지에 저장
+            success = await self.hybrid_storage.store_research(
+                research_id=memory.research_id,
+                user_id=memory.user_id,
+                topic=memory.topic,
+                content=memory.content,
+                results=memory.results,
+                metadata=memory.metadata,
+                summary=memory.summary,
+                keywords=memory.keywords
+            )
+            
+            if success:
+                logger.info(f"Research memory saved: {memory.research_id}")
+            else:
+                logger.warning(f"Failed to save research memory: {memory.research_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to save research memory: {e}")
+            return False
 
 
 # Global orchestrator instance
