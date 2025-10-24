@@ -34,6 +34,7 @@ class TaskType(Enum):
     RESEARCH = "research"
     ANALYSIS = "analysis"
     SYNTHESIS = "synthesis"
+    CREATIVE = "creative"
 
 
 class Provider(Enum):
