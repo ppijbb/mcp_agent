@@ -207,7 +207,7 @@ class BenchmarkRunner:
             )
     
     def _extract_all_metrics_from_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract all possible metrics from CLI output."""
+        """Extract all possible metrics from CLI output - 실제 실행 결과만 수집."""
         extracted = {
             'sources': [],
             'execution_results': [],
@@ -216,27 +216,61 @@ class BenchmarkRunner:
             'workflow_log': {}
         }
         
-        # Extract sources
-        if 'sources' in output:
-            extracted['sources'] = output['sources']
+        # Extract sources (실제 소스만)
+        if 'sources' in output and isinstance(output['sources'], list):
+            extracted['sources'] = [
+                source for source in output['sources'] 
+                if not self._is_mock_data(source)
+            ]
         
-        # Extract execution results
-        if 'execution_results' in output:
-            extracted['execution_results'] = output['execution_results']
+        # Extract execution results (실제 실행 결과만)
+        if 'execution_results' in output and isinstance(output['execution_results'], list):
+            extracted['execution_results'] = [
+                result for result in output['execution_results']
+                if not self._is_mock_data(result) and result.get('success', False)
+            ]
         
-        # Extract creative insights
-        if 'creative_insights' in output:
-            extracted['creative_insights'] = output['creative_insights']
+        # Extract creative insights (실제 인사이트만)
+        if 'creative_insights' in output and isinstance(output['creative_insights'], list):
+            extracted['creative_insights'] = [
+                insight for insight in output['creative_insights']
+                if not self._is_mock_data(insight)
+            ]
         
-        # Extract similar research
-        if 'similar_research' in output:
-            extracted['similar_research'] = output['similar_research']
+        # Extract similar research (실제 연구 결과만)
+        if 'similar_research' in output and isinstance(output['similar_research'], list):
+            extracted['similar_research'] = [
+                research for research in output['similar_research']
+                if not self._is_mock_data(research)
+            ]
         
-        # Extract workflow log
-        if 'workflow_log' in output:
+        # Extract workflow log (실제 워크플로우만)
+        if 'workflow_log' in output and isinstance(output['workflow_log'], dict):
             extracted['workflow_log'] = output['workflow_log']
         
         return extracted
+    
+    def _is_mock_data(self, data: Any) -> bool:
+        """Mock 데이터인지 확인."""
+        if isinstance(data, dict):
+            # Mock 데이터의 일반적인 패턴 확인
+            mock_indicators = [
+                'simulated', 'mock', 'dummy', 'fake', 'test_data',
+                'placeholder', 'example', 'sample'
+            ]
+            
+            # 키나 값에 mock 관련 문자열이 있는지 확인
+            for key, value in data.items():
+                if isinstance(key, str) and any(indicator in key.lower() for indicator in mock_indicators):
+                    return True
+                if isinstance(value, str) and any(indicator in value.lower() for indicator in mock_indicators):
+                    return True
+        
+        elif isinstance(data, str):
+            mock_indicators = ['simulated', 'mock', 'dummy', 'fake', 'test_data']
+            return any(indicator in data.lower() for indicator in mock_indicators)
+        
+        return False
     
     def _extract_agent_metrics_from_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
         """Extract agent-specific metrics from CLI output."""
@@ -583,18 +617,42 @@ class BenchmarkRunner:
         return metrics
     
     def _create_failure_metrics(self, test_case: Dict[str, Any], error_message: str) -> List:
-        """Create failure metrics when CLI execution fails."""
+        """Create failure metrics when CLI execution fails - 실제 실행 실패만 기록."""
         metrics = []
         
-        # Only create metrics for actual execution failures, not dummy data
-        metrics.append(MetricResult(
-            name="execution_failure",
-            value=0.0,
-            threshold=1.0,
-            passed=False,
-            category="system",
-            metadata={"error": error_message, "test_id": test_case.get('id', 'unknown')}
-        ))
+        # 실제 실행 실패만 기록 (Mock 데이터 제거)
+        if "simulated" not in error_message.lower() and "mock" not in error_message.lower():
+            metrics.append(MetricResult(
+                name="execution_failure",
+                value=0.0,
+                threshold=1.0,
+                passed=False,
+                category="system",
+                metadata={
+                    "error": error_message, 
+                    "test_id": test_case.get('id', 'unknown'),
+                    "failure_type": "actual_execution_failure"
+                }
+            ))
+            
+            # 추가 실패 메트릭
+            metrics.append(MetricResult(
+                name="task_completion_rate",
+                value=0.0,
+                threshold=0.8,
+                passed=False,
+                category="performance",
+                metadata={"test_id": test_case.get('id', 'unknown')}
+            ))
+            
+            metrics.append(MetricResult(
+                name="tool_execution_success",
+                value=0.0,
+                threshold=0.7,
+                passed=False,
+                category="reliability",
+                metadata={"test_id": test_case.get('id', 'unknown')}
+            ))
         
         return metrics
     

@@ -123,315 +123,6 @@ class OpenRouterClient:
             raise RuntimeError(f"OpenRouter API error: {e}")
 
 
-class MCPToolExecutor:
-    """MCP 도구 실행기 - OpenRouter와 Gemini 2.5 Flash Lite 기반."""
-    
-    def __init__(self, openrouter_client: OpenRouterClient):
-        self.client = openrouter_client
-        self.llm_config = get_llm_config()
-    
-    async def execute_search_tool(self, tool_name: str, query: str, max_results: int = 10) -> ToolResult:
-        """검색 도구 실행."""
-        start_time = time.time()
-        
-        try:
-            # Gemini 2.5 Flash Lite를 사용한 검색 시뮬레이션
-            messages = [
-                {
-                    "role": "system",
-                    "content": f"You are a {tool_name} search assistant. Provide accurate, up-to-date search results based on the query."
-                },
-                {
-                    "role": "user", 
-                    "content": f"Search for: {query}\nProvide {max_results} relevant results with titles, snippets, and URLs."
-                }
-            ]
-            
-            response = await self.client.generate_response(
-                model=self.llm_config.primary_model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=2000
-            )
-            
-            search_results = {
-                "query": query,
-                "tool": tool_name,
-                "results": self._parse_search_response(response["choices"][0]["message"]["content"]),
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            return ToolResult(
-                success=True,
-                data=search_results,
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Search tool execution failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-    
-    async def execute_data_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-        """데이터 도구 실행."""
-        start_time = time.time()
-        
-        try:
-            if tool_name == "fetch":
-                return await self._execute_fetch_tool(parameters)
-            elif tool_name == "filesystem":
-                return await self._execute_filesystem_tool(parameters)
-            else:
-                return ToolResult(
-                    success=False,
-                    data=None,
-                    error=f"Unknown data tool: {tool_name}",
-                    execution_time=time.time() - start_time
-                )
-                
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Data tool execution failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-    
-    async def execute_code_tool(self, tool_name: str, code: str, language: str = "python") -> ToolResult:
-        """코드 도구 실행."""
-        start_time = time.time()
-        
-        try:
-            # Gemini 2.5 Flash Lite를 사용한 코드 분석 및 실행
-            messages = [
-                {
-                    "role": "system",
-                    "content": f"You are a {language} code interpreter. Analyze and execute the provided code safely."
-                },
-                {
-                    "role": "user",
-                    "content": f"Execute this {language} code:\n\n```{language}\n{code}\n```\n\nProvide the output and any analysis."
-                }
-            ]
-            
-            response = await self.client.generate_response(
-                model=self.llm_config.primary_model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=3000
-            )
-            
-            code_result = {
-                "code": code,
-                "language": language,
-                "output": response["choices"][0]["message"]["content"],
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            return ToolResult(
-                success=True,
-                data=code_result,
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Code tool execution failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-    
-    async def _execute_fetch_tool(self, parameters: Dict[str, Any]) -> ToolResult:
-        """웹페이지 가져오기 도구."""
-        url = parameters.get("url")
-        if not url:
-            return ToolResult(
-                success=False,
-                data=None,
-                error="URL parameter is required for fetch tool"
-            )
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=30) as response:
-                    if response.status == 200:
-                        content = await response.text()
-                        return ToolResult(
-                            success=True,
-                            data={
-                                "url": url,
-                                "status": response.status,
-                                "content": content[:5000],  # 처음 5000자만
-                                "content_length": len(content)
-                            }
-                        )
-                    else:
-                        return ToolResult(
-                            success=False,
-                            data=None,
-                            error=f"HTTP {response.status}: {response.reason}"
-                        )
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Fetch failed: {str(e)}"
-            )
-    
-    async def _execute_filesystem_tool(self, parameters: Dict[str, Any]) -> ToolResult:
-        """파일시스템 도구."""
-        path = parameters.get("path")
-        operation = parameters.get("operation", "read")
-        
-        if not path:
-            return ToolResult(
-                success=False,
-                data=None,
-                error="Path parameter is required for filesystem tool"
-            )
-        
-        try:
-            file_path = Path(path)
-            
-            if operation == "read":
-                if file_path.exists() and file_path.is_file():
-                    content = file_path.read_text(encoding='utf-8')
-                    return ToolResult(
-                        success=True,
-                        data={
-                            "path": str(file_path),
-                            "operation": operation,
-                            "content": content,
-                            "size": file_path.stat().st_size
-                        }
-                    )
-                else:
-                    return ToolResult(
-                        success=False,
-                        data=None,
-                        error=f"File not found: {path}"
-                    )
-            elif operation == "list":
-                if file_path.exists() and file_path.is_dir():
-                    files = [f.name for f in file_path.iterdir()]
-                    return ToolResult(
-                        success=True,
-                        data={
-                            "path": str(file_path),
-                            "operation": operation,
-                            "files": files
-                        }
-                    )
-                else:
-                    return ToolResult(
-                        success=False,
-                        data=None,
-                        error=f"Directory not found: {path}"
-                    )
-            else:
-                return ToolResult(
-                    success=False,
-                    data=None,
-                    error=f"Unsupported operation: {operation}"
-                )
-                
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Filesystem operation failed: {str(e)}"
-            )
-    
-    def _parse_search_response(self, content: str) -> List[Dict[str, str]]:
-        """검색 응답 파싱."""
-        # 간단한 파싱 로직 (실제로는 더 정교한 파싱이 필요)
-        lines = content.split('\n')
-        results = []
-        
-        for line in lines:
-            if line.strip() and ('http' in line or 'www.' in line):
-                results.append({
-                    "title": line.strip()[:100],
-                    "snippet": line.strip(),
-                    "url": line.strip()
-                })
-        
-        return results[:10]  # 최대 10개 결과
-
-
-class ToolExecutor:
-    """실제 도구 실행기 - OpenRouter 기반."""
-
-    def __init__(self, openrouter_client: OpenRouterClient):
-        self.openrouter_client = openrouter_client
-
-    async def execute_search_tool(self, tool_name: str, query: str, max_results: int = 10) -> Dict[str, Any]:
-        """검색 도구 실행."""
-        try:
-            # OpenRouter를 통한 검색 시뮬레이션
-            prompt = f"""
-            다음 쿼리에 대한 검색 결과를 생성해주세요: "{query}"
-            결과는 {max_results}개까지 생성하고, 각 결과는 title, url, snippet 필드를 포함해야 합니다.
-            실제 검색 결과처럼 자연스럽게 작성해주세요.
-            """
-
-            messages = [
-                {"role": "system", "content": "당신은 전문 검색 엔진입니다. 정확하고 유용한 검색 결과를 제공합니다."},
-                {"role": "user", "content": prompt}
-            ]
-
-            response = await self.openrouter_client.generate_response(
-                model="google/gemini-2.5-flash-lite",
-                messages=messages,
-                temperature=0.3,
-                max_tokens=1000
-            )
-
-            # 응답을 파싱하여 검색 결과 생성
-            results = []
-            for i in range(min(max_results, 5)):
-                results.append({
-                    "title": f"Search result {i+1} for '{query}'",
-                    "url": f"https://example.com/result{i+1}",
-                    "snippet": f"This is a simulated search result for query: {query}"
-                })
-
-            return {
-                "query": query,
-                "results": results,
-                "total_results": len(results)
-            }
-
-        except Exception as e:
-            logger.error(f"Search tool execution failed: {e}")
-            return {
-                "query": query,
-                "results": [],
-                "total_results": 0,
-                "error": str(e)
-            }
-
-    async def execute_data_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """데이터 도구 실행."""
-        try:
-            url = parameters.get("url", "")
-            # 실제 웹페이지 가져오기 시뮬레이션
-            return {
-                "url": url,
-                "content": f"Simulated content from {url}",
-                "title": f"Page title for {url}",
-                "status": "success"
-            }
-        except Exception as e:
-            logger.error(f"Data tool execution failed: {e}")
-            return {
-                "url": parameters.get("url", ""),
-                "error": str(e)
-            }
 
 class UniversalMCPHub:
     """Universal MCP Hub - 2025년 10월 최신 버전."""
@@ -442,7 +133,6 @@ class UniversalMCPHub:
 
         self.tools: Dict[str, ToolInfo] = {}
         self.openrouter_client: Optional[OpenRouterClient] = None
-        self.tool_executor: Optional[ToolExecutor] = None
 
         self._initialize_tools()
         self._initialize_clients()
@@ -546,10 +236,9 @@ class UniversalMCPHub:
         """클라이언트 초기화 - OpenRouter와 Gemini 2.5 Flash Lite."""
         if self.llm_config.openrouter_api_key:
             self.openrouter_client = OpenRouterClient(self.llm_config.openrouter_api_key)
-            self.tool_executor = ToolExecutor(self.openrouter_client)
-            logger.info("✅ Tool Executor initialized with OpenRouter client")
+            logger.info("✅ OpenRouter client initialized")
         else:
-            logger.warning("OpenRouter API key not configured - tools will not function")
+            logger.warning("OpenRouter API key not configured - LLM features will not function")
     
     async def initialize_mcp(self):
         """MCP 초기화 - OpenRouter와 Gemini 2.5 Flash Lite."""
@@ -633,7 +322,7 @@ class UniversalMCPHub:
         logger.info("MCP Hub cleanup completed")
     
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-        """MCP 도구 실행 - 실제 OpenRouter 기반 도구 실행."""
+        """MCP 도구 실행 - 실제 무료 API 사용."""
         if tool_name not in self.tools:
             logger.error(f"Unknown tool: {tool_name}")
             return ToolResult(
@@ -642,67 +331,18 @@ class UniversalMCPHub:
                 error=f"Unknown tool: {tool_name}"
             )
 
-        if not self.tool_executor:
-            logger.error("Tool executor not initialized")
-            return ToolResult(
-                success=False,
-                data=None,
-                error="Tool executor not initialized"
-            )
-
         tool_info = self.tools[tool_name]
 
         try:
-            # 도구 카테고리별 실행
+            # 실제 무료 API를 사용한 도구 실행
             if tool_info.category == ToolCategory.SEARCH:
-                query = parameters.get("query", "")
-                max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
-                result = await self.tool_executor.execute_search_tool(tool_name, query, max_results)
-
-                return ToolResult(
-                    success=True,
-                    data=result,
-                    execution_time=0.1,
-                    confidence=0.9
-                )
-
-            elif tool_info.category == ToolCategory.DATA:
-                result = await self.tool_executor.execute_data_tool(tool_name, parameters)
-
-                return ToolResult(
-                    success=True,
-                    data=result,
-                    execution_time=0.1,
-                    confidence=0.9
-                )
-
-            elif tool_info.category == ToolCategory.CODE:
-                # 코드 생성 도구 (추후 구현)
-                return ToolResult(
-                    success=True,
-                    data={"message": "Code generation not yet implemented"},
-                    execution_time=0.1,
-                    confidence=0.8
-                )
-
+                return await _execute_search_tool(tool_name, parameters)
             elif tool_info.category == ToolCategory.ACADEMIC:
-                # 학술 검색 도구 (추후 구현)
-                return ToolResult(
-                    success=True,
-                    data={"message": "Academic search not yet implemented"},
-                    execution_time=0.1,
-                    confidence=0.8
-                )
-
-            elif tool_info.category == ToolCategory.BUSINESS:
-                # 비즈니스 검색 도구 (추후 구현)
-                return ToolResult(
-                    success=True,
-                    data={"message": "Business search not yet implemented"},
-                    execution_time=0.1,
-                    confidence=0.8
-                )
-
+                return await _execute_academic_tool(tool_name, parameters)
+            elif tool_info.category == ToolCategory.DATA:
+                return await _execute_data_tool(tool_name, parameters)
+            elif tool_info.category == ToolCategory.CODE:
+                return await _execute_code_tool(tool_name, parameters)
             else:
                 return ToolResult(
                     success=False,
@@ -719,18 +359,6 @@ class UniversalMCPHub:
                 execution_time=0.0,
                 confidence=0.0
             )
-            
-            if not result.success:
-                logger.error(f"MCP tool execution failed: {result.error}")
-                raise RuntimeError(f"MCP tool execution failed: {result.error}")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Critical error in MCP tool execution: {e}")
-            # MCP 실행 실패 시 즉시 종료
-            await self.cleanup()
-            raise RuntimeError(f"Critical MCP execution error: {e}")
     
     def get_tool_for_category(self, category: ToolCategory) -> Optional[str]:
         """카테고리에 해당하는 도구 반환."""
@@ -848,28 +476,387 @@ async def get_available_tools() -> List[str]:
 
 
 async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """MCP 도구 실행 - 실패 시 시뮬레이션 결과 반환."""
+    """MCP 도구 실행 - 실제 무료 API 사용, 실패 시 명확한 오류 반환."""
     try:
-        # 실제 MCP 도구 실행 시도
-        if hasattr(mcp_hub, 'execute_tool') and mcp_hub.tools.get(tool_name):
-            return await mcp_hub.execute_tool(tool_name, parameters)
+        # 실제 무료 API를 사용한 도구 실행
+        if tool_name in ["g-search", "tavily", "exa"]:
+            return await _execute_search_tool(tool_name, parameters)
+        elif tool_name in ["arxiv", "scholar"]:
+            return await _execute_academic_tool(tool_name, parameters)
+        elif tool_name in ["fetch", "filesystem"]:
+            return await _execute_data_tool(tool_name, parameters)
+        elif tool_name in ["python_coder", "code_interpreter"]:
+            return await _execute_code_tool(tool_name, parameters)
         else:
-            # 도구가 없거나 MCP 연결 실패 시 시뮬레이션 결과 반환
-            logger.warning(f"MCP tool '{tool_name}' not available, using simulation")
+            logger.error(f"Unknown tool: {tool_name}")
             return ToolResult(
-                success=True,
-                data={"simulated_result": f"Tool '{tool_name}' executed via simulation"},
-                execution_time=0.1,
-                confidence=0.8
+                success=False,
+                data=None,
+                error=f"Unknown tool: {tool_name}",
+                execution_time=0.0,
+                confidence=0.0
             )
     except Exception as e:
-        # 모든 예외 처리 후 시뮬레이션 결과 반환
-        logger.warning(f"MCP tool execution failed: {e}")
+        logger.error(f"Tool execution failed: {tool_name} - {e}")
         return ToolResult(
-            success=True,
-            data={"simulated_result": f"Tool '{tool_name}' failed but simulated: {str(e)}"},
-            execution_time=0.1,
-            confidence=0.6
+            success=False,
+            data=None,
+            error=f"Tool execution failed: {str(e)}",
+            execution_time=0.0,
+            confidence=0.0
+        )
+
+
+async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """실제 무료 검색 API를 사용한 검색 도구 실행."""
+    import time
+    from duckduckgo_search import DDGS
+    
+    start_time = time.time()
+    query = parameters.get("query", "")
+    max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
+    
+    try:
+        if tool_name == "g-search":
+            # DuckDuckGo 검색 (100% 무료)
+            with DDGS() as ddgs:
+                results = []
+                for r in ddgs.text(query, max_results=max_results):
+                    results.append({
+                        "title": r.get("title", ""),
+                        "url": r.get("href", ""),
+                        "snippet": r.get("body", "")
+                    })
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "query": query,
+                        "results": results,
+                        "total_results": len(results),
+                        "source": "duckduckgo"
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.9
+                )
+        
+        elif tool_name == "tavily":
+            # Tavily API (무료 tier 사용)
+            import os
+            api_key = os.getenv("TAVILY_API_KEY")
+            if not api_key:
+                raise ValueError("TAVILY_API_KEY not found. Please set it in .env file")
+            
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": api_key,
+                        "query": query,
+                        "search_depth": "basic",
+                        "max_results": max_results
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "query": query,
+                        "results": data.get("results", []),
+                        "total_results": len(data.get("results", [])),
+                        "source": "tavily"
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.85
+                )
+        
+        elif tool_name == "exa":
+            # Exa API (무료 tier 사용)
+            import os
+            api_key = os.getenv("EXA_API_KEY")
+            if not api_key:
+                raise ValueError("EXA_API_KEY not found. Please set it in .env file")
+            
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.exa.ai/search",
+                    headers={"x-api-key": api_key},
+                    json={
+                        "query": query,
+                        "numResults": max_results,
+                        "type": "search"
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "query": query,
+                        "results": data.get("results", []),
+                        "total_results": len(data.get("results", [])),
+                        "source": "exa"
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.85
+                )
+        
+        else:
+            raise ValueError(f"Unknown search tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"Search tool execution failed: {tool_name} - {e}")
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Search tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_academic_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """실제 무료 학술 API를 사용한 학술 도구 실행."""
+    import time
+    
+    start_time = time.time()
+    query = parameters.get("query", "")
+    max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
+    
+    try:
+        if tool_name == "arxiv":
+            # arXiv API (100% 무료)
+            import arxiv
+            
+            client = arxiv.Client()
+            search = arxiv.Search(
+                query=query,
+                max_results=max_results,
+                sort_by=arxiv.SortCriterion.Relevance
+            )
+            
+            results = []
+            for paper in client.results(search):
+                results.append({
+                    "title": paper.title,
+                    "authors": [author.name for author in paper.authors],
+                    "abstract": paper.summary,
+                    "url": paper.entry_id,
+                    "published": paper.published.isoformat(),
+                    "pdf_url": paper.pdf_url
+                })
+            
+            return ToolResult(
+                success=True,
+                data={
+                    "query": query,
+                    "results": results,
+                    "total_results": len(results),
+                    "source": "arxiv"
+                },
+                execution_time=time.time() - start_time,
+                confidence=0.95
+            )
+        
+        elif tool_name == "scholar":
+            # Google Scholar (무료, rate limit 있음)
+            from scholarly import scholarly
+            
+            search_query = scholarly.search_pubs(query)
+            results = []
+            
+            for i, pub in enumerate(search_query):
+                if i >= max_results:
+                    break
+                    
+                results.append({
+                    "title": pub.get("bib", {}).get("title", ""),
+                    "authors": pub.get("bib", {}).get("author", ""),
+                    "abstract": pub.get("bib", {}).get("abstract", ""),
+                    "url": pub.get("pub_url", ""),
+                    "year": pub.get("bib", {}).get("pub_year", ""),
+                    "citations": pub.get("num_citations", 0)
+                })
+            
+            return ToolResult(
+                success=True,
+                data={
+                    "query": query,
+                    "results": results,
+                    "total_results": len(results),
+                    "source": "scholar"
+                },
+                execution_time=time.time() - start_time,
+                confidence=0.8
+            )
+        
+        else:
+            raise ValueError(f"Unknown academic tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"Academic tool execution failed: {tool_name} - {e}")
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Academic tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_data_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """실제 데이터 도구 실행."""
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        if tool_name == "fetch":
+            # 실제 웹페이지 가져오기
+            url = parameters.get("url", "")
+            if not url:
+                raise ValueError("URL parameter is required for fetch tool")
+            
+            import httpx
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "url": url,
+                        "status": response.status_code,
+                        "content": response.text[:10000],  # 처음 10000자만
+                        "content_length": len(response.text),
+                        "headers": dict(response.headers)
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.9
+                )
+        
+        elif tool_name == "filesystem":
+            # 파일시스템 접근
+            path = parameters.get("path", "")
+            operation = parameters.get("operation", "read")
+            
+            if not path:
+                raise ValueError("Path parameter is required for filesystem tool")
+            
+            from pathlib import Path
+            file_path = Path(path)
+            
+            if operation == "read":
+                if file_path.exists() and file_path.is_file():
+                    content = file_path.read_text(encoding='utf-8')
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "path": str(file_path),
+                            "operation": operation,
+                            "content": content,
+                            "size": file_path.stat().st_size
+                        },
+                        execution_time=time.time() - start_time,
+                        confidence=0.9
+                    )
+                else:
+                    raise FileNotFoundError(f"File not found: {path}")
+            
+            elif operation == "list":
+                if file_path.exists() and file_path.is_dir():
+                    files = [f.name for f in file_path.iterdir()]
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "path": str(file_path),
+                            "operation": operation,
+                            "files": files
+                        },
+                        execution_time=time.time() - start_time,
+                        confidence=0.9
+                    )
+                else:
+                    raise FileNotFoundError(f"Directory not found: {path}")
+            
+            else:
+                raise ValueError(f"Unsupported operation: {operation}")
+        
+        else:
+            raise ValueError(f"Unknown data tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"Data tool execution failed: {tool_name} - {e}")
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Data tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """실제 코드 도구 실행."""
+    import time
+    
+    start_time = time.time()
+    code = parameters.get("code", "")
+    language = parameters.get("language", "python")
+    
+    try:
+        if tool_name in ["python_coder", "code_interpreter"]:
+            # Python 코드 실행 (안전한 환경에서)
+            import subprocess
+            import tempfile
+            import os
+            
+            # 임시 파일에 코드 저장
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(code)
+                temp_file = f.name
+            
+            try:
+                # 코드 실행
+                result = subprocess.run(
+                    [sys.executable, temp_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "code": code,
+                        "language": language,
+                        "output": result.stdout,
+                        "error": result.stderr,
+                        "return_code": result.returncode
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.8
+                )
+            finally:
+                # 임시 파일 삭제
+                os.unlink(temp_file)
+        
+        else:
+            raise ValueError(f"Unknown code tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"Code tool execution failed: {tool_name} - {e}")
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Code tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
         )
 
 

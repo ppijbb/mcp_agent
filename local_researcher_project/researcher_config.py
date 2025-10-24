@@ -27,12 +27,12 @@ class LLMConfig(BaseModel):
     """LLM configuration settings - Multi-Model Orchestration (혁신 3)."""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
     
-    # Primary provider (OpenRouter 기본)
+    # Primary provider (OpenRouter + Gemini 2.5 Flash Lite 기본)
     provider: str = Field(default=os.getenv("LLM_PROVIDER", "openrouter"), description="LLM provider")
     primary_model: str = Field(default=os.getenv("LLM_MODEL", "google/gemini-2.5-flash-lite"), description="Primary model")
     temperature: float = Field(default=float(os.getenv("LLM_TEMPERATURE", "0.1")), ge=0.0, le=2.0, description="Temperature")
     max_tokens: int = Field(default=int(os.getenv("LLM_MAX_TOKENS", "4000")), gt=0, description="Max tokens")
-    api_key: str = Field(default=os.getenv("GOOGLE_API_KEY", ""), description="Google API key")
+    api_key: str = Field(default=os.getenv("GOOGLE_API_KEY", ""), description="Google API key (deprecated, use OPENROUTER_API_KEY)")
     
     # Multi-Model Orchestration (혁신 3) - OpenRouter Gemini 2.5 Flash-Lite 우선
     planning_model: str = Field(default=os.getenv("PLANNING_MODEL", "google/gemini-2.5-flash-lite"), description="Planning model")
@@ -53,7 +53,42 @@ class LLMConfig(BaseModel):
     def validate_openrouter_api_key(cls, v):
         if not v:
             raise ValueError("OPENROUTER_API_KEY environment variable is required for OpenRouter LLM provider")
+        if not v.startswith('sk-or-'):
+            raise ValueError("OPENROUTER_API_KEY must start with 'sk-or-'")
         return v
+    
+    @field_validator('primary_model')
+    @classmethod
+    def validate_primary_model(cls, v):
+        if not v.startswith('google/gemini-'):
+            raise ValueError("Primary model must be a Gemini model (google/gemini-*)")
+        return v
+    
+    @classmethod
+    def validate_environment(cls):
+        """환경 변수 검증 및 필수 설정 확인."""
+        import os
+        
+        # 필수 환경 변수 검증
+        required_vars = {
+            'OPENROUTER_API_KEY': 'OpenRouter API key is required',
+            'LLM_MODEL': 'LLM model must be specified'
+        }
+        
+        missing_vars = []
+        for var, message in required_vars.items():
+            if not os.getenv(var):
+                missing_vars.append(f"{var}: {message}")
+        
+        if missing_vars:
+            raise ValueError(f"Missing required environment variables:\n" + "\n".join(missing_vars))
+        
+        # OpenRouter API 키 형식 검증
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if api_key and not api_key.startswith('sk-or-'):
+            raise ValueError("OPENROUTER_API_KEY must start with 'sk-or-'")
+        
+        return True
 
 
 class AgentConfig(BaseModel):

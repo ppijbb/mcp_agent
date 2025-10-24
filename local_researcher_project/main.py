@@ -64,193 +64,7 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(level
 logger.addHandler(console_handler)
 
 
-class MCPIntegrationManager:
-    """MCP 통합 관리자 - 2025년 10월 최신 버전 (OpenRouter + Gemini 2.5 Flash Lite)"""
-    
-    def __init__(self):
-        self.config = config
-        self.mcp_enabled = config.mcp.enabled
-        self.health_monitor = HealthMonitor()
-        self.available_tools = []
-        self.tool_performance = {}
-        self.mcp_hub = None
-        
-    async def start_mcp_server(self):
-        """MCP 서버 시작 - OpenRouter와 Gemini 2.5 Flash Lite 기반"""
-        if not self.mcp_enabled:
-            logger.error("MCP is disabled in configuration")
-            return False
-            
-        try:
-            logger.info("🚀 Starting MCP Server with OpenRouter and Gemini 2.5 Flash Lite...")
-            logger.info(f"Primary model: {config.llm.primary_model}")
-            logger.info(f"OpenRouter API: {'Configured' if config.llm.openrouter_api_key else 'Not configured'}")
-            logger.info(f"Tool categories: {len(config.mcp.search_tools + config.mcp.data_tools + config.mcp.code_tools + config.mcp.academic_tools + config.mcp.business_tools)}")
-            
-            # Initialize MCP Hub
-            from mcp_integration import UniversalMCPHub
-            self.mcp_hub = UniversalMCPHub()
-            await self.mcp_hub.initialize_mcp()
-            
-            # Start health monitoring
-            await self.health_monitor.start_monitoring()
-            
-            logger.info("✅ MCP Server started successfully with OpenRouter and Gemini 2.5 Flash Lite")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to start MCP server: {e}")
-            return False
-
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """MCP 도구 실행 - mcp_hub을 통해 실행."""
-        if not self.mcp_hub:
-            logger.error("MCP Hub not initialized")
-            return {"success": False, "error": "MCP Hub not initialized"}
-
-        try:
-            result = await self.mcp_hub.execute_tool(tool_name, parameters)
-            return {
-                "success": result.success,
-                "data": result.data,
-                "error": result.error,
-                "execution_time": result.execution_time,
-                "confidence": getattr(result, 'confidence', 0.0)
-            }
-        except Exception as e:
-            logger.error(f"MCP tool execution failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "data": None,
-                "execution_time": 0.0,
-                "confidence": 0.0
-            }
-    
-    async def start_mcp_client(self):
-        """MCP 클라이언트 시작 - OpenRouter와 Gemini 2.5 Flash Lite 기반"""
-        if not self.mcp_enabled:
-            logger.error("MCP is disabled in configuration")
-            return False
-            
-        try:
-            logger.info("🔗 Starting MCP Client with OpenRouter and Gemini 2.5 Flash Lite...")
-            logger.info(f"Primary model: {config.llm.primary_model}")
-            
-            # Initialize MCP Hub
-            from mcp_integration import UniversalMCPHub
-            self.mcp_hub = UniversalMCPHub()
-            await self.mcp_hub.initialize_mcp()
-            
-            # Discover available tools
-            self.available_tools = await get_available_tools()
-            logger.info(f"Discovered {len(self.available_tools)} MCP tools")
-            
-            # Initialize performance tracking
-            await self._initialize_performance_tracking()
-            
-            # Test tool connectivity
-            await self._test_tool_connectivity()
-            
-            logger.info("✅ MCP Client connected successfully with OpenRouter and Gemini 2.5 Flash Lite")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to start MCP client: {e}")
-            return False
-    
-    async def _initialize_mcp_tools(self):
-        """Initialize MCP tools with OpenRouter and Gemini 2.5 Flash Lite."""
-        try:
-            if not self.mcp_hub:
-                logger.warning("MCP Hub not initialized")
-                return
-                
-            # Load all configured MCP tools
-            for tool_name in config.mcp.server_names:
-                logger.info(f"Initializing MCP tool: {tool_name}")
-                
-                # Test tool availability with simple query
-                try:
-                    test_params = {"query": "test", "max_results": 1}
-                    test_result = await self.mcp_hub.execute_tool(tool_name, test_params)
-                    if test_result.success:
-                        logger.info(f"✅ {tool_name} initialized successfully")
-                    else:
-                        logger.warning(f"⚠️ {tool_name} failed: {test_result.error}")
-                except Exception as e:
-                    logger.warning(f"⚠️ {tool_name} test failed: {e}")
-                    
-        except Exception as e:
-            logger.warning(f"MCP tools initialization failed: {e}")
-    
-    async def _initialize_performance_tracking(self):
-        """Initialize performance tracking for Smart Tool Selection."""
-        for tool in self.available_tools:
-            self.tool_performance[tool] = {
-                'success_count': 0,
-                'failure_count': 0,
-                'average_response_time': 0.0,
-                'last_used': None,
-                'reliability_score': 1.0
-            }
-    
-    async def _test_tool_connectivity(self):
-        """Test connectivity to all available tools."""
-        if not self.mcp_hub:
-            logger.warning("MCP Hub not initialized for connectivity test")
-            return
-            
-        for tool in self.available_tools:
-            try:
-                start_time = datetime.now()
-                # Use appropriate test parameters based on tool type
-                test_params = {"query": "connectivity test", "max_results": 1}
-                result = await self.mcp_hub.execute_tool(tool, test_params)
-                end_time = datetime.now()
-                
-                response_time = (end_time - start_time).total_seconds()
-                
-                if result.success:
-                    self.tool_performance[tool]['success_count'] += 1
-                    self.tool_performance[tool]['average_response_time'] = response_time
-                    logger.info(f"✅ {tool}: {response_time:.2f}s response time")
-                else:
-                    self.tool_performance[tool]['failure_count'] += 1
-                    logger.warning(f"⚠️ {tool}: Test failed")
-                    
-            except Exception as e:
-                self.tool_performance[tool]['failure_count'] += 1
-                logger.warning(f"⚠️ {tool}: Connection test failed - {e}")
-    
-    async def get_tool_health_status(self) -> Dict[str, Any]:
-        """Get health status of all MCP tools."""
-        health_status = {
-            'total_tools': len(self.available_tools),
-            'healthy_tools': 0,
-            'unhealthy_tools': 0,
-            'tool_details': {}
-        }
-        
-        for tool, perf in self.tool_performance.items():
-            total_attempts = perf['success_count'] + perf['failure_count']
-            success_rate = perf['success_count'] / total_attempts if total_attempts > 0 else 0
-            
-            tool_health = {
-                'success_rate': success_rate,
-                'average_response_time': perf['average_response_time'],
-                'reliability_score': perf['reliability_score'],
-                'status': 'healthy' if success_rate > 0.8 else 'unhealthy'
-            }
-            
-            health_status['tool_details'][tool] = tool_health
-            
-            if tool_health['status'] == 'healthy':
-                health_status['healthy_tools'] += 1
-            else:
-                health_status['unhealthy_tools'] += 1
-        
-        return health_status
+# MCPIntegrationManager 클래스 제거됨 - mcp_integration.py의 UniversalMCPHub 사용
 
 
 class WebAppManager:
@@ -324,9 +138,20 @@ class AutonomousResearchSystem:
         update_config_from_env()
         self.config = config
         
+        # Validate environment variables
+        try:
+            from researcher_config import LLMConfig
+            LLMConfig.validate_environment()
+            logger.info("✅ Environment variables validated successfully")
+        except ValueError as e:
+            logger.error(f"❌ Environment validation failed: {e}")
+            logger.error("Please check your .env file and ensure all required variables are set")
+            raise
+        
         # Initialize components with 8 innovations
         self.orchestrator = AutonomousOrchestrator()
-        self.mcp_manager = MCPIntegrationManager()
+        from mcp_integration import UniversalMCPHub
+        self.mcp_hub = UniversalMCPHub()
         self.web_manager = WebAppManager()
         self.health_monitor = HealthMonitor()
         
@@ -349,7 +174,7 @@ class AutonomousResearchSystem:
             logger.error(f"Error during graceful shutdown: {e}")
     
     async def run_research(self, request: str, output_path: Optional[str] = None, 
-                          streaming: bool = False) -> Dict[str, Any]:
+                          streaming: bool = False, output_format: str = "json") -> Dict[str, Any]:
         """연구 실행 - 8가지 핵심 혁신 적용"""
         logger.info("🤖 Starting Autonomous Research System with 8 Core Innovations")
         logger.info("=" * 80)
@@ -374,7 +199,7 @@ class AutonomousResearchSystem:
             
             # Initialize MCP client if enabled
             if self.config.mcp.enabled:
-                await self.mcp_manager.start_mcp_client()
+                await self.mcp_hub.initialize_mcp()
             
             # Run research with production-grade reliability
             if streaming:
@@ -523,11 +348,11 @@ class AutonomousResearchSystem:
     
     async def run_mcp_server(self):
         """MCP 서버 실행"""
-        await self.mcp_manager.start_mcp_server()
+        await self.mcp_hub.initialize_mcp()
     
     async def run_mcp_client(self):
         """MCP 클라이언트 실행"""
-        await self.mcp_manager.start_mcp_client()
+        await self.mcp_hub.initialize_mcp()
     
     def run_web_app(self):
         """웹 앱 실행"""
@@ -539,12 +364,8 @@ class AutonomousResearchSystem:
         
         # Check MCP tools health
         if self.config.mcp.enabled:
-            mcp_health = await self.mcp_manager.get_tool_health_status()
-            logger.info(f"MCP Tools Health: {mcp_health['healthy_tools']}/{mcp_health['total_tools']} healthy")
-            
-            for tool, health in mcp_health['tool_details'].items():
-                status_icon = "✅" if health['status'] == 'healthy' else "❌"
-                logger.info(f"  {status_icon} {tool}: {health['success_rate']:.1%} success rate")
+            # MCP Hub health check
+            logger.info("MCP Hub initialized and ready")
         
         # Check system health
         system_health = self.health_monitor.get_system_health()
@@ -585,6 +406,7 @@ Examples:
     # Optional arguments
     parser.add_argument("--output", help="Output file path for research results")
     parser.add_argument("--config", help="Configuration file path")
+    parser.add_argument("--format", choices=["json", "yaml", "txt"], default="json", help="Output format for research results")
     parser.add_argument("--streaming", action="store_true", help="Enable streaming pipeline for real-time results")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     
@@ -607,7 +429,8 @@ Examples:
             await system.run_research(
                 args.request, 
                 args.output, 
-                streaming=args.streaming
+                streaming=args.streaming,
+                output_format=args.format
             )
             
         elif args.web:

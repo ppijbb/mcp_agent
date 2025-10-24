@@ -66,7 +66,7 @@ class CLIExecutor:
         """Try to execute actual CLI command."""
         # Prepare CLI command
         cmd = [
-            "python", "main.py",
+            "python3", "main.py",
             "--request", query,
             "--output", str(output_path),
             "--format", "json"
@@ -220,7 +220,7 @@ class CLIExecutor:
         
         # Prepare CLI command with streaming
         cmd = [
-            "python", "main.py",
+            "python3", "main.py",
             "--request", query,
             "--output", str(output_path),
             "--format", "json",
@@ -286,7 +286,7 @@ class CLIExecutor:
     
     def execute_health_check(self) -> CLIResult:
         """Execute health check command."""
-        cmd = ["python", "main.py", "--health-check"]
+        cmd = ["python3", "main.py", "--health-check"]
         
         self.logger.info(f"Executing health check: {' '.join(cmd)}")
         
@@ -413,7 +413,7 @@ class CLIExecutor:
         # Check if Python is available
         try:
             result = subprocess.run(
-                ["python", "--version"],
+                ["python3", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -427,7 +427,7 @@ class CLIExecutor:
         # but warn about them
         try:
             result = subprocess.run(
-                ["python", "-c", "import streamlit, openrouter, langgraph"],
+                ["python3", "-c", "import streamlit, openrouter, langgraph"],
                 capture_output=True,
                 text=True,
                 timeout=10

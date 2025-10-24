@@ -485,44 +485,97 @@ class AutonomousOrchestrator:
         
         # 각 작업을 병렬로 실행
         for task in tasks:
+            task_success = False
+            tool_attempts = []
+            
             try:
-                # MCP 도구 선택
+                # MCP 도구 선택 및 실행 (대체 도구 로직 포함)
                 tool_category = self._get_tool_category_for_task(task)
-                best_tool = self._get_best_tool_for_category(tool_category)
+                available_tools = self._get_available_tools_for_category(tool_category)
                 
-                if best_tool:
-                    # MCP 도구 실행
-                    logger.info(f"🔧 Executing MCP tool: {best_tool}")
-                    tool_result = await execute_tool(
-                        best_tool,
-                        task.get("parameters", {})
-                    )
-                    logger.info(f"✅ Tool '{best_tool}' executed successfully")
-                    
-                    if tool_result.get("success", False):
-                        execution_results.append({
-                            "task_id": task.get("id"),
-                            "task_name": task.get("name"),
-                            "tool_used": best_tool,
-                            "result": tool_result.get("data"),
-                            "execution_time": tool_result.get("execution_time", 0.0),
-                            "confidence": tool_result.get("confidence", 0.0)
+                # 도구 우선순위별로 시도
+                for tool_name in available_tools:
+                    try:
+                        logger.info(f"🔧 Attempting tool: {tool_name}")
+                        tool_result = await execute_tool(
+                            tool_name,
+                            task.get("parameters", {})
+                        )
+                        
+                        tool_attempts.append({
+                            "tool": tool_name,
+                            "success": tool_result.get("success", False),
+                            "error": tool_result.get("error", ""),
+                            "execution_time": tool_result.get("execution_time", 0.0)
                         })
+                        
+                        if tool_result.get("success", False):
+                            # 실제 데이터 검증
+                            if self._validate_tool_result(tool_result, task):
+                                execution_results.append({
+                                    "task_id": task.get("id"),
+                                    "task_name": task.get("name"),
+                                    "tool_used": tool_name,
+                                    "result": tool_result.get("data"),
+                                    "execution_time": tool_result.get("execution_time", 0.0),
+                                    "confidence": tool_result.get("confidence", 0.0),
+                                    "attempts": len(tool_attempts)
+                                })
 
-                        # 스트리밍 데이터 추가
-                        streaming_data.append({
-                            "timestamp": datetime.now().isoformat(),
-                            "task_id": task.get("id"),
-                            "status": "completed",
-                            "data": tool_result.get("data")
+                                # 스트리밍 데이터 추가
+                                streaming_data.append({
+                                    "timestamp": datetime.now().isoformat(),
+                                    "task_id": task.get("id"),
+                                    "status": "completed",
+                                    "data": tool_result.get("data"),
+                                    "tool_used": tool_name
+                                })
+                                
+                                logger.info(f"✅ Tool '{tool_name}' executed successfully with valid data")
+                                task_success = True
+                                break
+                            else:
+                                logger.warning(f"⚠️ Tool '{tool_name}' returned invalid data, trying next tool...")
+                        else:
+                            logger.warning(f"❌ Tool '{tool_name}' failed: {tool_result.get('error', 'Unknown error')}")
+                            
+                    except Exception as tool_error:
+                        logger.warning(f"❌ Tool '{tool_name}' execution error: {tool_error}")
+                        tool_attempts.append({
+                            "tool": tool_name,
+                            "success": False,
+                            "error": str(tool_error),
+                            "execution_time": 0.0
                         })
-                    else:
-                        logger.warning(f"Task {task.get('id')} failed: {tool_result.get('error', 'Unknown error')}")
-                else:
-                    logger.warning(f"No suitable tool found for task {task.get('id')}")
+                        continue
+                
+                if not task_success:
+                    logger.error(f"❌ All tools failed for task {task.get('id')}. Attempts: {tool_attempts}")
+                    # 실패한 작업도 기록
+                    execution_results.append({
+                        "task_id": task.get("id"),
+                        "task_name": task.get("name"),
+                        "tool_used": "none",
+                        "result": None,
+                        "execution_time": 0.0,
+                        "confidence": 0.0,
+                        "attempts": len(tool_attempts),
+                        "error": "All tools failed",
+                        "tool_attempts": tool_attempts
+                    })
                     
             except Exception as e:
-                logger.error(f"Error executing task {task.get('id')}: {e}")
+                logger.error(f"❌ Critical error executing task {task.get('id')}: {e}")
+                execution_results.append({
+                    "task_id": task.get("id"),
+                    "task_name": task.get("name"),
+                    "tool_used": "none",
+                    "result": None,
+                    "execution_time": 0.0,
+                    "confidence": 0.0,
+                    "attempts": 0,
+                    "error": str(e)
+                })
         
         state.update({
             "execution_results": execution_results,
@@ -1179,60 +1232,192 @@ class AutonomousOrchestrator:
     # ==================== Helper Methods ====================
     
     def _parse_analysis_result(self, content: str) -> Dict[str, Any]:
-        """분석 결과 파싱."""
-        try:
-            import json
-            # JSON 파싱 시도
-            if content.strip().startswith('{'):
-                return json.loads(content)
-            else:
-                # JSON이 아닌 경우 에러 발생
-                raise ValueError("Invalid JSON format in analysis result")
-        except Exception as e:
-            logger.error(f"❌ Failed to parse analysis result: {e}")
-            raise ValueError(f"Analysis parsing failed: {e}")
+        """분석 결과 파싱 - 재시도 로직 포함."""
+        import json
+        import re
+        
+        # 최대 3회 재시도
+        for attempt in range(3):
+            try:
+                # Markdown 코드 블록 제거
+                cleaned_content = content.strip()
+                if '```json' in cleaned_content:
+                    # ```json ... ``` 패턴 추출
+                    match = re.search(r'```json\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                elif '```' in cleaned_content:
+                    # ``` ... ``` 패턴 추출
+                    match = re.search(r'```\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                
+                # JSON 파싱 시도
+                if cleaned_content.startswith('{'):
+                    return json.loads(cleaned_content)
+                else:
+                    # JSON이 아닌 경우 부분 파싱 시도
+                    if attempt < 2:  # 마지막 시도가 아니면
+                        logger.warning(f"⚠️ Attempt {attempt + 1}: Invalid JSON format, retrying...")
+                        continue
+                    else:
+                        raise ValueError("Invalid JSON format in analysis result")
+                        
+            except json.JSONDecodeError as e:
+                if attempt < 2:  # 마지막 시도가 아니면
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse analysis result after 3 attempts: {e}")
+                    raise ValueError(f"Analysis parsing failed after 3 attempts: {e}")
+            except Exception as e:
+                if attempt < 2:  # 마지막 시도가 아니면
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: Parse error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse analysis result after 3 attempts: {e}")
+                    raise ValueError(f"Analysis parsing failed after 3 attempts: {e}")
+        
+        # 이 지점에 도달하면 안 됨
+        raise ValueError("Unexpected error in analysis parsing")
     
     def _parse_tasks_result(self, content: str) -> List[Dict[str, Any]]:
-        """Task 분해 결과 파싱."""
-        try:
-            import json
-            # JSON 배열로 파싱 시도
-            if content.strip().startswith('['):
-                return json.loads(content)
-            else:
-                # JSON이 아닌 경우 에러 발생
-                raise ValueError("Invalid JSON format in task decomposition result")
-        except Exception as e:
-            logger.error(f"❌ Failed to parse tasks result: {e}")
-            raise ValueError(f"Task parsing failed: {e}")
+        """Task 분해 결과 파싱 - 재시도 로직 포함."""
+        import json
+        import re
+        
+        # 최대 3회 재시도
+        for attempt in range(3):
+            try:
+                # Markdown 코드 블록 제거
+                cleaned_content = content.strip()
+                if '```json' in cleaned_content:
+                    match = re.search(r'```json\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                elif '```' in cleaned_content:
+                    match = re.search(r'```\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                
+                # JSON 배열 파싱 시도
+                if cleaned_content.startswith('['):
+                    return json.loads(cleaned_content)
+                else:
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Attempt {attempt + 1}: Invalid JSON array format, retrying...")
+                        continue
+                    else:
+                        raise ValueError("Invalid JSON array format in task decomposition result")
+                        
+            except json.JSONDecodeError as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse tasks result after 3 attempts: {e}")
+                    raise ValueError(f"Task parsing failed after 3 attempts: {e}")
+            except Exception as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: Parse error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse tasks result after 3 attempts: {e}")
+                    raise ValueError(f"Task parsing failed after 3 attempts: {e}")
+        
+        raise ValueError("Unexpected error in task parsing")
     
     def _parse_verification_result(self, content: str) -> Dict[str, Any]:
-        """Plan 검증 결과 파싱."""
-        try:
-            import json
-            # JSON 파싱 시도
-            if content.strip().startswith('{'):
-                return json.loads(content)
-            else:
-                # JSON이 아닌 경우 에러 발생
-                raise ValueError("Invalid JSON format in verification result")
-        except Exception as e:
-            logger.error(f"❌ Failed to parse verification result: {e}")
-            raise ValueError(f"Verification parsing failed: {e}")
+        """Plan 검증 결과 파싱 - 재시도 로직 포함."""
+        import json
+        import re
+        
+        # 최대 3회 재시도
+        for attempt in range(3):
+            try:
+                # Markdown 코드 블록 제거
+                cleaned_content = content.strip()
+                if '```json' in cleaned_content:
+                    match = re.search(r'```json\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                elif '```' in cleaned_content:
+                    match = re.search(r'```\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                
+                # JSON 파싱 시도
+                if cleaned_content.startswith('{'):
+                    return json.loads(cleaned_content)
+                else:
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Attempt {attempt + 1}: Invalid JSON format, retrying...")
+                        continue
+                    else:
+                        raise ValueError("Invalid JSON format in verification result")
+                        
+            except json.JSONDecodeError as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse verification result after 3 attempts: {e}")
+                    raise ValueError(f"Verification parsing failed after 3 attempts: {e}")
+            except Exception as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: Parse error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse verification result after 3 attempts: {e}")
+                    raise ValueError(f"Verification parsing failed after 3 attempts: {e}")
+        
+        raise ValueError("Unexpected error in verification parsing")
     
     def _parse_evaluation_result(self, content: str) -> Dict[str, Any]:
-        """평가 결과 파싱."""
-        try:
-            import json
-            # JSON 파싱 시도
-            if content.strip().startswith('{'):
-                return json.loads(content)
-            else:
-                # JSON이 아닌 경우 에러 발생
-                raise ValueError("Invalid JSON format in evaluation result")
-        except Exception as e:
-            logger.error(f"❌ Failed to parse evaluation result: {e}")
-            raise ValueError(f"Evaluation parsing failed: {e}")
+        """평가 결과 파싱 - 재시도 로직 포함."""
+        import json
+        import re
+        
+        # 최대 3회 재시도
+        for attempt in range(3):
+            try:
+                # Markdown 코드 블록 제거
+                cleaned_content = content.strip()
+                if '```json' in cleaned_content:
+                    match = re.search(r'```json\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                elif '```' in cleaned_content:
+                    match = re.search(r'```\s*(.*?)\s*```', cleaned_content, re.DOTALL)
+                    if match:
+                        cleaned_content = match.group(1).strip()
+                
+                # JSON 파싱 시도
+                if cleaned_content.startswith('{'):
+                    return json.loads(cleaned_content)
+                else:
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Attempt {attempt + 1}: Invalid JSON format, retrying...")
+                        continue
+                    else:
+                        raise ValueError("Invalid JSON format in evaluation result")
+                        
+            except json.JSONDecodeError as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse evaluation result after 3 attempts: {e}")
+                    raise ValueError(f"Evaluation parsing failed after 3 attempts: {e}")
+            except Exception as e:
+                if attempt < 2:
+                    logger.warning(f"⚠️ Attempt {attempt + 1}: Parse error: {e}, retrying...")
+                    continue
+                else:
+                    logger.error(f"❌ Failed to parse evaluation result after 3 attempts: {e}")
+                    raise ValueError(f"Evaluation parsing failed after 3 attempts: {e}")
+        
+        raise ValueError("Unexpected error in evaluation parsing")
     
     def _create_priority_queue(self, state: ResearchState) -> List[Dict[str, Any]]:
         """우선순위 큐 생성."""
@@ -1275,44 +1460,196 @@ class AutonomousOrchestrator:
         }
         return tool_mapping.get(category, "g-search")  # 기본값으로 g-search 사용
     
-    async def _self_verification(self, result: Dict[str, Any]) -> float:
-        """자체 검증."""
+    def _get_available_tools_for_category(self, category: ToolCategory) -> List[str]:
+        """카테고리별 사용 가능한 도구 목록 (우선순위 순)."""
+        tool_priorities = {
+            ToolCategory.SEARCH: ["g-search", "duckduckgo", "tavily", "exa"],
+            ToolCategory.ACADEMIC: ["arxiv", "scholar", "semantic_scholar"],
+            ToolCategory.DATA: ["fetch", "filesystem", "web_scraper"],
+            ToolCategory.CODE: ["python_coder", "code_interpreter", "jupyter"],
+            ToolCategory.BUSINESS: ["crunchbase", "linkedin", "company_search"]
+        }
+        return tool_priorities.get(category, ["g-search"])
+    
+    def _validate_tool_result(self, tool_result: Dict[str, Any], task: Dict[str, Any]) -> bool:
+        """도구 실행 결과 검증."""
+        if not tool_result.get("success", False):
+            return False
+        
+        data = tool_result.get("data")
+        if not data:
+            return False
+        
+        # 기본 검증: 빈 데이터가 아닌지 확인
+        if isinstance(data, str) and len(data.strip()) == 0:
+            return False
+        
+        if isinstance(data, dict) and len(data) == 0:
+            return False
+        
+        if isinstance(data, list) and len(data) == 0:
+            return False
+        
+        # 검색 결과의 경우 최소한의 내용이 있는지 확인
+        if task.get("type") == "search":
+            if isinstance(data, list) and len(data) > 0:
+                # 검색 결과가 있는지 확인
+                return True
+            elif isinstance(data, dict) and "results" in data:
+                # 구조화된 검색 결과인지 확인
+                return len(data["results"]) > 0
+        
+        # 학술 검색의 경우 논문 정보가 있는지 확인
+        if task.get("type") == "academic":
+            if isinstance(data, list) and len(data) > 0:
+                return True
+            elif isinstance(data, dict) and ("papers" in data or "entries" in data):
+                return True
+        
+        # 기본적으로 데이터가 있으면 유효한 것으로 간주
+        return True
+    
+    def _extract_text_for_similarity(self, data: Dict[str, Any]) -> str:
+        """유사도 계산을 위한 텍스트 추출."""
         try:
-            # 데이터 품질 검증
+            text_parts = []
+            
+            # 주요 텍스트 필드들 추출
+            text_fields = ["title", "content", "summary", "description", "abstract"]
+            for field in text_fields:
+                if field in data and data[field]:
+                    text_parts.append(str(data[field]).strip())
+            
+            # 딕셔너리 값들 중 문자열인 것들 추출
+            for key, value in data.items():
+                if isinstance(value, str) and value.strip() and key not in text_fields:
+                    text_parts.append(value.strip())
+            
+            return " ".join(text_parts)
+        except Exception as e:
+            logger.warning(f"Text extraction failed: {e}")
+            return ""
+    
+    def _calculate_semantic_similarity(self, text1: str, text2: str) -> float:
+        """Semantic similarity 계산 (간단한 버전)."""
+        try:
+            if not text1 or not text2:
+                return 0.0
+            
+            # 단어 단위로 분할
+            words1 = set(text1.lower().split())
+            words2 = set(text2.lower().split())
+            
+            if not words1 or not words2:
+                return 0.0
+            
+            # Jaccard similarity 계산
+            intersection = len(words1.intersection(words2))
+            union = len(words1.union(words2))
+            
+            jaccard_similarity = intersection / union if union > 0 else 0.0
+            
+            # 공통 단어 비율도 고려
+            common_ratio = intersection / min(len(words1), len(words2))
+            
+            # 두 지표의 가중 평균
+            similarity = (jaccard_similarity * 0.6 + common_ratio * 0.4)
+            
+            return min(similarity, 1.0)
+            
+        except Exception as e:
+            logger.warning(f"Similarity calculation failed: {e}")
+            return 0.0
+    
+    async def _self_verification(self, result: Dict[str, Any]) -> float:
+        """자체 검증 - 실제 데이터 품질 평가."""
+        try:
             data = result.get("compressed_data", {})
             if not data:
                 return 0.0
             
-            # 기본적인 데이터 검증
-            score = 0.5
+            quality_score = 0.0
             
-            # 데이터 완성도 검증
-            if isinstance(data, dict) and len(data) > 0:
-                score += 0.2
+            # 1. 데이터 완성도 검증
+            if isinstance(data, dict):
+                non_empty_fields = len([v for v in data.values() if v and str(v).strip()])
+                total_fields = len(data)
+                completeness = non_empty_fields / max(total_fields, 1)
+                quality_score += completeness * 0.25
+                
+                # 필수 필드 존재 여부
+                essential_fields = ["title", "content", "summary"]
+                essential_present = sum(1 for field in essential_fields if field in data and data[field])
+                essential_score = essential_present / len(essential_fields)
+                quality_score += essential_score * 0.25
             
-            # 중요 정보 보존 검증
-            important_info = result.get("important_info_preserved", [])
-            if important_info and len(important_info) > 0:
-                score += 0.3
+            # 2. 데이터 일관성 검증
+            if isinstance(data, dict):
+                consistency_score = 0.0
+                
+                # 제목과 내용의 일관성
+                if "title" in data and "content" in data:
+                    title = str(data["title"]).lower()
+                    content = str(data["content"]).lower()
+                    if title and content:
+                        # 제목의 키워드가 내용에 포함되는지 확인
+                        title_words = set(title.split())
+                        content_words = set(content.split())
+                        if len(title_words) > 0:
+                            overlap = len(title_words.intersection(content_words)) / len(title_words)
+                            consistency_score += overlap * 0.5
+                
+                # 요약과 내용의 일관성
+                if "summary" in data and "content" in data:
+                    summary = str(data["summary"]).lower()
+                    content = str(data["content"]).lower()
+                    if summary and content:
+                        summary_words = set(summary.split())
+                        content_words = set(content.split())
+                        if len(summary_words) > 0:
+                            overlap = len(summary_words.intersection(content_words)) / len(summary_words)
+                            consistency_score += overlap * 0.5
+                
+                quality_score += consistency_score * 0.25
             
-            return min(score, 1.0)
+            # 3. 압축 품질 검증
+            compression_ratio = result.get("compression_ratio", 1.0)
+            original_size = result.get("original_size", 0)
+            compressed_size = result.get("compressed_size", 0)
+            
+            if original_size > 0 and compressed_size > 0:
+                actual_ratio = compressed_size / original_size
+                # 적절한 압축률 (0.1 ~ 0.8)일 때 높은 점수
+                if 0.1 <= actual_ratio <= 0.8:
+                    compression_score = 1.0
+                elif actual_ratio < 0.1:
+                    compression_score = 0.7  # 과도한 압축
+                else:
+                    compression_score = 0.5  # 압축 부족
+                
+                quality_score += compression_score * 0.25
+            
+            return min(quality_score, 1.0)
         except Exception as e:
             logger.error(f"❌ Self verification failed: {e}")
             return 0.0
     
     async def _cross_verification(self, result: Dict[str, Any], all_results: List[Dict[str, Any]]) -> float:
-        """교차 검증."""
+        """교차 검증 - Semantic Similarity 기반."""
         try:
             if not all_results or len(all_results) < 2:
                 return 0.5
             
-            # 다른 결과와의 일치도 검사
             current_data = result.get("compressed_data", {})
             if not current_data:
                 return 0.0
             
-            consistency_score = 0.0
-            comparison_count = 0
+            # 현재 결과의 텍스트 추출
+            current_text = self._extract_text_for_similarity(current_data)
+            if not current_text:
+                return 0.5
+            
+            similarity_scores = []
             
             for other_result in all_results:
                 if other_result.get("task_id") == result.get("task_id"):
@@ -1322,21 +1659,30 @@ class AutonomousOrchestrator:
                 if not other_data:
                     continue
                 
-                # 간단한 일치도 검사 (실제로는 더 정교한 로직 필요)
-                if isinstance(current_data, dict) and isinstance(other_data, dict):
-                    common_keys = set(current_data.keys()) & set(other_data.keys())
-                    if common_keys:
-                        consistency_score += len(common_keys) / max(len(current_data.keys()), len(other_data.keys()))
-                        comparison_count += 1
+                other_text = self._extract_text_for_similarity(other_data)
+                if not other_text:
+                    continue
+                
+                # Semantic similarity 계산
+                similarity = self._calculate_semantic_similarity(current_text, other_text)
+                similarity_scores.append(similarity)
             
-            if comparison_count > 0:
-                return consistency_score / comparison_count
+            if similarity_scores:
+                # 평균 유사도 반환 (0.3-0.7 범위가 적절)
+                avg_similarity = sum(similarity_scores) / len(similarity_scores)
+                # 너무 높거나 낮은 유사도는 조정
+                if avg_similarity > 0.9:
+                    return 0.8  # 너무 유사하면 의심스러움
+                elif avg_similarity < 0.1:
+                    return 0.3  # 너무 다르면 일관성 부족
+                else:
+                    return avg_similarity
             else:
                 return 0.5
                 
         except Exception as e:
             logger.error(f"❌ Cross verification failed: {e}")
-            return 0.0
+            return 0.3
     
     async def _external_verification(self, result: Dict[str, Any]) -> float:
         """외부 검증."""
