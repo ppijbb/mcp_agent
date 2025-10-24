@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
-    page_title="Local Researcher - 8 Core Innovations",
-    page_icon="🔍",
+    page_title="SparkleForge - Where Ideas Sparkle and Get Forged",
+    page_icon="⚒️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -54,16 +54,16 @@ if 'innovation_stats' not in st.session_state:
 
 
 def initialize_orchestrator():
-    """Initialize the Autonomous Orchestrator with 8 innovations."""
+    """Initialize the SparkleForge with 8 innovations."""
     try:
         if st.session_state.orchestrator is None:
-            # Initialize orchestrator with 8 innovations
+            # Initialize forge with 8 innovations
             st.session_state.orchestrator = AutonomousOrchestrator()
             
             # Initialize health monitor
             st.session_state.health_monitor = HealthMonitor()
             
-            logger.info("Autonomous Orchestrator initialized with 8 innovations")
+            logger.info("SparkleForge initialized with 8 innovations")
             
     except Exception as e:
         st.error(f"Failed to initialize orchestrator: {e}")
@@ -72,8 +72,36 @@ def initialize_orchestrator():
 
 def main():
     """Main Streamlit application with 8 core innovations."""
-    st.title("🔍 Local Researcher - 8 Core Innovations")
-    st.markdown("**Revolutionary AI-Powered Research Platform with Production-Grade Reliability**")
+    # Add custom CSS for forge theme
+    st.markdown("""
+    <style>
+    .forge-header {
+        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .forge-metric {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 8px;
+        color: white;
+        text-align: center;
+        margin: 0.5rem 0;
+    }
+    .sparkle {
+        animation: sparkle 2s infinite;
+    }
+    @keyframes sparkle {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.title("⚒️ SparkleForge - Where Ideas Sparkle and Get Forged")
+    st.markdown("**Revolutionary Multi-Agent Forge System with Real-Time Collaboration and Creative AI**")
     st.markdown("---")
     
     # Initialize orchestrator
@@ -81,32 +109,32 @@ def main():
     
     # Sidebar navigation
     with st.sidebar:
-        st.header("🚀 8 Core Innovations")
+        st.header("⚒️ The Forge Process")
         st.markdown("""
-        - **Adaptive Supervisor** - Dynamic researcher allocation
-        - **Hierarchical Compression** - Multi-stage data compression
-        - **Multi-Model Orchestration** - Role-based LLM selection
-        - **Continuous Verification** - 3-stage verification system
-        - **Streaming Pipeline** - Real-time result delivery
-        - **Universal MCP Hub** - 100+ MCP tools
-        - **Adaptive Context Window** - Dynamic context management
-        - **Production Reliability** - Enterprise-grade stability
+        - **Adaptive Forge Master** - Dynamic craftsman allocation
+        - **Hierarchical Refinement** - Multi-stage material processing
+        - **Multi-Model Forge** - Role-based model selection
+        - **Continuous Quality Control** - 3-stage verification system
+        - **Streaming Forge** - Real-time progress delivery
+        - **Universal Tool Forge** - 100+ MCP tools
+        - **Adaptive Workspace** - Dynamic context management
+        - **Production-Grade Forge** - Enterprise-grade stability
         """)
         
         st.header("Navigation")
         page = st.selectbox(
             "Choose a page",
-            ["Research Dashboard", "Live Research Dashboard", "8 Innovations Monitor", "Creative Insights", "Data Visualization", "Report Generator", "System Health", "Settings"]
+            ["Forge Dashboard", "Live Forge", "Forge Monitor", "Creative Forge", "Data Visualization", "Report Generator", "System Health", "Settings"]
         )
     
     # Route to appropriate page
-    if page == "Research Dashboard":
+    if page == "Forge Dashboard":
         research_dashboard()
-    elif page == "Live Research Dashboard":
+    elif page == "Live Forge":
         live_research_dashboard()
-    elif page == "8 Innovations Monitor":
+    elif page == "Forge Monitor":
         innovations_monitor()
-    elif page == "Creative Insights":
+    elif page == "Creative Forge":
         creative_insights_page()
     elif page == "Data Visualization":
         data_visualization()
@@ -119,36 +147,36 @@ def main():
 
 
 def research_dashboard():
-    """Main research dashboard with 8 innovations."""
-    st.header("🚀 Research Dashboard - 8 Core Innovations")
+    """Main forge dashboard with 8 innovations."""
+    st.header("⚒️ Forge Dashboard - 8 Core Innovations")
     
     # Innovation status overview
-    st.subheader("Innovation Status")
+    st.subheader("Forge Status")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Adaptive Supervisor", "✅ Active", "Dynamic allocation")
+        st.metric("Adaptive Forge Master", "✅ Active", "Dynamic allocation")
     with col2:
-        st.metric("Hierarchical Compression", "✅ Active", "3-stage compression")
+        st.metric("Hierarchical Refinement", "✅ Active", "3-stage processing")
     with col3:
-        st.metric("Multi-Model Orchestration", "✅ Active", "Role-based selection")
+        st.metric("Multi-Model Forge", "✅ Active", "Role-based selection")
     with col4:
-        st.metric("Continuous Verification", "✅ Active", "3-stage verification")
+        st.metric("Continuous Quality Control", "✅ Active", "3-stage verification")
     
     col5, col6, col7, col8 = st.columns(4)
     
     with col5:
-        st.metric("Streaming Pipeline", "✅ Active", "Real-time delivery")
+        st.metric("Streaming Forge", "✅ Active", "Real-time delivery")
     with col6:
-        st.metric("Universal MCP Hub", "✅ Active", f"{len(config.mcp.server_names)} tools")
+        st.metric("Universal Tool Forge", "✅ Active", f"{len(config.mcp.server_names)} tools")
     with col7:
-        st.metric("Adaptive Context Window", "✅ Active", "2K-1M tokens")
+        st.metric("Adaptive Workspace", "✅ Active", "2K-1M tokens")
     with col8:
-        st.metric("Production Reliability", "✅ Active", "99.9% uptime")
+        st.metric("Production-Grade Forge", "✅ Active", "99.9% uptime")
     
-    # Research input section
+    # Forge input section
     with st.container():
-        st.subheader("Start New Research with 8 Innovations")
+        st.subheader("Start New Forge with 8 Innovations")
         
         col1, col2 = st.columns([3, 1])
         
@@ -736,9 +764,9 @@ def live_research_dashboard():
 
 
 def creative_insights_page():
-    """Creative Insights page for displaying generated creative insights."""
-    st.header("💡 Creative Insights - AI-Powered Innovation")
-    st.markdown("**Discover novel solutions through AI-generated creative insights**")
+    """Creative Forge page for displaying generated creative insights."""
+    st.header("✨ Creative Forge - Where Ideas Sparkle and Get Forged")
+    st.markdown("**Discover novel solutions through AI-powered creative synthesis**")
     st.markdown("---")
     
     # Check if there are any research results with creative insights
@@ -750,28 +778,28 @@ def creative_insights_page():
             insights = latest_research['creative_insights']
             
             # Display insights overview
-            st.subheader("🎯 Creative Insights Overview")
+            st.subheader("✨ Forged Insights Overview")
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric("Total Insights", len(insights))
+                st.metric("Total Forged Ideas", len(insights))
             with col2:
                 avg_confidence = sum(insight['confidence'] for insight in insights) / len(insights)
-                st.metric("Avg Confidence", f"{avg_confidence:.2f}")
+                st.metric("Avg Quality", f"{avg_confidence:.2f}")
             with col3:
                 avg_novelty = sum(insight['novelty_score'] for insight in insights) / len(insights)
-                st.metric("Avg Novelty", f"{avg_novelty:.2f}")
+                st.metric("Avg Sparkle", f"{avg_novelty:.2f}")
             
             # Display each insight
-            st.subheader("🔍 Detailed Insights")
+            st.subheader("⚒️ Forged Ideas")
             
             for i, insight in enumerate(insights):
-                with st.expander(f"💡 {insight['title']} ({insight['type'].replace('_', ' ').title()})"):
+                with st.expander(f"✨ {insight['title']} ({insight['type'].replace('_', ' ').title()})"):
                     col1, col2 = st.columns([2, 1])
                     
                     with col1:
                         st.markdown(f"**Description:** {insight['description']}")
-                        st.markdown(f"**Reasoning:** {insight['reasoning']}")
+                        st.markdown(f"**Forging Process:** {insight['reasoning']}")
                         
                         if insight['examples']:
                             st.markdown("**Examples:**")
@@ -779,25 +807,25 @@ def creative_insights_page():
                                 st.markdown(f"- {example}")
                     
                     with col2:
-                        # Confidence and novelty scores
-                        st.markdown("**Scores:**")
+                        # Quality and sparkle scores
+                        st.markdown("**Forge Quality:**")
                         st.progress(insight['confidence'])
-                        st.caption(f"Confidence: {insight['confidence']:.2f}")
+                        st.caption(f"Quality: {insight['confidence']:.2f}")
                         
                         st.progress(insight['novelty_score'])
-                        st.caption(f"Novelty: {insight['novelty_score']:.2f}")
+                        st.caption(f"Sparkle: {insight['novelty_score']:.2f}")
                         
                         st.progress(insight['applicability_score'])
-                        st.caption(f"Applicability: {insight['applicability_score']:.2f}")
+                        st.caption(f"Usability: {insight['applicability_score']:.2f}")
                         
                         # Related concepts
                         if insight['related_concepts']:
-                            st.markdown("**Related Concepts:**")
+                            st.markdown("**Related Materials:**")
                             for concept in insight['related_concepts']:
                                 st.markdown(f"- {concept}")
             
-            # Insight type distribution
-            st.subheader("📊 Insight Type Distribution")
+            # Forge type distribution
+            st.subheader("📊 Forge Type Distribution")
             insight_types = [insight['type'] for insight in insights]
             type_counts = {}
             for insight_type in insight_types:
@@ -807,12 +835,12 @@ def creative_insights_page():
                 fig = px.pie(
                     values=list(type_counts.values()),
                     names=list(type_counts.keys()),
-                    title="Distribution of Creative Insight Types"
+                    title="Distribution of Forge Types"
                 )
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Novelty vs Applicability scatter plot
-            st.subheader("🎯 Novelty vs Applicability Analysis")
+            # Sparkle vs Usability scatter plot
+            st.subheader("✨ Sparkle vs Usability Analysis")
             df = pd.DataFrame(insights)
             fig = px.scatter(
                 df,
@@ -821,15 +849,15 @@ def creative_insights_page():
                 color='type',
                 size='confidence',
                 hover_data=['title'],
-                title="Insight Quality Analysis"
+                title="Forge Quality Analysis"
             )
             st.plotly_chart(fig, use_container_width=True)
             
         else:
-            st.info("No creative insights available. Complete a research task to generate creative insights.")
+            st.info("No forged ideas available. Complete a forge task to generate creative insights.")
             
             # Demo creative insights
-            if st.button("🎨 Generate Demo Creative Insights", key="demo_creative"):
+            if st.button("⚒️ Generate Demo Forged Ideas", key="demo_creative"):
                 demo_insights = [
                     {
                         'insight_id': 'demo_1',
@@ -860,16 +888,16 @@ def creative_insights_page():
                 ]
                 
                 st.session_state.demo_creative_insights = demo_insights
-                st.success("Demo creative insights generated!")
+                st.success("Demo forged ideas generated!")
                 st.rerun()
     
     else:
-        st.info("No research history available. Start a research task to generate creative insights.")
+        st.info("No forge history available. Start a forge task to generate creative insights.")
         
-        # Show creativity agent capabilities
-        st.subheader("🎨 Creativity Agent Capabilities")
+        # Show creativity forge capabilities
+        st.subheader("✨ Creative Forge Capabilities")
         st.markdown("""
-        The Creativity Agent can generate insights using:
+        The Creative Forge can forge insights using:
         
         - **Analogical Reasoning**: Drawing parallels from different domains
         - **Cross-Domain Synthesis**: Combining principles from different fields
@@ -878,9 +906,9 @@ def creative_insights_page():
         - **Divergent Thinking**: Exploring all possible variations
         """)
         
-        # Show creativity patterns
-        st.subheader("🔍 Creativity Patterns")
-        creativity_patterns = {
+        # Show forge patterns
+        st.subheader("⚒️ Forge Patterns")
+        forge_patterns = {
             'Analogical': [
                 "How does this work in nature?",
                 "What if we applied this to a completely different field?",
@@ -898,8 +926,8 @@ def creative_insights_page():
             ]
         }
         
-        for pattern_type, patterns in creativity_patterns.items():
-            with st.expander(f"**{pattern_type} Thinking**"):
+        for pattern_type, patterns in forge_patterns.items():
+            with st.expander(f"**{pattern_type} Forging**"):
                 for pattern in patterns:
                     st.markdown(f"- {pattern}")
 
