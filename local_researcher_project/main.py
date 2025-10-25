@@ -30,7 +30,7 @@ import os
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import config, update_config_from_env
+from researcher_config import load_config_from_env
 from src.agents.autonomous_researcher import AutonomousResearcherAgent
 from src.core.autonomous_orchestrator import AutonomousOrchestrator
 from src.core.reliability import execute_with_reliability
@@ -134,17 +134,12 @@ class AutonomousResearchSystem:
     """자율 리서처 시스템 - 8가지 핵심 혁신 통합 메인 클래스"""
     
     def __init__(self):
-        # Load configurations
-        update_config_from_env()
-        self.config = config
-        
-        # Validate environment variables
+        # Load configurations from environment - ALL REQUIRED, NO DEFAULTS
         try:
-            from researcher_config import LLMConfig
-            LLMConfig.validate_environment()
-            logger.info("✅ Environment variables validated successfully")
+            self.config = load_config_from_env()
+            logger.info("✅ Configuration loaded successfully from environment variables")
         except ValueError as e:
-            logger.error(f"❌ Environment validation failed: {e}")
+            logger.error(f"❌ Configuration loading failed: {e}")
             logger.error("Please check your .env file and ensure all required variables are set")
             raise
         
@@ -213,7 +208,7 @@ class AutonomousResearchSystem:
             
             # Save results with incremental save
             if output_path:
-                await self._save_results_incrementally(result, output_path)
+                await self._save_results_incrementally(result, output_path, output_format)
             else:
                 self._display_results(result)
             
@@ -270,21 +265,44 @@ class AutonomousResearchSystem:
         logger.info("✅ Hierarchical compression applied")
         return result
     
-    async def _save_results_incrementally(self, result: Dict[str, Any], output_path: str):
+    async def _save_results_incrementally(self, result: Dict[str, Any], output_path: str, output_format: str = "json"):
         """Save results with incremental save (Innovation 5)."""
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Save incrementally
+        # Save incrementally based on format
         temp_file = output_file.with_suffix('.tmp')
         
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
+        if output_format.lower() == "json":
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+        elif output_format.lower() == "yaml":
+            import yaml
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                yaml.dump(result, f, default_flow_style=False, allow_unicode=True)
+        elif output_format.lower() == "txt":
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(f"Research Results\n")
+                f.write(f"===============\n\n")
+                f.write(f"Query: {result.get('query', 'N/A')}\n")
+                f.write(f"Timestamp: {result.get('timestamp', 'N/A')}\n\n")
+                if 'content' in result:
+                    f.write(f"Content:\n{result['content']}\n\n")
+                elif 'synthesis_results' in result:
+                    synthesis = result['synthesis_results']
+                    if isinstance(synthesis, dict) and 'content' in synthesis:
+                        f.write(f"Content:\n{synthesis['content']}\n\n")
+                if 'sources' in result:
+                    f.write(f"Sources:\n")
+                    for i, source in enumerate(result['sources'], 1):
+                        f.write(f"{i}. {source.get('title', 'N/A')} - {source.get('url', 'N/A')}\n")
+        else:
+            raise ValueError(f"Unsupported output format: {output_format}")
         
         # Atomic move
         temp_file.replace(output_file)
         
-        logger.info(f"✅ Results saved incrementally to: {output_file}")
+        logger.info(f"✅ Results saved incrementally to: {output_file} (format: {output_format})")
     
     def _display_results(self, result: Dict[str, Any]):
         """Display results with enhanced formatting."""

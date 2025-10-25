@@ -421,46 +421,128 @@ def data_visualization():
     """Data visualization page."""
     st.header("Data Visualization")
     
-    # Sample data for demonstration
-    if st.button("Generate Sample Data"):
-        generate_sample_visualizations()
+    # Load actual data from logs/results
+    try:
+        load_actual_visualization_data()
+    except Exception as e:
+        st.error(f"Failed to load visualization data: {e}")
+        st.info("No data available for visualization. Run some research tasks first.")
 
 
-def generate_sample_visualizations():
-    """Generate sample visualizations."""
-    # Research performance over time
-    dates = pd.date_range(start='2024-01-01', end='2024-01-31', freq='D')
-    performance_data = pd.DataFrame({
-        'Date': dates,
-        'Research_Count': [2, 3, 1, 4, 2, 3, 5, 2, 1, 3, 4, 2, 3, 1, 2, 4, 3, 2, 1, 3, 2, 4, 1, 2, 3, 4, 2, 1, 3, 2, 4],
-        'Quality_Score': [0.8, 0.85, 0.75, 0.9, 0.82, 0.88, 0.92, 0.78, 0.85, 0.89, 0.91, 0.83, 0.87, 0.79, 0.86, 0.93, 0.88, 0.84, 0.81, 0.89, 0.85, 0.91, 0.77, 0.86, 0.88, 0.92, 0.84, 0.82, 0.89, 0.87, 0.94]
-    })
+def load_actual_visualization_data():
+    """Load actual visualization data from logs and results."""
+    import json
+    from pathlib import Path
+    from datetime import datetime, timedelta
     
-    # Performance trend chart
-    fig1 = px.line(performance_data, x='Date', y='Research_Count', 
-                   title='Research Activity Over Time')
+    # Load research results from output directory
+    output_dir = Path("output")
+    if not output_dir.exists():
+        st.warning("No output directory found. Run some research tasks first.")
+        return
+    
+    # Find recent research results
+    result_files = list(output_dir.glob("*.json"))
+    if not result_files:
+        st.warning("No research results found. Run some research tasks first.")
+        return
+    
+    # Load and process recent results
+    research_data = []
+    agent_stats = {}
+    
+    for file_path in sorted(result_files, key=lambda x: x.stat().st_mtime, reverse=True)[:30]:  # Last 30 results
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Extract research metadata
+            if 'metadata' in data:
+                metadata = data['metadata']
+                research_data.append({
+                    'date': metadata.get('timestamp', datetime.now().isoformat()),
+                    'execution_time': metadata.get('execution_time', 0),
+                    'quality_score': metadata.get('confidence', 0.5),
+                    'sources_count': len(data.get('sources', [])),
+                    'success': metadata.get('success', True)
+                })
+            
+            # Extract agent performance data
+            if 'agent_collaboration_log' in data:
+                for log_entry in data['agent_collaboration_log']:
+                    agent = log_entry.get('agent', 'unknown')
+                    if agent not in agent_stats:
+                        agent_stats[agent] = {'tasks': 0, 'successes': 0}
+                    agent_stats[agent]['tasks'] += 1
+                    if log_entry.get('interaction_success', False):
+                        agent_stats[agent]['successes'] += 1
+        
+        except (json.JSONDecodeError, KeyError) as e:
+            st.warning(f"Failed to parse result file {file_path.name}: {e}")
+            continue
+    
+    if not research_data:
+        st.warning("No valid research data found for visualization.")
+        return
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(research_data)
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # Research activity over time
+    daily_counts = df.groupby(df['date'].dt.date).size().reset_index(name='Research_Count')
+    daily_counts['Date'] = pd.to_datetime(daily_counts['date'])
+    
+    fig1 = px.line(daily_counts, x='Date', y='Research_Count', 
+                   title='Research Activity Over Time (Actual Data)')
     st.plotly_chart(fig1, use_container_width=True)
     
     # Quality score distribution
-    fig2 = px.histogram(performance_data, x='Quality_Score', 
-                        title='Quality Score Distribution', nbins=20)
-    st.plotly_chart(fig2, use_container_width=True)
+    if 'quality_score' in df.columns:
+        fig2 = px.histogram(df, x='quality_score', 
+                            title='Quality Score Distribution (Actual Data)', nbins=20)
+        st.plotly_chart(fig2, use_container_width=True)
     
     # Agent performance
-    agent_data = pd.DataFrame({
-        'Agent': ['Task Analyzer', 'Research Agent', 'Evaluation Agent', 'Validation Agent', 'Synthesis Agent'],
-        'Tasks_Completed': [45, 38, 42, 40, 35],
-        'Success_Rate': [0.95, 0.88, 0.92, 0.90, 0.87]
-    })
+    if agent_stats:
+        agent_data = []
+        for agent, stats in agent_stats.items():
+            success_rate = stats['successes'] / stats['tasks'] if stats['tasks'] > 0 else 0
+            agent_data.append({
+                'Agent': agent.replace('_', ' ').title(),
+                'Tasks_Completed': stats['tasks'],
+                'Success_Rate': success_rate
+            })
+        
+        if agent_data:
+            agent_df = pd.DataFrame(agent_data)
+            
+            fig3 = px.bar(agent_df, x='Agent', y='Tasks_Completed', 
+                          title='Agent Task Completion (Actual Data)')
+            st.plotly_chart(fig3, use_container_width=True)
+            
+            fig4 = px.pie(agent_df, values='Success_Rate', names='Agent', 
+                          title='Agent Success Rates (Actual Data)')
+            st.plotly_chart(fig4, use_container_width=True)
     
-    fig3 = px.bar(agent_data, x='Agent', y='Tasks_Completed', 
-                  title='Agent Task Completion')
-    st.plotly_chart(fig3, use_container_width=True)
+    # Show summary statistics
+    st.subheader("Summary Statistics")
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Success rate pie chart
-    fig4 = px.pie(agent_data, values='Success_Rate', names='Agent', 
-                  title='Agent Success Rates')
-    st.plotly_chart(fig4, use_container_width=True)
+    with col1:
+        st.metric("Total Research Tasks", len(research_data))
+    
+    with col2:
+        avg_quality = df['quality_score'].mean() if 'quality_score' in df.columns else 0
+        st.metric("Average Quality Score", f"{avg_quality:.2f}")
+    
+    with col3:
+        avg_sources = df['sources_count'].mean() if 'sources_count' in df.columns else 0
+        st.metric("Average Sources per Task", f"{avg_sources:.1f}")
+    
+    with col4:
+        success_rate = df['success'].mean() if 'success' in df.columns else 0
+        st.metric("Success Rate", f"{success_rate:.1%}")
 
 
 def report_generator():

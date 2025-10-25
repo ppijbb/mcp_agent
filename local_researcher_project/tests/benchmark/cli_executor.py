@@ -11,7 +11,6 @@ import time
 import os
 import tempfile
 import logging
-import random
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,20 +46,19 @@ class CLIExecutor:
             raise ValueError(f"main.py not found in {self.project_root}")
     
     def execute_research(self, query: str, output_dir: Optional[str] = None) -> CLIResult:
-        """Execute a research query via CLI with fallback to mock data."""
+        """Execute a research query via CLI - NO FALLBACK ALLOWED."""
         if output_dir is None:
             output_dir = tempfile.mkdtemp(prefix="sparkleforge_benchmark_")
         
         output_path = Path(output_dir) / f"research_result_{int(time.time())}.json"
         
-        # Try actual CLI execution first
-        actual_result = self._try_actual_cli_execution(query, output_path)
-        if actual_result.success:
-            return actual_result
+        # Execute actual CLI - failure is failure, no fallback
+        result = self._try_actual_cli_execution(query, output_path)
+        if not result.success:
+            self.logger.error(f"CLI execution failed: {result.error_message}")
+            raise RuntimeError(f"Research execution failed: {result.error_message}")
         
-        # Fallback to mock data for benchmarking
-        self.logger.warning(f"CLI execution failed, using mock data for benchmarking: {actual_result.error_message}")
-        return self._generate_mock_result(query, output_path)
+        return result
     
     def _try_actual_cli_execution(self, query: str, output_path: Path) -> CLIResult:
         """Try to execute actual CLI command."""
@@ -129,87 +127,6 @@ class CLIExecutor:
                 error_message=str(e)
             )
     
-    def _generate_mock_result(self, query: str, output_path: Path) -> CLIResult:
-        """Generate mock result for benchmarking when actual execution fails."""
-        self.logger.info(f"Generating mock result for query: {query}")
-        
-        # Generate realistic mock data based on query
-        mock_data = {
-            "query": query,
-            "timestamp": datetime.now().isoformat(),
-            "execution_time": random.uniform(30, 120),  # Random execution time
-            "sources": [
-                {
-                    "title": f"Source 1 for {query}",
-                    "url": "https://example.com/source1",
-                    "credibility": random.uniform(0.7, 0.9),
-                    "content": f"Relevant content about {query}"
-                },
-                {
-                    "title": f"Source 2 for {query}",
-                    "url": "https://example.com/source2", 
-                    "credibility": random.uniform(0.6, 0.8),
-                    "content": f"Additional information about {query}"
-                }
-            ],
-            "creative_insights": [
-                {
-                    "title": f"Insight about {query}",
-                    "type": "analogical",
-                    "confidence": random.uniform(0.7, 0.9),
-                    "novelty_score": random.uniform(0.6, 0.8),
-                    "applicability_score": random.uniform(0.7, 0.9)
-                }
-            ],
-            "execution_results": [
-                {
-                    "summary": f"Research summary for {query}",
-                    "content": f"Detailed analysis of {query}",
-                    "quality_score": random.uniform(0.7, 0.9)
-                }
-            ],
-            "navigation_log": [
-                {"status": "success", "action": "web_search", "timestamp": time.time()},
-                {"status": "success", "action": "page_navigation", "timestamp": time.time()}
-            ],
-            "tool_usage_log": [
-                {"status": "success", "tool": "web_search", "timestamp": time.time()},
-                {"status": "success", "tool": "content_extraction", "timestamp": time.time()}
-            ],
-            "agent_collaboration_log": [
-                {"interaction_success": True, "agent": "research_agent", "timestamp": time.time()},
-                {"interaction_success": True, "agent": "synthesis_agent", "timestamp": time.time()}
-            ],
-            "reasoning_log": [
-                {"logical_validity": True, "step": "premise_analysis", "timestamp": time.time()},
-                {"logical_validity": True, "step": "conclusion_synthesis", "timestamp": time.time()}
-            ],
-            "execution_log": [
-                {"execution_success": True, "resource_usage": random.uniform(0.5, 0.8), "timestamp": time.time()}
-            ],
-            "reliability_log": [
-                {"status": "up", "timestamp": time.time()},
-                {"status": "up", "timestamp": time.time()}
-            ]
-        }
-        
-        # Save mock data to file
-        try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_data, f, indent=2)
-        except Exception as e:
-            self.logger.warning(f"Failed to save mock data: {e}")
-        
-        return CLIResult(
-            success=True,
-            execution_time=mock_data["execution_time"],
-            return_code=0,
-            stdout=f"Mock execution completed for: {query}",
-            stderr="",
-            output_file=str(output_path),
-            parsed_output=mock_data,
-            error_message=None
-        )
     
     def execute_with_streaming(self, query: str, output_dir: Optional[str] = None) -> CLIResult:
         """Execute research with streaming enabled."""
@@ -423,8 +340,7 @@ class CLIExecutor:
         except Exception:
             issues.append("Python not available or not working")
         
-        # For development/benchmarking, we'll allow missing dependencies
-        # but warn about them
+        # Check required dependencies - ALL MUST BE AVAILABLE
         try:
             result = subprocess.run(
                 ["python3", "-c", "import streamlit, openrouter, langgraph"],
@@ -433,14 +349,16 @@ class CLIExecutor:
                 timeout=10
             )
             if result.returncode != 0:
-                issues.append("Some dependencies not available - using mock data for benchmarking")
+                issues.append("Required dependencies not available - benchmark cannot run")
+                return False, issues
         except Exception:
-            issues.append("Some dependencies not available - using mock data for benchmarking")
+            issues.append("Required dependencies not available - benchmark cannot run")
+            return False, issues
         
-        # Check OpenRouter API key (warn if missing but don't fail)
+        # Check OpenRouter API key - REQUIRED
         if not os.getenv("OPENROUTER_API_KEY"):
-            issues.append("OPENROUTER_API_KEY not set - will use mock data for benchmarking")
+            issues.append("OPENROUTER_API_KEY not set - benchmark cannot run")
+            return False, issues
         
-        # For development, we'll allow the benchmark to run with mock data
-        # This allows users to test the benchmark system even without full setup
-        return True, issues
+        # All requirements must be met for production benchmarking
+        return len(issues) == 0, issues

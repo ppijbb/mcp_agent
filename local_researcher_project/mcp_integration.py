@@ -281,38 +281,52 @@ class UniversalMCPHub:
             raise RuntimeError(f"MCP Hub initialization failed: {e}")
     
     async def _validate_essential_tools(self):
-        """필수 MCP 도구 검증 및 실패 시 중단."""
+        """필수 MCP 도구 검증 및 실패 시 중단 - PRODUCTION LEVEL."""
         essential_tools = ["g-search", "fetch", "filesystem"]
         failed_tools = []
         
-        logger.info("Validating essential MCP tools...")
+        logger.info("Validating essential MCP tools for production deployment...")
         
         for tool in essential_tools:
             try:
-                # 간단한 테스트 실행
-                if tool == "g-search":
-                    test_result = await execute_tool(tool, {"query": "test", "max_results": 1})
-                elif tool == "fetch":
-                    test_result = await execute_tool(tool, {"url": "https://httpbin.org/get"})
-                elif tool == "filesystem":
-                    test_result = await execute_tool(tool, {"path": ".", "operation": "list"})
+                # Production-level test execution with timeout
+                test_timeout = 30  # 30초 타임아웃
                 
-                if test_result.get('success', False):
+                if tool == "g-search":
+                    test_result = await asyncio.wait_for(
+                        execute_tool(tool, {"query": "test", "max_results": 1}),
+                        timeout=test_timeout
+                    )
+                elif tool == "fetch":
+                    test_result = await asyncio.wait_for(
+                        execute_tool(tool, {"url": "https://httpbin.org/get"}),
+                        timeout=test_timeout
+                    )
+                elif tool == "filesystem":
+                    test_result = await asyncio.wait_for(
+                        execute_tool(tool, {"path": ".", "operation": "list"}),
+                        timeout=test_timeout
+                    )
+                
+                if test_result.success:
                     logger.info(f"✅ Essential tool {tool} validated successfully")
                 else:
                     failed_tools.append(tool)
-                    logger.error(f"❌ Essential tool {tool} validation failed: {test_result.get('error', 'Unknown error')}")
+                    logger.error(f"❌ Essential tool {tool} validation failed: {test_result.error}")
                     
+            except asyncio.TimeoutError:
+                failed_tools.append(tool)
+                logger.error(f"❌ Essential tool {tool} validation timed out after {test_timeout}s")
             except Exception as e:
                 failed_tools.append(tool)
                 logger.error(f"❌ Essential tool {tool} validation failed: {e}")
         
         if failed_tools:
-            error_msg = f"Essential MCP tools failed validation: {', '.join(failed_tools)}. System cannot start without these tools."
+            error_msg = f"PRODUCTION ERROR: Essential MCP tools failed validation: {', '.join(failed_tools)}. System cannot start without these tools. Check your MCP server configuration and network connectivity."
             logger.error(error_msg)
             raise RuntimeError(error_msg)
         
-        logger.info("✅ All essential MCP tools validated successfully")
+        logger.info("✅ All essential MCP tools validated successfully for production")
     
     async def cleanup(self):
         """MCP 연결 정리."""
