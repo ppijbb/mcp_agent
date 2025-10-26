@@ -166,10 +166,15 @@ class VectorStore:
     def _initialize_chromadb(self) -> None:
         """ChromaDB를 초기화합니다."""
         if not CHROMADB_AVAILABLE:
-            logger.error("ChromaDB not available")
+            logger.warning("⚠️ ChromaDB not available - running without vector search capabilities")
+            logger.warning("   Install with: pip install chromadb")
+            logger.info("ℹ️ Using fallback mode: vector search disabled, basic operations only")
+            self.chroma_client = None
+            self.collection = None
             return
         
         try:
+            logger.info(f"🔧 Initializing ChromaDB at: {self.persist_directory / 'chromadb'}")
             self.chroma_client = chromadb.PersistentClient(
                 path=str(self.persist_directory / "chromadb"),
                 settings=Settings(
@@ -184,10 +189,18 @@ class VectorStore:
                 metadata={"description": "Research memories and findings"}
             )
             
-            logger.info(f"ChromaDB initialized with collection: {self.collection_name}")
+            logger.info(f"✅ ChromaDB initialized successfully with collection: {self.collection_name}")
+            logger.info(f"📊 Collection contains {self.collection.count()} items")
             
+        except ImportError as e:
+            logger.error(f"❌ ChromaDB import failed: {e}")
+            logger.error("   Install with: pip install chromadb")
+            self.chroma_client = None
+            self.collection = None
         except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
+            logger.error(f"❌ Failed to initialize ChromaDB: {e}")
+            logger.error(f"   Error type: {type(e).__name__}")
+            logger.warning("⚠️ Falling back to in-memory mode without vector search")
             self.chroma_client = None
             self.collection = None
     

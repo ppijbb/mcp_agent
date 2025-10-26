@@ -181,8 +181,45 @@ class AutonomousOrchestrator:
         # 그래프 컴파일
         self.graph = workflow.compile()
     
+    def _log_node_input(self, node_name: str, state: ResearchState):
+        """노드 입력 로깅."""
+        logger.info(f"\n{'='*80}\n🔵 NODE INPUT: {node_name}\n{'='*80}")
+        logger.info(f"User Request: {state.get('user_request', 'N/A')}")
+        logger.info(f"Current Step: {state.get('current_step', 'N/A')}")
+        logger.info(f"Iteration: {state.get('iteration', 0)}")
+        logger.info(f"Complexity Score: {state.get('complexity_score', 'N/A')}")
+        
+        # 주요 필드 선택적 로깅
+        if 'analyzed_objectives' in state:
+            logger.info(f"Objectives Count: {len(state.get('analyzed_objectives', []))}")
+        if 'planned_tasks' in state:
+            logger.info(f"Planned Tasks Count: {len(state.get('planned_tasks', []))}")
+        if 'agent_assignments' in state:
+            logger.info(f"Agent Assignments Count: {len(state.get('agent_assignments', {}))}")
+        logger.info('='*80)
+    
+    def _log_node_output(self, node_name: str, state: ResearchState, key_changes: Dict[str, Any] = None):
+        """노드 출력 로깅."""
+        logger.info(f"\n{'='*80}\n🟢 NODE OUTPUT: {node_name}\n{'='*80}")
+        logger.info(f"Next Step: {state.get('current_step', 'N/A')}")
+        logger.info(f"Should Continue: {state.get('should_continue', 'N/A')}")
+        logger.info(f"Error Message: {state.get('error_message', 'None')}")
+        
+        # 주요 변경사항 로깅
+        if key_changes:
+            logger.info(f"Key Changes:\n{json.dumps(key_changes, indent=2, ensure_ascii=False)}")
+        
+        # State 업데이트 요약
+        logger.info(f"Complexity Score: {state.get('complexity_score', 'N/A')}")
+        logger.info(f"Allocated Researchers: {state.get('allocated_researchers', 'N/A')}")
+        logger.info(f"Iteration: {state.get('iteration', 0)}")
+        logger.info('='*80)
+    
     async def _analyze_objectives(self, state: ResearchState) -> ResearchState:
         """목표 분석 (Multi-Model Orchestration)."""
+        # 입력 로깅
+        self._log_node_input("analyze_objectives", state)
+        
         logger.info("🔍 Analyzing objectives with Multi-Model Orchestration")
         logger.info(f"📝 Research Request: {state['user_request']}")
         logger.info(f"📋 Context: {state.get('context', {})}")
@@ -286,10 +323,22 @@ class AutonomousOrchestrator:
             state["should_continue"] = False
             raise  # Fail-fast
         
+        # 출력 로깅
+        key_changes = {
+            "analyzed_objectives": len(analysis_data.get("objectives", [])),
+            "complexity_score": analysis_data.get("complexity", 5.0),
+            "intent_analysis": analysis_data.get("intent", {}),
+            "domain_analysis": analysis_data.get("domain", {})
+        }
+        self._log_node_output("analyze_objectives", state, key_changes)
+        
         return state
     
     async def _planning_agent(self, state: ResearchState) -> ResearchState:
         """Planning Agent: MCP 기반 사전 조사 → Task 분해 → Agent 동적 할당."""
+        # 입력 로깅
+        self._log_node_input("planning_agent", state)
+        
         logger.info("🎯 Planning Agent: MCP-based research planning")
         logger.info(f"📊 Complexity Score: {state.get('complexity_score', 5.0)}")
         logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
@@ -331,6 +380,17 @@ class AutonomousOrchestrator:
                 }
             })
             
+            # 출력 로깅
+            key_changes = {
+                "preliminary_research_sources": preliminary_research.get('sources_count', 0),
+                "planned_tasks_count": len(tasks),
+                "agent_assignments_count": len(agent_assignments),
+                "execution_strategy": execution_plan.get('strategy', 'sequential'),
+                "plan_iteration": state.get("plan_iteration", 0),
+                "planned_tasks": [{"id": task.get("id"), "type": task.get("type"), "agent": task.get("assigned_agent")} for task in tasks[:3]]  # 처음 3개만 로깅
+            }
+            self._log_node_output("planning_agent", state, key_changes)
+            
             logger.info("✅ Planning Agent completed successfully")
             return state
             
@@ -342,6 +402,9 @@ class AutonomousOrchestrator:
     
     async def _verify_plan(self, state: ResearchState) -> ResearchState:
         """Plan 검증: LLM 기반 plan 타당성 검증."""
+        # 입력 로깅
+        self._log_node_input("verify_plan", state)
+        
         logger.info("✅ Verifying research plan")
         logger.info(f"📋 Tasks to verify: {len(state.get('planned_tasks', []))}")
         logger.info(f"👥 Agent assignments: {len(state.get('agent_assignments', {}))}")
@@ -418,6 +481,15 @@ class AutonomousOrchestrator:
                 }
             })
             
+            # 출력 로깅
+            key_changes = {
+                "plan_approved": state.get("plan_approved", False),
+                "verification_confidence": verification.get("confidence", 0.0),
+                "plan_iteration": state.get("plan_iteration", 0),
+                "feedback": verification.get("feedback", "")[:200]  # 처음 200자만
+            }
+            self._log_node_output("verify_plan", state, key_changes)
+            
             return state
             
         except Exception as e:
@@ -469,6 +541,9 @@ class AutonomousOrchestrator:
     
     async def _execute_research(self, state: ResearchState) -> ResearchState:
         """연구 실행 (Universal MCP Hub + Streaming Pipeline)."""
+        # 입력 로깅
+        self._log_node_input("execute_research", state)
+        
         logger.info("🔍 Executing research with Universal MCP Hub and Streaming Pipeline")
         
         # Planning Agent에서 생성된 tasks 사용
@@ -588,6 +663,16 @@ class AutonomousOrchestrator:
                 "execution_success_rate": float(len(execution_results)) / max(len(tasks), 1)
             }
         })
+        
+        # 출력 로깅
+        key_changes = {
+            "tasks_executed": len(execution_results),
+            "tasks_successful": len([r for r in execution_results if r.get("result")]),
+            "tools_used": len(set(r.get("tool_used", "") for r in execution_results if r.get("tool_used"))),
+            "execution_success_rate": float(len([r for r in execution_results if r.get("result")])) / max(len(tasks), 1),
+            "total_execution_time": sum(r.get("execution_time", 0.0) for r in execution_results)
+        }
+        self._log_node_output("execute_research", state, key_changes)
         
         return state
     

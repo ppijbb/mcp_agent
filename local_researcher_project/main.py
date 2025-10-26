@@ -138,21 +138,60 @@ class AutonomousResearchSystem:
         try:
             self.config = load_config_from_env()
             logger.info("✅ Configuration loaded successfully from environment variables")
+            
+            # Validate ChromaDB availability (optional)
+            try:
+                import chromadb  # type: ignore
+                logger.info("✅ ChromaDB module available")
+            except ImportError:
+                logger.warning("⚠️ ChromaDB not installed - vector search will be disabled")
+                logger.info("   Install with: pip install chromadb")
+            
         except ValueError as e:
             logger.error(f"❌ Configuration loading failed: {e}")
             logger.error("Please check your .env file and ensure all required variables are set")
+            logger.info("\nRequired environment variables:")
+            logger.info("  - LLM_MODEL: LLM model identifier (e.g., google/gemini-2.5-flash-lite)")
+            logger.info("  - OPENROUTER_API_KEY: Your OpenRouter API key (starts with sk-or-)")
+            logger.info("  - LLM_PROVIDER: Provider name (e.g., openrouter)")
             raise
         
         # Initialize components with 8 innovations
-        self.orchestrator = AutonomousOrchestrator()
-        from mcp_integration import UniversalMCPHub
-        self.mcp_hub = UniversalMCPHub()
-        self.web_manager = WebAppManager()
-        self.health_monitor = HealthMonitor()
+        logger.info("🔧 Initializing system components...")
+        try:
+            self.orchestrator = AutonomousOrchestrator()
+            logger.info("✅ Orchestrator initialized")
+        except Exception as e:
+            logger.error(f"❌ Orchestrator initialization failed: {e}")
+            raise
+        
+        try:
+            from mcp_integration import UniversalMCPHub
+            self.mcp_hub = UniversalMCPHub()
+            logger.info("✅ MCP Hub initialized")
+        except Exception as e:
+            logger.error(f"❌ MCP Hub initialization failed: {e}")
+            raise
+        
+        try:
+            self.web_manager = WebAppManager()
+            logger.info("✅ Web Manager initialized")
+        except Exception as e:
+            logger.error(f"❌ Web Manager initialization failed: {e}")
+            raise
+        
+        try:
+            self.health_monitor = HealthMonitor()
+            logger.info("✅ Health Monitor initialized")
+        except Exception as e:
+            logger.error(f"❌ Health Monitor initialization failed: {e}")
+            raise
         
         # Initialize signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+        
+        logger.info("✅ AutonomousResearchSystem initialized successfully")
         
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""

@@ -93,11 +93,26 @@ class HybridStorage:
             directory.mkdir(parents=True, exist_ok=True)
         
         # 벡터 스토어 초기화
-        self.vector_store = VectorStore(
-            db_type=self.config.vector_db_type,
-            collection_name="research_memories",
-            persist_directory=str(self.vector_db_dir)
-        )
+        try:
+            self.vector_store = VectorStore(
+                db_type=self.config.vector_db_type,
+                collection_name="research_memories",
+                persist_directory=str(self.vector_db_dir)
+            )
+            
+            # ChromaDB 사용 가능 여부 확인
+            if self.vector_store.chroma_client is None and self.vector_store.qdrant_client is None:
+                logger.warning("⚠️ Vector database not available - vector search disabled")
+                logger.info("ℹ️ HybridStorage will use file storage only")
+                self.vector_enabled = False
+            else:
+                self.vector_enabled = True
+                logger.info(f"✅ Vector search enabled with {self.config.vector_db_type.value}")
+        except Exception as e:
+            logger.error(f"❌ Vector store initialization failed: {e}")
+            logger.warning("⚠️ Continuing with file storage only")
+            self.vector_store = None
+            self.vector_enabled = False
         
         # 캐시 초기화
         self.cache = {}
@@ -108,6 +123,7 @@ class HybridStorage:
         self.sync_in_progress = False
         
         logger.info(f"HybridStorage initialized: {self.config.vector_db_type.value}")
+        logger.info(f"Vector search: {'Enabled' if self.vector_enabled else 'Disabled'}")
     
     async def store_research(
         self,
