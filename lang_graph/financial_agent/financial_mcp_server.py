@@ -2,18 +2,24 @@ import yfinance as yf
 import pandas as pd
 from typing import Dict, List
 from mcp.server.fastmcp import FastMCP
+from .config import get_mcp_config
 
 # MCP 서버 초기화
 mcp = FastMCP("FinancialTools")
 
 @mcp.tool()
-def get_technical_indicators(ticker: str, period: str = "3mo") -> Dict:
+def get_technical_indicators(ticker: str, period: str = None) -> Dict:
     """
     yfinance를 사용하여 특정 종목의 기술적 지표를 계산합니다.
     - RSI (Relative Strength Index)
     - MACD (Moving Average Convergence Divergence)
     - 50일 이동평균
     """
+    # 설정에서 기본 기간 가져오기
+    if period is None:
+        config = get_mcp_config()
+        period = config.data_period
+    
     stock = yf.Ticker(ticker)
     hist = stock.history(period=period)
 

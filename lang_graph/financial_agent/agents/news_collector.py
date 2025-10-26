@@ -13,7 +13,10 @@ def news_collector_node(state: AgentState) -> Dict:
 
     tickers = state.get("target_tickers", [])
     if not tickers:
-        return {"news_data": {"news": {}}}
+        error_message = "분석할 티커가 지정되지 않았습니다."
+        print(error_message)
+        state["log"].append(error_message)
+        raise ValueError(error_message)
 
     # 동시 호출 지원: 한 번에 모든 티커를 요청
     print(f"Fetching news for {tickers} via MCP (concurrent)...")

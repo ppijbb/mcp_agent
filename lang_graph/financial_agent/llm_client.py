@@ -1,42 +1,39 @@
-import os
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from .config import get_llm_config
 
-# .env 파일에서 환경 변수 로드
-# 이 파일이 있는 디렉토리를 기준으로 .env 파일을 찾습니다.
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path=dotenv_path)
+# LLM 클라이언트 인스턴스 - 초기화 시 생성됨
+llm: ChatGoogleGenerativeAI = None
 
-# 성공한 코드와 동일하게 환경 변수 이름과 모델 로직을 수정
-api_key = os.getenv("GEMINI_API_KEY") 
-model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite-preview-0607") # 기본값을 사용자가 지정한 모델로
 
-llm = None
-
-if not api_key:
-    # 환경변수가 없을 경우 경고 메시지를 출력하고, None으로 설정
-    print("⚠️ 경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다. LLM 호출은 오류를 발생시킵니다.")
-else:
+def initialize_llm_client() -> None:
+    """LLM 클라이언트 초기화 - 설정 로드 후 호출"""
+    global llm
+    
     try:
+        config = get_llm_config()
+        
         # LangChain을 통해 Gemini 모델 초기화
         llm = ChatGoogleGenerativeAI(
-            model=model_name, # 환경 변수에서 읽어온 모델 이름 사용
-            google_api_key=api_key,
-            temperature=0.7,
-            convert_system_message_to_human=True # 시스템 메시지를 지원하지 않는 모델을 위한 설정
+            model=config.model,
+            google_api_key=config.api_key,
+            temperature=config.temperature,
+            convert_system_message_to_human=True
         )
-        print(f"✅ Gemini LLM 클라이언트가 성공적으로 초기화되었습니다. (모델: {model_name})")
+        print(f"✅ Gemini LLM 클라이언트가 성공적으로 초기화되었습니다. (모델: {config.model})")
+        
     except Exception as e:
-        print(f"❌ Gemini LLM 클라이언트 초기화 중 에러 발생: {e}")
+        error_msg = f"LLM 클라이언트 초기화 실패: {e}"
+        print(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)
 
 def call_llm(prompt: str) -> str:
     """
     지정된 프롬프트로 Gemini LLM을 호출하고 응답을 문자열로 반환합니다.
-    API 키가 없거나 초기화에 실패하면 예외를 발생시킵니다. (NO FALLBACK)
+    초기화되지 않은 경우 RuntimeError 발생 (NO FALLBACK)
     """
-    if not llm:
-        raise RuntimeError("GEMINI_API_KEY가 설정되지 않았거나 LLM 클라이언트 초기화에 실패했습니다.")
+    if llm is None:
+        raise RuntimeError("LLM 클라이언트가 초기화되지 않았습니다. initialize_llm_client()를 먼저 호출하세요.")
 
     try:
         # LangChain의 invoke 메서드를 사용
@@ -54,5 +51,6 @@ def call_llm(prompt: str) -> str:
         content = response.content
         return content if isinstance(content, str) else "Error: Empty or invalid response from LLM."
     except Exception as e:
-        print(f"LLM 호출 중 에러 발생: {e}")
-        raise
+        error_msg = f"LLM 호출 중 에러 발생: {e}"
+        print(f"❌ {error_msg}")
+        raise RuntimeError(error_msg)

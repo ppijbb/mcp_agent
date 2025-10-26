@@ -1,5 +1,7 @@
 from langgraph.graph import StateGraph, END, START
 from .state import AgentState
+from .config import get_workflow_config, initialize_config
+from .llm_client import initialize_llm_client
 # agents 패키지에서 모든 노드를 한 번에 임포트
 from .agents import (
     market_data_collector_node,
@@ -14,6 +16,15 @@ from .agents import (
 
 class FinancialAgentWorkflow:
     def __init__(self):
+        # LLM 클라이언트 초기화 (설정은 이미 초기화됨)
+        try:
+            initialize_llm_client()
+            print("✅ Financial Agent 워크플로우 초기화 완료")
+        except Exception as e:
+            error_msg = f"워크플로우 초기화 실패: {e}"
+            print(f"❌ {error_msg}")
+            raise RuntimeError(error_msg)
+        
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -66,9 +77,6 @@ if __name__ == "__main__":
     import sys
     from datetime import datetime
 
-    # 워크플로우 인스턴스 생성
-    workflow_runner = FinancialAgentWorkflow()
-
     # 명령행 인자에서 설정값 읽기
     if len(sys.argv) < 3:
         print("사용법: python graph.py <tickers> <risk_profile>")
@@ -78,11 +86,21 @@ if __name__ == "__main__":
     target_tickers = [ticker.strip() for ticker in sys.argv[1].split(',')]
     risk_profile = sys.argv[2]
     
-    # 유효한 리스크 프로필 검증
-    valid_profiles = ["conservative", "moderate", "aggressive"]
-    if risk_profile not in valid_profiles:
-        print(f"오류: 유효하지 않은 리스크 프로필입니다. 사용 가능한 값: {', '.join(valid_profiles)}")
+    # 설정 초기화 및 유효한 리스크 프로필 검증
+    try:
+        initialize_config()
+        workflow_config = get_workflow_config()
+        valid_profiles = workflow_config.valid_risk_profiles
+        
+        if risk_profile not in valid_profiles:
+            print(f"오류: 유효하지 않은 리스크 프로필입니다. 사용 가능한 값: {', '.join(valid_profiles)}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"❌ 설정 로드 실패: {e}")
         sys.exit(1)
+
+    # 워크플로우 인스턴스 생성 (설정 초기화 완료 후)
+    workflow_runner = FinancialAgentWorkflow()
     
     # 초기 상태 정의
     initial_state = {
