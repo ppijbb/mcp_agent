@@ -404,12 +404,61 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 💬 [Discussions](https://github.com/yourusername/sparkleforge/discussions)
 - 📧 [Email Support](mailto:support@sparkleforge.ai)
 
-## 🙏 Acknowledgments
+## 🙏 Acknowledgments & References
 
-- [OpenRouter](https://openrouter.ai/) for API access
+### Core Technologies
+- [OpenRouter](https://openrouter.ai/) for API access and free model access
 - [Google Gemini](https://ai.google.dev/) for the AI models
 - [Streamlit](https://streamlit.io/) for the web interface
 - [LangGraph](https://langchain-ai.github.io/langgraph/) for workflow orchestration
+- [LangChain](https://www.langchain.com/) for AI agent framework
+
+### Open Source Researcher Projects (Reference & Inspiration)
+This project has been enhanced by analyzing and integrating techniques from the following open-source research frameworks:
+
+#### 1. **LightMem** - Memory Management
+- Repository: [zjunlp/LightMem](https://github.com/zjunlp/LightMem)
+- Key Features: Lightweight memory management, Pre-compression, Topic Segmentation
+- Inspiration: Memory compression and efficient retrieval strategies
+- Paper: [arXiv:2510.18866](https://arxiv.org/abs/2510.18866)
+
+#### 2. **Tongyi DeepResearch** - Reinforcement Learning for Agents
+- Repository: [Alibaba-NLP/DeepResearch](https://github.com/Alibaba-NLP/DeepResearch)
+- Key Features: GRPO training, Agentic CPT, RLVR algorithm
+- Inspiration: Agent training methods and RL-based optimization
+- Model: [Tongyi-DeepResearch-30B-A3B](https://huggingface.co/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B)
+
+#### 3. **OpenManus** - Multi-Agent Framework
+- Repository: [FoundationAgents/OpenManus](https://github.com/FoundationAgents/OpenManus)
+- Key Features: BaseAgent framework, ReAct pattern, Planning flow
+- Inspiration: Agent architecture and state management patterns
+- License: MIT
+
+#### 4. **Open Deep Research** - LangGraph Orchestration
+- Repository: [langchain-ai/open_deep_research](https://github.com/langchain-ai/open_deep_research)
+- Key Features: LangGraph workflow, StateGraph, Supervisor-Researcher pattern
+- Inspiration: Research workflow orchestration and state management
+- License: MIT
+
+#### 5. **AgentFlow** - Modular Agent System with RL
+- Repository: [lupantech/AgentFlow](https://github.com/lupantech/AgentFlow)
+- Key Features: Flow-GRPO, Modular agents (Planner/Executor/Verifier/Generator)
+- Inspiration: Four-module agent architecture and RL training
+- Paper: [arXiv:2510.05592](https://arxiv.org/abs/2510.05592)
+
+#### 6. **Open-Agent** - Multi-Model Collaboration
+- Repository: [AFK-surf/open-agent](https://github.com/AFK-surf/open-agent)
+- Key Features: Multi-model collaboration, Spec & Context Engineering
+- Inspiration: Multi-model orchestration strategies
+- License: Apache-2.0
+
+### Key Integrations from These Projects
+
+- **Memory System** (inspired by LightMem): ChromaDB-based vector storage, hierarchical compression
+- **Agent Orchestration** (inspired by OpenManus & Open Deep Research): LangGraph StateGraph workflow
+- **Modular Agents** (inspired by AgentFlow): Four-agent architecture (Planner/Executor/Verifier/Generator)
+- **Shared Memory** (custom implementation): File-based and ChromaDB-backed memory for multi-agent collaboration
+- **RL Training Concepts** (inspired by DeepResearch & AgentFlow): Flow-GRPO and agent optimization strategies (future enhancement)
 
 ## 📊 Project Status
 

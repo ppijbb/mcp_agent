@@ -619,27 +619,59 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
     
     try:
         if tool_name == "g-search":
-            # DuckDuckGo 검색 (100% 무료)
-            with DDGS() as ddgs:
-                results = []
-                for r in ddgs.text(query, max_results=max_results):
-                    results.append({
-                        "title": r.get("title", ""),
-                        "url": r.get("href", ""),
-                        "snippet": r.get("body", "")
-                    })
-                
-                return ToolResult(
-                    success=True,
-                    data={
-                        "query": query,
-                        "results": results,
-                        "total_results": len(results),
-                        "source": "duckduckgo"
-                    },
-                    execution_time=time.time() - start_time,
-                    confidence=0.9
-                )
+            # DuckDuckGo 검색 (100% 무료) with retry logic
+            import random
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                try:
+                    # Random delay to avoid rate limiting
+                    if attempt > 0:
+                        delay = random.uniform(2, 5) * (attempt + 1)
+                        await asyncio.sleep(delay)
+                        logger.info(f"Retrying g-search after {delay:.2f}s (attempt {attempt + 1})")
+                    
+                    with DDGS() as ddgs:
+                        results = []
+                        for r in ddgs.text(query, max_results=max_results):
+                            results.append({
+                                "title": r.get("title", ""),
+                                "url": r.get("href", ""),
+                                "snippet": r.get("body", "")
+                            })
+                        
+                        return ToolResult(
+                            success=True,
+                            data={
+                                "query": query,
+                                "results": results,
+                                "total_results": len(results),
+                                "source": "duckduckgo"
+                            },
+                            execution_time=time.time() - start_time,
+                            confidence=0.9
+                        )
+                    
+                except Exception as e:
+                    error_str = str(e)
+                    # Rate limit 오류인 경우 재시도
+                    if "202" in error_str or "ratelimit" in error_str.lower() or "rate" in error_str.lower():
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Rate limit hit, retrying g-search (attempt {attempt + 1}/{max_retries})")
+                            continue
+                        else:
+                            logger.error(f"g-search rate limit after {max_retries} attempts: {e}")
+                            # Fallback: 빈 결과 반환
+                            return ToolResult(
+                                success=False,
+                                data={"query": query, "results": [], "total_results": 0, "source": "duckduckgo", "rate_limited": True},
+                                error=f"Rate limited: {str(e)}",
+                                execution_time=time.time() - start_time,
+                                confidence=0.0
+                            )
+                    else:
+                        # 다른 오류는 그대로 전파
+                        raise
         
         elif tool_name == "tavily":
             # Tavily API (무료 tier 사용)
