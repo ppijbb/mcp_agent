@@ -466,8 +466,15 @@ class ProductionReliability:
         }
 
 
-# Global reliability manager
-reliability_manager = ProductionReliability()
+# Global reliability manager (lazy initialization)
+_reliability_manager = None
+
+def get_reliability_manager() -> 'ProductionReliability':
+    """Get or initialize global reliability manager."""
+    global _reliability_manager
+    if _reliability_manager is None:
+        _reliability_manager = ProductionReliability()
+    return _reliability_manager
 
 
 async def execute_with_reliability(
@@ -478,6 +485,7 @@ async def execute_with_reliability(
     **kwargs
 ) -> Any:
     """안정성 보장 실행."""
+    reliability_manager = get_reliability_manager()
     return await reliability_manager.execute_with_reliability(
         func, *args, component_name=component_name, save_state=save_state, **kwargs
     )
@@ -485,14 +493,18 @@ async def execute_with_reliability(
 
 async def get_system_status() -> Dict[str, Any]:
     """시스템 상태 반환."""
+    reliability_manager = get_reliability_manager()
     return reliability_manager.get_system_status()
 
 
 async def start_reliability_monitoring():
     """안정성 모니터링 시작."""
+    reliability_manager = get_reliability_manager()
     await reliability_manager.start_monitoring()
 
 
 async def stop_reliability_monitoring():
     """안정성 모니터링 중지."""
-    await reliability_manager.stop_monitoring()
+    global _reliability_manager
+    if _reliability_manager is not None:
+        await _reliability_manager.stop_monitoring()

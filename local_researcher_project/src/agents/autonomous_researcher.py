@@ -16,11 +16,19 @@ import json
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import config, get_llm_config, get_agent_config, get_research_config, get_mcp_config
-from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_task
-from src.core.mcp_integration import execute_tool, get_best_tool_for_task, ToolCategory
-from src.core.reliability import execute_with_reliability
-from src.core.compression import compress_data
+# Lazy import to avoid circular dependencies and configuration issues
+def get_config_functions():
+    """Lazy import of configuration functions."""
+    from researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
+    return get_llm_config, get_agent_config, get_research_config, get_mcp_config
+
+def get_core_functions():
+    """Lazy import of core functions."""
+    from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_task
+    from src.core.mcp_integration import execute_tool, get_best_tool_for_task, ToolCategory
+    from src.core.reliability import execute_with_reliability
+    from src.core.compression import compress_data
+    return execute_llm_task, TaskType, get_best_model_for_task, execute_tool, get_best_tool_for_task, ToolCategory, execute_with_reliability, compress_data
 
 
 class AutonomousResearcherAgent:
@@ -31,7 +39,8 @@ class AutonomousResearcherAgent:
     
     def __init__(self):
         """Initialize the autonomous researcher agent."""
-        # Load configurations
+        # Load configurations (lazy import)
+        get_llm_config, get_agent_config, get_research_config, get_mcp_config = get_config_functions()
         self.llm_config = get_llm_config()
         self.agent_config = get_agent_config()
         self.research_config = get_research_config()
@@ -42,6 +51,12 @@ class AutonomousResearcherAgent:
         
         # Initialize specialized agents
         self._initialize_agents()
+        
+        # Store core functions for later use
+        self._execute_llm_task = None
+        self._TaskType = None
+        self._execute_with_reliability = None
+        self._compress_data = None
         
     def _initialize_agents(self):
         """Initialize specialized research agents with Multi-Model Orchestration."""

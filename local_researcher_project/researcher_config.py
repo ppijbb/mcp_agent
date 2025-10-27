@@ -335,6 +335,15 @@ def get_reliability_config() -> ReliabilityConfig:
 def load_config_from_env() -> ResearcherSystemConfig:
     """Load configuration from environment variables - ALL REQUIRED, NO DEFAULTS."""
     
+    # Load .env file if it exists
+    from pathlib import Path
+    from dotenv import load_dotenv
+    
+    project_root = Path(__file__).parent
+    env_file = project_root / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+    
     def get_required_env(key: str, var_type: type = str):
         """Get required environment variable, raise error if missing."""
         value = os.getenv(key)
@@ -484,7 +493,9 @@ def load_config_from_env() -> ResearcherSystemConfig:
         enable_latex_export=get_required_env("ENABLE_LATEX", bool)
     )
     
-    return ResearcherSystemConfig(
+    # Create and store global config instance
+    global config
+    config = ResearcherSystemConfig(
         llm=llm_config,
         agent=agent_config,
         research=research_config,
@@ -495,6 +506,8 @@ def load_config_from_env() -> ResearcherSystemConfig:
         context_window=context_window_config,
         reliability=reliability_config
     )
+    
+    return config
 
 
 def update_config_from_env():

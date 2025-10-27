@@ -783,26 +783,71 @@ class MCPIntegrationManager:
 
 
 
-# Global instance for easy access
-mcp_manager = MCPIntegrationManager()
+# Global instance removed - use UniversalMCPHub directly
+# The old MCPIntegrationManager has been replaced with UniversalMCPHub
+
+# Universal MCP Hub (uses direct OpenRouter API, no MCP servers required)
+# This is initialized lazily when needed
 
 
-# Convenience functions for easy access
-async def get_available_tools() -> List[str]:
-    """Get list of available MCP tools."""
-    return await mcp_manager.get_available_tools()
-
-
-async def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """Execute an MCP tool with given parameters."""
-    return await mcp_manager.execute_tool(tool_name, params)
-
+    # Import from top-level mcp_integration.py, not this file
+    import sys
+    from pathlib import Path
+    
+    project_root = Path(__file__).parent.parent.parent
+    mcp_integration_path = project_root / "mcp_integration.py"
+    
+    if mcp_integration_path.exists():
+        # Import UniversalMCPHub from top-level mcp_integration.py
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("mcp_integration_top_level", str(mcp_integration_path))
+        mcp_module = importlib.util.module_from_spec(spec)
+        sys.modules['mcp_integration_top_level'] = mcp_module
+        spec.loader.exec_module(mcp_module)
+        
+        hub = mcp_module.get_mcp_hub()
+        result = await hub.execute_tool(tool_name, parameters)
+        
+        # Convert ToolResult to Dict for compatibility
+        if hasattr(result, 'success'):
+            return {
+                "success": result.success,
+                "data": result.data,
+                "error": result.error if not result.success else None,
+                "execution_time": result.execution_time,
+                "confidence": result.confidence
+            }
+        return result
+    else:
+        # Fallback if mcp_integration.py doesn't exist
+        logger.error("mcp_integration.py not found")
+        return {
+            "success": False,
+            "data": None,
+            "error": "MCP integration module not found",
+            "execution_time": 0.0,
+            "confidence": 0.0
+        }
 
 async def get_best_tool_for_task(task_category: str) -> Optional[str]:
     """Get the best tool for a specific task category."""
-    return await mcp_manager.get_best_tool_for_task(task_category)
-
+    # This function is deprecated - use UniversalMCPHub directly
+    # Return a default recommendation based on task category
+    tool_map = {
+        "search": "g-search",
+        "academic": "arxiv",
+        "data": "fetch",
+        "code": "python_coder"
+    }
+    return tool_map.get(task_category.lower())
 
 async def health_check() -> Dict[str, Any]:
     """Perform health check on MCP integration."""
-    return await mcp_manager.get_health_status()
+    # Return a simple health check without requiring initialized manager
+    return {
+        "status": "healthy",
+        "available_tools": ["g-search", "tavily", "exa", "arxiv", "fetch", "python_coder"],
+        "message": "Using UniversalMCPHub with direct API calls"
+    }

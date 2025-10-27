@@ -740,8 +740,15 @@ class MultiModelOrchestrator:
         return best_model or "gemini-flash-lite"
 
 
-# Global orchestrator instance
-llm_orchestrator = MultiModelOrchestrator()
+# Global orchestrator instance (lazy initialization)
+_llm_orchestrator = None
+
+def get_llm_orchestrator() -> 'MultiModelOrchestrator':
+    """Get or initialize global LLM orchestrator."""
+    global _llm_orchestrator
+    if _llm_orchestrator is None:
+        _llm_orchestrator = MultiModelOrchestrator()
+    return _llm_orchestrator
 
 
 async def execute_llm_task(
@@ -754,6 +761,7 @@ async def execute_llm_task(
 ) -> ModelResult:
     """LLM 작업 실행."""
     try:
+        llm_orchestrator = get_llm_orchestrator()
         if use_ensemble:
             return await llm_orchestrator.weighted_ensemble(
                 prompt, task_type, model_name, system_message, **kwargs
@@ -769,9 +777,11 @@ async def execute_llm_task(
 
 def get_best_model_for_task(task_type: TaskType) -> str:
     """작업에 최적 모델 반환."""
+    llm_orchestrator = get_llm_orchestrator()
     return llm_orchestrator.get_best_model_for_task(task_type)
 
 
 def get_model_performance_stats() -> Dict[str, Any]:
     """모델 성능 통계 반환."""
+    llm_orchestrator = get_llm_orchestrator()
     return llm_orchestrator.get_model_performance_stats()

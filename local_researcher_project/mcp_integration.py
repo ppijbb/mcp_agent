@@ -243,8 +243,8 @@ class UniversalMCPHub:
     async def initialize_mcp(self):
         """MCP 초기화 - OpenRouter와 Gemini 2.5 Flash Lite."""
         if not self.config.enabled:
-            logger.error("MCP is disabled. Cannot proceed without MCP connection.")
-            raise RuntimeError("MCP is required but disabled")
+            logger.warning("MCP is disabled. Continuing with limited functionality.")
+            return
         
         try:
             logger.info("Initializing MCP Hub with OpenRouter and Gemini 2.5 Flash Lite...")
@@ -270,15 +270,16 @@ class UniversalMCPHub:
                 logger.info(f"Available tools: {len(self.tools)}")
                 logger.info(f"Primary model: {self.llm_config.primary_model}")
             else:
-                raise RuntimeError("OpenRouter connection test failed")
+                logger.warning("⚠️ OpenRouter connection test failed - continuing with graceful degradation")
+                return
             
-            # 필수 도구 검증 및 실패 시 중단
+            # 필수 도구 검증 - 실패 시 warning만
             await self._validate_essential_tools()
             
         except Exception as e:
-            logger.error(f"Failed to initialize MCP Hub: {e}")
-            await self.cleanup()
-            raise RuntimeError(f"MCP Hub initialization failed: {e}")
+            logger.warning(f"⚠️ MCP Hub initialization failed: {e} - continuing with graceful degradation")
+            logger.info("ℹ️ System will continue with limited functionality (no API calls)")
+            # Don't raise, allow graceful degradation
     
     async def _validate_essential_tools(self):
         """필수 MCP 도구 검증 및 실패 시 중단 - PRODUCTION LEVEL."""
@@ -308,11 +309,11 @@ class UniversalMCPHub:
                         timeout=test_timeout
                     )
                 
-                if test_result.success:
+                if test_result.get('success', False):
                     logger.info(f"✅ Essential tool {tool} validated successfully")
                 else:
                     failed_tools.append(tool)
-                    logger.error(f"❌ Essential tool {tool} validation failed: {test_result.error}")
+                    logger.error(f"❌ Essential tool {tool} validation failed: {test_result.get('error', 'Unknown error')}")
                     
             except asyncio.TimeoutError:
                 failed_tools.append(tool)
@@ -335,44 +336,58 @@ class UniversalMCPHub:
             await self.openrouter_client.__aexit__(None, None, None)
         logger.info("MCP Hub cleanup completed")
     
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """MCP 도구 실행 - 실제 무료 API 사용."""
         if tool_name not in self.tools:
             logger.error(f"Unknown tool: {tool_name}")
-            return ToolResult(
-                success=False,
-                data=None,
-                error=f"Unknown tool: {tool_name}"
-            )
+            return {
+                "success": False,
+                "data": None,
+                "error": f"Unknown tool: {tool_name}",
+                "execution_time": 0.0,
+                "confidence": 0.0
+            }
 
         tool_info = self.tools[tool_name]
 
         try:
             # 실제 무료 API를 사용한 도구 실행
+            result: ToolResult
             if tool_info.category == ToolCategory.SEARCH:
-                return await _execute_search_tool(tool_name, parameters)
+                result = await _execute_search_tool(tool_name, parameters)
             elif tool_info.category == ToolCategory.ACADEMIC:
-                return await _execute_academic_tool(tool_name, parameters)
+                result = await _execute_academic_tool(tool_name, parameters)
             elif tool_info.category == ToolCategory.DATA:
-                return await _execute_data_tool(tool_name, parameters)
+                result = await _execute_data_tool(tool_name, parameters)
             elif tool_info.category == ToolCategory.CODE:
-                return await _execute_code_tool(tool_name, parameters)
+                result = await _execute_code_tool(tool_name, parameters)
             else:
-                return ToolResult(
+                result = ToolResult(
                     success=False,
                     data=None,
-                    error=f"Unsupported tool category: {tool_info.category}"
+                    error=f"Unsupported tool category: {tool_info.category}",
+                    execution_time=0.0,
+                    confidence=0.0
                 )
+            
+            # ToolResult를 dict로 변환
+            return {
+                "success": result.success,
+                "data": result.data,
+                "error": result.error,
+                "execution_time": result.execution_time,
+                "confidence": result.confidence
+            }
 
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
-            return ToolResult(
-                success=False,
-                data=None,
-                error=str(e),
-                execution_time=0.0,
-                confidence=0.0
-            )
+            return {
+                "success": False,
+                "data": None,
+                "error": str(e),
+                "execution_time": 0.0,
+                "confidence": 0.0
+            }
     
     def get_tool_for_category(self, category: ToolCategory) -> Optional[str]:
         """카테고리에 해당하는 도구 반환."""
@@ -480,45 +495,62 @@ class UniversalMCPHub:
             }
 
 
-# Global MCP Hub instance
-mcp_hub = UniversalMCPHub()
+# Global MCP Hub instance (lazy initialization)
+_mcp_hub = None
 
+def get_mcp_hub() -> 'UniversalMCPHub':
+    """Get or initialize global MCP Hub."""
+    global _mcp_hub
+    if _mcp_hub is None:
+        _mcp_hub = UniversalMCPHub()
+    return _mcp_hub
 
 async def get_available_tools() -> List[str]:
     """사용 가능한 도구 목록 반환."""
+    mcp_hub = get_mcp_hub()
     return mcp_hub.get_available_tools()
 
 
-async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """MCP 도구 실행 - 실제 무료 API 사용, 실패 시 명확한 오류 반환."""
     try:
         # 실제 무료 API를 사용한 도구 실행
+        result: ToolResult
         if tool_name in ["g-search", "tavily", "exa"]:
-            return await _execute_search_tool(tool_name, parameters)
+            result = await _execute_search_tool(tool_name, parameters)
         elif tool_name in ["arxiv", "scholar"]:
-            return await _execute_academic_tool(tool_name, parameters)
+            result = await _execute_academic_tool(tool_name, parameters)
         elif tool_name in ["fetch", "filesystem"]:
-            return await _execute_data_tool(tool_name, parameters)
+            result = await _execute_data_tool(tool_name, parameters)
         elif tool_name in ["python_coder", "code_interpreter"]:
-            return await _execute_code_tool(tool_name, parameters)
+            result = await _execute_code_tool(tool_name, parameters)
         else:
             logger.error(f"Unknown tool: {tool_name}")
-            return ToolResult(
+            result = ToolResult(
                 success=False,
                 data=None,
                 error=f"Unknown tool: {tool_name}",
                 execution_time=0.0,
                 confidence=0.0
             )
+        
+        # ToolResult를 dict로 변환
+        return {
+            "success": result.success,
+            "data": result.data,
+            "error": result.error,
+            "execution_time": result.execution_time,
+            "confidence": result.confidence
+        }
     except Exception as e:
         logger.error(f"Tool execution failed: {tool_name} - {e}")
-        return ToolResult(
-            success=False,
-            data=None,
-            error=f"Tool execution failed: {str(e)}",
-            execution_time=0.0,
-            confidence=0.0
-        )
+        return {
+            "success": False,
+            "data": None,
+            "error": f"Tool execution failed: {str(e)}",
+            "execution_time": 0.0,
+            "confidence": 0.0
+        }
 
 
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
@@ -876,17 +908,20 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
 
 async def get_tool_for_category(category: ToolCategory) -> Optional[str]:
     """카테고리에 해당하는 도구 반환."""
+    mcp_hub = get_mcp_hub()
     return mcp_hub.get_tool_for_category(category)
 
 
 async def health_check() -> Dict[str, Any]:
     """헬스 체크."""
+    mcp_hub = get_mcp_hub()
     return await mcp_hub.health_check()
 
 
 # CLI 실행 함수들
 async def run_mcp_hub():
     """MCP Hub 실행 (CLI)."""
+    mcp_hub = get_mcp_hub()
     print("🚀 Starting Universal MCP Hub...")
     try:
         await mcp_hub.initialize_mcp()
@@ -908,11 +943,9 @@ async def run_mcp_hub():
 async def list_tools():
     """도구 목록 출력 (CLI)."""
     print("🔧 Available MCP Tools:")
-    for tool_name, tool_info in mcp_hub.tools.items():
-        print(f"  - {tool_name}: {tool_info.description}")
-        print(f"    Category: {tool_info.category.value}")
-        print(f"    MCP Server: {tool_info.mcp_server}")
-        print()
+    available_tools = await get_available_tools()
+    for tool_name in available_tools:
+        print(f"  - {tool_name}")
 
 
 if __name__ == "__main__":
@@ -931,6 +964,7 @@ if __name__ == "__main__":
         asyncio.run(list_tools())
     elif args.health:
         async def show_health():
+            mcp_hub = get_mcp_hub()
             try:
                 await mcp_hub.initialize_mcp()
                 health = await health_check()

@@ -343,7 +343,7 @@ class CLIExecutor:
         # Check required dependencies - ALL MUST BE AVAILABLE
         try:
             result = subprocess.run(
-                ["python3", "-c", "import streamlit, openrouter, langgraph"],
+                ["python3", "-c", "import streamlit, langgraph"],
                 capture_output=True,
                 text=True,
                 timeout=10

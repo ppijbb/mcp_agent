@@ -473,12 +473,20 @@ class HierarchicalCompressor:
         }
 
 
-# Global compressor instance
-compressor = HierarchicalCompressor()
+# Global compressor instance (lazy initialization)
+_compressor = None
+
+def get_compressor() -> 'HierarchicalCompressor':
+    """Get or initialize global compressor."""
+    global _compressor
+    if _compressor is None:
+        _compressor = HierarchicalCompressor()
+    return _compressor
 
 
 async def compress_data(data: Union[str, Dict[str, Any]]) -> CompressionResult:
     """데이터 압축."""
+    compressor = get_compressor()
     return await execute_with_reliability(
         compressor.compress_with_validation,
         data,
@@ -489,9 +497,11 @@ async def compress_data(data: Union[str, Dict[str, Any]]) -> CompressionResult:
 
 def get_compression_stats() -> Dict[str, Any]:
     """압축 통계 반환."""
+    compressor = get_compressor()
     return compressor.get_compression_stats()
 
 
 async def restore_from_history(target_ratio: float = 0.5) -> Optional[CompressionResult]:
     """히스토리에서 복원."""
+    compressor = get_compressor()
     return compressor.history.get_best_compression(target_ratio)

@@ -1020,16 +1020,22 @@ class AutonomousOrchestrator:
                     parameters={"query": keyword, "max_results": 5}
                 )
                 
-                if result.success:
+                if result.get('success', False):
+                    result_data = result.get('data', {})
+                    if isinstance(result_data, dict) and 'results' in result_data:
+                        data_list = result_data.get('results', [])
+                    else:
+                        data_list = result_data if isinstance(result_data, list) else []
+                    
                     search_results.append({
                         "keyword": keyword,
                         "tool": tool_name,
-                        "data": result.data,
-                        "sources_count": len(result.data) if isinstance(result.data, list) else 1
+                        "data": data_list,
+                        "sources_count": len(data_list)
                     })
-                    logger.info(f"✅ {tool_name} search for '{keyword}': {len(result.data) if isinstance(result.data, list) else 1} results")
+                    logger.info(f"✅ {tool_name} search for '{keyword}': {len(data_list)} results")
                 else:
-                    logger.warning(f"⚠️ {tool_name} search failed for '{keyword}': {result.error}")
+                    logger.warning(f"⚠️ {tool_name} search failed for '{keyword}': {result.get('error', 'Unknown error')}")
                     
             except Exception as e:
                 logger.warning(f"⚠️ {tool_name} search error for '{keyword}': {e}")
@@ -1045,13 +1051,19 @@ class AutonomousOrchestrator:
                     parameters={"query": " ".join(keywords[:2]), "max_results": 3}
                 )
                 
-                if result.success:
+                if result.get('success', False):
+                    result_data = result.get('data', {})
+                    if isinstance(result_data, dict) and 'results' in result_data:
+                        data_list = result_data.get('results', [])
+                    else:
+                        data_list = result_data if isinstance(result_data, list) else []
+                    
                     academic_results.append({
                         "tool": tool_name,
-                        "data": result.data,
-                        "sources_count": len(result.data) if isinstance(result.data, list) else 1
+                        "data": data_list,
+                        "sources_count": len(data_list)
                     })
-                    logger.info(f"✅ {tool_name} academic search: {len(result.data) if isinstance(result.data, list) else 1} results")
+                    logger.info(f"✅ {tool_name} academic search: {len(data_list)} results")
                     
             except Exception as e:
                 logger.warning(f"⚠️ {tool_name} academic search error: {e}")
@@ -2037,11 +2049,18 @@ class AutonomousOrchestrator:
             return False
 
 
-# Global orchestrator instance
-orchestrator = AutonomousOrchestrator()
+# Global orchestrator instance (lazy initialization)
+_orchestrator = None
 
+def get_orchestrator() -> 'AutonomousOrchestrator':
+    """Get or initialize global orchestrator."""
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = AutonomousOrchestrator()
+    return _orchestrator
 
 async def run_research(user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """연구 실행."""
+    orchestrator = get_orchestrator()
     return await orchestrator.run_research(user_request, context)
 
