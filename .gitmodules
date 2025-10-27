@@ -16,3 +16,6 @@
 [submodule "open_researcher/AgentFlow"]
 	path = open_researcher/AgentFlow
 	url = https://github.com/lupantech/AgentFlow.git
+[submodule "open_researcher/LightMem"]
+	path = open_researcher/LightMem
+	url = https://github.com/zjunlp/LightMem.git
