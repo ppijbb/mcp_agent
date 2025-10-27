@@ -60,7 +60,7 @@ class ToolResult:
 
 
 class OpenRouterClient:
-    """OpenRouter API 클라이언트 - Gemini 2.5 Flash Lite 우선 사용."""
+    """OpenRouter API 클라이언트 - API에서 무료 모델을 동적으로 가져와 사용."""
     
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -68,17 +68,72 @@ class OpenRouterClient:
         self.session: Optional[aiohttp.ClientSession] = None
         self.rate_limit_remaining = 1000
         self.rate_limit_reset = datetime.now() + timedelta(hours=1)
+        self.available_models: List[str] = []
+        self.free_models: List[str] = []
     
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
             headers={
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://mcp-agent.local",
                 "X-Title": "MCP Agent Hub"
             }
         )
+        
+        # OpenRouter API에서 무료 모델 목록 동적으로 가져오기
+        await self._fetch_free_models()
+        
         return self
+    
+    async def _fetch_free_models(self):
+        """OpenRouter API에서 무료 모델 목록을 동적으로 가져옴."""
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://mcp-agent.local",
+                "X-Title": "MCP Agent Hub"
+            }
+            
+            # API 키가 있으면 추가
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            
+            async with self.session.get(
+                f"{self.base_url}/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = data.get("data", [])
+                    
+                    for model in models:
+                        model_id = model.get("id", "")
+                        pricing = model.get("pricing", {})
+                        
+                        # 무료 모델 확인
+                        if pricing and pricing.get("prompt", "0") == "0" and pricing.get("completion", "0") == "0":
+                            self.free_models.append(model_id)
+                        
+                        self.available_models.append(model_id)
+                    
+                    if self.free_models:
+                        logger.info(f"✅ 동적으로 {len(self.free_models)}개의 무료 모델 로드: {', '.join(self.free_models[:5])}")
+                    else:
+                        logger.warning("⚠️ 무료 모델을 찾지 못했습니다. API 키 없이는 제한적 기능만 사용 가능합니다.")
+                else:
+                    logger.warning(f"⚠️ OpenRouter 모델 목록 조회 실패: {response.status}")
+                    
+        except Exception as e:
+            logger.warning(f"⚠️ 무료 모델 로드 실패: {e}. 기본 모델 사용")
+            
+    def get_free_model(self) -> str:
+        """무료 모델 중 첫 번째 사용 가능한 모델 반환."""
+        if self.free_models:
+            return self.free_models[0]
+        # 무료 모델이 없으면 기본값 (OpenRouter의 최근 무료 모델)
+        return "deepseek/deepseek-chat-v3.1:free"
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:

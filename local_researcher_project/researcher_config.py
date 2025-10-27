@@ -51,8 +51,9 @@ class LLMConfig(BaseModel):
     @field_validator('openrouter_api_key')
     @classmethod
     def validate_openrouter_api_key(cls, v):
-        if not v:
-            raise ValueError("OPENROUTER_API_KEY environment variable is required for OpenRouter LLM provider")
+        # 무료 모델 사용시 API 키 불필요
+        if not v or v.strip() == "":
+            return ""  # 빈 문자열 허용 (무료 모델)
         if not v.startswith('sk-or-'):
             raise ValueError("OPENROUTER_API_KEY must start with 'sk-or-'")
         return v
@@ -60,8 +61,9 @@ class LLMConfig(BaseModel):
     @field_validator('primary_model')
     @classmethod
     def validate_primary_model(cls, v):
-        if not v.startswith('google/gemini-'):
-            raise ValueError("Primary model must be a Gemini model (google/gemini-*)")
+        # 모든 OpenRouter 모델 허용
+        if not v or v.strip() == "":
+            raise ValueError("Primary model must be specified")
         return v
     
     @classmethod
