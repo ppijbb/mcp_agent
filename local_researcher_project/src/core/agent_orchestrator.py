@@ -19,6 +19,9 @@ from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from src.core.shared_memory import get_shared_memory, MemoryScope
+from src.core.skills_manager import get_skill_manager
+from src.core.skills_selector import get_skill_selector, SkillMatch
+from src.core.skills_loader import Skill
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +66,35 @@ class AgentContext:
 
 
 class PlannerAgent:
-    """Planner agent - creates research plans."""
+    """Planner agent - creates research plans (Skills-based)."""
     
-    def __init__(self, context: AgentContext):
+    def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "planner"
+        self.skill = skill
+        
+        # Skill이 없으면 로드 시도
+        if self.skill is None:
+            skill_manager = get_skill_manager()
+            self.skill = skill_manager.load_skill("research_planner")
+        
+        # Skill instruction 사용
+        if self.skill:
+            self.instruction = self.skill.instructions
+        else:
+            # Fallback instruction
+            self.instruction = "You are a research planning agent."
     
     async def execute(self, state: AgentState) -> AgentState:
-        """Execute planning task with actual LLM call."""
+        """Execute planning task with Skills-based instruction."""
         logger.info(f"[{self.name}] Planning research for: {state['user_query']}")
         
         # Read from shared memory
         memory = self.context.shared_memory
         previous_plans = memory.search(state['user_query'], limit=3)
+        
+        # Skills-based instruction 사용
+        instruction = self.instruction if self.skill else "You are a research planning agent."
         
         # Call LLM via OpenRouter (priority: OpenRouter > Gemini > OpenAI)
         try:
@@ -86,8 +105,10 @@ class PlannerAgent:
             if not openrouter_key:
                 raise ValueError("OPENROUTER_API_KEY not set")
             
-            # Use OpenRouter with free model
-            prompt = f"""You are a research planning agent. Create a detailed research plan for: {state['user_query']}
+            # Use Skills instruction
+            prompt = f"""{instruction}
+
+Task: Create a detailed research plan for: {state['user_query']}
 
 Based on previous research:
 {previous_plans if previous_plans else "No previous research found"}
@@ -132,11 +153,24 @@ Objectives:
 
 
 class ExecutorAgent:
-    """Executor agent - executes research tasks using tools."""
+    """Executor agent - executes research tasks using tools (Skills-based)."""
     
-    def __init__(self, context: AgentContext):
+    def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "executor"
+        self.skill = skill
+        
+        # Skill이 없으면 로드 시도
+        if self.skill is None:
+            skill_manager = get_skill_manager()
+            self.skill = skill_manager.load_skill("research_executor")
+        
+        # Skill instruction 사용
+        if self.skill:
+            self.instruction = self.skill.instructions
+        else:
+            # Fallback instruction
+            self.instruction = "You are a research execution agent."
     
     async def execute(self, state: AgentState) -> AgentState:
         """Execute research tasks."""
@@ -174,11 +208,24 @@ class ExecutorAgent:
 
 
 class VerifierAgent:
-    """Verifier agent - verifies research results."""
+    """Verifier agent - verifies research results (Skills-based)."""
     
-    def __init__(self, context: AgentContext):
+    def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "verifier"
+        self.skill = skill
+        
+        # Skill이 없으면 로드 시도
+        if self.skill is None:
+            skill_manager = get_skill_manager()
+            self.skill = skill_manager.load_skill("evaluator")
+        
+        # Skill instruction 사용
+        if self.skill:
+            self.instruction = self.skill.instructions
+        else:
+            # Fallback instruction
+            self.instruction = "You are a verification agent."
     
     async def execute(self, state: AgentState) -> AgentState:
         """Verify research results."""
@@ -210,11 +257,24 @@ class VerifierAgent:
 
 
 class GeneratorAgent:
-    """Generator agent - creates final report."""
+    """Generator agent - creates final report (Skills-based)."""
     
-    def __init__(self, context: AgentContext):
+    def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "generator"
+        self.skill = skill
+        
+        # Skill이 없으면 로드 시도
+        if self.skill is None:
+            skill_manager = get_skill_manager()
+            self.skill = skill_manager.load_skill("synthesizer")
+        
+        # Skill instruction 사용
+        if self.skill:
+            self.instruction = self.skill.instructions
+        else:
+            # Fallback instruction
+            self.instruction = "You are a report generation agent."
     
     async def execute(self, state: AgentState) -> AgentState:
         """Generate final report."""
@@ -266,13 +326,14 @@ class AgentOrchestrator:
         """Initialize orchestrator."""
         self.config = config
         self.shared_memory = get_shared_memory()
+        self.skill_manager = get_skill_manager()
         self.graph = None
-        self._build_graph()
+        # Graph는 첫 실행 시 쿼리 기반으로 빌드
         
         logger.info("AgentOrchestrator initialized")
     
-    def _build_graph(self) -> None:
-        """Build LangGraph workflow."""
+    def _build_graph(self, user_query: Optional[str] = None) -> None:
+        """Build LangGraph workflow with Skills auto-selection."""
         
         # Create context for all agents
         context = AgentContext(
@@ -282,11 +343,21 @@ class AgentOrchestrator:
             config=self.config
         )
         
-        # Initialize agents
-        self.planner = PlannerAgent(context)
-        self.executor = ExecutorAgent(context)
-        self.verifier = VerifierAgent(context)
-        self.generator = GeneratorAgent(context)
+        # Skills 자동 선택 (쿼리가 있으면)
+        selected_skills = {}
+        if user_query:
+            skill_selector = get_skill_selector()
+            matches = skill_selector.select_skills_for_task(user_query)
+            for match in matches:
+                skill = self.skill_manager.load_skill(match.skill_id)
+                if skill:
+                    selected_skills[match.skill_id] = skill
+        
+        # Initialize agents with Skills
+        self.planner = PlannerAgent(context, selected_skills.get("research_planner"))
+        self.executor = ExecutorAgent(context, selected_skills.get("research_executor"))
+        self.verifier = VerifierAgent(context, selected_skills.get("evaluator"))
+        self.generator = GeneratorAgent(context, selected_skills.get("synthesizer"))
         
         # Build graph
         workflow = StateGraph(AgentState)
@@ -333,7 +404,7 @@ class AgentOrchestrator:
     
     async def execute(self, user_query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Execute multi-agent workflow.
+        Execute multi-agent workflow with Skills auto-selection.
         
         Args:
             user_query: User's research query
@@ -346,6 +417,10 @@ class AgentOrchestrator:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         logger.info(f"Starting workflow for query: {user_query}")
+        
+        # Graph가 없거나 쿼리 기반 재빌드가 필요한 경우 빌드
+        if self.graph is None:
+            self._build_graph(user_query)
         
         # Initialize state
         initial_state = AgentState(
