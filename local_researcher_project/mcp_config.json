@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ddg_search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@OEvortex/ddg_search",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0"
+      ]
+    }
+  }
+}
+

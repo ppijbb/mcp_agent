@@ -19,6 +19,21 @@ from enum import Enum
 import subprocess
 import os
 from datetime import datetime, timedelta
+from contextlib import AsyncExitStack
+
+# MCP imports
+try:
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    from mcp.types import ListToolsResult, TextContent
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    ClientSession = None
+    StdioServerParameters = None
+    stdio_client = None
+    ListToolsResult = None
+    TextContent = None
 
 # Add project root to path
 project_root = Path(__file__).parent
@@ -137,7 +152,14 @@ class OpenRouterClient:
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
-            await self.session.close()
+            try:
+                await self.session.close()
+                # 연결 완전히 정리 대기
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.debug(f"Error closing OpenRouter session: {e}")
+            finally:
+                self.session = None
     
     async def generate_response(self, model: str, messages: List[Dict[str, str]], 
                               temperature: float = 0.1, max_tokens: int = 4000) -> Dict[str, Any]:
@@ -188,9 +210,16 @@ class UniversalMCPHub:
 
         self.tools: Dict[str, ToolInfo] = {}
         self.openrouter_client: Optional[OpenRouterClient] = None
+        
+        # MCP 클라이언트
+        self.mcp_sessions: Dict[str, ClientSession] = {}
+        self.exit_stacks: Dict[str, AsyncExitStack] = {}
+        self.mcp_tools_map: Dict[str, Dict[str, Any]] = {}  # server_name -> {tool_name -> tool_info}
+        self.mcp_server_configs: Dict[str, Dict[str, Any]] = {}
 
         self._initialize_tools()
         self._initialize_clients()
+        self._load_mcp_servers_from_config()
     
     def _initialize_tools(self):
         """도구 초기화."""
@@ -295,38 +324,152 @@ class UniversalMCPHub:
         else:
             logger.warning("OpenRouter API key not configured - LLM features will not function")
     
+    def _load_mcp_servers_from_config(self):
+        """MCP 서버 설정을 config에서 로드."""
+        try:
+            # .env나 config 파일에서 MCP 서버 설정 읽기
+            config_file = project_root / "mcp_config.json"
+            
+            if config_file.exists():
+                with open(config_file, 'r') as f:
+                    config_data = json.load(f)
+                    self.mcp_server_configs = config_data.get("mcpServers", {})
+                    logger.info(f"✅ Loaded MCP server configs: {list(self.mcp_server_configs.keys())}")
+            else:
+                # 기본 DuckDuckGo MCP 서버 설정
+                self.mcp_server_configs = {
+                    "ddg_search": {
+                        "command": "npx",
+                        "args": [
+                            "-y",
+                            "@smithery/cli@latest",
+                            "run",
+                            "@OEvortex/ddg_search",
+                            "--key",
+                            os.getenv("DDG_SEARCH_KEY", "")
+                        ]
+                    }
+                }
+                logger.info("✅ Using default MCP server config for ddg_search")
+                
+        except Exception as e:
+            logger.warning(f"Failed to load MCP server configs: {e}")
+            self.mcp_server_configs = {}
+    
+    async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any]):
+        """MCP 서버에 연결."""
+        if not MCP_AVAILABLE:
+            logger.error("MCP package not available")
+            return False
+        
+        try:
+            if server_name in self.mcp_sessions:
+                await self._disconnect_from_mcp_server(server_name)
+            
+            command = server_config["command"]
+            args = server_config.get("args", [])
+            
+            logger.info(f"Connecting to MCP server: {server_name} ({command})")
+            
+            exit_stack = AsyncExitStack()
+            self.exit_stacks[server_name] = exit_stack
+            
+            # stdio transport 사용
+            server_params = StdioServerParameters(command=command, args=args)
+            stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
+            read, write = stdio_transport
+            session = await exit_stack.enter_async_context(ClientSession(read, write))
+            
+            self.mcp_sessions[server_name] = session
+            
+            # 세션 초기화 및 도구 목록 가져오기
+            await session.initialize()
+            response = await session.list_tools()
+            
+            # 도구 맵 생성
+            self.mcp_tools_map[server_name] = {}
+            for tool in response.tools:
+                self.mcp_tools_map[server_name][tool.name] = tool
+            
+            logger.info(f"✅ Connected to MCP server {server_name} with {len(response.tools)} tools")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to connect to MCP server {server_name}: {e}")
+            return False
+    
+    async def _disconnect_from_mcp_server(self, server_name: str):
+        """MCP 서버 연결 해제."""
+        try:
+            # 세션 먼저 제거
+            if server_name in self.mcp_sessions:
+                del self.mcp_sessions[server_name]
+            
+            # Exit stack은 직접 닫지 않고 참조만 제거
+            # (stdio_client가 async generator이므로 자동으로 정리됨)
+            if server_name in self.exit_stacks:
+                # AsyncExitStack을 직접 aclose() 하면 다른 task에서 실행될 수 있어 에러 발생
+                # 대신 참조만 제거하고 실제 정리는 Python GC가 처리하도록 함
+                del self.exit_stacks[server_name]
+            
+            if server_name in self.mcp_tools_map:
+                del self.mcp_tools_map[server_name]
+            
+            logger.debug(f"Disconnected from MCP server: {server_name}")
+            
+        except Exception as e:
+            logger.debug(f"Error disconnecting from MCP server {server_name}: {e}")
+    
     async def initialize_mcp(self):
-        """MCP 초기화 - OpenRouter와 Gemini 2.5 Flash Lite."""
+        """MCP 초기화 - OpenRouter와 MCP 서버 연결."""
         if not self.config.enabled:
             logger.warning("MCP is disabled. Continuing with limited functionality.")
             return
         
         try:
-            logger.info("Initializing MCP Hub with OpenRouter and Gemini 2.5 Flash Lite...")
+            logger.info("Initializing MCP Hub with OpenRouter and MCP servers...")
             
             # OpenRouter 클라이언트 초기화
-            await self.openrouter_client.__aenter__()
+            if self.openrouter_client:
+                await self.openrouter_client.__aenter__()
+            
+            # MCP 서버 연결 (모든 서버)
+            connected_servers = []
+            for server_name, server_config in self.mcp_server_configs.items():
+                try:
+                    success = await self._connect_to_mcp_server(server_name, server_config)
+                    if success:
+                        connected_servers.append(server_name)
+                except Exception as e:
+                    logger.error(f"Failed to connect to MCP server {server_name}: {e}")
+            
+            if connected_servers:
+                logger.info(f"✅ Successfully connected to {len(connected_servers)} MCP servers: {', '.join(connected_servers)}")
+            else:
+                logger.warning("⚠️ No MCP servers connected successfully")
             
             # 연결 테스트
-            test_messages = [
-                {"role": "system", "content": "You are a test assistant."},
-                {"role": "user", "content": "Hello, this is a connection test."}
-            ]
-            
-            test_response = await self.openrouter_client.generate_response(
-                model=self.llm_config.primary_model,
-                messages=test_messages,
-                temperature=0.1,
-                max_tokens=100
-            )
-            
-            if test_response and "choices" in test_response:
-                logger.info("✅ MCP Hub initialized successfully with OpenRouter and Gemini 2.5 Flash Lite")
-                logger.info(f"Available tools: {len(self.tools)}")
-                logger.info(f"Primary model: {self.llm_config.primary_model}")
-            else:
-                logger.warning("⚠️ OpenRouter connection test failed - continuing with graceful degradation")
-                return
+            if self.openrouter_client:
+                test_messages = [
+                    {"role": "system", "content": "You are a test assistant."},
+                    {"role": "user", "content": "Hello, this is a connection test."}
+                ]
+                
+                test_response = await self.openrouter_client.generate_response(
+                    model=self.llm_config.primary_model,
+                    messages=test_messages,
+                    temperature=0.1,
+                    max_tokens=100
+                )
+                
+                if test_response and "choices" in test_response:
+                    logger.info("✅ MCP Hub initialized successfully")
+                    logger.info(f"Available tools: {len(self.tools)}")
+                    logger.info(f"MCP servers: {list(self.mcp_sessions.keys())}")
+                    logger.info(f"Primary model: {self.llm_config.primary_model}")
+                else:
+                    logger.warning("⚠️ OpenRouter connection test failed - continuing with graceful degradation")
+                    return
             
             # 필수 도구 검증 - 실패 시 warning만
             await self._validate_essential_tools()
@@ -335,6 +478,49 @@ class UniversalMCPHub:
             logger.warning(f"⚠️ MCP Hub initialization failed: {e} - continuing with graceful degradation")
             logger.info("ℹ️ System will continue with limited functionality (no API calls)")
             # Don't raise, allow graceful degradation
+    
+    async def _execute_via_mcp_server(self, server_name: str, tool_name: str, params: Dict[str, Any]) -> Optional[Any]:
+        """MCP 서버를 통해 도구 실행."""
+        if server_name not in self.mcp_sessions:
+            logger.error(f"Server {server_name} not in mcp_sessions. Available: {list(self.mcp_sessions.keys())}")
+            return None
+        
+        if server_name not in self.mcp_tools_map:
+            logger.error(f"Server {server_name} not in mcp_tools_map. Available: {list(self.mcp_tools_map.keys())}")
+            return None
+        
+        if tool_name not in self.mcp_tools_map[server_name]:
+            available_tools = list(self.mcp_tools_map[server_name].keys())
+            logger.error(f"Tool {tool_name} not found in server {server_name}. Available tools: {available_tools}")
+            return None
+        
+        try:
+            session = self.mcp_sessions[server_name]
+            logger.debug(f"Calling tool {tool_name} on server {server_name} with params: {params}")
+            result = await session.call_tool(tool_name, params)
+            
+            # 결과를 TextContent에서 추출
+            if result and result.content:
+                content_parts = []
+                for item in result.content:
+                    if isinstance(item, TextContent):
+                        content_parts.append(item.text)
+                    else:
+                        # 다른 타입의 content도 처리
+                        content_parts.append(str(item))
+                
+                content_str = " ".join(content_parts)
+                logger.debug(f"Tool {tool_name} returned content length: {len(content_str)}")
+                return content_str
+            else:
+                logger.warning(f"Tool {tool_name} returned empty result")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Failed to execute tool {tool_name} on server {server_name}: {e}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+            return None
     
     async def _validate_essential_tools(self):
         """필수 MCP 도구 검증 및 실패 시 중단 - PRODUCTION LEVEL."""
@@ -393,9 +579,58 @@ class UniversalMCPHub:
     async def cleanup(self):
         """MCP 연결 정리."""
         logger.info("Cleaning up MCP Hub...")
+        
+        # 모든 MCP 서버 연결 해제 (역순으로 정리)
+        server_names = list(self.mcp_sessions.keys())
+        for server_name in reversed(server_names):
+            try:
+                # 세션만 제거하고 exit stack은 나중에 정리
+                if server_name in self.mcp_sessions:
+                    del self.mcp_sessions[server_name]
+                
+                # Exit stack 정리 (에러 무시)
+                if server_name in self.exit_stacks:
+                    exit_stack = self.exit_stacks[server_name]
+                    try:
+                        # exit_stack.aclose()를 직접 호출하지 않고
+                        # 이미 생성된 컨텍스트는 그대로 두고 정리만 시도
+                        del self.exit_stacks[server_name]
+                    except Exception:
+                        # 에러는 무시하고 계속
+                        pass
+                
+                if server_name in self.mcp_tools_map:
+                    del self.mcp_tools_map[server_name]
+                    
+            except Exception as e:
+                logger.debug(f"Error disconnecting from {server_name}: {e}")
+        
+        # OpenRouter 클라이언트 정리
         if self.openrouter_client:
-            await self.openrouter_client.__aexit__(None, None, None)
+            try:
+                if hasattr(self.openrouter_client, 'session') and self.openrouter_client.session:
+                    await self.openrouter_client.session.close()
+                    # 세션 완전히 정리 대기
+                    await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.debug(f"Error closing OpenRouter client session: {e}")
+            finally:
+                self.openrouter_client = None
+        
         logger.info("MCP Hub cleanup completed")
+    
+    async def call_llm_async(self, model: str, messages: List[Dict[str, str]], 
+                           temperature: float = 0.1, max_tokens: int = 4000) -> Dict[str, Any]:
+        """LLM 호출 - OpenRouter를 통한 비동기 호출."""
+        if not self.openrouter_client:
+            raise RuntimeError("OpenRouter client not initialized")
+        
+        return await self.openrouter_client.generate_response(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
     
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """MCP 도구 실행 - 실제 무료 API 사용."""
@@ -615,9 +850,8 @@ async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, 
 
 
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """실제 무료 검색 API를 사용한 검색 도구 실행."""
+    """MCP 서버를 통한 검색 도구 실행."""
     import time
-    from duckduckgo_search import DDGS
     
     start_time = time.time()
     query = parameters.get("query", "")
@@ -625,19 +859,125 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
     
     try:
         if tool_name == "g-search":
-            # DuckDuckGo 검색 (100% 무료) with retry logic
-            import random
-            max_retries = 3
+            # mcp_config.json에 정의된 모든 MCP 서버에서 검색 시도
+            mcp_hub = get_mcp_hub()
             
+            # MCP 서버 연결 확인 및 재연결
+            if not mcp_hub.mcp_sessions:
+                logger.warning("No MCP servers connected, attempting to initialize...")
+                try:
+                    await mcp_hub.initialize_mcp()
+                except Exception as e:
+                    logger.warning(f"Failed to initialize MCP servers: {e}")
+            
+            # mcp_config.json에 정의된 모든 서버 확인
+            for server_name in mcp_hub.mcp_server_configs.keys():
+                # 연결이 안 되어 있으면 연결 시도
+                if server_name not in mcp_hub.mcp_sessions:
+                    logger.info(f"MCP server {server_name} not connected, attempting connection...")
+                    try:
+                        server_config = mcp_hub.mcp_server_configs[server_name]
+                        success = await mcp_hub._connect_to_mcp_server(server_name, server_config)
+                        if not success:
+                            logger.warning(f"Failed to connect to MCP server {server_name}")
+                            continue
+                    except Exception as e:
+                        logger.error(f"Error connecting to MCP server {server_name}: {e}")
+                        continue
+                
+                # 도구 맵 확인
+                if server_name not in mcp_hub.mcp_tools_map:
+                    logger.warning(f"MCP server {server_name} has no tools map")
+                    continue
+                
+                try:
+                    tools = mcp_hub.mcp_tools_map[server_name]
+                    if not tools:
+                        logger.warning(f"MCP server {server_name} has no tools available")
+                        continue
+                    
+                    search_tool_name = None
+                    
+                    # 검색 도구 찾기 (search, query, ddg 등 키워드로)
+                    for tool_name_key in tools.keys():
+                        tool_lower = tool_name_key.lower()
+                        if "search" in tool_lower or "query" in tool_lower or "ddg" in tool_lower:
+                            search_tool_name = tool_name_key
+                            logger.info(f"Found search tool '{search_tool_name}' in server {server_name}")
+                            break
+                    
+                    if not search_tool_name:
+                        logger.debug(f"No search tool found in MCP server {server_name}, available tools: {list(tools.keys())}")
+                        continue
+                    
+                    # 검색 실행
+                    logger.info(f"Using MCP server {server_name} with tool {search_tool_name} for search: {query}")
+                    result = await mcp_hub._execute_via_mcp_server(
+                        server_name,
+                        search_tool_name,
+                        {"query": query, "max_results": max_results}
+                    )
+                    
+                    if not result:
+                        logger.warning(f"MCP server {server_name} tool {search_tool_name} returned no result")
+                        continue
+                    
+                    # 결과 파싱
+                    import json
+                    if isinstance(result, str):
+                        try:
+                            result_data = json.loads(result)
+                        except:
+                            # JSON이 아니면 텍스트를 결과로 사용
+                            logger.debug(f"Result is not JSON, treating as text: {result[:100]}")
+                            result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                    else:
+                        result_data = result
+                    
+                    # 결과 형식 정규화
+                    results = result_data.get("results", [])
+                    if not results and isinstance(result_data, dict):
+                        # 다른 형식 시도
+                        results = result_data.get("items", result_data.get("data", []))
+                    
+                    if results:
+                        logger.info(f"✅ Search successful via MCP server {server_name}: {len(results)} results")
+                        return ToolResult(
+                            success=True,
+                            data={
+                                "query": query,
+                                "results": results if isinstance(results, list) else [results],
+                                "total_results": len(results) if isinstance(results, list) else 1,
+                                "source": f"{server_name}-mcp"
+                            },
+                            execution_time=time.time() - start_time,
+                            confidence=0.9
+                        )
+                    else:
+                        logger.warning(f"MCP server {server_name} returned empty results")
+                        continue
+                    
+                except Exception as mcp_error:
+                    logger.warning(f"MCP 서버 {server_name} 검색 실패: {mcp_error}, 다음 서버 시도")
+                    import traceback
+                    logger.debug(f"Traceback: {traceback.format_exc()}")
+                    continue
+            
+            # 모든 MCP 서버 실패 시 직접 DuckDuckGo 사용
+            
+            # Fallback: 직접 DuckDuckGo 검색
+            logger.info(f"Using direct DuckDuckGo search for query: {query}")
+            from duckduckgo_search import DDGS
+            
+            max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    # Random delay to avoid rate limiting
                     if attempt > 0:
-                        delay = random.uniform(2, 5) * (attempt + 1)
+                        delay = 2 * attempt
                         await asyncio.sleep(delay)
-                        logger.info(f"Retrying g-search after {delay:.2f}s (attempt {attempt + 1})")
+                        logger.info(f"Retrying search (attempt {attempt + 1}/{max_retries})")
                     
-                    with DDGS() as ddgs:
+                    with DDGS(timeout=60) as ddgs:
                         results = []
                         for r in ddgs.text(query, max_results=max_results):
                             results.append({
@@ -646,13 +986,15 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                 "snippet": r.get("body", "")
                             })
                         
+                        logger.info(f"Search completed with {len(results)} results")
                         return ToolResult(
                             success=True,
                             data={
                                 "query": query,
                                 "results": results,
                                 "total_results": len(results),
-                                "source": "duckduckgo"
+                                "source": "duckduckgo-direct",
+                                "mcp_server_used": False
                             },
                             execution_time=time.time() - start_time,
                             confidence=0.9
@@ -660,90 +1002,149 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     
                 except Exception as e:
                     error_str = str(e)
-                    # Rate limit 오류인 경우 재시도
-                    if "202" in error_str or "ratelimit" in error_str.lower() or "rate" in error_str.lower():
+                    if "202" in error_str or "ratelimit" in error_str.lower():
                         if attempt < max_retries - 1:
-                            logger.warning(f"Rate limit hit, retrying g-search (attempt {attempt + 1}/{max_retries})")
+                            logger.warning(f"Rate limit hit, retrying (attempt {attempt + 1}/{max_retries})")
                             continue
                         else:
-                            logger.error(f"g-search rate limit after {max_retries} attempts: {e}")
-                            # Fallback: 빈 결과 반환
+                            logger.error(f"Rate limit after {max_retries} attempts")
                             return ToolResult(
                                 success=False,
-                                data={"query": query, "results": [], "total_results": 0, "source": "duckduckgo", "rate_limited": True},
+                                data={"query": query, "results": [], "total_results": 0, "rate_limited": True},
                                 error=f"Rate limited: {str(e)}",
                                 execution_time=time.time() - start_time,
                                 confidence=0.0
                             )
                     else:
-                        # 다른 오류는 그대로 전파
                         raise
+            
+            # 모든 재시도 실패
+            logger.error("All search attempts failed")
+            raise RuntimeError("All search attempts failed")
         
         elif tool_name == "tavily":
-            # Tavily API (무료 tier 사용)
-            import os
-            api_key = os.getenv("TAVILY_API_KEY")
-            if not api_key:
-                raise ValueError("TAVILY_API_KEY not found. Please set it in .env file")
+            # MCP 서버를 통해 tavily 사용 (mcp_config.json에 정의된 서버)
+            mcp_hub = get_mcp_hub()
             
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": api_key,
-                        "query": query,
-                        "search_depth": "basic",
-                        "max_results": max_results
-                    }
-                )
-                response.raise_for_status()
-                data = response.json()
+            # 모든 연결된 MCP 서버에서 tavily 도구 찾아서 시도
+            for server_name in mcp_hub.mcp_sessions.keys():
+                if server_name not in mcp_hub.mcp_tools_map:
+                    continue
                 
-                return ToolResult(
-                    success=True,
-                    data={
-                        "query": query,
-                        "results": data.get("results", []),
-                        "total_results": len(data.get("results", [])),
-                        "source": "tavily"
-                    },
-                    execution_time=time.time() - start_time,
-                    confidence=0.85
-                )
+                try:
+                    tools = mcp_hub.mcp_tools_map[server_name]
+                    tavily_tool_name = None
+                    
+                    # tavily 도구 찾기
+                    for tool_name_key in tools.keys():
+                        tool_lower = tool_name_key.lower()
+                        if "tavily" in tool_lower:
+                            tavily_tool_name = tool_name_key
+                            break
+                    
+                    if tavily_tool_name:
+                        logger.info(f"Using MCP server {server_name} with tool {tavily_tool_name}")
+                        result = await mcp_hub._execute_via_mcp_server(
+                            server_name,
+                            tavily_tool_name,
+                            {"query": query, "max_results": max_results}
+                        )
+                        
+                        if result:
+                            import json
+                            if isinstance(result, str):
+                                try:
+                                    result_data = json.loads(result)
+                                except:
+                                    result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                            else:
+                                result_data = result
+                            
+                            results = result_data.get("results", [])
+                            if not results and isinstance(result_data, dict):
+                                results = result_data.get("items", result_data.get("data", []))
+                            
+                            if results:
+                                return ToolResult(
+                                    success=True,
+                                    data={
+                                        "query": query,
+                                        "results": results if isinstance(results, list) else [results],
+                                        "total_results": len(results) if isinstance(results, list) else 1,
+                                        "source": f"{server_name}-mcp"
+                                    },
+                                    execution_time=time.time() - start_time,
+                                    confidence=0.85
+                                )
+                    
+                except Exception as mcp_error:
+                    logger.warning(f"MCP 서버 {server_name} tavily 실패: {mcp_error}, 다음 서버 시도")
+                    continue
+            
+            # MCP 서버에 tavily가 없으면 에러 (fallback 제거)
+            raise ValueError("Tavily MCP server not found. Add tavily server to mcp_config.json")
         
         elif tool_name == "exa":
-            # Exa API (무료 tier 사용)
-            import os
-            api_key = os.getenv("EXA_API_KEY")
-            if not api_key:
-                raise ValueError("EXA_API_KEY not found. Please set it in .env file")
+            # MCP 서버를 통해 exa 사용 (mcp_config.json에 정의된 서버)
+            mcp_hub = get_mcp_hub()
             
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.exa.ai/search",
-                    headers={"x-api-key": api_key},
-                    json={
-                        "query": query,
-                        "numResults": max_results,
-                        "type": "search"
-                    }
-                )
-                response.raise_for_status()
-                data = response.json()
+            # 모든 연결된 MCP 서버에서 exa 도구 찾아서 시도
+            for server_name in mcp_hub.mcp_sessions.keys():
+                if server_name not in mcp_hub.mcp_tools_map:
+                    continue
                 
-                return ToolResult(
-                    success=True,
-                    data={
-                        "query": query,
-                        "results": data.get("results", []),
-                        "total_results": len(data.get("results", [])),
-                        "source": "exa"
-                    },
-                    execution_time=time.time() - start_time,
-                    confidence=0.85
-                )
+                try:
+                    tools = mcp_hub.mcp_tools_map[server_name]
+                    exa_tool_name = None
+                    
+                    # exa 도구 찾기
+                    for tool_name_key in tools.keys():
+                        tool_lower = tool_name_key.lower()
+                        if "exa" in tool_lower:
+                            exa_tool_name = tool_name_key
+                            break
+                    
+                    if exa_tool_name:
+                        logger.info(f"Using MCP server {server_name} with tool {exa_tool_name}")
+                        result = await mcp_hub._execute_via_mcp_server(
+                            server_name,
+                            exa_tool_name,
+                            {"query": query, "numResults": max_results}
+                        )
+                        
+                        if result:
+                            import json
+                            if isinstance(result, str):
+                                try:
+                                    result_data = json.loads(result)
+                                except:
+                                    result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                            else:
+                                result_data = result
+                            
+                            results = result_data.get("results", [])
+                            if not results and isinstance(result_data, dict):
+                                results = result_data.get("items", result_data.get("data", []))
+                            
+                            if results:
+                                return ToolResult(
+                                    success=True,
+                                    data={
+                                        "query": query,
+                                        "results": results if isinstance(results, list) else [results],
+                                        "total_results": len(results) if isinstance(results, list) else 1,
+                                        "source": f"{server_name}-mcp"
+                                    },
+                                    execution_time=time.time() - start_time,
+                                    confidence=0.85
+                                )
+                    
+                except Exception as mcp_error:
+                    logger.warning(f"MCP 서버 {server_name} exa 실패: {mcp_error}, 다음 서버 시도")
+                    continue
+            
+            # MCP 서버에 exa가 없으면 에러 (fallback 제거)
+            raise ValueError("Exa MCP server not found. Add exa server to mcp_config.json")
         
         else:
             raise ValueError(f"Unknown search tool: {tool_name}")
