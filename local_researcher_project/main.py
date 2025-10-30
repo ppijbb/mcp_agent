@@ -251,6 +251,9 @@ class AutonomousResearchSystem:
             # MCP Hub cleanup (타임아웃 설정)
             if self.config.mcp.enabled and self.mcp_hub:
                 try:
+                    # 신규 연결 차단
+                    if hasattr(self.mcp_hub, 'start_shutdown'):
+                        self.mcp_hub.start_shutdown()
                     await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=10.0)
                 except asyncio.TimeoutError:
                     logger.warning("MCP Hub cleanup timed out")
@@ -264,22 +267,7 @@ class AutonomousResearchSystem:
         finally:
             # 최종 종료 준비
             logger.info("Exiting...")
-            # 모든 태스크 취소 시도 (현재 태스크 제외)
-            try:
-                loop = asyncio.get_running_loop()
-                tasks = [t for t in asyncio.all_tasks(loop) if not t.done() and t is not asyncio.current_task()]
-                for task in tasks:
-                    task.cancel()
-                # 취소된 태스크가 완료될 때까지 잠시 대기 (타임아웃 적용)
-                if tasks:
-                    try:
-                        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
-                    except asyncio.TimeoutError:
-                        logger.debug("Some tasks did not complete within timeout, proceeding with exit")
-                    except Exception:
-                        pass
-            except Exception as e:
-                logger.debug(f"Error cancelling tasks: {e}")
+            # 외부 라이브러리 태스크는 개별 매니저가 정리함. 일괄 취소는 하지 않음
             
             # sys.exit(0)은 호출하지 않음 - asyncio.run()이 자동으로 처리
             # 대신 루프에서 나가도록 함

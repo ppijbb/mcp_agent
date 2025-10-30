@@ -95,13 +95,8 @@ class PlannerAgent:
         # Skills-based instruction 사용
         instruction = self.instruction if self.skill else "You are a research planning agent."
         
-        # Call LLM via OpenRouter
-        import os
-        from src.core.mcp_integration import get_mcp_hub
-            
-        openrouter_key = os.getenv('OPENROUTER_API_KEY')
-        if not openrouter_key:
-            raise RuntimeError("OPENROUTER_API_KEY not set - LLM features require OpenRouter API key")
+        # LLM 호출은 llm_manager를 통해 Gemini 직결 사용
+        from src.core.llm_manager import execute_llm_task, TaskType
         
         # Use Skills instruction
         prompt = f"""{instruction}
@@ -119,22 +114,14 @@ Create a comprehensive research plan with:
 
 Keep it concise and actionable (max 300 words)."""
 
-        # 전역 MCP Hub 인스턴스 사용 및 초기화 확인
-        hub = get_mcp_hub()
-        if not hub.openrouter_client or (hasattr(hub.openrouter_client, 'session') and not hub.openrouter_client.session):
-            logger.info("Initializing MCP Hub...")
-            await hub.initialize_mcp()
-        
-        response = await hub.call_llm_async(
-            model="google/gemini-2.0-flash-exp:free",
-            messages=[{"role": "user", "content": prompt}]
+        # Gemini 실행
+        model_result = await execute_llm_task(
+            prompt=prompt,
+            task_type=TaskType.PLANNING,
+            model_name=None,
+            system_message=None
         )
-        
-        # 응답 파싱
-        if response and 'choices' in response and len(response['choices']) > 0:
-            plan = response['choices'][0].get('message', {}).get('content', 'No plan generated')
-        else:
-            plan = response.get('content', 'No plan generated')
+        plan = model_result.content or 'No plan generated'
         
         state['research_plan'] = plan
         state['current_agent'] = self.name

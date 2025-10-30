@@ -249,6 +249,10 @@ class UniversalMCPHub:
         self.exit_stacks: Dict[str, AsyncExitStack] = {}
         self.mcp_tools_map: Dict[str, Dict[str, Any]] = {}  # server_name -> {tool_name -> tool_info}
         self.mcp_server_configs: Dict[str, Dict[str, Any]] = {}
+        # 각 서버별 연결 진단 정보
+        self.connection_diagnostics: Dict[str, Dict[str, Any]] = {}
+        # 종료/차단 플래그 (종료 중 신규 연결 방지)
+        self.stopping: bool = False
 
         self._load_tools_config()
         self._initialize_tools()
@@ -529,7 +533,21 @@ class UniversalMCPHub:
     
     async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any], timeout: float = 15.0):
         """MCP 서버에 연결 - stdio 및 HTTP 지원 (타임아웃 포함)."""
-        logger.info(f"[MCP][connect.start] server={server_name} type={server_config.get('type','stdio')} url={server_config.get('httpUrl')} timeout={timeout}")
+        if self.stopping:
+            logger.warning(f"[MCP][skip.stopping] server={server_name}")
+            return False
+        logger.info(f"[MCP][connect.start] server={server_name} type={server_config.get('type','stdio')} url={(server_config.get('httpUrl') or server_config.get('url'))} timeout={timeout}")
+        self.connection_diagnostics[server_name] = {
+            "server": server_name,
+            "type": ("http" if (server_config.get("httpUrl") or server_config.get("url") or server_config.get("type") == "http") else "stdio"),
+            "url": server_config.get("httpUrl") or server_config.get("url"),
+            "stage": "start",
+            "ok": False,
+            "error": None,
+            "traceback": None,
+            "init_ms": None,
+            "list_ms": None,
+        }
         if not MCP_AVAILABLE:
             logger.error("MCP package not available")
             return False
@@ -569,6 +587,9 @@ class UniversalMCPHub:
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
                 except Exception as e:
                     logger.exception(f"[MCP][connect.error] create-http-transport server={server_name} err={e}")
+                    di = self.connection_diagnostics.get(server_name, {})
+                    di.update({"stage": "create_http_transport", "error": str(e)})
+                    self.connection_diagnostics[server_name] = di
                     return False
                 
             else:
@@ -590,6 +611,9 @@ class UniversalMCPHub:
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
                 except Exception as e:
                     logger.exception(f"[MCP][connect.error] create-stdio-transport server={server_name} err={e}")
+                    di = self.connection_diagnostics.get(server_name, {})
+                    di.update({"stage": "create_stdio_transport", "error": str(e)})
+                    self.connection_diagnostics[server_name] = di
                     return False
             
             self.mcp_sessions[server_name] = session
@@ -601,13 +625,27 @@ class UniversalMCPHub:
                 t1 = asyncio.get_running_loop().time()
                 response = await asyncio.wait_for(session.list_tools(), timeout=timeout)
                 t2 = asyncio.get_running_loop().time()
+                di = self.connection_diagnostics.get(server_name, {})
+                di.update({
+                    "stage": "list_tools_ok",
+                    "ok": True,
+                    "init_ms": (t1 - t0) * 1000.0,
+                    "list_ms": (t2 - t1) * 1000.0,
+                })
+                self.connection_diagnostics[server_name] = di
             except asyncio.CancelledError:
                 # 작업이 취소된 경우 (종료 신호 등)
                 logger.warning(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list")
                 await self._disconnect_from_mcp_server(server_name)
+                di = self.connection_diagnostics.get(server_name, {})
+                di.update({"stage": "cancelled_initialize_or_list", "error": "cancelled"})
+                self.connection_diagnostics[server_name] = di
                 raise  # 상위로 전파하여 초기화 중단
             except asyncio.TimeoutError:
                 logger.error(f"[MCP][connect.timeout] server={server_name} after={timeout}s stage=initialize_or_list")
+                di = self.connection_diagnostics.get(server_name, {})
+                di.update({"stage": "timeout_initialize_or_list", "error": f"timeout_{timeout}s"})
+                self.connection_diagnostics[server_name] = di
                 # 연결은 되었지만 초기화 실패 - 세션 정리
                 # 타임아웃 발생 시 exit_stack을 안전하게 정리
                 if server_name in self.exit_stacks:
@@ -655,6 +693,9 @@ class UniversalMCPHub:
             raise  # 상위로 전파하여 초기화 중단
         except asyncio.TimeoutError:
             logger.error(f"[MCP][connect.timeout] server={server_name} stage=generic")
+            di = self.connection_diagnostics.get(server_name, {})
+            di.update({"stage": "timeout_generic", "error": f"timeout_{timeout}s"})
+            self.connection_diagnostics[server_name] = di
             # 타임아웃 발생 시 exit_stack 정리
             if server_name in self.exit_stacks:
                 exit_stack = self.exit_stacks.get(server_name)
@@ -677,6 +718,9 @@ class UniversalMCPHub:
             logger.exception(f"[MCP][connect.error] server={server_name} err={e}")
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
+            di = self.connection_diagnostics.get(server_name, {})
+            di.update({"stage": "exception", "error": str(e), "traceback": traceback.format_exc()})
+            self.connection_diagnostics[server_name] = di
             # 실패 시 exit_stack 정리 시도
             if server_name in self.exit_stacks:
                 exit_stack = self.exit_stacks.get(server_name)
@@ -744,6 +788,9 @@ class UniversalMCPHub:
         if not self.config.enabled:
             logger.warning("MCP is disabled. Continuing with limited functionality.")
             return
+        if self.stopping:
+            logger.warning("MCP initialization requested during stopping state; skipping")
+            return
         
         try:
             logger.info("Initializing MCP Hub with MCP servers (no OpenRouter)...")
@@ -771,10 +818,16 @@ class UniversalMCPHub:
                     logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
                     return name, False
 
-            # disabled=true 설정된 서버는 건너뛰기
-            enabled_server_items = [
-                (n, c) for n, c in self.mcp_server_configs.items() if not c.get("disabled")
-            ]
+            # disabled=true 설정된 서버는 건너뛰기 + 허용 서버 화이트리스트 적용
+            allowlist_str = os.getenv("MCP_ALLOWED_SERVERS", "").strip()
+            allowlist = [s.strip() for s in allowlist_str.split(",") if s.strip()]
+            base_items = [(n, c) for n, c in self.mcp_server_configs.items() if not c.get("disabled")]
+            if allowlist:
+                enabled_server_items = [(n, c) for n, c in base_items if n in allowlist]
+                logger.info(f"[MCP][allowlist] enabled={ [n for n,_ in enabled_server_items] }")
+            else:
+                enabled_server_items = []  # 허용 서버 미설정 시 연결 시도 안함
+                logger.warning("[MCP][allowlist] no servers allowed; skipping all connections")
 
             tasks = [asyncio.create_task(connect_one(n, c)) for n, c in enabled_server_items]
             results = await asyncio.gather(*tasks, return_exceptions=False)
@@ -790,6 +843,23 @@ class UniversalMCPHub:
             logger.info(f"Available tools: {len(self.tools)}")
             logger.info(f"MCP servers: {list(self.mcp_sessions.keys())}")
             logger.info(f"Primary model: {self.llm_config.primary_model}")
+            # 서버별 연결 진단 요약 출력
+            if self.connection_diagnostics:
+                logger.info("[MCP][diagnostics] server connection summary")
+                for name, di in self.connection_diagnostics.items():
+                    init_ms = di.get('init_ms')
+                    list_ms = di.get('list_ms')
+                    logger.info(
+                        "[MCP][diag] server=%s type=%s url=%s stage=%s ok=%s init_ms=%s list_ms=%s err=%s",
+                        name,
+                        di.get("type"),
+                        di.get("url"),
+                        di.get("stage"),
+                        di.get("ok"),
+                        f"{init_ms:.0f}" if isinstance(init_ms, (int, float)) else "-",
+                        f"{list_ms:.0f}" if isinstance(list_ms, (int, float)) else "-",
+                        di.get("error")
+                    )
             
             # 필수 도구 검증 - 실패 시 warning만
             await self._validate_essential_tools()
@@ -890,6 +960,8 @@ class UniversalMCPHub:
     async def cleanup(self):
         """MCP 연결 정리 - Production-grade cleanup."""
         logger.info("Cleaning up MCP Hub...")
+        # 신규 연결 차단
+        self.stopping = True
         
         # OpenRouter 클라이언트 사용 안 함
         self.openrouter_client = None
@@ -931,6 +1003,10 @@ class UniversalMCPHub:
             pass
         
         logger.info("MCP Hub cleanup completed")
+
+    def start_shutdown(self):
+        """외부에서 종료 시작 시 호출 - 신규 연결 차단"""
+        self.stopping = True
     
     async def call_llm_async(self, model: str, messages: List[Dict[str, str]], 
                            temperature: float = 0.1, max_tokens: int = 4000) -> Dict[str, Any]:
