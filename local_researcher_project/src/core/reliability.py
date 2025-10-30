@@ -419,26 +419,12 @@ class ProductionReliability:
         *args,
         **kwargs
     ) -> Any:
-        """Graceful degradation."""
-        logger.warning(f"Graceful degradation for {component_name}: {error}")
+        """Graceful degradation - 실패 시 명확한 에러 반환 (fallback 데이터 없음)."""
+        error_msg = f"Component {component_name} failed: {str(error)}"
+        logger.error(error_msg)
         
-        # 컴포넌트별 degradation 전략
-        if "research" in component_name.lower():
-            return await self._simple_search_fallback()
-        elif "verification" in component_name.lower():
-            return {"verified": False, "warning": "Verification unavailable due to errors"}
-        elif "compression" in component_name.lower():
-            return {"compressed": False, "warning": "Compression unavailable, using raw data"}
-        else:
-            return {"error": f"Component {component_name} unavailable", "fallback": True}
-    
-    async def _simple_search_fallback(self) -> Dict[str, Any]:
-        """간단한 검색 fallback."""
-        return {
-            "results": [],
-            "warning": "Advanced search unavailable, using basic fallback",
-            "fallback": True
-        }
+        # 모든 경우에서 명확한 실패 반환 (더미 데이터 없이)
+        raise RuntimeError(error_msg)
     
     async def start_monitoring(self):
         """모니터링 시작."""

@@ -120,11 +120,11 @@ python main.py --request "Latest AI trends in 2025"
 - Smart tool selection and rate limiting
 - Health monitoring of all forge equipment
 
-#### MCP 서버 설정 (DuckDuckGo/G-Search)
+#### MCP Server Configuration (DuckDuckGo/G-Search)
 
-**1. MCP 서버 Config 파일 생성**
+**1. Create MCP Server Config File**
 ```bash
-# configs/mcp_config.json 파일 생성
+# Create configs/mcp_config.json file
 mkdir -p configs
 cat > configs/mcp_config.json << 'EOF'
 {
@@ -145,12 +145,48 @@ cat > configs/mcp_config.json << 'EOF'
 EOF
 ```
 
-**2. 사용 방법**
-- 시스템은 `configs/mcp_config.json` 파일을 자동으로 읽어서 MCP 서버에 연결합니다 (하위 호환성을 위해 루트의 `mcp_config.json`도 지원)
-- MCP 서버 연결에 실패하면 자동으로 직접 DuckDuckGo 검색을 사용합니다
-- Rate limit 문제도 자동으로 처리합니다
+**2. Usage**
+- The system automatically reads the `configs/mcp_config.json` file and connects to MCP servers (also supports `mcp_config.json` in the root directory for backward compatibility)
+- If MCP server connection fails, it automatically falls back to direct DuckDuckGo search
+- Rate limit issues are automatically handled
 
-**3. G-Search MCP 서버 사용** (선택사항)
+**3. Check MCP Server Connection Status**
+```bash
+# Check current status (shows configured servers without connecting)
+python main.py --check-mcp-servers
+
+# Connect and test all servers (recommended)
+python scripts/test_mcp_connection.py
+
+# Or initialize MCP servers and keep them running
+python main.py --mcp-server
+
+# Or run the check script directly
+python scripts/check_mcp_servers.py
+```
+
+Example output:
+```
+================================================================================
+📊 MCP Server Connection Status Check
+================================================================================
+Total servers: 10
+Connected servers: 8
+Connection rate: 8/10
+Total available tools: 45
+
+✅ Server: ddg_search
+   Type: stdio
+   Command: npx -y @smithery/cli@latest...
+   Connection status: Connected
+   Tools provided: 3
+   Tool list:
+     - ddg_search::search
+     - ddg_search::fetch
+     ...
+```
+
+**4. Using G-Search MCP Server** (Optional)
 ```json
 {
   "mcpServers": {

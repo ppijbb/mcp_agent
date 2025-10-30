@@ -199,21 +199,85 @@ class AutonomousResearchSystem:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
+        # Shutdown flag 초기화
+        self._shutdown_requested = False
+        
         logger.info("✅ AutonomousResearchSystem initialized successfully")
         
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-        asyncio.create_task(self._graceful_shutdown())
+        import sys
+        
+        # Shutdown 플래그 설정 (중복 방지)
+        if hasattr(self, '_shutdown_requested') and self._shutdown_requested:
+            # 이미 종료 중이면 강제 종료
+            logger.warning("Shutdown already in progress, forcing exit...")
+            sys.exit(1)
+        
+        self._shutdown_requested = True
+        
+        # 실행 중인 이벤트 루프가 있는지 확인하고 shutdown 작업 스케줄링
+        try:
+            loop = asyncio.get_running_loop()
+            # 실행 중인 루프에 shutdown 작업 추가
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(self._graceful_shutdown()))
+        except RuntimeError:
+            # 이벤트 루프가 없으면 강제 종료
+            logger.warning("No event loop available, forcing exit")
+            sys.exit(1)
     
     async def _graceful_shutdown(self):
         """Graceful shutdown with state persistence."""
+        import sys
+        import signal
+        
         try:
             logger.info("Performing graceful shutdown...")
-            await self.health_monitor.stop_monitoring()
+            
+            # Health monitor 정지 (타임아웃 설정)
+            try:
+                await asyncio.wait_for(self.health_monitor.stop_monitoring(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Health monitor stop timed out")
+            except Exception as e:
+                logger.debug(f"Error stopping health monitor: {e}")
+            
+            # MCP Hub cleanup (타임아웃 설정)
+            if self.config.mcp.enabled and self.mcp_hub:
+                try:
+                    await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    logger.warning("MCP Hub cleanup timed out")
+                except Exception as e:
+                    logger.warning(f"Error cleaning up MCP Hub: {e}")
+            
             logger.info("✅ Graceful shutdown completed")
+            
         except Exception as e:
             logger.error(f"Error during graceful shutdown: {e}")
+        finally:
+            # 최종 종료 준비
+            logger.info("Exiting...")
+            # 모든 태스크 취소 시도 (현재 태스크 제외)
+            try:
+                loop = asyncio.get_running_loop()
+                tasks = [t for t in asyncio.all_tasks(loop) if not t.done() and t is not asyncio.current_task()]
+                for task in tasks:
+                    task.cancel()
+                # 취소된 태스크가 완료될 때까지 잠시 대기 (타임아웃 적용)
+                if tasks:
+                    try:
+                        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        logger.debug("Some tasks did not complete within timeout, proceeding with exit")
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Error cancelling tasks: {e}")
+            
+            # sys.exit(0)은 호출하지 않음 - asyncio.run()이 자동으로 처리
+            # 대신 루프에서 나가도록 함
     
     async def run_research(self, request: str, output_path: Optional[str] = None, 
                           streaming: bool = False, output_format: str = "json") -> Dict[str, Any]:
@@ -241,7 +305,12 @@ class AutonomousResearchSystem:
             
             # Initialize MCP client if enabled
             if self.config.mcp.enabled:
-                await self.mcp_hub.initialize_mcp()
+                try:
+                    await self.mcp_hub.initialize_mcp()
+                except asyncio.CancelledError:
+                    # 초기화 중 취소된 경우 - 상위로 전파하여 종료
+                    logger.warning("MCP initialization was cancelled")
+                    raise
             
             # Run research with production-grade reliability
             if streaming:
@@ -458,6 +527,72 @@ class AutonomousResearchSystem:
         logger.info(f"Web App Health: {web_health.get('status', 'Unknown')}")
         
         logger.info("✅ Health check completed")
+    
+    async def check_mcp_servers(self):
+        """MCP 서버 연결 상태 확인."""
+        logger.info("📊 Checking MCP server connections...")
+        
+        if not self.config.mcp.enabled:
+            logger.warning("MCP is disabled")
+            return
+        
+        try:
+            # MCP Hub 초기화 확인 - 이미 연결된 서버가 있으면 그대로 사용
+            if self.mcp_hub.mcp_sessions:
+                logger.info(f"Found {len(self.mcp_hub.mcp_sessions)} existing MCP server connections")
+            else:
+                logger.info("No existing connections. Will attempt quick connection tests for each server...")
+            
+            # 서버 상태 확인 (각 서버에 대해 짧은 타임아웃으로 연결 시도)
+            logger.info("Checking MCP server connection status...")
+            server_status = await self.mcp_hub.check_mcp_servers()
+            
+            # 결과 출력
+            print("\n" + "=" * 80)
+            print("📊 MCP 서버 연결 상태 확인")
+            print("=" * 80)
+            print(f"전체 서버 수: {server_status['total_servers']}")
+            print(f"연결된 서버: {server_status['connected_servers']}")
+            print(f"연결률: {server_status['summary']['connection_rate']}")
+            print(f"전체 사용 가능한 Tool 수: {server_status['summary']['total_tools_available']}")
+            print("\n")
+            
+            for server_name, info in server_status["servers"].items():
+                status_icon = "✅" if info["connected"] else "❌"
+                print(f"{status_icon} 서버: {server_name}")
+                print(f"   타입: {info['type']}")
+                
+                if info["type"] == "http":
+                    print(f"   URL: {info.get('url', 'unknown')}")
+                else:
+                    cmd = info.get('command', 'unknown')
+                    args_preview = ' '.join(info.get('args', [])[:3])
+                    print(f"   명령어: {cmd} {args_preview}...")
+                
+                print(f"   연결 상태: {'연결됨' if info['connected'] else '연결 안 됨'}")
+                print(f"   제공 Tool 수: {info['tools_count']}")
+                
+                if info["tools"]:
+                    print(f"   Tool 목록:")
+                    for tool in info["tools"][:5]:  # 처음 5개만 표시
+                        registered_name = f"{server_name}::{tool}"
+                        print(f"     - {registered_name}")
+                    if len(info["tools"]) > 5:
+                        print(f"     ... 및 {len(info['tools']) - 5}개 더")
+                
+                if info.get("error"):
+                    print(f"   ⚠️ 오류: {info['error']}")
+                print()
+            
+            print("=" * 80)
+            
+            # 요약 정보 로깅
+            logger.info(f"MCP 서버 확인 완료: {server_status['summary']['connection_rate']} 연결")
+            
+        except Exception as e:
+            logger.error(f"MCP 서버 확인 실패: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
 
 async def main():
@@ -484,6 +619,7 @@ Examples:
     mode_group.add_argument("--mcp-server", action="store_true", help="Start MCP server with Universal MCP Hub")
     mode_group.add_argument("--mcp-client", action="store_true", help="Start MCP client with Smart Tool Selection")
     mode_group.add_argument("--health-check", action="store_true", help="Check system health and MCP tools")
+    mode_group.add_argument("--check-mcp-servers", action="store_true", help="Check all MCP server connections and list tools")
     
     # Optional arguments
     parser.add_argument("--output", help="Output file path for research results")
@@ -520,9 +656,33 @@ Examples:
             system.run_web_app()
             
         elif args.mcp_server:
-            # MCP Server Mode with Universal MCP Hub
-            success = await system.run_mcp_server()
-            if not success:
+            # MCP Server Mode with Universal MCP Hub - 실제 연결 수행
+            logger.info("Initializing MCP servers...")
+            try:
+                await system.mcp_hub.initialize_mcp()
+                logger.info("✅ MCP servers initialized")
+                
+                # 연결된 서버 상태 출력
+                if system.mcp_hub.mcp_sessions:
+                    print("\n" + "=" * 80)
+                    print("✅ MCP 서버 연결 완료")
+                    print("=" * 80)
+                    for server_name in system.mcp_hub.mcp_sessions.keys():
+                        tools_count = len(system.mcp_hub.mcp_tools_map.get(server_name, {}))
+                        print(f"✅ {server_name}: {tools_count} tools available")
+                    print("=" * 80)
+                    print("\nMCP Hub is running. Press Ctrl+C to stop.")
+                    
+                    # 계속 실행 대기
+                    try:
+                        await asyncio.sleep(3600)  # 1시간 대기 (또는 Ctrl+C로 종료)
+                    except KeyboardInterrupt:
+                        logger.info("Shutting down MCP Hub...")
+                else:
+                    logger.warning("⚠️ No MCP servers connected")
+                    sys.exit(1)
+            except Exception as e:
+                logger.error(f"Failed to initialize MCP servers: {e}")
                 sys.exit(1)
             
         elif args.mcp_client:
@@ -534,15 +694,49 @@ Examples:
         elif args.health_check:
             # Health Check Mode
             await system.run_health_check()
+        
+        elif args.check_mcp_servers:
+            # MCP 서버 확인 모드
+            await system.check_mcp_servers()
             
     except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        await system._graceful_shutdown()
-        sys.exit(0)
+        logger.info("Operation cancelled by user (KeyboardInterrupt)")
+        system._shutdown_requested = True
+        try:
+            await system._graceful_shutdown()
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+        # sys.exit(0) 제거 - asyncio.run()이 자동으로 처리
+    except asyncio.CancelledError:
+        # 취소된 경우 정리 후 종료
+        logger.info("Operation cancelled")
+        system._shutdown_requested = True
+        try:
+            await system._graceful_shutdown()
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+        # asyncio.CancelledError는 다시 raise하여 정상적인 취소 흐름 유지
+        raise
     except Exception as e:
         logger.error(f"Error: {e}")
-        await system._graceful_shutdown()
+        import traceback
+        logger.error(traceback.format_exc())
+        system._shutdown_requested = True
+        try:
+            await system._graceful_shutdown()
+        except Exception as e2:
+            logger.error(f"Error during shutdown: {e2}")
+        # 에러 발생 시 종료 코드 1로 종료
         sys.exit(1)
+    finally:
+        # 최종 정리 보장
+        if hasattr(system, 'mcp_hub') and system.mcp_hub and hasattr(system.mcp_hub, 'mcp_sessions'):
+            try:
+                if system.mcp_hub.mcp_sessions:
+                    logger.info("Final cleanup of MCP connections...")
+                    await system.mcp_hub.cleanup()
+            except Exception as e:
+                logger.debug(f"Error in final cleanup: {e}")
 
 
 if __name__ == "__main__":

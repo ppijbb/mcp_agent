@@ -10,6 +10,104 @@
         "--key",
         "8416adbd-cb03-490d-b33c-2598883358b0"
       ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/fetch",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0",
+        "--profile",
+        "automatic-fish-vOdJTK"
+      ]
+    },
+  "docfork": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@smithery/cli@latest",
+          "run",
+          "@docfork/mcp",
+          "--key",
+          "8416adbd-cb03-490d-b33c-2598883358b0"
+        ]
+      },
+    "context7-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@upstash/context7-mcp",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0"
+      ]
+    },
+    "exa": {
+      "type": "http",
+      "httpUrl": "https://mcp.exa.ai/mcp",
+      "headers": {
+        "Remove-Me": "Disable web_search_exa tool if you're just coding. To 100% call exa-code, say 'use exa-code'."
+      }
+    },
+    "semantic_scholar": {
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@hamid-vakilzadeh/mcpsemanticscholar/mcp",
+      "params": {
+        "api_key": "8416adbd-cb03-490d-b33c-2598883358b0",
+        "profile": "automatic-fish-vOdJTK"
+      }
+    },
+    "parallel-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@parallel/search",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0"
+      ]
+    },
+    "tavily-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@Jeetanshu18/tavily-mcp",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0",
+        "--profile",
+        "automatic-fish-vOdJTK"
+      ]
+    },
+    "WebSearch-MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@mnhlt/WebSearch-MCP",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0",
+        "--profile",
+        "automatic-fish-vOdJTK"
+      ]
+    },
+    "unified-search-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@JDeun/unified-search-mcp-server",
+        "--key",
+        "8416adbd-cb03-490d-b33c-2598883358b0"
+      ]
     }
   }
 }

@@ -182,15 +182,81 @@ class ExecutorAgent:
             session_id=state['session_id']
         )
         
-        # Simulate research execution
-        results = [
-            f"Research Result 1: Found information about {state['user_query']}",
-            f"Research Result 2: Data from multiple sources compiled",
-            f"Research Result 3: Key findings identified"
-        ]
+        # 실제 연구 실행 - MCP Hub를 통한 검색 수행
+        query = state['user_query']
+        results = []
         
+        try:
+            # MCP Hub 초기화 확인
+            from src.core.mcp_integration import get_mcp_hub, execute_tool, ToolCategory
+            
+            hub = get_mcp_hub()
+            if not hub.openrouter_client or (hasattr(hub.openrouter_client, 'session') and not hub.openrouter_client.session):
+                logger.info("Initializing MCP Hub...")
+                await hub.initialize_mcp()
+            
+            # 검색 도구 실행
+            search_result = await execute_tool(
+                "g-search",
+                {"query": query, "max_results": 10}
+            )
+            
+            if search_result.get('success') and search_result.get('data'):
+                data = search_result.get('data', {})
+                search_results = data.get('results', []) if isinstance(data, dict) else []
+                
+                if search_results and len(search_results) > 0:
+                    # 실제 검색 결과를 사용
+                    for i, result in enumerate(search_results[:5], 1):
+                        title = result.get('title', 'No title')
+                        snippet = result.get('snippet', result.get('content', ''))
+                        url = result.get('url', '')
+                        
+                        result_text = f"Research Result {i}: {title}"
+                        if snippet:
+                            result_text += f" - {snippet[:200]}"
+                        if url:
+                            result_text += f" (Source: {url})"
+                        
+                        results.append(result_text)
+                else:
+                    # 검색 결과가 없음 - 실패 처리
+                    error_msg = f"연구 실행 실패: '{query}'에 대한 검색 결과를 찾을 수 없습니다."
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+            else:
+                # 검색 실패 - 에러 반환
+                error_msg = f"연구 실행 실패: 검색 도구 실행 중 오류가 발생했습니다. {search_result.get('error', 'Unknown error')}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+                
+        except Exception as e:
+            # 실제 오류 발생 - 실패 처리
+            error_msg = f"연구 실행 실패: {str(e)}"
+            logger.error(error_msg)
+            
+            # 실패 상태 기록
+            state['research_results'] = []
+            state['current_agent'] = self.name
+            state['error'] = error_msg
+            state['research_failed'] = True
+            
+            # 메모리에 실패 정보 기록
+            memory.write(
+                key=f"execution_error_{state['session_id']}",
+                value=error_msg,
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id'],
+                agent_id=self.name
+            )
+            
+            # 실패 상태 반환 (더미 데이터 없이)
+            return state
+        
+        # 성공적으로 결과 수집된 경우
         state['research_results'].extend(results)
         state['current_agent'] = self.name
+        state['research_failed'] = False
         
         # Write to shared memory
         for i, result in enumerate(results):
@@ -228,18 +294,40 @@ class VerifierAgent:
         """Verify research results."""
         logger.info(f"[{self.name}] Verifying results...")
         
+        # 연구 실패 확인
+        if state.get('research_failed'):
+            logger.error("Research execution failed, skipping verification")
+            state['verified_results'] = []
+            state['verification_failed'] = True
+            state['current_agent'] = self.name
+            return state
+        
         memory = self.context.shared_memory
         
         # Read results from shared memory
-        results = state['research_results']
+        results = state.get('research_results', [])
         
-        # Simulate verification
-        verified = [
-            f"✅ Verified: {result}" for result in results
-        ]
+        if not results or len(results) == 0:
+            error_msg = "검증 실패: 검증할 연구 결과가 없습니다."
+            logger.error(error_msg)
+            state['verified_results'] = []
+            state['verification_failed'] = True
+            state['error'] = error_msg
+            state['current_agent'] = self.name
+            return state
+        
+        # 실제 결과 검증 (단순 패턴 확인)
+        verified = []
+        for result in results:
+            # 기본 검증: 결과가 실제 정보를 포함하는지 확인
+            if result and len(result) > 20 and "Research Result" in result:
+                verified.append(f"✅ Verified: {result}")
+            else:
+                verified.append(f"⚠️ Partial verification: {result}")
         
         state['verified_results'].extend(verified)
         state['current_agent'] = self.name
+        state['verification_failed'] = False
         
         # Write to shared memory
         memory.write(
@@ -276,12 +364,85 @@ class GeneratorAgent:
         """Generate final report."""
         logger.info(f"[{self.name}] Generating final report...")
         
+        # 연구 또는 검증 실패 확인
+        if state.get('research_failed') or state.get('verification_failed'):
+            error_msg = state.get('error', '알 수 없는 오류')
+            
+            report = f"""
+# 연구 실패 보고서: {state['user_query']}
+
+## ❌ 연구 실행 실패
+
+연구를 완료할 수 없었습니다.
+
+### 오류 내용
+{error_msg}
+
+### 권장 조치
+1. 검색 쿼리를 다시 확인해주세요
+2. 네트워크 연결 상태를 확인해주세요
+3. MCP 서버 설정을 확인해주세요
+4. 잠시 후 다시 시도해주세요
+
+## 실패 원인
+- 연구 실행 단계에서 오류 발생
+- 검색 결과를 얻을 수 없음
+- 서버 연결 문제 가능성
+
+실제 연구 결과 없이 보고서를 생성할 수 없습니다.
+"""
+            state['final_report'] = report
+            state['current_agent'] = self.name
+            state['report_failed'] = True
+            
+            memory = self.context.shared_memory
+            memory.write(
+                key=f"report_{state['session_id']}",
+                value=report,
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id'],
+                agent_id=self.name
+            )
+            
+            return state
+        
         memory = self.context.shared_memory
         
         # Read verified results from shared memory
-        verified_results = state['verified_results']
+        verified_results = state.get('verified_results', [])
         
-        # Generate final report
+        if not verified_results or len(verified_results) == 0:
+            error_msg = "보고서 생성 실패: 검증된 연구 결과가 없습니다."
+            logger.error(error_msg)
+            
+            report = f"""
+# 연구 완료 불가: {state['user_query']}
+
+## ❌ 보고서 생성 실패
+
+검증된 연구 결과가 없어 보고서를 생성할 수 없습니다.
+
+### 상황
+- 연구 실행은 완료되었지만 결과가 없습니다
+- 또는 검증 단계에서 모든 결과가 제외되었습니다
+
+실제 연구 데이터 없이 보고서를 생성할 수 없습니다.
+"""
+            state['final_report'] = report
+            state['current_agent'] = self.name
+            state['report_failed'] = True
+            
+            memory.write(
+                key=f"report_{state['session_id']}",
+                value=report,
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id'],
+                agent_id=self.name
+            )
+            
+            return state
+        
+        # 실제 결과가 있는 경우에만 보고서 생성
         report = f"""
 # Final Report: {state['user_query']}
 
@@ -298,6 +459,7 @@ a thorough analysis of the topic with high confidence.
         
         state['final_report'] = report
         state['current_agent'] = self.name
+        state['report_failed'] = False
         
         # Write to shared memory
         memory.write(
