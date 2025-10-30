@@ -15,7 +15,7 @@ from enum import Enum
 import hashlib
 from datetime import datetime
 
-from researcher_config import get_compression_config, get_llm_config
+from src.core.researcher_config import get_compression_config, get_llm_config
 from src.core.reliability import execute_with_reliability
 
 logger = logging.getLogger(__name__)

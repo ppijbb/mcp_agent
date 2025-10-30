@@ -22,7 +22,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
-from researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
+from src.core.researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
 from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_task
 from src.core.mcp_integration import execute_tool, ToolCategory, health_check
 from src.core.reliability import execute_with_reliability, get_system_status

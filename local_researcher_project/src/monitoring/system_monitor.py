@@ -24,7 +24,7 @@ import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import config
+from src.core.researcher_config import config
 from src.core.reliability import execute_with_reliability, CircuitBreaker
 
 logger = logging.getLogger(__name__)

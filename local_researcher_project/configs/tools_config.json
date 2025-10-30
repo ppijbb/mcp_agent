@@ -1,0 +1,222 @@
+{
+  "version": "1.0.0",
+  "local_tools": {
+    "g-search": {
+      "category": "search",
+      "description": "Google 검색 (DuckDuckGo fallback)",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "최대 결과 수",
+          "default": 10,
+          "required": false
+        },
+        "num_results": {
+          "type": "integer",
+          "description": "결과 수 (max_results의 별칭)",
+          "default": 10,
+          "required": false
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool",
+      "fallback_enabled": true
+    },
+    "fetch": {
+      "category": "data",
+      "description": "웹페이지 가져오기",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "description": "가져올 URL",
+          "required": true
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "filesystem": {
+      "category": "data",
+      "description": "파일시스템 접근 (읽기/목록 조회)",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "description": "파일 또는 디렉토리 경로",
+          "required": true
+        },
+        "operation": {
+          "type": "string",
+          "description": "작업 유형 (read, list)",
+          "enum": ["read", "list"],
+          "default": "read",
+          "required": false
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "python_coder": {
+      "category": "code",
+      "description": "Python 코드 실행",
+      "parameters": {
+        "code": {
+          "type": "string",
+          "description": "실행할 Python 코드",
+          "required": true
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "code_interpreter": {
+      "category": "code",
+      "description": "코드 해석 (다양한 언어 지원)",
+      "parameters": {
+        "code": {
+          "type": "string",
+          "description": "실행할 코드",
+          "required": true
+        },
+        "language": {
+          "type": "string",
+          "description": "프로그래밍 언어",
+          "default": "python",
+          "required": false
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "arxiv": {
+      "category": "academic",
+      "description": "ArXiv 논문 검색",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "최대 결과 수",
+          "default": 10,
+          "required": false
+        },
+        "num_results": {
+          "type": "integer",
+          "description": "결과 수 (max_results의 별칭)",
+          "default": 10,
+          "required": false
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "scholar": {
+      "category": "academic",
+      "description": "Google Scholar 검색",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        },
+        "num_results": {
+          "type": "integer",
+          "description": "결과 수",
+          "default": 10,
+          "required": false
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "최대 결과 수 (num_results의 별칭)",
+          "default": 10,
+          "required": false
+        }
+      },
+      "implementation": "local",
+      "langchain_class": "StructuredTool"
+    },
+    "tavily": {
+      "category": "search",
+      "description": "Tavily 검색 (MCP 서버 필요)",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "최대 결과 수",
+          "default": 10,
+          "required": false
+        }
+      },
+      "implementation": "mcp_only",
+      "requires_mcp_server": true,
+      "mcp_server_name": "tavily"
+    },
+    "exa": {
+      "category": "search",
+      "description": "Exa 검색 (MCP 서버 필요)",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        },
+        "num_results": {
+          "type": "integer",
+          "description": "결과 수",
+          "default": 10,
+          "required": false
+        }
+      },
+      "implementation": "mcp_only",
+      "requires_mcp_server": true,
+      "mcp_server_name": "exa"
+    },
+    "crunchbase": {
+      "category": "business",
+      "description": "Crunchbase 검색 (MCP 서버 필요)",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        }
+      },
+      "implementation": "mcp_only",
+      "requires_mcp_server": true,
+      "mcp_server_name": "crunchbase"
+    },
+    "linkedin": {
+      "category": "business",
+      "description": "LinkedIn 검색 (MCP 서버 필요)",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "검색 쿼리",
+          "required": true
+        }
+      },
+      "implementation": "mcp_only",
+      "requires_mcp_server": true,
+      "mcp_server_name": "linkedin"
+    }
+  },
+  "tool_categories": {
+    "search": ["g-search", "tavily", "exa"],
+    "data": ["fetch", "filesystem"],
+    "code": ["python_coder", "code_interpreter"],
+    "academic": ["arxiv", "scholar"],
+    "business": ["crunchbase", "linkedin"]
+  }
+}
+

@@ -82,7 +82,6 @@ class PlannerAgent:
         if self.skill:
             self.instruction = self.skill.instructions
         else:
-            # Fallback instruction
             self.instruction = "You are a research planning agent."
     
     async def execute(self, state: AgentState) -> AgentState:
@@ -96,17 +95,16 @@ class PlannerAgent:
         # Skills-based instruction 사용
         instruction = self.instruction if self.skill else "You are a research planning agent."
         
-        # Call LLM via OpenRouter (priority: OpenRouter > Gemini > OpenAI)
-        try:
-            import os
-            from mcp_integration import UniversalMCPHub
+        # Call LLM via OpenRouter
+        import os
+        from src.core.mcp_integration import get_mcp_hub
             
-            openrouter_key = os.getenv('OPENROUTER_API_KEY')
-            if not openrouter_key:
-                raise ValueError("OPENROUTER_API_KEY not set")
-            
-            # Use Skills instruction
-            prompt = f"""{instruction}
+        openrouter_key = os.getenv('OPENROUTER_API_KEY')
+        if not openrouter_key:
+            raise RuntimeError("OPENROUTER_API_KEY not set - LLM features require OpenRouter API key")
+        
+        # Use Skills instruction
+        prompt = f"""{instruction}
 
 Task: Create a detailed research plan for: {state['user_query']}
 
@@ -121,21 +119,22 @@ Create a comprehensive research plan with:
 
 Keep it concise and actionable (max 300 words)."""
 
-            hub = UniversalMCPHub()
-            response = await hub.call_llm_async(
-                model="google/gemini-2.0-flash-exp:free",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
+        # 전역 MCP Hub 인스턴스 사용 및 초기화 확인
+        hub = get_mcp_hub()
+        if not hub.openrouter_client or (hasattr(hub.openrouter_client, 'session') and not hub.openrouter_client.session):
+            logger.info("Initializing MCP Hub...")
+            await hub.initialize_mcp()
+        
+        response = await hub.call_llm_async(
+            model="google/gemini-2.0-flash-exp:free",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # 응답 파싱
+        if response and 'choices' in response and len(response['choices']) > 0:
+            plan = response['choices'][0].get('message', {}).get('content', 'No plan generated')
+        else:
             plan = response.get('content', 'No plan generated')
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}, using fallback plan")
-            # Fallback to simple plan
-            plan = f"""Research Plan for: {state['user_query']}
-Objectives:
-1. Gather information
-2. Verify facts  
-3. Synthesize results"""
         
         state['research_plan'] = plan
         state['current_agent'] = self.name
@@ -169,7 +168,6 @@ class ExecutorAgent:
         if self.skill:
             self.instruction = self.skill.instructions
         else:
-            # Fallback instruction
             self.instruction = "You are a research execution agent."
     
     async def execute(self, state: AgentState) -> AgentState:
@@ -224,7 +222,6 @@ class VerifierAgent:
         if self.skill:
             self.instruction = self.skill.instructions
         else:
-            # Fallback instruction
             self.instruction = "You are a verification agent."
     
     async def execute(self, state: AgentState) -> AgentState:
@@ -273,7 +270,6 @@ class GeneratorAgent:
         if self.skill:
             self.instruction = self.skill.instructions
         else:
-            # Fallback instruction
             self.instruction = "You are a report generation agent."
     
     async def execute(self, state: AgentState) -> AgentState:

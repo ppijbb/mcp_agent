@@ -20,7 +20,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import get_llm_config, get_output_config, get_context_window_config
+from src.core.researcher_config import get_llm_config, get_output_config, get_context_window_config
 from src.core.llm_manager import execute_llm_task, TaskType, get_best_model_for_task
 from src.core.reliability import execute_with_reliability
 from src.core.compression import compress_data

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from researcher_config import get_mcp_config, get_reliability_config
+from src.core.researcher_config import get_mcp_config, get_reliability_config
 from src.core.reliability import execute_with_reliability
 from src.core.mcp_integration import execute_tool, get_best_tool_for_task, ToolCategory
 

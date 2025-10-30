@@ -19,7 +19,7 @@ sys.path.insert(0, str(project_root))
 # Lazy import to avoid circular dependencies and configuration issues
 def get_config_functions():
     """Lazy import of configuration functions."""
-    from researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
+    from src.core.researcher_config import get_llm_config, get_agent_config, get_research_config, get_mcp_config
     return get_llm_config, get_agent_config, get_research_config, get_mcp_config
 
 def get_core_functions():

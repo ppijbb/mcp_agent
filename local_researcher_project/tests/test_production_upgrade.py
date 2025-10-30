@@ -25,8 +25,8 @@ from src.research.tools.web_search import WebSearchTool
 from src.research.tools.academic_search import AcademicSearchTool
 from src.research.workflow_manager import ResearchWorkflowManager
 from src.automation.browser_manager import BrowserManager
-from mcp_integration import UniversalMCPHub, health_check
-from researcher_config import ResearcherSystemConfig
+from src.core.mcp_integration import UniversalMCPHub, health_check
+from src.core.researcher_config import ResearcherSystemConfig
 
 
 class TestProductionUpgrade:

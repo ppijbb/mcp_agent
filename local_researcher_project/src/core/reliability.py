@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from researcher_config import get_reliability_config
+from src.core.researcher_config import get_reliability_config
 
 logger = structlog.get_logger(__name__)
 

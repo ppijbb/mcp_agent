@@ -18,7 +18,7 @@ import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from researcher_config import get_llm_config, get_agent_config
+from src.core.researcher_config import get_llm_config, get_agent_config
 from src.core.reliability import execute_with_reliability
 
 logger = logging.getLogger(__name__)

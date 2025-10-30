@@ -26,8 +26,8 @@ sys.path.insert(0, str(project_root))
 from src.core.autonomous_orchestrator import AutonomousOrchestrator
 from src.agents.autonomous_researcher import AutonomousResearcherAgent
 from src.core.reliability import HealthMonitor
-from mcp_integration import get_available_tools, execute_tool
-from researcher_config import config
+from src.core.mcp_integration import get_available_tools, execute_tool
+from src.core.researcher_config import config
 
 import logging
 logger = logging.getLogger(__name__)

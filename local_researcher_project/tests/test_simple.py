@@ -11,8 +11,8 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import load_config_from_env
-from mcp_integration import execute_tool
+from src.core.researcher_config import load_config_from_env
+from src.core.mcp_integration import execute_tool
 
 async def test_basic():
     """기본 기능 테스트"""

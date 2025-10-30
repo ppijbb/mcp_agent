@@ -25,7 +25,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import get_llm_config, get_agent_config
+from src.core.researcher_config import get_llm_config, get_agent_config
 import logging
 
 logger = logging.getLogger(__name__)

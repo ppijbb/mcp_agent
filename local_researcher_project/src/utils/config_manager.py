@@ -9,9 +9,9 @@ from pathlib import Path
 
 # Import configuration classes from researcher_config
 try:
-    from researcher_config import MCPConfig, LLMConfig, AgentConfig, ResearchConfig
-    from researcher_config import CompressionConfig, VerificationConfig, ContextWindowConfig, ReliabilityConfig
-    from researcher_config import OutputConfig, ResearcherSystemConfig
+    from src.core.researcher_config import MCPConfig, LLMConfig, AgentConfig, ResearchConfig
+    from src.core.researcher_config import CompressionConfig, VerificationConfig, ContextWindowConfig, ReliabilityConfig
+    from src.core.researcher_config import OutputConfig, ResearcherSystemConfig
 except ImportError:
     # Fallback if researcher_config is not available
     MCPConfig = None

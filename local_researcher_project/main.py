@@ -30,7 +30,7 @@ import os
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from researcher_config import load_config_from_env
+from src.core.researcher_config import load_config_from_env
 
 # CRITICAL: Load configuration BEFORE importing any modules that depend on it
 config = load_config_from_env()
@@ -42,7 +42,7 @@ from src.core.autonomous_orchestrator import AutonomousOrchestrator
 from src.core.reliability import execute_with_reliability
 from src.monitoring.system_monitor import HealthMonitor
 from src.core.llm_manager import execute_llm_task, TaskType
-# from mcp_integration import get_available_tools, execute_tool  # Commented out to avoid import-time initialization
+# from src.core.mcp_integration import get_available_tools, execute_tool  # Commented out to avoid import-time initialization
 
 # Configure logging for production-grade reliability
 # Advanced logging setup: setup logger manually to ensure logs directory exists and avoid issues with logging.basicConfig (per best practices)
@@ -174,7 +174,7 @@ class AutonomousResearchSystem:
             raise
         
         try:
-            from mcp_integration import UniversalMCPHub
+            from src.core.mcp_integration import UniversalMCPHub
             self.mcp_hub = UniversalMCPHub()
             logger.info("✅ MCP Hub initialized")
         except Exception as e:

@@ -341,7 +341,7 @@ def load_config_from_env() -> ResearcherSystemConfig:
     from pathlib import Path
     from dotenv import load_dotenv
     
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent.parent
     env_file = project_root / ".env"
     if env_file.exists():
         load_dotenv(env_file)

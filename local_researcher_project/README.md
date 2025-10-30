@@ -124,8 +124,9 @@ python main.py --request "Latest AI trends in 2025"
 
 **1. MCP 서버 Config 파일 생성**
 ```bash
-# mcp_config.json 파일 생성
-cat > mcp_config.json << 'EOF'
+# configs/mcp_config.json 파일 생성
+mkdir -p configs
+cat > configs/mcp_config.json << 'EOF'
 {
   "mcpServers": {
     "ddg_search": {
@@ -145,7 +146,7 @@ EOF
 ```
 
 **2. 사용 방법**
-- 시스템은 `mcp_config.json` 파일을 자동으로 읽어서 MCP 서버에 연결합니다
+- 시스템은 `configs/mcp_config.json` 파일을 자동으로 읽어서 MCP 서버에 연결합니다 (하위 호환성을 위해 루트의 `mcp_config.json`도 지원)
 - MCP 서버 연결에 실패하면 자동으로 직접 DuckDuckGo 검색을 사용합니다
 - Rate limit 문제도 자동으로 처리합니다
 
