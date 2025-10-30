@@ -220,130 +220,15 @@ class ToolRegistry:
 
 
 class OpenRouterClient:
-    """OpenRouter API 클라이언트 - API에서 무료 모델을 동적으로 가져와 사용."""
-    
+    """(비활성화) OpenRouter 경유는 사용하지 않습니다."""
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.rate_limit_remaining = 1000
-        self.rate_limit_reset = datetime.now() + timedelta(hours=1)
-        self.available_models: List[str] = []
-        self.free_models: List[str] = []
-    
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession(
-            headers={
-                "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://mcp-agent.local",
-                "X-Title": "MCP Agent Hub"
-            }
-        )
-        
-        # OpenRouter API에서 무료 모델 목록 동적으로 가져오기
-        await self._fetch_free_models()
-        
-        return self
-    
-    async def _fetch_free_models(self):
-        """OpenRouter API에서 무료 모델 목록을 동적으로 가져옴."""
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://mcp-agent.local",
-                "X-Title": "MCP Agent Hub"
-            }
-            
-            # API 키가 있으면 추가
-            if self.api_key:
-                headers["Authorization"] = f"Bearer {self.api_key}"
-            
-            async with self.session.get(
-                f"{self.base_url}/models",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get("data", [])
-                    
-                    for model in models:
-                        model_id = model.get("id", "")
-                        pricing = model.get("pricing", {})
-                        
-                        # 무료 모델 확인
-                        if pricing and pricing.get("prompt", "0") == "0" and pricing.get("completion", "0") == "0":
-                            self.free_models.append(model_id)
-                        
-                        self.available_models.append(model_id)
-                    
-                    if self.free_models:
-                        logger.info(f"✅ 동적으로 {len(self.free_models)}개의 무료 모델 로드: {', '.join(self.free_models[:5])}")
-                    else:
-                        logger.warning("⚠️ 무료 모델을 찾지 못했습니다. API 키 없이는 제한적 기능만 사용 가능합니다.")
-                else:
-                    logger.warning(f"⚠️ OpenRouter 모델 목록 조회 실패: {response.status}")
-                    
-        except Exception as e:
-            logger.warning(f"⚠️ 무료 모델 로드 실패: {e}. 기본 모델 사용")
-            
-    def get_free_model(self) -> str:
-        """무료 모델 중 첫 번째 사용 가능한 모델 반환."""
-        if self.free_models:
-            return self.free_models[0]
-        # 무료 모델이 없으면 기본값 (OpenRouter의 최근 무료 모델)
-        return "deepseek/deepseek-chat-v3.1:free"
-    
+        raise RuntimeError("OpenRouter is disabled. Use Gemini direct path via llm_manager.")
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            try:
-                if not self.session.closed:
-                    await self.session.close()
-                # 연결 완전히 정리 대기
-                await asyncio.sleep(0.2)
-            except Exception as e:
-                logger.debug(f"Error closing OpenRouter session: {e}")
-            finally:
-                self.session = None
-    
-    async def generate_response(self, model: str, messages: List[Dict[str, str]], 
-                              temperature: float = 0.1, max_tokens: int = 4000) -> Dict[str, Any]:
-        """OpenRouter API를 통한 응답 생성."""
-        if not self.session or self.session.closed:
-            raise RuntimeError("OpenRouter client not initialized - session is None or closed. Call initialize_mcp() first.")
-        
-        # Rate limiting 체크
-        if self.rate_limit_remaining <= 0 and datetime.now() < self.rate_limit_reset:
-            await asyncio.sleep(60)  # 1분 대기
-        
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": False
-        }
-        
-        try:
-            async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as response:
-                if response.status == 429:
-                    # Rate limit exceeded
-                    retry_after = int(response.headers.get("Retry-After", 60))
-                    await asyncio.sleep(retry_after)
-                    return await self.generate_response(model, messages, temperature, max_tokens)
-                
-                response.raise_for_status()
-                result = await response.json()
-                
-                # Rate limit 정보 업데이트
-                self.rate_limit_remaining = int(response.headers.get("X-RateLimit-Remaining", 1000))
-                
-                return result
-                
-        except aiohttp.ClientError as e:
-            logger.error(f"OpenRouter API error: {e}")
-            raise RuntimeError(f"OpenRouter API error: {e}")
+        return False
+    async def generate_response(self, *args, **kwargs):
+        raise RuntimeError("OpenRouter is disabled. Use Gemini direct path via llm_manager.")
 
 
 
@@ -603,12 +488,9 @@ class UniversalMCPHub:
         logger.info(f"✅ Initialized {len(self.registry.tools)} tools in registry ({len(self.registry.langchain_tools)} with LangChain wrappers)")
     
     def _initialize_clients(self):
-        """클라이언트 초기화 - OpenRouter와 Gemini 2.5 Flash Lite."""
-        if self.llm_config.openrouter_api_key:
-            self.openrouter_client = OpenRouterClient(self.llm_config.openrouter_api_key)
-            logger.info("✅ OpenRouter client initialized")
-        else:
-            logger.warning("OpenRouter API key not configured - LLM features will not function")
+        """클라이언트 초기화 - Gemini 직결 사용, OpenRouter 비활성화."""
+        self.openrouter_client = None
+        logger.info("✅ LLM routed via llm_manager (Gemini direct). OpenRouter disabled.")
     
     def _load_mcp_servers_from_config(self):
         """MCP 서버 설정을 config에서 로드."""
@@ -647,6 +529,7 @@ class UniversalMCPHub:
     
     async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any], timeout: float = 15.0):
         """MCP 서버에 연결 - stdio 및 HTTP 지원 (타임아웃 포함)."""
+        logger.info(f"[MCP][connect.start] server={server_name} type={server_config.get('type','stdio')} url={server_config.get('httpUrl')} timeout={timeout}")
         if not MCP_AVAILABLE:
             logger.error("MCP package not available")
             return False
@@ -685,7 +568,7 @@ class UniversalMCPHub:
                     read, write, _ = http_transport
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
                 except Exception as e:
-                    logger.error(f"Failed to create HTTP transport for {server_name}: {e}")
+                    logger.exception(f"[MCP][connect.error] create-http-transport server={server_name} err={e}")
                     return False
                 
             else:
@@ -706,22 +589,25 @@ class UniversalMCPHub:
                     read, write = stdio_transport
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
                 except Exception as e:
-                    logger.error(f"Failed to create stdio transport for {server_name}: {e}")
+                    logger.exception(f"[MCP][connect.error] create-stdio-transport server={server_name} err={e}")
                     return False
             
             self.mcp_sessions[server_name] = session
             
             # 세션 초기화 및 도구 목록 가져오기 (타임아웃 적용 - 개별 작업에만)
             try:
+                t0 = asyncio.get_running_loop().time()
                 await asyncio.wait_for(session.initialize(), timeout=timeout)
+                t1 = asyncio.get_running_loop().time()
                 response = await asyncio.wait_for(session.list_tools(), timeout=timeout)
+                t2 = asyncio.get_running_loop().time()
             except asyncio.CancelledError:
                 # 작업이 취소된 경우 (종료 신호 등)
-                logger.warning(f"Session initialization for {server_name} was cancelled")
+                logger.warning(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list")
                 await self._disconnect_from_mcp_server(server_name)
                 raise  # 상위로 전파하여 초기화 중단
             except asyncio.TimeoutError:
-                logger.error(f"Session initialization or tool listing for {server_name} timed out after {timeout}s")
+                logger.error(f"[MCP][connect.timeout] server={server_name} after={timeout}s stage=initialize_or_list")
                 # 연결은 되었지만 초기화 실패 - 세션 정리
                 # 타임아웃 발생 시 exit_stack을 안전하게 정리
                 if server_name in self.exit_stacks:
@@ -732,11 +618,11 @@ class UniversalMCPHub:
                             await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
                         except RuntimeError as e:
                             if "cancel scope" in str(e).lower():
-                                logger.debug(f"Cancel scope error during timeout cleanup for {server_name}, ignoring")
+                                logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-timeout ignored")
                             else:
                                 raise
                         except (asyncio.TimeoutError, Exception) as e:
-                            logger.debug(f"Error closing exit_stack during timeout: {e}")
+                            logger.debug(f"[MCP][cleanup.error] server={server_name} during-timeout err={e}")
                         finally:
                             if server_name in self.exit_stacks:
                                 del self.exit_stacks[server_name]
@@ -749,21 +635,26 @@ class UniversalMCPHub:
                 self.mcp_tools_map[server_name][tool.name] = tool
                 # ToolRegistry에 server_name::tool_name 형식으로 등록
                 self.registry.register_mcp_tool(server_name, tool.name, tool)
-                logger.debug(f"Registered MCP tool: {server_name}::{tool.name}")
+                logger.debug(f"[MCP][register] {server_name}::{tool.name}")
             
             # Registry tools를 self.tools에 동기화
             self.tools.update(self.registry.tools)
             
+            tool_names = [t for t in self.mcp_tools_map.get(server_name, {}).keys()]
+            if 't1' in locals() and 't2' in locals():
+                logger.info(f"[MCP][connect.ok] server={server_name} init_ms={(t1-t0)*1000:.0f} list_ms={(t2-t1)*1000:.0f} tools={tool_names}")
+            else:
+                logger.info(f"[MCP][connect.ok] server={server_name} tools={tool_names}")
             logger.info(f"✅ Connected to MCP server {server_name} with {len(response.tools)} tools")
             return True
             
         except asyncio.CancelledError:
             # 작업이 취소된 경우 (종료 신호 등)
-            logger.warning(f"Connection to {server_name} was cancelled")
+            logger.warning(f"[MCP][connect.cancelled] server={server_name} stage=generic")
             await self._disconnect_from_mcp_server(server_name)
             raise  # 상위로 전파하여 초기화 중단
         except asyncio.TimeoutError:
-            logger.error(f"Connection to {server_name} timed out")
+            logger.error(f"[MCP][connect.timeout] server={server_name} stage=generic")
             # 타임아웃 발생 시 exit_stack 정리
             if server_name in self.exit_stacks:
                 exit_stack = self.exit_stacks.get(server_name)
@@ -772,7 +663,7 @@ class UniversalMCPHub:
                         await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
                     except RuntimeError as e:
                         if "cancel scope" in str(e).lower():
-                            logger.debug(f"Cancel scope error during connection timeout cleanup for {server_name}, ignoring")
+                            logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-generic-timeout ignored")
                         else:
                             raise
                     except (asyncio.TimeoutError, Exception):
@@ -783,7 +674,7 @@ class UniversalMCPHub:
             await self._disconnect_from_mcp_server(server_name)
             return False
         except Exception as e:
-            logger.error(f"Failed to connect to MCP server {server_name}: {e}")
+            logger.exception(f"[MCP][connect.error] server={server_name} err={e}")
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
             # 실패 시 exit_stack 정리 시도
@@ -794,7 +685,7 @@ class UniversalMCPHub:
                         await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
                     except RuntimeError as e:
                         if "cancel scope" in str(e).lower():
-                            logger.debug(f"Cancel scope error during connection failure cleanup for {server_name}, ignoring")
+                            logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-failure ignored")
                         else:
                             raise
                     except (asyncio.TimeoutError, Exception):
@@ -855,30 +746,29 @@ class UniversalMCPHub:
             return
         
         try:
-            logger.info("Initializing MCP Hub with OpenRouter and MCP servers...")
-            
-            # OpenRouter 클라이언트 초기화
-            if self.openrouter_client:
-                await self.openrouter_client.__aenter__()
+            logger.info("Initializing MCP Hub with MCP servers (no OpenRouter)...")
             
             # MCP 서버 연결 (모든 서버) - 병렬 + 타임아웃 적용
-            timeout_per_server = 15.0  # 서버당 최대 15초
+            timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "15"))  # 서버당 최대 15초(환경변수로 조정)
             max_concurrency = 4
             semaphore = asyncio.Semaphore(max_concurrency)
 
             async def connect_one(name: str, cfg: Dict[str, Any]) -> tuple[str, bool]:
                 try:
                     async with semaphore:
+                        if cfg.get("disabled"):
+                            logger.warning(f"[MCP][skip.disabled] server={name}")
+                            return name, False
                         logger.info(f"Connecting to MCP server {name} (timeout: {timeout_per_server}s)...")
                         ok = await self._connect_to_mcp_server(name, cfg, timeout=timeout_per_server)
                         if not ok:
                             logger.warning(f"Failed to connect to MCP server {name}")
                         return name, ok
                 except asyncio.CancelledError:
-                    logger.warning(f"MCP initialization cancelled during connection to {name}")
+                    logger.warning(f"[MCP][init.cancelled] server={name}")
                     raise
                 except Exception as e:
-                    logger.error(f"Failed to connect to MCP server {name}: {e}")
+                    logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
                     return name, False
 
             # disabled=true 설정된 서버는 건너뛰기
@@ -895,28 +785,11 @@ class UniversalMCPHub:
             else:
                 logger.warning("⚠️ No MCP servers connected successfully")
             
-            # 연결 테스트
-            if self.openrouter_client:
-                test_messages = [
-                    {"role": "system", "content": "You are a test assistant."},
-                    {"role": "user", "content": "Hello, this is a connection test."}
-                ]
-                
-                test_response = await self.openrouter_client.generate_response(
-                    model=self.llm_config.primary_model,
-                    messages=test_messages,
-                    temperature=0.1,
-                    max_tokens=100
-                )
-                
-                if test_response and "choices" in test_response:
-                    logger.info("✅ MCP Hub initialized successfully")
-                    logger.info(f"Available tools: {len(self.tools)}")
-                    logger.info(f"MCP servers: {list(self.mcp_sessions.keys())}")
-                    logger.info(f"Primary model: {self.llm_config.primary_model}")
-                else:
-                    logger.warning("⚠️ OpenRouter connection test failed - continuing with graceful degradation")
-                    return
+            # OpenRouter 연결 테스트 제거 (Gemini는 llm_manager 경유)
+            logger.info("✅ MCP Hub initialized (OpenRouter disabled)")
+            logger.info(f"Available tools: {len(self.tools)}")
+            logger.info(f"MCP servers: {list(self.mcp_sessions.keys())}")
+            logger.info(f"Primary model: {self.llm_config.primary_model}")
             
             # 필수 도구 검증 - 실패 시 warning만
             await self._validate_essential_tools()
@@ -1018,14 +891,8 @@ class UniversalMCPHub:
         """MCP 연결 정리 - Production-grade cleanup."""
         logger.info("Cleaning up MCP Hub...")
         
-        # OpenRouter 클라이언트 먼저 정리
-        if self.openrouter_client:
-            try:
-                await asyncio.wait_for(self.openrouter_client.__aexit__(None, None, None), timeout=2.0)
-            except (asyncio.TimeoutError, Exception) as e:
-                logger.debug(f"Error closing OpenRouter client: {e}")
-            finally:
-                self.openrouter_client = None
+        # OpenRouter 클라이언트 사용 안 함
+        self.openrouter_client = None
         
         # 모든 MCP 서버 연결 해제 (역순으로 정리)
         server_names = list(self.mcp_sessions.keys())
@@ -1067,23 +934,8 @@ class UniversalMCPHub:
     
     async def call_llm_async(self, model: str, messages: List[Dict[str, str]], 
                            temperature: float = 0.1, max_tokens: int = 4000) -> Dict[str, Any]:
-        """LLM 호출 - OpenRouter를 통한 비동기 호출."""
-        if not self.openrouter_client:
-            raise RuntimeError("OpenRouter client not initialized - call initialize_mcp() first")
-        
-        # 세션 상태 확인
-        if not hasattr(self.openrouter_client, 'session') or not self.openrouter_client.session:
-            raise RuntimeError("OpenRouter client session not initialized - call initialize_mcp() first")
-        
-        if self.openrouter_client.session.closed:
-            raise RuntimeError("OpenRouter client session is closed - reinitialize with initialize_mcp()")
-        
-        return await self.openrouter_client.generate_response(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        """LLM 호출은 llm_manager를 통해 수행하도록 강제 (Gemini 직결)."""
+        raise RuntimeError("call_llm_async via MCP Hub is disabled. Use llm_manager for Gemini.")
     
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1096,6 +948,7 @@ class UniversalMCPHub:
         """
         import time
         start_time = time.time()
+        logger.info(f"[MCP][exec.start] tool={tool_name} params_keys={list(parameters.keys())}")
         
         # Tool 찾기 (server_name::tool_name 또는 tool_name)
         tool_info = self.registry.get_tool_info(tool_name)
@@ -1125,8 +978,7 @@ class UniversalMCPHub:
         if not tool_info:
             # 사용 가능한 모든 tool 목록 로깅
             available_tools = self.registry.get_all_tool_names()
-            logger.error(f"Unknown tool: {tool_name}")
-            logger.error(f"Available tools: {available_tools}")
+            logger.error(f"[MCP][exec.unknown] tool={tool_name} available={available_tools}")
             return {
                 "success": False,
                 "data": None,
@@ -1152,7 +1004,7 @@ class UniversalMCPHub:
                         if original_tool_name == tool_name and self.registry.is_mcp_tool(registered_name):
                             mcp_info = self.registry.get_mcp_server_info(registered_name)
                             found_tool_name = registered_name
-                            logger.info(f"Found MCP tool {tool_name} as {registered_name}")
+                            logger.info(f"[MCP][exec.resolve] {tool_name} -> {registered_name}")
                             break
             
             if mcp_info:
@@ -1161,7 +1013,7 @@ class UniversalMCPHub:
                 # MCP 서버 연결 확인
                 if server_name in self.mcp_sessions:
                     try:
-                        logger.info(f"Executing MCP tool: {tool_name} (as {found_tool_name}) via server {server_name}")
+                        logger.info(f"[MCP][exec.try] server={server_name} tool={tool_name} as={found_tool_name}")
                         mcp_result = await self._execute_via_mcp_server(
                             server_name,
                             original_tool_name,
@@ -1180,7 +1032,7 @@ class UniversalMCPHub:
                                 "source": "mcp"
                             }
                     except Exception as mcp_error:
-                        logger.warning(f"MCP tool execution failed: {mcp_error}, trying LangChain fallback")
+                        logger.warning(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error} -> try_langchain")
                         # MCP 실패 시 LangChain Tool로 fallback
             
             # 2. LangChain Tool fallback - tool_name으로 직접 찾기 또는 server_name::tool_name 형식으로 찾기
@@ -1197,7 +1049,7 @@ class UniversalMCPHub:
             
             if langchain_tool:
                 try:
-                    logger.info(f"Executing LangChain tool: {tool_name}")
+                    logger.info(f"[MCP][exec.lc.try] tool={tool_name}")
                     # LangChain Tool 실행 (동기)
                     result = langchain_tool.invoke(parameters)
                     
@@ -1220,7 +1072,7 @@ class UniversalMCPHub:
                         "source": "langchain"
                     }
                 except Exception as lc_error:
-                    logger.error(f"LangChain tool execution failed: {lc_error}")
+                    logger.error(f"[MCP][exec.lc.error] tool={tool_name} err={lc_error}")
             
             # 3. 카테고리 기반 직접 실행 (최후의 수단)
             if tool_info.category == ToolCategory.SEARCH:
@@ -1251,7 +1103,7 @@ class UniversalMCPHub:
             }
 
         except Exception as e:
-            logger.error(f"Tool execution failed: {e}")
+            logger.exception(f"[MCP][exec.error] tool={tool_name} err={e}")
             return {
                 "success": False,
                 "data": None,

@@ -699,10 +699,13 @@ class ResearchAgent:
             }
             params = {'q': query, 'count': 5}
             
-            async with asyncio.timeout(10):
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                response.raise_for_status()
-                data = response.json()
+            # 블로킹 I/O는 스레드로 위임하고, 단일 계층 타임아웃으로 보호
+            response = await asyncio.wait_for(
+                asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10),
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
             
             formatted_results = []
             for result in data.get('web', {}).get('results', [])[:5]:
@@ -740,10 +743,12 @@ class ResearchAgent:
             }
             payload = {'q': query, 'num': 5, 'gl': 'kr', 'hl': 'ko'}
             
-            async with asyncio.timeout(10):
-                response = requests.post(url, headers=headers, json=payload, timeout=10)
-                response.raise_for_status()
-                data = response.json()
+            response = await asyncio.wait_for(
+                asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=10),
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
             
             formatted_results = []
             organic_results = data.get('organic', [])

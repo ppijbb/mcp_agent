@@ -158,8 +158,8 @@ class AutonomousResearchSystem:
             logger.error("Please check your .env file and ensure all required variables are set")
             logger.info("\nRequired environment variables:")
             logger.info("  - LLM_MODEL: LLM model identifier (e.g., google/gemini-2.5-flash-lite)")
-            logger.info("  - OPENROUTER_API_KEY: Your OpenRouter API key (starts with sk-or-)")
-            logger.info("  - LLM_PROVIDER: Provider name (e.g., openrouter)")
+            logger.info("  - GOOGLE_API_KEY: Your Google or Vertex AI API key")
+            logger.info("  - LLM_PROVIDER: Provider name (e.g., google)")
             raise
         
         # Initialize components with 8 innovations
@@ -211,17 +211,22 @@ class AutonomousResearchSystem:
         
         # Shutdown 플래그 설정 (중복 방지)
         if hasattr(self, '_shutdown_requested') and self._shutdown_requested:
-            # 이미 종료 중이면 강제 종료
-            logger.warning("Shutdown already in progress, forcing exit...")
-            sys.exit(1)
+            # 이미 종료 중이면 재진입 방지만 수행
+            logger.warning("Shutdown already in progress; ignoring additional signal")
+            return
         
         self._shutdown_requested = True
         
         # 실행 중인 이벤트 루프가 있는지 확인하고 shutdown 작업 스케줄링
         try:
             loop = asyncio.get_running_loop()
-            # 실행 중인 루프에 shutdown 작업 추가
-            loop.call_soon_threadsafe(lambda: asyncio.create_task(self._graceful_shutdown()))
+            # 중복 생성 방지: 이미 스케줄된 작업이 있으면 재생성하지 않음
+            if not hasattr(self, '_shutdown_task') or self._shutdown_task is None or self._shutdown_task.done():
+                def _schedule():
+                    self._shutdown_task = asyncio.create_task(self._graceful_shutdown())
+                loop.call_soon_threadsafe(_schedule)
+            else:
+                logger.debug("Shutdown task already scheduled")
         except RuntimeError:
             # 이벤트 루프가 없으면 강제 종료
             logger.warning("No event loop available, forcing exit")

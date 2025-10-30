@@ -25,7 +25,7 @@
       },
       "implementation": "local",
       "langchain_class": "StructuredTool",
-      "fallback_enabled": true
+      "fallback_enabled": false
     },
     "fetch": {
       "category": "data",
