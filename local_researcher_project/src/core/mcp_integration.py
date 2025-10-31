@@ -246,7 +246,7 @@ class UniversalMCPHub:
         
         # MCP 클라이언트
         self.mcp_sessions: Dict[str, ClientSession] = {}
-        self.exit_stacks: Dict[str, AsyncExitStack] = {}
+        self.exit_stacks: Dict[str, AsyncExitStack] = {}  # 참조만 유지, cleanup에서 aclose() 호출 안 함
         self.mcp_tools_map: Dict[str, Dict[str, Any]] = {}  # server_name -> {tool_name -> tool_info}
         self.mcp_server_configs: Dict[str, Dict[str, Any]] = {}
         # 각 서버별 연결 진단 정보
@@ -647,23 +647,9 @@ class UniversalMCPHub:
                 di.update({"stage": "timeout_initialize_or_list", "error": f"timeout_{timeout}s"})
                 self.connection_diagnostics[server_name] = di
                 # 연결은 되었지만 초기화 실패 - 세션 정리
-                # 타임아웃 발생 시 exit_stack을 안전하게 정리
+                # 타임아웃 발생 시 exit_stack 참조만 제거 (aclose() 호출하지 않음 - anyio 오류 방지)
                 if server_name in self.exit_stacks:
-                    exit_stack = self.exit_stacks.get(server_name)
-                    if exit_stack:
-                        try:
-                            # cancel scope 에러는 무시
-                            await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
-                        except RuntimeError as e:
-                            if "cancel scope" in str(e).lower():
-                                logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-timeout ignored")
-                            else:
-                                raise
-                        except (asyncio.TimeoutError, Exception) as e:
-                            logger.debug(f"[MCP][cleanup.error] server={server_name} during-timeout err={e}")
-                        finally:
-                            if server_name in self.exit_stacks:
-                                del self.exit_stacks[server_name]
+                    del self.exit_stacks[server_name]
                 await self._disconnect_from_mcp_server(server_name)
                 return False
             
@@ -696,22 +682,9 @@ class UniversalMCPHub:
             di = self.connection_diagnostics.get(server_name, {})
             di.update({"stage": "timeout_generic", "error": f"timeout_{timeout}s"})
             self.connection_diagnostics[server_name] = di
-            # 타임아웃 발생 시 exit_stack 정리
+            # 타임아웃 발생 시 exit_stack 참조만 제거 (aclose() 호출하지 않음 - anyio 오류 방지)
             if server_name in self.exit_stacks:
-                exit_stack = self.exit_stacks.get(server_name)
-                if exit_stack:
-                    try:
-                        await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
-                    except RuntimeError as e:
-                        if "cancel scope" in str(e).lower():
-                            logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-generic-timeout ignored")
-                        else:
-                            raise
-                    except (asyncio.TimeoutError, Exception):
-                        pass
-                    finally:
-                        if server_name in self.exit_stacks:
-                            del self.exit_stacks[server_name]
+                del self.exit_stacks[server_name]
             await self._disconnect_from_mcp_server(server_name)
             return False
         except Exception as e:
@@ -721,22 +694,9 @@ class UniversalMCPHub:
             di = self.connection_diagnostics.get(server_name, {})
             di.update({"stage": "exception", "error": str(e), "traceback": traceback.format_exc()})
             self.connection_diagnostics[server_name] = di
-            # 실패 시 exit_stack 정리 시도
+            # 실패 시 exit_stack 참조만 제거 (aclose() 호출하지 않음 - anyio 오류 방지)
             if server_name in self.exit_stacks:
-                exit_stack = self.exit_stacks.get(server_name)
-                if exit_stack:
-                    try:
-                        await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
-                    except RuntimeError as e:
-                        if "cancel scope" in str(e).lower():
-                            logger.debug(f"[MCP][cleanup.note] server={server_name} cancel-scope during-failure ignored")
-                        else:
-                            raise
-                    except (asyncio.TimeoutError, Exception):
-                        pass
-                    finally:
-                        if server_name in self.exit_stacks:
-                            del self.exit_stacks[server_name]
+                del self.exit_stacks[server_name]
             try:
                 await self._disconnect_from_mcp_server(server_name)
             except:
@@ -752,28 +712,15 @@ class UniversalMCPHub:
                 try:
                     # 세션 종료 시도 (안전하게)
                     if hasattr(session, 'shutdown'):
-                        await asyncio.wait_for(session.shutdown(), timeout=2.0)
+                        await asyncio.wait_for(session.shutdown(), timeout=1.0)
                 except (asyncio.TimeoutError, AttributeError, Exception):
                     pass  # 세션 종료 실패는 무시
                 del self.mcp_sessions[server_name]
             
-            # Exit stack 정리 시도 (cancel scope 에러 무시)
+            # Exit stack 정리: aclose() 호출하지 않음 (anyio cancel scope 오류 방지)
+            # 참조만 제거 - 컨텍스트는 원래 태스크에서 정리됨
             if server_name in self.exit_stacks:
-                exit_stack = self.exit_stacks[server_name]
-                try:
-                    # AsyncExitStack을 정리하되, cancel scope 에러는 무시
-                    await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
-                except RuntimeError as e:
-                    if "cancel scope" in str(e).lower():
-                        logger.debug(f"Cancel scope error during disconnect from {server_name}, continuing cleanup")
-                    else:
-                        logger.debug(f"RuntimeError during disconnect from {server_name}: {e}")
-                except (asyncio.TimeoutError, Exception) as e:
-                    logger.debug(f"Error closing exit_stack for {server_name}: {e}")
-                finally:
-                    # 참조는 항상 제거
-                    if server_name in self.exit_stacks:
-                        del self.exit_stacks[server_name]
+                del self.exit_stacks[server_name]
             
             if server_name in self.mcp_tools_map:
                 del self.mcp_tools_map[server_name]
@@ -823,11 +770,13 @@ class UniversalMCPHub:
             allowlist = [s.strip() for s in allowlist_str.split(",") if s.strip()]
             base_items = [(n, c) for n, c in self.mcp_server_configs.items() if not c.get("disabled")]
             if allowlist:
+                # 화이트리스트가 있으면 그것만 연결
                 enabled_server_items = [(n, c) for n, c in base_items if n in allowlist]
                 logger.info(f"[MCP][allowlist] enabled={ [n for n,_ in enabled_server_items] }")
             else:
-                enabled_server_items = []  # 허용 서버 미설정 시 연결 시도 안함
-                logger.warning("[MCP][allowlist] no servers allowed; skipping all connections")
+                # 화이트리스트가 없으면 disabled가 아닌 모든 서버 연결 시도
+                enabled_server_items = base_items
+                logger.info(f"[MCP][allowlist] not set; connecting to all enabled servers: { [n for n,_ in enabled_server_items] }")
 
             tasks = [asyncio.create_task(connect_one(n, c)) for n, c in enabled_server_items]
             results = await asyncio.gather(*tasks, return_exceptions=False)
@@ -972,23 +921,32 @@ class UniversalMCPHub:
             try:
                 # 세션 제거
                 if server_name in self.mcp_sessions:
+                    session = self.mcp_sessions.get(server_name)
+                    # 세션 종료 시도 (안전하게)
+                    if session and hasattr(session, 'shutdown'):
+                        try:
+                            await asyncio.wait_for(session.shutdown(), timeout=1.0)
+                        except:
+                            pass
                     del self.mcp_sessions[server_name]
                 
-                # Exit stack 정리 (cancel scope 에러 무시)
+                # Exit stack 정리: anyio cancel scope 오류 무시하고 시도
                 if server_name in self.exit_stacks:
                     exit_stack = self.exit_stacks[server_name]
                     try:
-                        await asyncio.wait_for(exit_stack.aclose(), timeout=5.0)
+                        # anyio RuntimeError는 완전히 무시 (다른 태스크에서 닫히려 할 때 발생)
+                        await asyncio.wait_for(exit_stack.aclose(), timeout=2.0)
                     except RuntimeError as e:
-                        if "cancel scope" in str(e).lower():
-                            logger.debug(f"Cancel scope error during cleanup for {server_name}, ignoring")
+                        if "cancel scope" in str(e).lower() or "different task" in str(e).lower():
+                            # anyio cancel scope 오류는 무시
+                            pass
                         else:
-                            logger.debug(f"RuntimeError during cleanup for {server_name}: {e}")
+                            logger.debug(f"RuntimeError during exit_stack cleanup for {server_name}: {e}")
                     except (asyncio.TimeoutError, Exception) as e:
-                        logger.debug(f"Error closing exit_stack for {server_name} during cleanup: {e}")
+                        # 기타 오류는 무시
+                        logger.debug(f"Error closing exit_stack for {server_name}: {e}")
                     finally:
-                        if server_name in self.exit_stacks:
-                            del self.exit_stacks[server_name]
+                        del self.exit_stacks[server_name]
                 
                 if server_name in self.mcp_tools_map:
                     del self.mcp_tools_map[server_name]

@@ -230,11 +230,18 @@ class MultiModelOrchestrator:
             capabilities=[TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
         )
         
-        # OpenRouter 모델들은 API에서 동적으로 로드
-        self._load_openrouter_models()
+        # OpenRouter 모델 로딩 비활성화 (Gemini만 사용)
+        # OpenRouter API 키가 있으면 로드 시도, 없으면 무시
+        if os.getenv("OPENROUTER_API_KEY"):
+            try:
+                self._load_openrouter_models()
+            except Exception as e:
+                logger.warning(f"OpenRouter models not loaded (Gemini will be used instead): {e}")
+        else:
+            logger.info("OpenRouter disabled - using Gemini only")
     
     def _load_openrouter_models(self):
-        """OpenRouter API에서 무료 모델들을 동적으로 로드."""
+        """OpenRouter API에서 무료 모델들을 동적으로 로드 (선택적)."""
         try:
             openrouter_models = self._fetch_openrouter_models()
             for model_data in openrouter_models:
@@ -244,8 +251,8 @@ class MultiModelOrchestrator:
                     self.models[model_name] = model_config
                     logger.info(f"Loaded OpenRouter model: {model_name} ({model_data['id']})")
         except Exception as e:
-            logger.error(f"Failed to load OpenRouter models: {e}")
-            raise RuntimeError(f"OpenRouter model loading failed: {e}. Please check your OPENROUTER_API_KEY and network connection.")
+            logger.warning(f"Failed to load OpenRouter models: {e}")
+            # 예외를 raise하지 않음 - Gemini만 사용하도록 함
     
     def _fetch_openrouter_models(self):
         """OpenRouter API에서 모델 목록을 가져옴."""
@@ -422,30 +429,24 @@ class MultiModelOrchestrator:
             # 기본 모델 사용
             return "gemini-flash-lite"
         
-        # OpenRouter 무료 모델 우선 선택 (프로토타이핑용)
-        openrouter_models = [
+        # OpenRouter 제외 - Gemini만 사용
+        gemini_models = [
             name for name in suitable_models
-            if self.models[name].provider == "openrouter" and self.models[name].cost_per_token == 0.0
+            if self.models[name].provider == "google"
         ]
         
-        if openrouter_models:
-            # 복잡도에 따른 OpenRouter 모델 선택
-            if complexity > 7.0 and "qwen2.5-vl-72b" in openrouter_models:
-                return "qwen2.5-vl-72b"
-            elif complexity > 6.0 and "llama-3.3-70b" in openrouter_models:
-                return "llama-3.3-70b"
-            elif complexity > 5.0 and "deepseek-chat-v3" in openrouter_models:
-                return "deepseek-chat-v3"
+        # Gemini 모델 우선 사용
+        if gemini_models:
+            if complexity > 7.0 and "gemini-pro" in gemini_models:
+                return "gemini-pro"
+            elif complexity > 5.0 and "gemini-flash" in gemini_models:
+                return "gemini-flash"
             else:
-                return "gemma-2-27b" if "gemma-2-27b" in openrouter_models else openrouter_models[0]
+                # gemini-flash-lite 또는 첫 번째 Gemini 모델
+                return "gemini-flash-lite" if "gemini-flash-lite" in gemini_models else gemini_models[0]
         
-        # OpenRouter 모델이 없으면 Google 모델 사용
-        if complexity > 7.0 and "gemini-pro" in suitable_models:
-            return "gemini-pro"
-        elif complexity > 5.0 and "gemini-flash" in suitable_models:
-            return "gemini-flash"
-        else:
-            return "gemini-flash-lite"
+        # Gemini 모델이 없으면 기본 모델 사용
+        return "gemini-flash-lite"
     
     async def execute_with_model(
         self,
@@ -460,25 +461,41 @@ class MultiModelOrchestrator:
             model_name = self.select_model(task_type)
         
         # 모델 클라이언트 확인
-        if model_name not in self.model_clients and self.models[model_name].provider != "openrouter":
+        model_name_clean = model_name.replace("_langchain", "")
+        
+        # OpenRouter 모델이 선택되었으면 Gemini로 폴백
+        if model_name_clean in self.models and self.models[model_name_clean].provider == "openrouter":
+            logger.warning(f"OpenRouter model {model_name} selected, falling back to Gemini")
+            # Gemini 모델로 변경
+            if "gemini-flash-lite" in self.model_clients:
+                model_name = "gemini-flash-lite"
+            elif "gemini-flash" in self.model_clients:
+                model_name = "gemini-flash"
+            elif "gemini-pro" in self.model_clients:
+                model_name = "gemini-pro"
+            else:
+                # 사용 가능한 첫 번째 Gemini 모델
+                gemini_models = [name for name in self.model_clients.keys() if "gemini" in name.lower()]
+                if gemini_models:
+                    model_name = gemini_models[0]
+                else:
+                    raise ValueError(f"No Gemini models available (OpenRouter model {model_name_clean} was requested)")
+            model_name_clean = model_name
+        
+        if model_name not in self.model_clients:
             raise ValueError(f"Model {model_name} not available")
         
         start_time = time.time()
         
         try:
-            # 모델 실행
+            # 모델 실행 (OpenRouter는 이미 폴백 처리됨)
             if model_name.endswith("_langchain"):
                 # LangChain 클라이언트 사용
                 result = await self._execute_langchain_model(
                     model_name, prompt, system_message, **kwargs
                 )
-            elif self.models[model_name.replace("_langchain", "")].provider == "openrouter":
-                # OpenRouter HTTP 요청 사용
-                result = await self._execute_openrouter_model(
-                    model_name, prompt, system_message, **kwargs
-                )
             else:
-                # Google Generative AI 클라이언트 사용
+                # Google Generative AI 클라이언트 사용 (OpenRouter는 폴백됨)
                 result = await self._execute_gemini_model(
                     model_name, prompt, system_message, **kwargs
                 )

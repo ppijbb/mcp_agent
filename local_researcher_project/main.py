@@ -590,6 +590,27 @@ class AutonomousResearchSystem:
 
 async def main():
     """Main function - 8가지 핵심 혁신 통합 실행 진입점"""
+    # Python 종료 시 발생하는 async generator 정리 오류 무시
+    def ignore_async_gen_errors(loop, context):
+        """anyio cancel scope 및 async generator 종료 오류 무시"""
+        exception = context.get('exception')
+        if exception:
+            error_msg = str(exception)
+            # anyio cancel scope 오류는 무시
+            if isinstance(exception, RuntimeError) and ("cancel scope" in error_msg.lower() or "different task" in error_msg.lower()):
+                return  # 무시
+            # async generator 종료 오류는 무시
+            if isinstance(exception, GeneratorExit) or "async_generator" in error_msg.lower():
+                return  # 무시
+        # 기타 오류는 기본 handler로 전달
+        loop.set_exception_handler(None)
+        loop.call_exception_handler(context)
+        loop.set_exception_handler(ignore_async_gen_errors)
+    
+    # asyncio exception handler 설정
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(ignore_async_gen_errors)
+    
     parser = argparse.ArgumentParser(
         description="Autonomous Multi-Agent Research System with 8 Core Innovations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
