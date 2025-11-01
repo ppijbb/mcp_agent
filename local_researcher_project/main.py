@@ -20,9 +20,8 @@ import subprocess
 import signal
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from datetime import datetime
-from enum import Enum
 import json
 import os
 
@@ -35,14 +34,9 @@ from src.core.researcher_config import load_config_from_env
 # CRITICAL: Load configuration BEFORE importing any modules that depend on it
 config = load_config_from_env()
 
-from src.agents.autonomous_researcher import AutonomousResearcherAgent
-# Use new AgentOrchestrator for multi-agent orchestration
-from src.core.agent_orchestrator import AgentOrchestrator as NewAgentOrchestrator
-from src.core.autonomous_orchestrator import AutonomousOrchestrator
-from src.core.reliability import execute_with_reliability
+# Use AgentOrchestrator for multi-agent orchestration
+from src.core.agent_orchestrator import AgentOrchestrator
 from src.monitoring.system_monitor import HealthMonitor
-from src.core.llm_manager import execute_llm_task, TaskType
-# from src.core.mcp_integration import get_available_tools, execute_tool  # Commented out to avoid import-time initialization
 
 # Configure logging for production-grade reliability
 # Advanced logging setup: setup logger manually to ensure logs directory exists and avoid issues with logging.basicConfig (per best practices)
@@ -70,9 +64,6 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(level
 logger.addHandler(console_handler)
 
 
-# MCPIntegrationManager 클래스 제거됨 - mcp_integration.py의 UniversalMCPHub 사용
-
-
 class WebAppManager:
     """웹 앱 관리자 - Streaming Pipeline (Innovation 5) 지원"""
     
@@ -89,8 +80,12 @@ class WebAppManager:
                 logger.error(f"Streamlit app not found at {streamlit_app_path}")
                 return False
             
+            # Get port from environment variable, default to 8501
+            port = os.getenv("STREAMLIT_PORT", "8501")
+            address = os.getenv("STREAMLIT_ADDRESS", "0.0.0.0")
+            
             logger.info("🌐 Starting Local Researcher Web Application with Streaming Pipeline...")
-            logger.info("App will be available at: http://localhost:8501")
+            logger.info(f"App will be available at: http://{address}:{port}")
             logger.info("Features: Real-time streaming, Progressive reporting, Incremental save")
             logger.info("Press Ctrl+C to stop the application")
             
@@ -101,8 +96,8 @@ class WebAppManager:
             cmd = [
                 sys.executable, "-m", "streamlit", "run",
                 str(streamlit_app_path),
-                "--server.port", "8501",
-                "--server.address", "0.0.0.0",
+                "--server.port", port,
+                "--server.address", address,
                 "--browser.gatherUsageStats", "false",
                 "--server.enableCORS", "false",
                 "--server.enableXsrfProtection", "false"
@@ -123,17 +118,15 @@ class WebAppManager:
     
     async def get_web_app_health(self) -> Dict[str, Any]:
         """Get web application health status."""
+        port = int(os.getenv("STREAMLIT_PORT", "8501"))
         return {
             'status': 'running',
-            'port': 8501,
+            'port': port,
             'streaming_enabled': True,
             'progressive_reporting': True,
             'incremental_save': True,
             'timestamp': datetime.now().isoformat()
         }
-
-
-# AutonomousResearcherAgent is now in src/agents/autonomous_researcher.py
 
 
 class AutonomousResearchSystem:
@@ -165,10 +158,9 @@ class AutonomousResearchSystem:
         # Initialize components with 8 innovations
         logger.info("🔧 Initializing system components...")
         try:
-            # Use new multi-agent orchestrator
-            self.orchestrator = NewAgentOrchestrator()
+            # Use AgentOrchestrator for multi-agent orchestration
+            self.orchestrator = AgentOrchestrator()
             logger.info("✅ Multi-Agent Orchestrator initialized")
-            self.old_orchestrator = AutonomousOrchestrator()  # Keep for fallback
         except Exception as e:
             logger.error(f"❌ Orchestrator initialization failed: {e}")
             raise

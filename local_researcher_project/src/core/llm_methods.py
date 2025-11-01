@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LLM-based methods for AutonomousOrchestrator
+LLM-based methods for research tasks
 """
 
 import asyncio

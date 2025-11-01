@@ -23,7 +23,7 @@ from plotly.subplots import make_subplots
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.autonomous_orchestrator import AutonomousOrchestrator
+from src.core.agent_orchestrator import AgentOrchestrator
 from src.agents.autonomous_researcher import AutonomousResearcherAgent
 from src.core.reliability import HealthMonitor
 from src.core.mcp_integration import get_available_tools, execute_tool
@@ -54,16 +54,16 @@ if 'innovation_stats' not in st.session_state:
 
 
 def initialize_orchestrator():
-    """Initialize the SparkleForge with 8 innovations."""
+    """Initialize the SparkleForge with AgentOrchestrator."""
     try:
         if st.session_state.orchestrator is None:
-            # Initialize forge with 8 innovations
-            st.session_state.orchestrator = AutonomousOrchestrator()
+            # Initialize with AgentOrchestrator
+            st.session_state.orchestrator = AgentOrchestrator()
             
             # Initialize health monitor
             st.session_state.health_monitor = HealthMonitor()
             
-            logger.info("SparkleForge initialized with 8 innovations")
+            logger.info("SparkleForge initialized with AgentOrchestrator")
             
     except Exception as e:
         st.error(f"Failed to initialize orchestrator: {e}")
@@ -267,7 +267,7 @@ def start_research_with_innovations(
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 result = loop.run_until_complete(
-                    st.session_state.orchestrator.run_research(query)
+                    st.session_state.orchestrator.execute(query)
                 )
                 loop.close()
                 

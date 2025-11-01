@@ -32,7 +32,7 @@ class LLMConfig(BaseModel):
     primary_model: str = Field(description="Primary model")
     temperature: float = Field(ge=0.0, le=2.0, description="Temperature")
     max_tokens: int = Field(gt=0, description="Max tokens")
-    api_key: str = Field(description="Google API key (deprecated, use OPENROUTER_API_KEY)")
+    api_key: str = Field(description="Google API key for Gemini models")
     
     # Multi-Model Orchestration (혁신 3) - OpenRouter Gemini 2.5 Flash-Lite 우선 - NO DEFAULTS
     planning_model: str = Field(description="Planning model")
@@ -512,11 +512,4 @@ def load_config_from_env() -> ResearcherSystemConfig:
     return config
 
 
-def update_config_from_env():
-    """Update configuration from environment variables - DEPRECATED, use load_config_from_env() instead."""
-    global config
-    config = load_config_from_env()
-
-
-# Initialize configuration from environment - will be called by main.py
-# update_config_from_env()
+# Configuration is loaded via load_config_from_env() function
