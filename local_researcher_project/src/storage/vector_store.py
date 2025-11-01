@@ -168,7 +168,7 @@ class VectorStore:
         if not CHROMADB_AVAILABLE:
             logger.warning("⚠️ ChromaDB not available - running without vector search capabilities")
             logger.warning("   Install with: pip install chromadb")
-            logger.info("ℹ️ Using fallback mode: vector search disabled, basic operations only")
+            logger.info("ℹ️ ChromaDB not available: vector search disabled, basic operations only")
             self.chroma_client = None
             self.collection = None
             return
@@ -253,7 +253,7 @@ class VectorStore:
                     return result.get('data', {}).get('embedding', [])
                 else:
                     logger.warning("MCP embedding failed, using simple text hash")
-                    # 간단한 해시 기반 임베딩 (fallback)
+                    # 간단한 해시 기반 임베딩 (ChromaDB 없을 때)
                     return self._simple_hash_embedding(text)
                     
         except Exception as e:
@@ -261,7 +261,7 @@ class VectorStore:
             return self._simple_hash_embedding(text)
     
     def _simple_hash_embedding(self, text: str) -> List[float]:
-        """간단한 해시 기반 임베딩 (fallback)."""
+        """간단한 해시 기반 임베딩 (ChromaDB 없을 때 사용)."""
         import hashlib
         
         # 텍스트를 해시하고 384차원 벡터로 변환

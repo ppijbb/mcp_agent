@@ -973,12 +973,11 @@ class UniversalMCPHub:
     
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Tool 실행 - MCP 우선 프로토콜, 실패 시 LangChain Tool fallback.
+        Tool 실행 - MCP 프로토콜만 사용.
         
         실행 우선순위:
         1. MCP 서버에서 Tool 실행 (server_name::tool_name 형식 또는 tool_name으로 찾기)
-        2. MCP 서버 연결 실패 시 LangChain Tool로 fallback (로컬 구현)
-        3. 모두 실패 시 에러 반환
+        2. 실패 시 명확한 에러 반환 (fallback 없음)
         """
         import time
         start_time = time.time()
@@ -1066,74 +1065,27 @@ class UniversalMCPHub:
                                 "source": "mcp"
                             }
                     except Exception as mcp_error:
-                        logger.warning(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error} -> try_langchain")
-                        # MCP 실패 시 LangChain Tool로 fallback
+                        logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error}")
+                        # MCP 실패 시 에러 반환 (fallback 제거)
+                        return {
+                            "success": False,
+                            "data": None,
+                            "error": f"MCP tool execution failed: {str(mcp_error)}",
+                            "execution_time": time.time() - start_time,
+                            "confidence": 0.0,
+                            "source": "mcp"
+                        }
             
-            # 2. LangChain Tool fallback - tool_name으로 직접 찾기 또는 server_name::tool_name 형식으로 찾기
-            langchain_tool = self.registry.get_langchain_tool(tool_name)
-            if not langchain_tool:
-                # server_name::tool_name 형식으로도 찾기 시도
-                for registered_name in self.registry.get_all_tool_names():
-                    if "::" in registered_name:
-                        _, original_tool_name = registered_name.split("::", 1)
-                        if original_tool_name == tool_name:
-                            langchain_tool = self.registry.get_langchain_tool(registered_name)
-                            if langchain_tool:
-                                break
-            
-            if langchain_tool:
-                try:
-                    logger.info(f"[MCP][exec.lc.try] tool={tool_name}")
-                    # LangChain Tool 실행 (동기)
-                    result = langchain_tool.invoke(parameters)
-                    
-                    # 결과 파싱
-                    if isinstance(result, str):
-                        import json
-                        try:
-                            data = json.loads(result)
-                        except:
-                            data = {"result": result}
-                    else:
-                        data = result if isinstance(result, dict) else {"result": result}
-                    
-                    return {
-                        "success": True,
-                        "data": data,
-                        "error": None,
-                        "execution_time": time.time() - start_time,
-                        "confidence": 0.85,
-                        "source": "langchain"
-                    }
-                except Exception as lc_error:
-                    logger.error(f"[MCP][exec.lc.error] tool={tool_name} err={lc_error}")
-            
-            # 3. 카테고리 기반 직접 실행 (최후의 수단)
-            if tool_info.category == ToolCategory.SEARCH:
-                result = await _execute_search_tool(tool_name, parameters)
-            elif tool_info.category == ToolCategory.ACADEMIC:
-                result = await _execute_academic_tool(tool_name, parameters)
-            elif tool_info.category == ToolCategory.DATA:
-                result = await _execute_data_tool(tool_name, parameters)
-            elif tool_info.category == ToolCategory.CODE:
-                result = await _execute_code_tool(tool_name, parameters)
-            else:
-                result = ToolResult(
-                    success=False,
-                    data=None,
-                    error=f"Unsupported tool category: {tool_info.category}",
-                    execution_time=time.time() - start_time,
-                    confidence=0.0
-                )
-            
-            # ToolResult를 dict로 변환
+            # MCP 도구가 아닌 경우 에러 반환 (fallback 제거)
+            error_msg = f"Tool '{tool_name}' is not available via MCP servers"
+            logger.error(f"[MCP][exec.error] {error_msg}")
             return {
-                "success": result.success,
-                "data": result.data,
-                "error": result.error,
-                "execution_time": result.execution_time,
-                "confidence": result.confidence,
-                "source": "direct"
+                "success": False,
+                "data": None,
+                "error": error_msg,
+                "execution_time": time.time() - start_time,
+                "confidence": 0.0,
+                "source": "mcp"
             }
 
         except Exception as e:
@@ -1572,64 +1524,9 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     logger.debug(f"Traceback: {traceback.format_exc()}")
                     continue
             
-            # 모든 MCP 서버 실패 시 직접 DuckDuckGo 사용
-            
-            # Fallback: 직접 DuckDuckGo 검색
-            logger.info(f"Using direct DuckDuckGo search for query: {query}")
-            from duckduckgo_search import DDGS
-            
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    if attempt > 0:
-                        delay = 2 * attempt
-                        await asyncio.sleep(delay)
-                        logger.info(f"Retrying search (attempt {attempt + 1}/{max_retries})")
-                    
-                    with DDGS(timeout=60) as ddgs:
-                        results = []
-                        for r in ddgs.text(query, max_results=max_results):
-                            results.append({
-                                "title": r.get("title", ""),
-                                "url": r.get("href", ""),
-                                "snippet": r.get("body", "")
-                            })
-                        
-                        logger.info(f"Search completed with {len(results)} results")
-                        return ToolResult(
-                            success=True,
-                            data={
-                                "query": query,
-                                "results": results,
-                                "total_results": len(results),
-                                "source": "duckduckgo-direct",
-                                "mcp_server_used": False
-                            },
-                            execution_time=time.time() - start_time,
-                            confidence=0.9
-                        )
-                    
-                except Exception as e:
-                    error_str = str(e)
-                    if "202" in error_str or "ratelimit" in error_str.lower():
-                        if attempt < max_retries - 1:
-                            logger.warning(f"Rate limit hit, retrying (attempt {attempt + 1}/{max_retries})")
-                            continue
-                        else:
-                            logger.error(f"Rate limit after {max_retries} attempts")
-                            return ToolResult(
-                                success=False,
-                                data={"query": query, "results": [], "total_results": 0, "rate_limited": True},
-                                error=f"Rate limited: {str(e)}",
-                                execution_time=time.time() - start_time,
-                                confidence=0.0
-                            )
-                    else:
-                        raise
-            
-            # 모든 재시도 실패
-            logger.error("All search attempts failed")
-            raise RuntimeError("All search attempts failed")
+            # 모든 MCP 서버 실패 시 에러 반환 (fallback 제거)
+            logger.error(f"All MCP search tools failed for query: {query}")
+            raise RuntimeError(f"All MCP search tools failed for query: {query}. No fallback available.")
         
         elif tool_name == "tavily":
             # MCP 서버를 통해 tavily 사용 (mcp_config.json에 정의된 서버)

@@ -1382,32 +1382,8 @@ class ResearchAgent:
         Returns:
             Web data collection result
         """
-        try:
-            # Simulate web data collection
-            web_data = {
-                'source_type': 'web',
-                'subtype': subtype,
-                'data_points': [
-                    {
-                        'title': f"Web research result for {task.get('description', 'task')}",
-                        'url': f"https://example.com/research/{objective_id}",
-                        'content': f"Simulated web content for {task.get('description', 'task')}",
-                        'reliability_score': 0.7,
-                        'timestamp': datetime.now().isoformat()
-                    }
-                ],
-                'collection_metadata': {
-                    'search_query': task.get('description', ''),
-                    'results_count': 1,
-                    'collection_method': 'autonomous_web_search'
-                }
-            }
-            
-            return web_data
-            
-        except Exception as e:
-            logger.error(f"Web data collection failed: {e}")
-            return {}
+        # 실제 웹 데이터 수집 수행 (MCP 도구 사용)
+        raise NotImplementedError("_simulate_web_data_collection is not implemented. Use actual MCP search tools instead.")
     
     async def _collect_academic_data(self, subtype: str, task: Dict[str, Any], 
                                    objective_id: str) -> Dict[str, Any]:
@@ -1477,7 +1453,7 @@ class ResearchAgent:
                     }
                 ],
                 'collection_metadata': {
-                    'data_source': 'simulated_database',
+                    'data_source': 'database',
                     'results_count': 1,
                     'collection_method': 'autonomous_data_analysis'
                 }
@@ -1677,76 +1653,16 @@ class ResearchAgent:
     
     def _calculate_timeliness_score(self, data: List[Dict[str, Any]]) -> float:
         """Calculate timeliness score."""
-        return 0.8  # Simulated timeliness score
+        # Implement actual timeliness calculation
+        raise NotImplementedError("_calculate_timeliness_score requires actual implementation")
     
     def _calculate_consistency_score(self, data: List[Dict[str, Any]]) -> float:
         """Calculate consistency score."""
-        return 0.7  # Simulated consistency score
+        # Implement actual consistency calculation
+        raise NotImplementedError("_calculate_consistency_score requires actual implementation")
     
-    # Placeholder methods for analysis, synthesis, and validation tasks
-    async def _select_analysis_method(self, task: Dict[str, Any], objective_id: str) -> str:
-        """Select appropriate analysis method."""
-        return 'quantitative'
-    
-    async def _perform_analysis(self, method: str, task: Dict[str, Any], objective_id: str) -> Dict[str, Any]:
-        """Perform analysis using selected method."""
-        return {'method': method, 'results': 'Simulated analysis results'}
-    
-    async def _generate_insights(self, analysis_result: Dict[str, Any], task: Dict[str, Any]) -> List[str]:
-        """Generate insights from analysis."""
-        return ['Simulated insight 1', 'Simulated insight 2']
-    
-    async def _create_analysis_report(self, analysis_result: Dict[str, Any], insights: List[str], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Create analysis report."""
-        return {'report': 'Simulated analysis report', 'insights': insights}
-    
-    def _calculate_analysis_quality(self, analysis_result: Dict[str, Any]) -> float:
-        """Calculate analysis quality score."""
-        return 0.8
-    
-    def _calculate_confidence_score(self, analysis_result: Dict[str, Any]) -> float:
-        """Calculate confidence score."""
-        return 0.75
-    
-    async def _gather_synthesis_data(self, task: Dict[str, Any], objective_id: str) -> List[Dict[str, Any]]:
-        """Gather data for synthesis."""
-        return [{'data': 'Simulated synthesis data'}]
-    
-    async def _perform_synthesis(self, data: List[Dict[str, Any]], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform synthesis."""
-        return {'synthesis': 'Simulated synthesis result'}
-    
-    async def _generate_recommendations(self, synthesis_result: Dict[str, Any], task: Dict[str, Any]) -> List[str]:
-        """Generate recommendations."""
-        return ['Simulated recommendation 1', 'Simulated recommendation 2']
-    
-    async def _create_synthesis_report(self, synthesis_result: Dict[str, Any], recommendations: List[str], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Create synthesis report."""
-        return {'report': 'Simulated synthesis report', 'recommendations': recommendations}
-    
-    def _calculate_synthesis_quality(self, synthesis_result: Dict[str, Any]) -> float:
-        """Calculate synthesis quality score."""
-        return 0.85
-    
-    def _calculate_completeness_score(self, synthesis_result: Dict[str, Any]) -> float:
-        """Calculate completeness score."""
-        return 0.8
-    
-    async def _gather_validation_data(self, task: Dict[str, Any], objective_id: str) -> List[Dict[str, Any]]:
-        """Gather data for validation."""
-        return [{'data': 'Simulated validation data'}]
-    
-    async def _perform_validation(self, data: List[Dict[str, Any]], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform validation."""
-        return {'overall_score': 0.8, 'issues': []}
-    
-    async def _create_validation_report(self, validation_result: Dict[str, Any], task: Dict[str, Any]) -> Dict[str, Any]:
-        """Create validation report."""
-        return {'report': 'Simulated validation report', 'score': validation_result.get('overall_score', 0)}
-    
-    def _calculate_reliability_score(self, validation_result: Dict[str, Any]) -> float:
-        """Calculate reliability score."""
-        return validation_result.get('overall_score', 0.5)
+    # Placeholder methods removed - use actual implementation instead
+    # These methods are no longer available to prevent using simulated/dummy data
     
     async def _generate_research_summary(self, query: str, search_results: Dict[str, Any], collected_data: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate comprehensive research summary using LLM."""

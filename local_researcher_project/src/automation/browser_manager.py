@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup
 import markdownify
 
-# Browser automation imports with fallback
+# Browser automation imports
 try:
     from browser_use import Browser as BrowserUseBrowser
     from browser_use import BrowserConfig
@@ -51,7 +51,7 @@ logger = setup_logger("browser_manager", log_level="INFO")
 
 
 class BrowserManager:
-    """Enhanced browser manager with robust error handling and fallback mechanisms."""
+    """Enhanced browser manager with robust error handling."""
     
     def __init__(self, config_path: Optional[str] = None):
         """Initialize the browser manager.
@@ -105,7 +105,7 @@ class BrowserManager:
                         except Exception as e:
                             logger.warning(f"Browser initialization attempt {attempt + 1} failed: {e}")
                             if attempt == max_retries - 1:
-                                logger.error("All browser initialization attempts failed. Using fallback mode.")
+                                logger.error("All browser initialization attempts failed")
                                 raise RuntimeError("Browser initialization failed after multiple attempts")
                                 return False
                             await asyncio.sleep(2 ** attempt)  # Exponential backoff

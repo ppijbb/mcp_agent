@@ -646,30 +646,30 @@ class ValidationAgent:
                                                  results: List[Dict[str, Any]], 
                                                  user_request: str) -> float:
         """Calculate alignment score for an objective."""
-        # Simulated alignment calculation
-        return 0.8
+        # Implement actual alignment calculation using LLM
+        raise NotImplementedError("_calculate_objective_alignment_score requires actual implementation")
     
     async def _calculate_result_quality_score(self, result: Dict[str, Any], result_type: str) -> float:
         """Calculate quality score for a result."""
-        # Simulated quality calculation
-        return 0.75
+        # Implement actual quality calculation using LLM
+        raise NotImplementedError("_calculate_result_quality_score requires actual implementation")
     
     async def _calculate_result_completeness(self, result: Dict[str, Any]) -> float:
         """Calculate completeness score for a result."""
-        # Simulated completeness calculation
-        return 0.8
+        # Implement actual completeness calculation using LLM
+        raise NotImplementedError("_calculate_result_completeness requires actual implementation")
     
     async def _calculate_result_accuracy(self, result: Dict[str, Any]) -> float:
         """Calculate accuracy score for a result."""
-        # Simulated accuracy calculation
-        return 0.85
+        # Implement actual accuracy calculation using LLM
+        raise NotImplementedError("_calculate_result_accuracy requires actual implementation")
     
     async def _calculate_result_relevance(self, result: Dict[str, Any], 
                                         user_request: str, 
                                         objectives: List[Dict[str, Any]]) -> float:
         """Calculate relevance score for a result."""
-        # Simulated relevance calculation
-        return 0.7
+        # Implement actual relevance calculation using LLM
+        raise NotImplementedError("_calculate_result_relevance requires actual implementation")
     
     def _calculate_accuracy_consistency(self, accuracy_scores: List[float]) -> float:
         """Calculate accuracy consistency."""

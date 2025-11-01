@@ -563,15 +563,8 @@ class SynthesisAgent:
                     'success': True
                 }
         
-        # Fallback: 기본 생성
-        return {
-            'format': format_name,
-            'content': compressed_content['compressed_content'],
-            'file_path': None,
-            'tools_used': [],
-            'generation_time': 0.0,
-            'success': False
-        }
+        # 모든 도구 실패 시 에러 반환 (fallback 제거)
+        raise RuntimeError(f"Failed to generate {format_name} format: No suitable tools available. Content: {compressed_content.get('compressed_content', '')[:100]}")
     
     async def _validate_synthesis(
         self,

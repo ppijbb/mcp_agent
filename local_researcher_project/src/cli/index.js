@@ -445,8 +445,8 @@ class MainCLI {
     }
     
     async testOpenDeepResearch() {
-        // Mock test for now
-        return true;
+        // Test implementation required
+        throw new Error("testOpenDeepResearch not implemented");
     }
     
     async runCommand(command, args) {
