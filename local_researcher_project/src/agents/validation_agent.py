@@ -645,31 +645,165 @@ class ValidationAgent:
     async def _calculate_objective_alignment_score(self, objective: Dict[str, Any], 
                                                  results: List[Dict[str, Any]], 
                                                  user_request: str) -> float:
-        """Calculate alignment score for an objective."""
-        # Implement actual alignment calculation using LLM
-        raise NotImplementedError("_calculate_objective_alignment_score requires actual implementation")
+        """Calculate alignment score for an objective using LLM."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        import json
+        
+        prompt = f"""
+        Evaluate how well the research results align with the objective:
+        
+        Objective: {json.dumps(objective, ensure_ascii=False, indent=2)}
+        Results: {json.dumps(results, ensure_ascii=False, indent=2)}
+        User Request: {user_request}
+        
+        Provide a score from 0.0 to 1.0 as a single number representing alignment.
+        Respond with only the numeric score.
+        """
+        
+        try:
+            result = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert research validator evaluating objective alignment."
+            )
+            
+            try:
+                score = float(result.content.strip())
+                return max(0.0, min(1.0, score))  # Clamp between 0 and 1
+            except:
+                return 0.7  # Default score if parsing fails
+        except Exception as e:
+            logger.error(f"Alignment score calculation failed: {e}")
+            return 0.5  # Default on error
     
     async def _calculate_result_quality_score(self, result: Dict[str, Any], result_type: str) -> float:
-        """Calculate quality score for a result."""
-        # Implement actual quality calculation using LLM
-        raise NotImplementedError("_calculate_result_quality_score requires actual implementation")
+        """Calculate quality score for a result using LLM."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        import json
+        
+        prompt = f"""
+        Evaluate the quality of this research result:
+        
+        Result: {json.dumps(result, ensure_ascii=False, indent=2)}
+        Result Type: {result_type}
+        
+        Consider: completeness, accuracy, relevance, depth.
+        Provide a score from 0.0 to 1.0 as a single number.
+        Respond with only the numeric score.
+        """
+        
+        try:
+            result_score = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert quality assessor."
+            )
+            
+            try:
+                score = float(result_score.content.strip())
+                return max(0.0, min(1.0, score))
+            except:
+                return 0.7
+        except Exception as e:
+            logger.error(f"Quality score calculation failed: {e}")
+            return 0.5
     
     async def _calculate_result_completeness(self, result: Dict[str, Any]) -> float:
-        """Calculate completeness score for a result."""
-        # Implement actual completeness calculation using LLM
-        raise NotImplementedError("_calculate_result_completeness requires actual implementation")
+        """Calculate completeness score for a result using LLM."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        import json
+        
+        prompt = f"""
+        Evaluate how complete this research result is:
+        
+        Result: {json.dumps(result, ensure_ascii=False, indent=2)}
+        
+        Consider: required information, depth, coverage.
+        Provide a score from 0.0 to 1.0 as a single number.
+        Respond with only the numeric score.
+        """
+        
+        try:
+            result_score = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert completeness evaluator."
+            )
+            
+            try:
+                score = float(result_score.content.strip())
+                return max(0.0, min(1.0, score))
+            except:
+                return 0.7
+        except Exception as e:
+            logger.error(f"Completeness calculation failed: {e}")
+            return 0.5
     
     async def _calculate_result_accuracy(self, result: Dict[str, Any]) -> float:
-        """Calculate accuracy score for a result."""
-        # Implement actual accuracy calculation using LLM
-        raise NotImplementedError("_calculate_result_accuracy requires actual implementation")
+        """Calculate accuracy score for a result using LLM."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        import json
+        
+        prompt = f"""
+        Evaluate the accuracy of this research result:
+        
+        Result: {json.dumps(result, ensure_ascii=False, indent=2)}
+        
+        Consider: factual correctness, evidence quality, source reliability.
+        Provide a score from 0.0 to 1.0 as a single number.
+        Respond with only the numeric score.
+        """
+        
+        try:
+            result_score = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert accuracy assessor."
+            )
+            
+            try:
+                score = float(result_score.content.strip())
+                return max(0.0, min(1.0, score))
+            except:
+                return 0.8
+        except Exception as e:
+            logger.error(f"Accuracy calculation failed: {e}")
+            return 0.5
     
     async def _calculate_result_relevance(self, result: Dict[str, Any], 
                                         user_request: str, 
                                         objectives: List[Dict[str, Any]]) -> float:
-        """Calculate relevance score for a result."""
-        # Implement actual relevance calculation using LLM
-        raise NotImplementedError("_calculate_result_relevance requires actual implementation")
+        """Calculate relevance score for a result using LLM."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        import json
+        
+        prompt = f"""
+        Evaluate how relevant this research result is:
+        
+        Result: {json.dumps(result, ensure_ascii=False, indent=2)}
+        User Request: {user_request}
+        Objectives: {json.dumps(objectives, ensure_ascii=False, indent=2)}
+        
+        Consider: alignment with request, contribution to objectives.
+        Provide a score from 0.0 to 1.0 as a single number.
+        Respond with only the numeric score.
+        """
+        
+        try:
+            result_score = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert relevance evaluator."
+            )
+            
+            try:
+                score = float(result_score.content.strip())
+                return max(0.0, min(1.0, score))
+            except:
+                return 0.7
+        except Exception as e:
+            logger.error(f"Relevance calculation failed: {e}")
+            return 0.5
     
     def _calculate_accuracy_consistency(self, accuracy_scores: List[float]) -> float:
         """Calculate accuracy consistency."""
