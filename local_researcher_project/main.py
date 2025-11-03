@@ -34,8 +34,8 @@ from src.core.researcher_config import load_config_from_env
 # CRITICAL: Load configuration BEFORE importing any modules that depend on it
 config = load_config_from_env()
 
-# Use AgentOrchestrator for multi-agent orchestration
-from src.core.agent_orchestrator import AgentOrchestrator
+# Use AutonomousOrchestrator for full research workflow
+from src.core.autonomous_orchestrator import AutonomousOrchestrator
 from src.monitoring.system_monitor import HealthMonitor
 
 # Configure logging for production-grade reliability
@@ -158,9 +158,10 @@ class AutonomousResearchSystem:
         # Initialize components with 8 innovations
         logger.info("🔧 Initializing system components...")
         try:
-            # Use AgentOrchestrator for multi-agent orchestration
-            self.orchestrator = AgentOrchestrator()
-            logger.info("✅ Multi-Agent Orchestrator initialized")
+            # Use AutonomousOrchestrator for full research workflow with 8 innovations
+            # Note: AutonomousOrchestrator loads config internally
+            self.orchestrator = AutonomousOrchestrator()
+            logger.info("✅ Autonomous Orchestrator initialized")
         except Exception as e:
             logger.error(f"❌ Orchestrator initialization failed: {e}")
             raise
@@ -246,9 +247,15 @@ class AutonomousResearchSystem:
                     # 신규 연결 차단
                     if hasattr(self.mcp_hub, 'start_shutdown'):
                         self.mcp_hub.start_shutdown()
-                    await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=10.0)
-                except asyncio.TimeoutError:
-                    logger.warning("MCP Hub cleanup timed out")
+                    # cleanup은 CancelledError를 발생시킬 수 있으므로 무시
+                    try:
+                        await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=10.0)
+                    except asyncio.CancelledError:
+                        logger.debug("MCP Hub cleanup was cancelled (normal during shutdown)")
+                    except asyncio.TimeoutError:
+                        logger.warning("MCP Hub cleanup timed out")
+                except asyncio.CancelledError:
+                    logger.debug("MCP Hub cleanup setup was cancelled (normal during shutdown)")
                 except Exception as e:
                     logger.warning(f"Error cleaning up MCP Hub: {e}")
             
@@ -301,22 +308,38 @@ class AutonomousResearchSystem:
             if streaming:
                 result = await self._run_streaming_research(request)
             else:
-                # Use new multi-agent orchestrator
-                result = await self.orchestrator.execute(request)
+                # Use AutonomousOrchestrator with full research workflow
+                result = await self.orchestrator.run_research(user_request=request, context={})
+                
+                # Extract content from synthesis
+                final_synthesis = result.get("synthesis_results", {}).get("content", "")
+                if not final_synthesis:
+                    final_synthesis = result.get("content", "")
+                if not final_synthesis:
+                    # Fallback: use execution results
+                    execution_results = result.get("detailed_results", {}).get("execution_results", [])
+                    if execution_results:
+                        final_synthesis = "\n\n".join([
+                            str(r.get("result", r)) for r in execution_results[:5]
+                        ])
+                
                 # Convert to expected format
                 result = {
-                    "content": result.get("final_report", "Research completed"),
-                    "metadata": {
+                    "query": request,
+                    "content": final_synthesis or "Research completed",
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": result.get("metadata", {
                         "model_used": "multi-agent",
                         "execution_time": 0.0,
                         "cost": 0.0,
-                        "confidence": 0.9
-                    },
-                    "synthesis_results": {
-                        "content": result.get("final_report", "")
-                    },
-                    "innovation_stats": {"multi_agent_orchestration": "enabled"},
-                    "system_health": {"overall_status": "healthy"}
+                        "confidence": result.get("metadata", {}).get("confidence", 0.9)
+                    }),
+                    "synthesis_results": result.get("synthesis_results", {
+                        "content": final_synthesis
+                    }),
+                    "sources": self._extract_sources(result),
+                    "innovation_stats": result.get("innovation_stats", {}),
+                    "system_health": result.get("system_health", {"overall_status": "healthy"})
                 }
             
             # Apply hierarchical compression if enabled
@@ -327,7 +350,15 @@ class AutonomousResearchSystem:
             # Save results with incremental save
             if output_path:
                 await self._save_results_incrementally(result, output_path, output_format)
+                logger.info(f"📄 Results saved to: {output_path}")
             else:
+                # Generate default output path if not provided
+                output_dir = project_root / "output"
+                output_dir.mkdir(exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                default_output = output_dir / f"research_{timestamp}.{output_format}"
+                await self._save_results_incrementally(result, str(default_output), output_format)
+                logger.info(f"📄 Results saved to default location: {default_output}")
                 self._display_results(result)
             
             # Get final health status
@@ -354,14 +385,58 @@ class AutonomousResearchSystem:
             # In a real implementation, this would send to web interface
             print(f"📊 Partial Result: {partial_result.get('summary', 'Processing...')}")
         
-        # Run with streaming
-        result = await self.orchestrator.run_research_with_streaming(
-            request=request,
-            streaming_callback=streaming_callback
-        )
+        # Use standard run_research but with streaming callback simulation
+        result = await self.orchestrator.run_research(user_request=request, context={})
+        
+        # Extract and format result
+        final_synthesis = result.get("synthesis_results", {}).get("content", "")
+        if not final_synthesis:
+            final_synthesis = result.get("content", "")
+        
+        formatted_result = {
+            "query": request,
+            "content": final_synthesis or "Research completed",
+            "timestamp": datetime.now().isoformat(),
+            "metadata": result.get("metadata", {}),
+            "synthesis_results": result.get("synthesis_results", {}),
+            "sources": self._extract_sources(result),
+            "innovation_stats": result.get("innovation_stats", {}),
+            "system_health": result.get("system_health", {})
+        }
         
         logger.info("✅ Streaming research completed")
-        return result
+        return formatted_result
+    
+    def _extract_sources(self, result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract sources from research results."""
+        sources = []
+        
+        # Try to extract from execution results
+        execution_results = result.get("detailed_results", {}).get("execution_results", [])
+        for exec_result in execution_results:
+            if isinstance(exec_result, dict):
+                # Look for search results
+                if "results" in exec_result:
+                    sources.extend(exec_result["results"])
+                elif "sources" in exec_result:
+                    sources.extend(exec_result["sources"])
+                elif "url" in exec_result:
+                    sources.append(exec_result)
+        
+        # Deduplicate by URL
+        seen_urls = set()
+        unique_sources = []
+        for source in sources:
+            url = source.get("url") or source.get("link")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_sources.append({
+                    "title": source.get("title", source.get("name", "")),
+                    "url": url,
+                    "snippet": source.get("snippet", source.get("summary", ""))
+                })
+        
+        return unique_sources[:20]  # Limit to 20 sources
     
     async def _apply_hierarchical_compression(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Apply hierarchical compression (Innovation 2)."""

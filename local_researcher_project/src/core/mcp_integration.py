@@ -751,13 +751,16 @@ class UniversalMCPHub:
                 })
                 self.connection_diagnostics[server_name] = di
             except asyncio.CancelledError:
-                # 작업이 취소된 경우 (종료 신호 등)
-                logger.warning(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list")
-                await self._disconnect_from_mcp_server(server_name)
+                # 작업이 취소된 경우 (종료 신호 등) - 정상적인 동작
+                logger.info(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list (shutdown in progress)")
+                try:
+                    await self._disconnect_from_mcp_server(server_name)
+                except Exception:
+                    pass  # cleanup 중 오류는 무시
                 di = self.connection_diagnostics.get(server_name, {})
                 di.update({"stage": "cancelled_initialize_or_list", "error": "cancelled"})
                 self.connection_diagnostics[server_name] = di
-                raise  # 상위로 전파하여 초기화 중단
+                return False  # raise하지 않고 False 반환
             except asyncio.TimeoutError:
                 logger.error(f"[MCP][connect.timeout] server={server_name} after={timeout}s stage=initialize_or_list")
                 di = self.connection_diagnostics.get(server_name, {})
@@ -790,10 +793,13 @@ class UniversalMCPHub:
             return True
             
         except asyncio.CancelledError:
-            # 작업이 취소된 경우 (종료 신호 등)
-            logger.warning(f"[MCP][connect.cancelled] server={server_name} stage=generic")
-            await self._disconnect_from_mcp_server(server_name)
-            raise  # 상위로 전파하여 초기화 중단
+            # 작업이 취소된 경우 (종료 신호 등) - 정상적인 동작
+            logger.info(f"[MCP][connect.cancelled] server={server_name} stage=generic (shutdown in progress)")
+            try:
+                await self._disconnect_from_mcp_server(server_name)
+            except Exception:
+                pass  # cleanup 중 오류는 무시
+            return False  # raise하지 않고 False 반환하여 다른 서버 연결 계속 진행
         except asyncio.TimeoutError:
             logger.error(f"[MCP][connect.timeout] server={server_name} stage=generic")
             di = self.connection_diagnostics.get(server_name, {})
@@ -896,15 +902,30 @@ class UniversalMCPHub:
                             logger.warning(f"Failed to connect to MCP server {name}")
                         return name, ok
                 except asyncio.CancelledError:
-                    logger.warning(f"[MCP][init.cancelled] server={name}")
-                    raise
+                    # shutdown 중 취소는 정상적인 동작 - 다른 서버 연결은 계속 진행
+                    logger.info(f"[MCP][init.cancelled] server={name} (shutdown in progress)")
+                    return name, False
                 except Exception as e:
                     logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
                     return name, False
 
             tasks = [asyncio.create_task(connect_one_with_settings(n, c)) for n, c in enabled_server_items]
-            results = await asyncio.gather(*tasks, return_exceptions=False)
-            connected_servers = [n for n, ok in results if ok]
+            # return_exceptions=True로 변경하여 일부 실패해도 계속 진행
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 결과 파싱 (예외가 포함될 수 있음)
+            connected_servers = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    server_name = enabled_server_items[i][0]
+                    if isinstance(result, asyncio.CancelledError):
+                        logger.info(f"[MCP][init.cancelled] server={server_name} (task was cancelled)")
+                    else:
+                        logger.warning(f"[MCP][init.exception] server={server_name} error={result}")
+                elif isinstance(result, tuple) and len(result) == 2:
+                    name, ok = result
+                    if ok:
+                        connected_servers.append(name)
             
             if connected_servers:
                 logger.info(f"✅ Successfully connected to {len(connected_servers)} MCP servers: {', '.join(connected_servers)}")
@@ -1107,6 +1128,34 @@ class UniversalMCPHub:
         start_time = time.time()
         logger.info(f"[MCP][exec.start] tool={tool_name} params_keys={list(parameters.keys())}")
         
+        # g-search, tavily, exa는 먼저 라우팅 확인 (도구 찾기 전에)
+        if tool_name in ["g-search", "tavily", "exa"]:
+            logger.info(f"[MCP][exec.route] Routing {tool_name} to _execute_search_tool (tool_name type: {type(tool_name)})")
+            try:
+                from src.core.mcp_integration import _execute_search_tool, ToolResult
+                tool_result = await _execute_search_tool(tool_name, parameters)
+                logger.info(f"[MCP][exec.route.success] {tool_name} routing succeeded: success={tool_result.success}")
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": time.time() - start_time,
+                    "confidence": tool_result.confidence,
+                    "source": "mcp_search"
+                }
+            except Exception as e:
+                logger.error(f"[MCP][exec.route.error] {tool_name} routing failed: {e}", exc_info=True)
+                # 라우팅 실패 시 일반 도구 찾기로 fallback
+                # 하지만 라우팅이 실패하면 검색 도구 자체가 문제이므로 빈 결과 반환
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Search tool routing failed: {str(e)}",
+                    "execution_time": time.time() - start_time,
+                    "confidence": 0.0,
+                    "source": "mcp_search_routing_failed"
+                }
+        
         # Tool 찾기 (server_name::tool_name 또는 tool_name)
         # 먼저 tool_name이 이미 server_name::tool_name 형식인지 확인
         if "::" in tool_name:
@@ -1213,20 +1262,6 @@ class UniversalMCPHub:
                             mcp_info = self.registry.get_mcp_server_info(registered_name)
                             found_tool_name = registered_name
                             break
-            
-            # g-search 같은 특수 도구는 _execute_search_tool로 라우팅
-            if not mcp_info and tool_name in ["g-search", "tavily", "exa"]:
-                logger.info(f"[MCP][exec.route] Routing {tool_name} to _execute_search_tool")
-                from src.core.mcp_integration import _execute_search_tool, ToolResult
-                tool_result = await _execute_search_tool(tool_name, parameters)
-                return {
-                    "success": tool_result.success,
-                    "data": tool_result.data,
-                    "error": tool_result.error,
-                    "execution_time": time.time() - start_time,
-                    "confidence": tool_result.confidence,
-                    "source": "mcp_search"
-                }
             
             if mcp_info:
                 server_name, original_tool_name = mcp_info

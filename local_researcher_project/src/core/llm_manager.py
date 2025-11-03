@@ -559,14 +559,92 @@ class MultiModelOrchestrator:
             )
         )
         
+        # finish_reason 체크 및 안전한 응답 처리
+        finish_reason = None
+        finish_reason_int = None
+        has_valid_part = False
+        
+        # 먼저 candidates와 parts 확인
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            finish_reason = candidate.finish_reason if hasattr(candidate, 'finish_reason') else None
+            
+            # parts 확인
+            if hasattr(candidate, 'content') and candidate.content:
+                if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                    # text 속성을 가진 part가 있는지 확인
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text'):
+                            has_valid_part = True
+                            break
+            
+            # finish_reason이 enum인 경우 숫자로 변환
+            if finish_reason is not None:
+                try:
+                    # FinishReason enum인 경우
+                    if hasattr(finish_reason, 'value'):
+                        finish_reason_int = finish_reason.value
+                    elif hasattr(finish_reason, 'name'):
+                        # SAFETY = 2
+                        if 'SAFETY' in finish_reason.name or 'SAFETY' in str(finish_reason):
+                            finish_reason_int = 2
+                    # 숫자인 경우
+                    elif isinstance(finish_reason, int):
+                        finish_reason_int = finish_reason
+                    # 문자열인 경우
+                    elif isinstance(finish_reason, str):
+                        if 'SAFETY' in finish_reason.upper() or finish_reason == '2':
+                            finish_reason_int = 2
+                except Exception:
+                    # 변환 실패 시 그대로 사용
+                    finish_reason_int = finish_reason if isinstance(finish_reason, int) else None
+        
+        # finish_reason이 2 (SAFETY)이거나 유효한 Part가 없는 경우
+        if finish_reason_int == 2 or (finish_reason is not None and ('SAFETY' in str(finish_reason).upper())) or not has_valid_part:
+            if finish_reason_int == 2 or (finish_reason is not None and ('SAFETY' in str(finish_reason).upper())):
+                logger.warning(f"Gemini API safety filter triggered (finish_reason={finish_reason}). Returning empty content.")
+            else:
+                logger.warning(f"Gemini API response has no valid Part (finish_reason={finish_reason}). Returning empty content.")
+            return {
+                "content": "[Content blocked by safety filters. Please try rephrasing the request.]",
+                "confidence": 0.0,
+                "quality_score": 0.0,
+                "metadata": {
+                    "model": model_name,
+                    "temperature": model_config.temperature,
+                    "max_tokens": model_config.max_tokens,
+                    "finish_reason": finish_reason,
+                    "safety_filter_triggered": True
+                }
+            }
+        
+        # 안전한 텍스트 추출 (has_valid_part가 True이면 안전하게 접근 가능)
+        try:
+            content = response.text
+        except ValueError as e:
+            # 예외 발생 시 직접 추출 시도
+            logger.warning(f"Gemini API response.text failed: {e}. Trying direct extraction.")
+            content = ""
+            if hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'text'):
+                                    content += part.text
+            
+            if not content:
+                content = "[Unable to extract content from response. This may be due to safety filters or other restrictions.]"
+        
         return {
-            "content": response.text,
+            "content": content,
             "confidence": 0.8,  # 기본 신뢰도
             "quality_score": 0.8,
             "metadata": {
                 "model": model_name,
                 "temperature": model_config.temperature,
-                "max_tokens": model_config.max_tokens
+                "max_tokens": model_config.max_tokens,
+                "finish_reason": finish_reason
             }
         }
     
@@ -683,6 +761,16 @@ class MultiModelOrchestrator:
         if weights is None:
             weights = [1.0 / len(models)] * len(models)
         
+        # weights 타입 검증 및 변환
+        if weights:
+            try:
+                # 모든 값이 숫자인지 확인하고 변환
+                weights = [float(w) if isinstance(w, (int, float, str)) else 1.0 
+                          for w in weights]
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid weights format, using equal weights: {e}")
+                weights = [1.0 / len(models)] * len(models)
+        
         # 모든 모델로 실행
         results = []
         for model in models:
@@ -696,15 +784,40 @@ class MultiModelOrchestrator:
         if not results:
             raise RuntimeError("All models failed in ensemble")
         
+        # weights 개수를 results 개수에 맞춤
+        if len(weights) > len(results):
+            weights = weights[:len(results)]
+        elif len(weights) < len(results):
+            # 부족한 weights는 동일하게 분배
+            remaining = 1.0 - sum(weights[:len(weights)])
+            weights.extend([remaining / (len(results) - len(weights))] * (len(results) - len(weights)))
+        
         # 가중 평균으로 결과 통합
-        total_weight = sum(weights[:len(results)])
+        try:
+            total_weight = sum(weights)
+            if total_weight <= 0:
+                # 모든 weight가 0이거나 음수면 동일하게 분배
+                logger.warning("Total weight is 0 or negative, using equal weights")
+                weights = [1.0 / len(results)] * len(results)
+                total_weight = 1.0
+        except (TypeError, ValueError) as e:
+            logger.error(f"Error calculating total weight: {e}, weights: {weights}")
+            # 기본값 사용
+            weights = [1.0 / len(results)] * len(results)
+            total_weight = 1.0
         weighted_content = ""
         total_confidence = 0.0
         total_cost = 0.0
         total_time = 0.0
         
         for i, result in enumerate(results):
-            weight = weights[i] / total_weight
+            # 안전한 weight 계산
+            try:
+                weight = float(weights[i]) / total_weight if total_weight > 0 else 1.0 / len(results)
+            except (TypeError, ValueError, IndexError) as e:
+                logger.warning(f"Error calculating weight for result {i}: {e}, using equal weight")
+                weight = 1.0 / len(results)
+            
             weighted_content += f"[{result.model_used}] {result.content}\n\n"
             total_confidence += result.confidence * weight
             total_cost += result.cost * weight
