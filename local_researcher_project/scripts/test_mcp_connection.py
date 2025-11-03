@@ -19,6 +19,23 @@ sys.path.insert(0, str(project_root))
 from src.core.researcher_config import load_config_from_env
 from src.core.mcp_integration import UniversalMCPHub
 
+# anyio 오류 무시 설정
+def ignore_async_gen_errors(loop, context):
+    """anyio cancel scope 및 async generator 종료 오류 무시"""
+    exception = context.get('exception')
+    if exception:
+        error_msg = str(exception)
+        # anyio cancel scope 오류는 무시
+        if isinstance(exception, RuntimeError) and ("cancel scope" in error_msg.lower() or "different task" in error_msg.lower()):
+            return  # 무시
+        # async generator 종료 오류는 무시
+        if isinstance(exception, GeneratorExit) or "async_generator" in error_msg.lower():
+            return  # 무시
+    # 기타 오류는 기본 handler로 전달
+    loop.set_exception_handler(None)
+    loop.call_exception_handler(context)
+    loop.set_exception_handler(ignore_async_gen_errors)
+
 async def test_mcp_connections():
     """MCP 서버 연결 테스트."""
     # 환경 변수 로드
@@ -47,7 +64,10 @@ async def test_mcp_connections():
     for server_name, server_config in hub.mcp_server_configs.items():
         print(f"Testing {server_name}...", end=" ", flush=True)
         try:
-            success = await hub._connect_to_mcp_server(server_name, server_config, timeout=10.0)
+            # 서버별 설정 가져오기 (더 긴 타임아웃 적용)
+            server_settings = hub._get_server_specific_settings(server_name, server_config)
+            server_timeout = server_settings["timeout"]
+            success = await hub._connect_to_mcp_server(server_name, server_config, timeout=server_timeout)
             if success:
                 tools_count = len(hub.mcp_tools_map.get(server_name, {}))
                 print(f"✅ Connected ({tools_count} tools)")
@@ -80,5 +100,18 @@ async def test_mcp_connections():
     await hub.cleanup()
 
 if __name__ == "__main__":
-    asyncio.run(test_mcp_connections())
+    # anyio 오류 무시 설정
+    async def main():
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(ignore_async_gen_errors)
+        await test_mcp_connections()
+    
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n테스트 중단됨")
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
 

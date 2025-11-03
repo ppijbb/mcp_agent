@@ -496,8 +496,36 @@ class UniversalMCPHub:
         self.openrouter_client = None
         logger.info("✅ LLM routed via llm_manager (Gemini direct). OpenRouter disabled.")
     
+    def _resolve_env_vars_in_value(self, value: Any) -> Any:
+        """
+        재귀적으로 객체 내의 환경변수 플레이스홀더를 실제 값으로 치환.
+        ${VAR_NAME} 또는 $VAR_NAME 형식 지원.
+        """
+        if isinstance(value, str):
+            import re
+            # ${VAR_NAME} 또는 $VAR_NAME 패턴 찾기
+            pattern = r'\$\{([^}]+)\}|\$(\w+)'
+            
+            def replace_env_var(match):
+                var_name = match.group(1) or match.group(2)
+                env_value = os.getenv(var_name)
+                if env_value is not None:
+                    return env_value
+                # 환경변수가 없으면 원본 유지 (또는 경고)
+                logger.warning(f"Environment variable '{var_name}' not found, keeping placeholder")
+                return match.group(0)
+            
+            result = re.sub(pattern, replace_env_var, value)
+            return result
+        elif isinstance(value, dict):
+            return {k: self._resolve_env_vars_in_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._resolve_env_vars_in_value(item) for item in value]
+        else:
+            return value
+    
     def _load_mcp_servers_from_config(self):
-        """MCP 서버 설정을 config에서 로드."""
+        """MCP 서버 설정을 config에서 로드하고 환경변수 치환."""
         try:
             # configs 폴더에서 로드 시도 (우선)
             config_file = project_root / "configs" / "mcp_config.json"
@@ -508,7 +536,10 @@ class UniversalMCPHub:
             if config_file.exists():
                 with open(config_file, 'r') as f:
                     config_data = json.load(f)
-                    self.mcp_server_configs = config_data.get("mcpServers", {})
+                    raw_configs = config_data.get("mcpServers", {})
+                    
+                    # 환경변수 치환
+                    self.mcp_server_configs = self._resolve_env_vars_in_value(raw_configs)
                     logger.info(f"✅ Loaded MCP server configs: {list(self.mcp_server_configs.keys())}")
             else:
                 # 기본 DuckDuckGo MCP 서버 설정
@@ -574,7 +605,11 @@ class UniversalMCPHub:
         elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
             settings["timeout"] = 40.0  # API 키 검증 시간 필요
             settings["pre_init_delay"] = 1.5
-        elif server_name in ["ddg_search", "fetch", "docfork"]:
+        elif server_name == "ddg_search":
+            settings["timeout"] = 40.0  # uvx 기반 서버는 초기화 시간 필요
+            settings["pre_init_delay"] = 2.0  # uvx 패키지 다운로드 시간 고려
+            settings["post_init_delay"] = 1.0
+        elif server_name in ["fetch", "docfork"]:
             settings["timeout"] = 35.0  # smithery 서버는 안정적
             settings["pre_init_delay"] = 1.0
         
@@ -1073,13 +1108,24 @@ class UniversalMCPHub:
         logger.info(f"[MCP][exec.start] tool={tool_name} params_keys={list(parameters.keys())}")
         
         # Tool 찾기 (server_name::tool_name 또는 tool_name)
-        tool_info = self.registry.get_tool_info(tool_name)
+        # 먼저 tool_name이 이미 server_name::tool_name 형식인지 확인
+        if "::" in tool_name:
+            # 이미 전체 이름 형식이면 직접 찾기
+            tool_info = self.registry.get_tool_info(tool_name)
+        else:
+            # tool_name만 주어진 경우 Registry에서 찾기
+            tool_info = self.registry.get_tool_info(tool_name)
         
         # tool_name으로 직접 찾기 실패 시, 모든 MCP 서버에서 server_name::tool_name 형식으로 찾기
         if not tool_info:
             for registered_name in self.registry.get_all_tool_names():
+                # 이미 전체 이름 형식이면 정확히 매칭
+                if "::" in tool_name and registered_name == tool_name:
+                    tool_info = self.registry.get_tool_info(registered_name)
+                    logger.info(f"Found tool by exact match: {tool_name}")
+                    break
                 # server_name::tool_name 형식에서 tool_name 부분만 추출하여 비교
-                if "::" in registered_name:
+                elif "::" in registered_name:
                     _, original_tool_name = registered_name.split("::", 1)
                     if original_tool_name == tool_name:
                         tool_info = self.registry.get_tool_info(registered_name)
@@ -1110,24 +1156,77 @@ class UniversalMCPHub:
             }
 
         try:
-            # 1. MCP Tool인지 확인 및 실행 시도 - tool_name 또는 server_name::tool_name 형식 모두 확인
+            # 1. MCP Tool인지 확인 및 실행 시도 - tool_info에서 직접 정보 추출
             found_tool_name = tool_name
             mcp_info = None
             
-            # tool_name으로 직접 확인
-            if self.registry.is_mcp_tool(tool_name):
-                mcp_info = self.registry.get_mcp_server_info(tool_name)
-                found_tool_name = tool_name
-            else:
-                # server_name::tool_name 형식으로 찾기
-                for registered_name in self.registry.get_all_tool_names():
-                    if "::" in registered_name:
-                        server_part, original_tool_name = registered_name.split("::", 1)
-                        if original_tool_name == tool_name and self.registry.is_mcp_tool(registered_name):
+            # tool_info가 있으면 MCP 도구인지 확인하고 mcp_info 추출
+            if tool_info:
+                # tool_info에서 mcp_server 정보 확인
+                mcp_server = tool_info.mcp_server
+                if mcp_server:
+                    # server_name::tool_name 형식에서 server_name과 tool_name 추출
+                    if "::" in tool_name:
+                        server_name, original_tool_name = tool_name.split("::", 1)
+                        mcp_info = (server_name, original_tool_name)
+                        found_tool_name = tool_name
+                        logger.info(f"[MCP][exec.resolve] Using tool_info: {tool_name} -> server={server_name}, tool={original_tool_name}")
+                    else:
+                        # tool_name만 있는 경우 tool_info의 mcp_server 사용
+                        # tool_name이 실제 서버의 원본 tool name인지 확인 필요
+                        # registry에서 찾기
+                        for registered_name in self.registry.get_all_tool_names():
+                            if registered_name == tool_name and self.registry.is_mcp_tool(registered_name):
+                                mcp_info = self.registry.get_mcp_server_info(registered_name)
+                                found_tool_name = registered_name
+                                break
+                            elif "::" in registered_name:
+                                _, original_tool_name = registered_name.split("::", 1)
+                                if original_tool_name == tool_name:
+                                    mcp_info = self.registry.get_mcp_server_info(registered_name)
+                                    found_tool_name = registered_name
+                                    logger.info(f"[MCP][exec.resolve] Found {tool_name} as {registered_name}")
+                                    break
+            
+            # tool_info에서 찾지 못한 경우 기존 로직 사용
+            if not mcp_info:
+                # 이미 server_name::tool_name 형식인 경우
+                if "::" in tool_name:
+                    if self.registry.is_mcp_tool(tool_name):
+                        mcp_info = self.registry.get_mcp_server_info(tool_name)
+                        found_tool_name = tool_name
+                        logger.info(f"[MCP][exec.resolve] Using full name: {tool_name}")
+                elif self.registry.is_mcp_tool(tool_name):
+                    mcp_info = self.registry.get_mcp_server_info(tool_name)
+                    found_tool_name = tool_name
+                else:
+                    # server_name::tool_name 형식으로 찾기
+                    for registered_name in self.registry.get_all_tool_names():
+                        if "::" in registered_name:
+                            server_part, original_tool_name = registered_name.split("::", 1)
+                            if original_tool_name == tool_name and self.registry.is_mcp_tool(registered_name):
+                                mcp_info = self.registry.get_mcp_server_info(registered_name)
+                                found_tool_name = registered_name
+                                logger.info(f"[MCP][exec.resolve] {tool_name} -> {registered_name}")
+                                break
+                        elif registered_name == tool_name and self.registry.is_mcp_tool(registered_name):
                             mcp_info = self.registry.get_mcp_server_info(registered_name)
                             found_tool_name = registered_name
-                            logger.info(f"[MCP][exec.resolve] {tool_name} -> {registered_name}")
                             break
+            
+            # g-search 같은 특수 도구는 _execute_search_tool로 라우팅
+            if not mcp_info and tool_name in ["g-search", "tavily", "exa"]:
+                logger.info(f"[MCP][exec.route] Routing {tool_name} to _execute_search_tool")
+                from src.core.mcp_integration import _execute_search_tool, ToolResult
+                tool_result = await _execute_search_tool(tool_name, parameters)
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": time.time() - start_time,
+                    "confidence": tool_result.confidence,
+                    "source": "mcp_search"
+                }
             
             if mcp_info:
                 server_name, original_tool_name = mcp_info
@@ -1144,7 +1243,90 @@ class UniversalMCPHub:
                         
                         if mcp_result:
                             # MCP 결과를 ToolResult 형식으로 변환
-                            result_data = mcp_result if isinstance(mcp_result, dict) else {"result": mcp_result}
+                            # 에러 응답 체크
+                            import json
+                            import re
+                            
+                            result_lower = str(mcp_result).lower() if mcp_result else ""
+                            error_patterns = [
+                                r'\b(failed|error|invalid_token|authentication failed)\b',
+                                r'\b(401|404|500|502|503|504)\b',
+                                r'bad gateway',
+                                r'not found',
+                                r'unauthorized',
+                                r'<!doctype html>',
+                                r'<html',
+                                r'<title>.*error.*</title>'
+                            ]
+                            
+                            is_error = False
+                            error_msg = None
+                            for pattern in error_patterns:
+                                if re.search(pattern, result_lower):
+                                    is_error = True
+                                    if '401' in result_lower:
+                                        error_msg = "Authentication failed (401)"
+                                    elif '404' in result_lower:
+                                        error_msg = "Not found (404)"
+                                    elif '502' in result_lower or 'bad gateway' in result_lower:
+                                        error_msg = "Bad gateway (502)"
+                                    elif '500' in result_lower:
+                                        error_msg = "Internal server error (500)"
+                                    else:
+                                        error_msg = "Server error detected"
+                                    break
+                            
+                            if is_error:
+                                logger.error(f"MCP tool {tool_name} returned error: {error_msg}")
+                                return {
+                                    "success": False,
+                                    "data": None,
+                                    "error": f"MCP tool returned error: {error_msg}",
+                                    "execution_time": time.time() - start_time,
+                                    "confidence": 0.0,
+                                    "source": "mcp"
+                                }
+                            
+                            # 문자열인 경우 마크다운 파싱 시도
+                            if isinstance(mcp_result, str):
+                                # JSON 시도
+                                try:
+                                    result_data = json.loads(mcp_result)
+                                except:
+                                    # 마크다운 파싱
+                                    results = []
+                                    lines = mcp_result.strip().split('\n')
+                                    current_result = None
+                                    
+                                    for line in lines:
+                                        line = line.strip()
+                                        if not line:
+                                            continue
+                                        
+                                        link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                        if link_match:
+                                            if current_result:
+                                                results.append(current_result)
+                                            title = link_match.group(1)
+                                            url = link_match.group(2)
+                                            current_result = {"title": title, "url": url, "snippet": ""}
+                                        elif current_result and line:
+                                            if current_result["snippet"]:
+                                                current_result["snippet"] += " " + line
+                                            else:
+                                                current_result["snippet"] = line
+                                    
+                                    if current_result:
+                                        results.append(current_result)
+                                    
+                                    if results:
+                                        result_data = {"results": results}
+                                    else:
+                                        # 파싱 실패 시 원본 텍스트
+                                        result_data = {"result": mcp_result}
+                            else:
+                                result_data = mcp_result if isinstance(mcp_result, dict) else {"result": mcp_result}
+                            
                             return {
                                 "success": True,
                                 "data": result_data,
@@ -1399,6 +1581,12 @@ async def get_available_tools() -> List[str]:
 async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """MCP 도구 실행 - UniversalMCPHub의 execute_tool 사용."""
     mcp_hub = get_mcp_hub()
+    
+    # MCP Hub가 초기화되지 않았으면 초기화
+    if not mcp_hub.mcp_sessions:
+        logger.info("[MCP][execute_tool] MCP Hub not initialized, initializing...")
+        await mcp_hub.initialize_mcp()
+    
     return await mcp_hub.execute_tool(tool_name, parameters)
 
 
@@ -1572,15 +1760,94 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         logger.warning(f"MCP server {server_name} tool {search_tool_name} returned no result")
                         continue
                     
-                    # 결과 파싱
+                    # 결과 파싱 - 실제 외부 서버 응답 형식 처리 및 에러 체크
                     import json
+                    import re
+                    
+                    # 에러 응답 체크 (failed, 401, 404, 502 등)
+                    result_lower = str(result).lower() if result else ""
+                    error_patterns = [
+                        r'\b(failed|error|invalid_token|authentication failed)\b',
+                        r'\b(401|404|500|502|503|504)\b',
+                        r'bad gateway',
+                        r'not found',
+                        r'unauthorized',
+                        r'<!doctype html>',  # HTML 에러 페이지
+                        r'<html',
+                        r'<title>.*error.*</title>'
+                    ]
+                    
+                    is_error = False
+                    error_msg = None
+                    for pattern in error_patterns:
+                        if re.search(pattern, result_lower):
+                            is_error = True
+                            if not error_msg:
+                                # 에러 메시지 추출 시도
+                                if '401' in result_lower or 'invalid_token' in result_lower:
+                                    error_msg = "Authentication failed (401)"
+                                elif '404' in result_lower:
+                                    error_msg = "Not found (404)"
+                                elif '502' in result_lower or 'bad gateway' in result_lower:
+                                    error_msg = "Bad gateway (502) - Server temporarily unavailable"
+                                elif '500' in result_lower:
+                                    error_msg = "Internal server error (500)"
+                                else:
+                                    error_msg = "Server error detected in response"
+                            break
+                    
+                    if is_error:
+                        logger.error(f"MCP server {server_name} returned error response: {error_msg}")
+                        continue  # 다음 서버 시도
+                    
                     if isinstance(result, str):
+                        # 텍스트 결과를 파싱 시도
+                        # 1. JSON 형식 시도
                         try:
                             result_data = json.loads(result)
                         except:
-                            # JSON이 아니면 텍스트를 결과로 사용
-                            logger.debug(f"Result is not JSON, treating as text: {result[:100]}")
-                            result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                            # 2. 마크다운 형식 텍스트 파싱 (ddg_search 등이 반환하는 형식)
+                            # 예: "1. [Title](url)\n   Description..."
+                            results = []
+                            lines = result.strip().split('\n')
+                            current_result = None
+                            
+                            for line in lines:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                
+                                # 마크다운 링크 패턴: [Title](url)
+                                link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                if link_match:
+                                    # 이전 결과 저장
+                                    if current_result:
+                                        results.append(current_result)
+                                    
+                                    title = link_match.group(1)
+                                    url = link_match.group(2)
+                                    current_result = {
+                                        "title": title,
+                                        "url": url,
+                                        "snippet": ""
+                                    }
+                                elif current_result and line:
+                                    # 설명 텍스트
+                                    if current_result["snippet"]:
+                                        current_result["snippet"] += " " + line
+                                    else:
+                                        current_result["snippet"] = line
+                            
+                            # 마지막 결과 추가
+                            if current_result:
+                                results.append(current_result)
+                            
+                            if results:
+                                result_data = {"results": results}
+                            else:
+                                # 파싱 실패 시 원본 텍스트를 snippet으로 사용
+                                logger.debug(f"Could not parse markdown format, using raw text: {result[:100]}")
+                                result_data = {"results": [{"title": "Search Results", "snippet": result, "url": ""}]}
                     else:
                         result_data = result
                     
@@ -1647,11 +1914,65 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         
                         if result:
                             import json
+                            import re
+                            
+                            # 에러 응답 체크
+                            result_lower = str(result).lower() if result else ""
+                            error_patterns = [
+                                r'\b(failed|error|invalid_token|authentication failed)\b',
+                                r'\b(401|404|500|502|503|504)\b',
+                                r'bad gateway',
+                                r'not found',
+                                r'unauthorized',
+                                r'<!doctype html>',
+                                r'<html',
+                                r'<title>.*error.*</title>'
+                            ]
+                            
+                            is_error = False
+                            for pattern in error_patterns:
+                                if re.search(pattern, result_lower):
+                                    is_error = True
+                                    logger.warning(f"Error detected in tavily response, skipping")
+                                    break
+                            
+                            if is_error:
+                                continue  # 다음 서버 시도
+                            
                             if isinstance(result, str):
                                 try:
                                     result_data = json.loads(result)
                                 except:
-                                    result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                                    # 마크다운 형식 파싱
+                                    results = []
+                                    lines = result.strip().split('\n')
+                                    current_result = None
+                                    
+                                    for line in lines:
+                                        line = line.strip()
+                                        if not line:
+                                            continue
+                                        
+                                        link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                        if link_match:
+                                            if current_result:
+                                                results.append(current_result)
+                                            title = link_match.group(1)
+                                            url = link_match.group(2)
+                                            current_result = {"title": title, "url": url, "snippet": ""}
+                                        elif current_result and line:
+                                            if current_result["snippet"]:
+                                                current_result["snippet"] += " " + line
+                                            else:
+                                                current_result["snippet"] = line
+                                    
+                                    if current_result:
+                                        results.append(current_result)
+                                    
+                                    if results:
+                                        result_data = {"results": results}
+                                    else:
+                                        result_data = {"results": [{"title": "Search Results", "snippet": result, "url": ""}]}
                             else:
                                 result_data = result
                             
@@ -1709,11 +2030,65 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         
                         if result:
                             import json
+                            import re
+                            
+                            # 에러 응답 체크
+                            result_lower = str(result).lower() if result else ""
+                            error_patterns = [
+                                r'\b(failed|error|invalid_token|authentication failed)\b',
+                                r'\b(401|404|500|502|503|504)\b',
+                                r'bad gateway',
+                                r'not found',
+                                r'unauthorized',
+                                r'<!doctype html>',
+                                r'<html',
+                                r'<title>.*error.*</title>'
+                            ]
+                            
+                            is_error = False
+                            for pattern in error_patterns:
+                                if re.search(pattern, result_lower):
+                                    is_error = True
+                                    logger.warning(f"Error detected in tavily response, skipping")
+                                    break
+                            
+                            if is_error:
+                                continue  # 다음 서버 시도
+                            
                             if isinstance(result, str):
                                 try:
                                     result_data = json.loads(result)
                                 except:
-                                    result_data = {"results": [{"title": "Search Result", "snippet": result}]}
+                                    # 마크다운 형식 파싱
+                                    results = []
+                                    lines = result.strip().split('\n')
+                                    current_result = None
+                                    
+                                    for line in lines:
+                                        line = line.strip()
+                                        if not line:
+                                            continue
+                                        
+                                        link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                        if link_match:
+                                            if current_result:
+                                                results.append(current_result)
+                                            title = link_match.group(1)
+                                            url = link_match.group(2)
+                                            current_result = {"title": title, "url": url, "snippet": ""}
+                                        elif current_result and line:
+                                            if current_result["snippet"]:
+                                                current_result["snippet"] += " " + line
+                                            else:
+                                                current_result["snippet"] = line
+                                    
+                                    if current_result:
+                                        results.append(current_result)
+                                    
+                                    if results:
+                                        result_data = {"results": results}
+                                    else:
+                                        result_data = {"results": [{"title": "Search Results", "snippet": result, "url": ""}]}
                             else:
                                 result_data = result
                             
