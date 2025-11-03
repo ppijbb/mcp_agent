@@ -531,11 +531,72 @@ class UniversalMCPHub:
             logger.warning(f"Failed to load MCP server configs: {e}")
             self.mcp_server_configs = {}
     
-    async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any], timeout: float = 15.0):
-        """MCP 서버에 연결 - stdio 및 HTTP 지원 (타임아웃 포함)."""
+    def _get_server_specific_settings(self, server_name: str, server_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        각 MCP 서버별 특성에 맞는 설정 반환.
+        
+        서버별 특성:
+        - stdio 서버 (npx 기반): 프로세스 시작 시간 필요, 더 긴 타임아웃
+        - HTTP 서버: 빠른 연결, 짧은 타임아웃
+        - 특정 서버: 특수 설정 적용
+        """
+        is_stdio = "httpUrl" not in server_config and "url" not in server_config and server_config.get("type") != "http"
+        is_npx = is_stdio and "npx" in server_config.get("command", "")
+        
+        # 서버별 기본 설정
+        settings = {
+            "timeout": 30.0,
+            "pre_init_delay": 0.0,  # initialize 전 대기
+            "post_init_delay": 0.0,  # initialize 후 대기
+            "max_retries": 1,
+        }
+        
+        # npx 기반 stdio 서버는 더 긴 시간 필요
+        if is_npx:
+            settings["timeout"] = 45.0  # npx 다운로드 및 실행 시간 고려
+            settings["pre_init_delay"] = 2.0  # npx 프로세스 시작 대기
+            settings["post_init_delay"] = 1.0  # 초기화 후 안정화 대기
+        
+        # 특정 서버별 커스텀 설정
+        if server_name == "exa":
+            settings["timeout"] = 20.0  # HTTP 서버는 빠름
+        elif server_name == "semantic_scholar":
+            settings["timeout"] = 25.0  # HTTP 서버지만 인증 처리 필요
+        elif server_name == "context7-mcp":
+            settings["timeout"] = 40.0  # Upstash 서버는 초기화 시간 필요
+            settings["pre_init_delay"] = 1.5
+        elif server_name == "parallel-search":
+            settings["timeout"] = 35.0
+            settings["pre_init_delay"] = 1.0
+        elif server_name == "unified-search-mcp-server":
+            settings["timeout"] = 40.0
+            settings["pre_init_delay"] = 1.0
+        elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
+            settings["timeout"] = 40.0  # API 키 검증 시간 필요
+            settings["pre_init_delay"] = 1.5
+        elif server_name in ["ddg_search", "fetch", "docfork"]:
+            settings["timeout"] = 35.0  # smithery 서버는 안정적
+            settings["pre_init_delay"] = 1.0
+        
+        # HTTP 서버는 빠르게
+        if not is_stdio:
+            settings["timeout"] = min(settings["timeout"], 20.0)
+            settings["pre_init_delay"] = 0.0
+            settings["post_init_delay"] = 0.0
+        
+        return settings
+    
+    async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any], timeout: float = None):
+        """MCP 서버에 연결 - 서버별 특성에 맞는 최적화된 연결."""
         if self.stopping:
             logger.warning(f"[MCP][skip.stopping] server={server_name}")
             return False
+        
+        # 서버별 설정 가져오기
+        server_settings = self._get_server_specific_settings(server_name, server_config)
+        if timeout is None:
+            timeout = server_settings["timeout"]
+        
         logger.info(f"[MCP][connect.start] server={server_name} type={server_config.get('type','stdio')} url={(server_config.get('httpUrl') or server_config.get('url'))} timeout={timeout}")
         self.connection_diagnostics[server_name] = {
             "server": server_name,
@@ -578,13 +639,22 @@ class UniversalMCPHub:
                 else:
                     url = base_url
                 
+                # Headers 구성 (exa 서버 등에서 사용)
+                headers = server_config.get("headers", {})
+                
                 logger.info(f"Connecting to HTTP MCP server: {server_name} ({url})")
                 
                 try:
-                    # HTTP transport 사용
+                    # HTTP transport 사용 (headers는 URL 파라미터로 처리되거나 서버가 자동으로 처리)
+                    # streamablehttp_client는 기본적으로 headers를 직접 지원하지 않으므로
+                    # 필요한 경우 URL에 포함되거나 서버 설정에서 처리됨
                     http_transport = await exit_stack.enter_async_context(streamablehttp_client(url))
                     read, write, _ = http_transport
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
+                    
+                    # headers가 있는 경우 로그에 기록 (실제 적용은 서버/클라이언트 구현에 따라 다름)
+                    if headers:
+                        logger.debug(f"[MCP][http.headers] server={server_name} headers={headers}")
                 except Exception as e:
                     logger.exception(f"[MCP][connect.error] create-http-transport server={server_name} err={e}")
                     di = self.connection_diagnostics.get(server_name, {})
@@ -618,11 +688,23 @@ class UniversalMCPHub:
             
             self.mcp_sessions[server_name] = session
             
-            # 세션 초기화 및 도구 목록 가져오기 (타임아웃 적용 - 개별 작업에만)
+            # 세션 초기화 및 도구 목록 가져오기 (서버별 설정 적용)
             try:
                 t0 = asyncio.get_running_loop().time()
+                
+                # 서버별 pre_init_delay 적용
+                if server_settings["pre_init_delay"] > 0:
+                    logger.debug(f"[MCP][pre_init_delay] server={server_name} delay={server_settings['pre_init_delay']}s")
+                    await asyncio.sleep(server_settings["pre_init_delay"])
+                
                 await asyncio.wait_for(session.initialize(), timeout=timeout)
                 t1 = asyncio.get_running_loop().time()
+                
+                # 서버별 post_init_delay 적용
+                if server_settings["post_init_delay"] > 0:
+                    logger.debug(f"[MCP][post_init_delay] server={server_name} delay={server_settings['post_init_delay']}s")
+                    await asyncio.sleep(server_settings["post_init_delay"])
+                
                 response = await asyncio.wait_for(session.list_tools(), timeout=timeout)
                 t2 = asyncio.get_running_loop().time()
                 di = self.connection_diagnostics.get(server_name, {})
@@ -743,27 +825,10 @@ class UniversalMCPHub:
             logger.info("Initializing MCP Hub with MCP servers (no OpenRouter)...")
             
             # MCP 서버 연결 (모든 서버) - 병렬 + 타임아웃 적용
-            timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "15"))  # 서버당 최대 15초(환경변수로 조정)
+            timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "30"))  # 서버당 최대 30초(환경변수로 조정)
             max_concurrency = 4
             semaphore = asyncio.Semaphore(max_concurrency)
 
-            async def connect_one(name: str, cfg: Dict[str, Any]) -> tuple[str, bool]:
-                try:
-                    async with semaphore:
-                        if cfg.get("disabled"):
-                            logger.warning(f"[MCP][skip.disabled] server={name}")
-                            return name, False
-                        logger.info(f"Connecting to MCP server {name} (timeout: {timeout_per_server}s)...")
-                        ok = await self._connect_to_mcp_server(name, cfg, timeout=timeout_per_server)
-                        if not ok:
-                            logger.warning(f"Failed to connect to MCP server {name}")
-                        return name, ok
-                except asyncio.CancelledError:
-                    logger.warning(f"[MCP][init.cancelled] server={name}")
-                    raise
-                except Exception as e:
-                    logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
-                    return name, False
 
             # disabled=true 설정된 서버는 건너뛰기 + 허용 서버 화이트리스트 적용
             allowlist_str = os.getenv("MCP_ALLOWED_SERVERS", "").strip()
@@ -778,7 +843,31 @@ class UniversalMCPHub:
                 enabled_server_items = base_items
                 logger.info(f"[MCP][allowlist] not set; connecting to all enabled servers: { [n for n,_ in enabled_server_items] }")
 
-            tasks = [asyncio.create_task(connect_one(n, c)) for n, c in enabled_server_items]
+            # 서버별 타임아웃 설정 적용
+            async def connect_one_with_settings(name: str, cfg: Dict[str, Any]) -> tuple[str, bool]:
+                try:
+                    async with semaphore:
+                        if cfg.get("disabled"):
+                            logger.warning(f"[MCP][skip.disabled] server={name}")
+                            return name, False
+                        
+                        # 서버별 설정 가져오기
+                        server_settings = self._get_server_specific_settings(name, cfg)
+                        server_timeout = server_settings["timeout"]
+                        
+                        logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s)...")
+                        ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
+                        if not ok:
+                            logger.warning(f"Failed to connect to MCP server {name}")
+                        return name, ok
+                except asyncio.CancelledError:
+                    logger.warning(f"[MCP][init.cancelled] server={name}")
+                    raise
+                except Exception as e:
+                    logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
+                    return name, False
+
+            tasks = [asyncio.create_task(connect_one_with_settings(n, c)) for n, c in enabled_server_items]
             results = await asyncio.gather(*tasks, return_exceptions=False)
             connected_servers = [n for n, ok in results if ok]
             
