@@ -761,13 +761,42 @@ class MultiModelOrchestrator:
         if weights is None:
             weights = [1.0 / len(models)] * len(models)
         
-        # weights 타입 검증 및 변환
+        # weights 타입 검증 및 변환 (엄격한 검증)
         if weights:
             try:
-                # 모든 값이 숫자인지 확인하고 변환
-                weights = [float(w) if isinstance(w, (int, float, str)) else 1.0 
-                          for w in weights]
-            except (ValueError, TypeError) as e:
+                validated_weights = []
+                for w in weights:
+                    if isinstance(w, (int, float)):
+                        # 숫자 타입은 그대로 사용 (0 이상인지 확인)
+                        validated_weights.append(max(0.0, float(w)))
+                    elif isinstance(w, str):
+                        # 문자열인 경우 숫자로 변환 시도
+                        # 먼저 숫자가 아닌 문자 제거 (공백, 문자 등)
+                        cleaned_str = ''.join(c for c in w if c.isdigit() or c == '.' or c == '-' or c == '+')
+                        
+                        # '.' 만 있거나 숫자가 없는 경우 처리
+                        if not cleaned_str or cleaned_str == '.' or cleaned_str in ['-', '+', '-.', '+.']:
+                            logger.warning(f"Invalid weight value '{w}' (no valid number), using 1.0")
+                            validated_weights.append(1.0)
+                        else:
+                            try:
+                                float_val = float(cleaned_str)
+                                validated_weights.append(max(0.0, float_val))
+                            except (ValueError, TypeError):
+                                # 변환 실패 시 기본값 1.0 사용
+                                logger.warning(f"Invalid weight value '{w}' (cleaned: '{cleaned_str}'), using 1.0")
+                                validated_weights.append(1.0)
+                    else:
+                        # 기타 타입은 기본값 사용
+                        logger.warning(f"Invalid weight type '{type(w)}', using 1.0")
+                        validated_weights.append(1.0)
+                
+                # 검증된 weights 사용
+                if len(validated_weights) == len(weights):
+                    weights = validated_weights
+                else:
+                    raise ValueError("Weight validation failed")
+            except Exception as e:
                 logger.warning(f"Invalid weights format, using equal weights: {e}")
                 weights = [1.0 / len(models)] * len(models)
         

@@ -306,14 +306,43 @@ class VectorStore:
             logger.error(f"Failed to store research memory: {e}")
             return False
     
+    def _serialize_metadata_for_chromadb(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """ChromaDB 호환 형식으로 metadata 직렬화."""
+        serialized = {}
+        
+        for key, value in metadata.items():
+            # 단순 타입은 그대로 사용
+            if value is None or isinstance(value, (str, int, float, bool)):
+                serialized[key] = value
+            # 리스트, 딕셔너리 등은 JSON 문자열로 변환
+            elif isinstance(value, (list, dict)):
+                try:
+                    import json
+                    serialized[key] = json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Failed to serialize metadata key '{key}': {e}, skipping")
+                    # 변환 실패 시 문자열로 변환
+                    serialized[key] = str(value)[:500]  # 최대 500자로 제한
+            else:
+                # 기타 타입은 문자열로 변환
+                try:
+                    serialized[key] = str(value)[:500]  # 최대 500자로 제한
+                except Exception:
+                    serialized[key] = None
+        
+        return serialized
+    
     async def _store_in_chromadb(self, memory: ResearchMemory) -> None:
         """ChromaDB에 저장합니다."""
         try:
+            # metadata 직렬화
+            serialized_metadata = self._serialize_metadata_for_chromadb(memory.metadata)
+            
             self.collection.add(
                 ids=[memory.research_id],
                 embeddings=[memory.embedding],
                 documents=[memory.content],
-                metadatas=[memory.metadata]
+                metadatas=[serialized_metadata]
             )
             logger.debug(f"Stored in ChromaDB: {memory.research_id}")
         except Exception as e:

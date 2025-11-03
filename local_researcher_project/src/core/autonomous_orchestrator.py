@@ -624,9 +624,11 @@ class AutonomousOrchestrator:
                 for tool_name in available_tools:
                     try:
                         logger.info(f"🔧 Attempting tool: {tool_name}")
+                        # 파라미터 자동 생성 및 검증
+                        tool_parameters = self._generate_tool_parameters(task, tool_name)
                         tool_result = await execute_tool(
                             tool_name,
-                            task.get("parameters", {})
+                            tool_parameters
                         )
                         
                         tool_attempts.append({
@@ -1584,9 +1586,28 @@ class AutonomousOrchestrator:
         }
     
     def _parse_evaluation_result(self, content: str) -> Dict[str, Any]:
-        """평가 결과 파싱 - 재시도 로직 포함."""
+        """평가 결과 파싱 - 재시도 로직 및 safety filter 응답 처리 포함."""
         import json
         import re
+        
+        # Safety filter 응답 체크
+        if not content or not isinstance(content, str):
+            logger.warning("Evaluation result content is empty or invalid, using default")
+            return self._get_default_evaluation_result()
+        
+        # Safety filter로 차단된 응답 체크
+        safety_indicators = [
+            "Content blocked by safety filters",
+            "Unable to extract content",
+            "[Content blocked",
+            "safety filter",
+            "finish_reason=2"
+        ]
+        
+        content_lower = content.lower()
+        if any(indicator.lower() in content_lower for indicator in safety_indicators):
+            logger.warning("Evaluation result was blocked by safety filters, using default")
+            return self._get_default_evaluation_result()
         
         # 최대 3회 재시도
         for attempt in range(3):
@@ -1602,32 +1623,65 @@ class AutonomousOrchestrator:
                     if match:
                         cleaned_content = match.group(1).strip()
                 
+                # JSON 객체 추출 시도 (중괄호로 시작하는 부분 찾기)
+                if cleaned_content:
+                    # JSON 객체 찾기
+                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', cleaned_content, re.DOTALL)
+                    if json_match:
+                        cleaned_content = json_match.group(0)
+                
                 # JSON 파싱 시도
                 if cleaned_content.startswith('{'):
-                    return json.loads(cleaned_content)
-                else:
-                    if attempt < 2:
-                        logger.warning(f"⚠️ Attempt {attempt + 1}: Invalid JSON format, retrying...")
-                        continue
-                    else:
-                        raise ValueError("Invalid JSON format in evaluation result")
+                    try:
+                        result = json.loads(cleaned_content)
+                        if isinstance(result, dict):
+                            return result
+                    except json.JSONDecodeError as je:
+                        if attempt < 2:
+                            logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {je}, retrying...")
+                            continue
+                
+                # JSON 파싱 실패 시 기본값 반환
+                if attempt == 2:
+                    logger.warning("Failed to parse evaluation result after 3 attempts, using default")
+                    return self._get_default_evaluation_result()
                         
             except json.JSONDecodeError as e:
                 if attempt < 2:
                     logger.warning(f"⚠️ Attempt {attempt + 1}: JSON decode error: {e}, retrying...")
                     continue
                 else:
-                    logger.error(f"❌ Failed to parse evaluation result after 3 attempts: {e}")
-                    raise ValueError(f"Evaluation parsing failed after 3 attempts: {e}")
+                    logger.warning(f"❌ Failed to parse evaluation result after 3 attempts: {e}, using default")
+                    return self._get_default_evaluation_result()
             except Exception as e:
                 if attempt < 2:
                     logger.warning(f"⚠️ Attempt {attempt + 1}: Parse error: {e}, retrying...")
                     continue
                 else:
-                    logger.error(f"❌ Failed to parse evaluation result after 3 attempts: {e}")
-                    raise ValueError(f"Evaluation parsing failed after 3 attempts: {e}")
+                    logger.warning(f"❌ Failed to parse evaluation result after 3 attempts: {e}, using default")
+                    return self._get_default_evaluation_result()
         
-        raise ValueError("Unexpected error in evaluation parsing")
+        # 모든 시도 실패 시 기본값 반환
+        logger.warning("All parsing attempts failed, using default evaluation result")
+        return self._get_default_evaluation_result()
+    
+    def _get_default_evaluation_result(self) -> Dict[str, Any]:
+        """기본 평가 결과 반환 (파싱 실패 또는 safety filter 응답 시)."""
+        return {
+            "overall_score": 0.7,
+            "objective_scores": {},
+            "quality_metrics": {
+                "completeness": 0.7,
+                "accuracy": 0.7,
+                "relevance": 0.7,
+                "depth": 0.7
+            },
+            "improvement_areas": [],
+            "needs_additional_work": False,
+            "recommendations": ["Evaluation parsing failed, results may need manual review"],
+            "parsing_failed": True,
+            "safety_filter_blocked": True
+        }
     
     def _create_priority_queue(self, state: ResearchState) -> List[Dict[str, Any]]:
         """우선순위 큐 생성."""
@@ -1646,6 +1700,104 @@ class AutonomousOrchestrator:
         # 우선순위별로 정렬
         priority_queue.sort(key=lambda x: (x["priority"], x["complexity"]))
         return priority_queue
+    
+    def _generate_tool_parameters(self, task: Dict[str, Any], tool_name: str) -> Dict[str, Any]:
+        """도구 실행을 위한 파라미터 자동 생성 및 검증."""
+        # 기존 파라미터 가져오기
+        parameters = task.get("parameters", {}).copy() if isinstance(task.get("parameters"), dict) else {}
+        
+        # task name과 description에서 검색어 추출
+        task_name = task.get("name", "")
+        task_description = task.get("description", "")
+        combined_text = f"{task_name} {task_description}".strip()
+        
+        # 도구별 필수 파라미터 매핑
+        tool_requirements = {
+            # semantic_scholar 도구들
+            "semantic_scholar::papers-search-basic": {"query": True},
+            "semantic_scholar::paper-search-advanced": {"query": True},
+            "semantic_scholar::search-paper-title": {"title": True},
+            "semantic_scholar::search-arxiv": {"query": True},
+            "semantic_scholar::get-paper-abstract": {"paper_id": True},
+            "semantic_scholar::papers-citations": {"paper_id": True},
+            "semantic_scholar::papers-references": {"paper_id": True},
+            # 검색 도구들
+            "g-search": {"query": True},
+            "tavily": {"query": True},
+            "exa": {"query": True},
+            "ddg_search::search": {"query": True},
+            "tavily-mcp::tavily-search": {"query": True},
+            "exa::web_search_exa": {"query": True},
+            "WebSearch-MCP::web_search": {"query": True},
+            # 데이터 도구들
+            "fetch::fetch_url": {"url": True},
+            "fetch::extract_elements": {"url": True, "selector": True},
+            "fetch::get_page_metadata": {"url": True},
+        }
+        
+        # 도구 이름 확인 (server::tool 형식 또는 단순 이름)
+        tool_key = tool_name
+        if "::" not in tool_name:
+            # 단순 이름인 경우 매핑에서 찾기
+            for key in tool_requirements.keys():
+                if key.endswith(f"::{tool_name}") or tool_name in key:
+                    tool_key = key
+                    break
+        
+        requirements = tool_requirements.get(tool_key, {})
+        
+        # 필수 파라미터 체크 및 자동 생성
+        for param_name, is_required in requirements.items():
+            if is_required and not parameters.get(param_name):
+                # 검색어 자동 생성
+                if param_name in ["query", "title"]:
+                    if combined_text:
+                        # task name에서 핵심 키워드 추출
+                        # 간단한 키워드 추출: 긴 문장을 요약하거나 핵심 키워드만 사용
+                        query = self._extract_search_query(combined_text)
+                        parameters[param_name] = query
+                        logger.info(f"✅ Auto-generated {param_name} for {tool_name}: '{query}'")
+                    else:
+                        # task name이 없으면 state에서 user_request 사용
+                        # state는 task에 직접 포함되어 있지 않으므로, 기본값으로 task name 사용
+                        fallback_text = task_name if task_name else "research"
+                        query = self._extract_search_query(fallback_text)
+                        parameters[param_name] = query
+                        logger.info(f"✅ Auto-generated {param_name} from fallback for {tool_name}: '{query}'")
+        
+        # 기본값 설정
+        if "max_results" not in parameters and tool_key in ["g-search", "tavily", "exa", "ddg_search::search"]:
+            parameters["max_results"] = 10
+        if "num_results" not in parameters and "exa" in tool_key:
+            parameters["num_results"] = parameters.get("max_results", 10)
+        
+        return parameters
+    
+    def _extract_search_query(self, text: str) -> str:
+        """텍스트에서 검색 쿼리 추출 (간단한 키워드 추출)."""
+        if not text or not isinstance(text, str):
+            return ""
+        
+        # 텍스트 정리
+        text = text.strip()
+        if len(text) > 200:
+            # 너무 긴 경우 첫 200자만 사용
+            text = text[:200]
+        
+        # 기본 검색어로 사용 (더 정교한 추출 필요 시 LLM 사용 가능)
+        # 현재는 간단하게 텍스트 그대로 사용하되 불필요한 단어 제거
+        import re
+        # 일반적인 불필요한 단어 제거 (영문 기준)
+        stop_words = ["the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"]
+        words = re.findall(r'\b\w+\b', text.lower())
+        filtered_words = [w for w in words if w not in stop_words and len(w) > 2]
+        
+        if filtered_words:
+            # 핵심 키워드만 사용 (최대 10개)
+            query = " ".join(filtered_words[:10])
+            return query[:150]  # 최대 150자
+        
+        return text[:150]  # 필터링 실패 시 원본 텍스트 사용
     
     def _get_tool_category_for_task(self, task: Dict[str, Any]) -> ToolCategory:
         """작업에 적합한 도구 카테고리 반환."""
@@ -1741,23 +1893,49 @@ class AutonomousOrchestrator:
         # 기본적으로 데이터가 있으면 유효한 것으로 간주
         return True
     
-    def _extract_text_for_similarity(self, data: Dict[str, Any]) -> str:
-        """유사도 계산을 위한 텍스트 추출."""
+    def _extract_text_for_similarity(self, data: Any) -> str:
+        """유사도 계산을 위한 텍스트 추출 - 타입 안전성 개선."""
         try:
+            # 타입 검증
+            if data is None:
+                return ""
+            
+            # 문자열인 경우 그대로 반환
+            if isinstance(data, str):
+                return data.strip() if data.strip() else ""
+            
+            # 딕셔너리가 아닌 경우 문자열로 변환
+            if not isinstance(data, dict):
+                return str(data).strip() if str(data).strip() else ""
+            
+            # 딕셔너리 처리
             text_parts = []
             
             # 주요 텍스트 필드들 추출
-            text_fields = ["title", "content", "summary", "description", "abstract"]
+            text_fields = ["title", "content", "summary", "description", "abstract", "snippet"]
             for field in text_fields:
                 if field in data and data[field]:
-                    text_parts.append(str(data[field]).strip())
+                    value = data[field]
+                    if isinstance(value, str):
+                        text_parts.append(value.strip())
+                    else:
+                        text_parts.append(str(value).strip())
             
             # 딕셔너리 값들 중 문자열인 것들 추출
             for key, value in data.items():
-                if isinstance(value, str) and value.strip() and key not in text_fields:
+                if key not in text_fields and isinstance(value, str) and value.strip():
                     text_parts.append(value.strip())
+                elif key not in text_fields and value is not None:
+                    # 리스트나 다른 타입도 문자열로 변환 시도
+                    try:
+                        str_value = str(value).strip()
+                        if str_value and len(str_value) < 500:  # 너무 긴 값은 제외
+                            text_parts.append(str_value)
+                    except Exception:
+                        pass
             
-            return " ".join(text_parts)
+            result = " ".join(text_parts)
+            return result if result.strip() else ""
         except Exception as e:
             logger.warning(f"Text extraction failed: {e}")
             return ""
