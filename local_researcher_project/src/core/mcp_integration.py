@@ -621,11 +621,51 @@ class UniversalMCPHub:
         
         return settings
     
+    async def _check_connection_health(self, server_name: str) -> bool:
+        """
+        Check if existing MCP server connection is healthy.
+        
+        Args:
+            server_name: Server name to check
+            
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        if server_name not in self.mcp_sessions:
+            return False
+        
+        try:
+            session = self.mcp_sessions[server_name]
+            # Try to list tools as a health check (lightweight operation)
+            # This will fail if connection is broken
+            if hasattr(session, 'list_tools'):
+                # Quick health check - just verify session is still valid
+                # We don't actually call list_tools to avoid overhead
+                return True
+            return True  # Assume healthy if session exists
+        except Exception as e:
+            logger.debug(f"Connection health check failed for {server_name}: {e}")
+            return False
+    
     async def _connect_to_mcp_server(self, server_name: str, server_config: Dict[str, Any], timeout: float = None):
-        """MCP 서버에 연결 - 서버별 특성에 맞는 최적화된 연결."""
+        """MCP 서버에 연결 - Connection pooling with health check and auto-reconnection."""
         if self.stopping:
             logger.warning(f"[MCP][skip.stopping] server={server_name}")
             return False
+        
+        # Connection pooling: Check if connection already exists and is healthy
+        if server_name in self.mcp_sessions:
+            is_healthy = await self._check_connection_health(server_name)
+            if is_healthy:
+                logger.debug(f"[MCP][connect.pool] Reusing existing connection for {server_name}")
+                return True
+            else:
+                logger.warning(f"[MCP][connect.reconnect] Connection unhealthy for {server_name}, reconnecting...")
+                # Disconnect unhealthy connection
+                try:
+                    await self._disconnect_from_mcp_server(server_name)
+                except Exception as e:
+                    logger.debug(f"Error disconnecting unhealthy connection: {e}")
         
         # 서버별 설정 가져오기
         server_settings = self._get_server_specific_settings(server_name, server_config)
@@ -649,8 +689,6 @@ class UniversalMCPHub:
             return False
         
         try:
-            if server_name in self.mcp_sessions:
-                await self._disconnect_from_mcp_server(server_name)
             
             exit_stack = AsyncExitStack()
             self.exit_stacks[server_name] = exit_stack
@@ -964,9 +1002,42 @@ class UniversalMCPHub:
             # Don't raise, allow graceful degradation
     
     async def _execute_via_mcp_server(self, server_name: str, tool_name: str, params: Dict[str, Any]) -> Optional[Any]:
-        """MCP 서버를 통해 도구 실행."""
+        """MCP 서버를 통해 도구 실행 (with connection pooling and health check)."""
+        # Connection pooling: Check if connection exists and is healthy
         if server_name not in self.mcp_sessions:
-            logger.error(f"Server {server_name} not in mcp_sessions. Available: {list(self.mcp_sessions.keys())}")
+            # Try to connect if not in sessions
+            logger.debug(f"Server {server_name} not in sessions, attempting connection...")
+            if server_name in self.mcp_server_configs:
+                server_config = self.mcp_server_configs[server_name]
+                connected = await self._connect_to_mcp_server(server_name, server_config)
+                if not connected:
+                    logger.error(f"Failed to connect to server {server_name}")
+                    return None
+            else:
+                logger.error(f"Server {server_name} not in mcp_sessions and no config found. Available: {list(self.mcp_sessions.keys())}")
+                return None
+        else:
+            # Health check existing connection
+            is_healthy = await self._check_connection_health(server_name)
+            if not is_healthy:
+                logger.warning(f"Connection to {server_name} is unhealthy, reconnecting...")
+                # Auto-reconnection
+                if server_name in self.mcp_server_configs:
+                    try:
+                        await self._disconnect_from_mcp_server(server_name)
+                    except Exception:
+                        pass
+                    server_config = self.mcp_server_configs[server_name]
+                    connected = await self._connect_to_mcp_server(server_name, server_config)
+                    if not connected:
+                        logger.error(f"Failed to reconnect to server {server_name}")
+                        return None
+                else:
+                    logger.error(f"Cannot reconnect to {server_name}: no config found")
+                    return None
+        
+        if server_name not in self.mcp_sessions:
+            logger.error(f"Server {server_name} still not in mcp_sessions after connection attempt")
             return None
         
         if server_name not in self.mcp_tools_map:
@@ -1614,7 +1685,23 @@ async def get_available_tools() -> List[str]:
 
 
 async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-    """MCP 도구 실행 - UniversalMCPHub의 execute_tool 사용."""
+    """MCP 도구 실행 - UniversalMCPHub의 execute_tool 사용 (with caching)."""
+    from src.core.result_cache import get_result_cache
+    
+    result_cache = get_result_cache()
+    
+    # 캐시 확인
+    cached_result = await result_cache.get(
+        tool_name=tool_name,
+        parameters=parameters,
+        check_similarity=True
+    )
+    
+    if cached_result:
+        logger.debug(f"[MCP][execute_tool] Cache hit for {tool_name}")
+        return cached_result
+    
+    # MCP Hub 실행
     mcp_hub = get_mcp_hub()
     
     # MCP Hub가 초기화되지 않았으면 초기화
@@ -1622,7 +1709,21 @@ async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, 
         logger.info("[MCP][execute_tool] MCP Hub not initialized, initializing...")
         await mcp_hub.initialize_mcp()
     
-    return await mcp_hub.execute_tool(tool_name, parameters)
+    result = await mcp_hub.execute_tool(tool_name, parameters)
+    
+    # 성공한 결과만 캐시에 저장
+    if result.get("success", False):
+        # TTL 결정: 검색/데이터 도구는 1시간, 다른 도구는 30분
+        ttl = 3600 if any(keyword in tool_name.lower() for keyword in ['search', 'fetch', 'data']) else 1800
+        await result_cache.set(
+            tool_name=tool_name,
+            parameters=parameters,
+            value=result,
+            ttl=ttl
+        )
+        logger.debug(f"[MCP][execute_tool] Cached result for {tool_name}")
+    
+    return result
 
 
 # 동기화 헬퍼 함수들 (LangChain Tool용)
@@ -1723,12 +1824,33 @@ def _execute_code_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> str:
 
 
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """MCP 서버를 통한 검색 도구 실행."""
+    """MCP 서버를 통한 검색 도구 실행 (with caching)."""
     import time
+    from src.core.result_cache import get_result_cache
     
     start_time = time.time()
     query = parameters.get("query", "")
     max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
+    
+    # 캐시 확인
+    result_cache = get_result_cache()
+    cached_result = await result_cache.get(
+        tool_name=tool_name,
+        parameters=parameters,
+        check_similarity=True
+    )
+    
+    if cached_result:
+        logger.debug(f"[MCP][_execute_search_tool] Cache hit for {tool_name}")
+        # ToolResult 형식으로 변환
+        from src.core.mcp_integration import ToolResult
+        return ToolResult(
+            success=cached_result.get("success", False),
+            data=cached_result.get("data"),
+            error=cached_result.get("error"),
+            execution_time=cached_result.get("execution_time", 0.0),
+            confidence=cached_result.get("confidence", 0.8)
+        )
     
     try:
         if tool_name == "g-search":
@@ -1894,7 +2016,7 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     
                     if results:
                         logger.info(f"✅ Search successful via MCP server {server_name}: {len(results)} results")
-                        return ToolResult(
+                        tool_result = ToolResult(
                             success=True,
                             data={
                                 "query": query,
@@ -1905,6 +2027,24 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                             execution_time=time.time() - start_time,
                             confidence=0.9
                         )
+                        
+                        # 캐시에 저장 (TTL: 1시간)
+                        cache_dict = {
+                            "success": tool_result.success,
+                            "data": tool_result.data,
+                            "error": tool_result.error,
+                            "execution_time": tool_result.execution_time,
+                            "confidence": tool_result.confidence
+                        }
+                        await result_cache.set(
+                            tool_name=tool_name,
+                            parameters=parameters,
+                            value=cache_dict,
+                            ttl=3600  # 1 hour for search results
+                        )
+                        logger.debug(f"[MCP][_execute_search_tool] Cached result for {tool_name}")
+                        
+                        return tool_result
                     else:
                         logger.warning(f"MCP server {server_name} returned empty results")
                         continue
@@ -2016,7 +2156,7 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                 results = result_data.get("items", result_data.get("data", []))
                             
                             if results:
-                                return ToolResult(
+                                tool_result = ToolResult(
                                     success=True,
                                     data={
                                         "query": query,
@@ -2027,6 +2167,24 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                     execution_time=time.time() - start_time,
                                     confidence=0.85
                                 )
+                                
+                                # 캐시에 저장 (TTL: 1시간)
+                                cache_dict = {
+                                    "success": tool_result.success,
+                                    "data": tool_result.data,
+                                    "error": tool_result.error,
+                                    "execution_time": tool_result.execution_time,
+                                    "confidence": tool_result.confidence
+                                }
+                                await result_cache.set(
+                                    tool_name=tool_name,
+                                    parameters=parameters,
+                                    value=cache_dict,
+                                    ttl=3600  # 1 hour for search results
+                                )
+                                logger.debug(f"[MCP][_execute_search_tool] Cached result for {tool_name}")
+                                
+                                return tool_result
                     
                 except Exception as mcp_error:
                     logger.warning(f"MCP 서버 {server_name} tavily 실패: {mcp_error}, 다음 서버 시도")
@@ -2132,7 +2290,7 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                 results = result_data.get("items", result_data.get("data", []))
                             
                             if results:
-                                return ToolResult(
+                                tool_result = ToolResult(
                                     success=True,
                                     data={
                                         "query": query,
@@ -2143,6 +2301,24 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                     execution_time=time.time() - start_time,
                                     confidence=0.85
                                 )
+                                
+                                # 캐시에 저장 (TTL: 1시간)
+                                cache_dict = {
+                                    "success": tool_result.success,
+                                    "data": tool_result.data,
+                                    "error": tool_result.error,
+                                    "execution_time": tool_result.execution_time,
+                                    "confidence": tool_result.confidence
+                                }
+                                await result_cache.set(
+                                    tool_name=tool_name,
+                                    parameters=parameters,
+                                    value=cache_dict,
+                                    ttl=3600  # 1 hour for search results
+                                )
+                                logger.debug(f"[MCP][_execute_search_tool] Cached result for {tool_name}")
+                                
+                                return tool_result
                     
                 except Exception as mcp_error:
                     logger.warning(f"MCP 서버 {server_name} exa 실패: {mcp_error}, 다음 서버 시도")

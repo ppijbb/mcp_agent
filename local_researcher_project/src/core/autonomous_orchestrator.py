@@ -592,95 +592,148 @@ class AutonomousOrchestrator:
         return state
     
     async def _execute_research(self, state: ResearchState) -> ResearchState:
-        """연구 실행 (Universal MCP Hub + Streaming Pipeline)."""
+        """연구 실행 (Universal MCP Hub + Streaming Pipeline + Parallel Execution)."""
         # 입력 로깅
         self._log_node_input("execute_research", state)
         
-        logger.info("🔍 Executing research with Universal MCP Hub and Streaming Pipeline")
+        logger.info("🔍 Executing research with Universal MCP Hub, Streaming Pipeline, and Parallel Execution")
         
         # Planning Agent에서 생성된 tasks 사용
         tasks = state.get("planned_tasks", [])
         agent_assignments = state.get("agent_assignments", {})
         execution_plan = state.get("execution_plan", {})
+        objective_id = state.get("objective_id", "default")
         
         logger.info(f"📋 Executing {len(tasks)} planned tasks")
         logger.info(f"👥 Agent assignments: {len(agent_assignments)} mappings")
         logger.info(f"📈 Execution strategy: {execution_plan.get('strategy', 'sequential')}")
         
-        execution_results = []
-        streaming_data = []
+        # 병렬 실행 사용 여부 결정
+        use_parallel = (
+            execution_plan.get('strategy') in ['parallel', 'hybrid'] and
+            len(tasks) > 1 and
+            self.agent_config.max_concurrent_research_units > 1
+        )
         
-        # 각 작업을 병렬로 실행
-        for task in tasks:
-            task_success = False
-            tool_attempts = []
+        if use_parallel:
+            logger.info("🚀 Using parallel execution with ParallelAgentExecutor")
             
-            try:
-                # MCP 도구 선택 및 실행 (대체 도구 로직 포함)
-                tool_category = self._get_tool_category_for_task(task)
-                available_tools = self._get_available_tools_for_category(tool_category)
+            # ParallelAgentExecutor 사용
+            from src.core.parallel_agent_executor import ParallelAgentExecutor
+            
+            executor = ParallelAgentExecutor()
+            parallel_results = await executor.execute_parallel_tasks(
+                tasks=tasks,
+                agent_assignments=agent_assignments,
+                execution_plan=execution_plan,
+                objective_id=objective_id
+            )
+            
+            execution_results = parallel_results.get("execution_results", [])
+            streaming_data = [
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "task_id": r.get("task_id", ""),
+                    "status": r.get("status", "completed"),
+                    "data": r.get("result"),
+                    "tool_used": r.get("tool_used", "")
+                }
+                for r in execution_results
+            ]
+            
+            logger.info(f"✅ Parallel execution completed: {len(execution_results)} tasks executed")
+        else:
+            logger.info("📝 Using sequential execution (parallel execution conditions not met)")
+            # 순차 실행 (기존 로직 - 병렬 실행이 불가능한 경우)
+            execution_results = []
+            streaming_data = []
+            
+            for task in tasks:
+                task_success = False
+                tool_attempts = []
                 
-                # 도구 우선순위별로 시도
-                for tool_name in available_tools:
-                    try:
-                        logger.info(f"🔧 Attempting tool: {tool_name}")
-                        # 파라미터 자동 생성 및 검증
-                        tool_parameters = self._generate_tool_parameters(task, tool_name)
-                        tool_result = await execute_tool(
-                            tool_name,
-                            tool_parameters
-                        )
-                        
-                        tool_attempts.append({
-                            "tool": tool_name,
-                            "success": tool_result.get("success", False),
-                            "error": tool_result.get("error", ""),
-                            "execution_time": tool_result.get("execution_time", 0.0)
-                        })
-                        
-                        if tool_result.get("success", False):
-                            # 실제 데이터 검증
-                            if self._validate_tool_result(tool_result, task):
-                                execution_results.append({
-                                    "task_id": task.get("id"),
-                                    "task_name": task.get("name"),
-                                    "tool_used": tool_name,
-                                    "result": tool_result.get("data"),
-                                    "execution_time": tool_result.get("execution_time", 0.0),
-                                    "confidence": tool_result.get("confidence", 0.0),
-                                    "attempts": len(tool_attempts)
-                                })
-
-                                # 스트리밍 데이터 추가
-                                streaming_data.append({
-                                    "timestamp": datetime.now().isoformat(),
-                                    "task_id": task.get("id"),
-                                    "status": "completed",
-                                    "data": tool_result.get("data"),
-                                    "tool_used": tool_name
-                                })
-                                
-                                logger.info(f"✅ Tool '{tool_name}' executed successfully with valid data")
-                                task_success = True
-                                break
-                            else:
-                                logger.warning(f"⚠️ Tool '{tool_name}' returned invalid data, trying next tool...")
-                        else:
-                            logger.warning(f"❌ Tool '{tool_name}' failed: {tool_result.get('error', 'Unknown error')}")
+                try:
+                    # MCP 도구 선택 및 실행 (대체 도구 로직 포함)
+                    tool_category = self._get_tool_category_for_task(task)
+                    available_tools = self._get_available_tools_for_category(tool_category)
+                    
+                    # 도구 우선순위별로 시도
+                    for tool_name in available_tools:
+                        try:
+                            logger.info(f"🔧 Attempting tool: {tool_name}")
+                            # 파라미터 자동 생성 및 검증
+                            tool_parameters = self._generate_tool_parameters(task, tool_name)
+                            tool_result = await execute_tool(
+                                tool_name,
+                                tool_parameters
+                            )
                             
-                    except Exception as tool_error:
-                        logger.warning(f"❌ Tool '{tool_name}' execution error: {tool_error}")
-                        tool_attempts.append({
-                            "tool": tool_name,
-                            "success": False,
-                            "error": str(tool_error),
-                            "execution_time": 0.0
+                            tool_attempts.append({
+                                "tool": tool_name,
+                                "success": tool_result.get("success", False),
+                                "error": tool_result.get("error", ""),
+                                "execution_time": tool_result.get("execution_time", 0.0)
+                            })
+                            
+                            if tool_result.get("success", False):
+                                # 실제 데이터 검증
+                                if self._validate_tool_result(tool_result, task):
+                                    execution_results.append({
+                                        "task_id": task.get("id"),
+                                        "task_name": task.get("name"),
+                                        "tool_used": tool_name,
+                                        "result": tool_result.get("data"),
+                                        "execution_time": tool_result.get("execution_time", 0.0),
+                                        "confidence": tool_result.get("confidence", 0.0),
+                                        "attempts": len(tool_attempts),
+                                        "status": "completed"
+                                    })
+
+                                    # 스트리밍 데이터 추가
+                                    streaming_data.append({
+                                        "timestamp": datetime.now().isoformat(),
+                                        "task_id": task.get("id"),
+                                        "status": "completed",
+                                        "data": tool_result.get("data"),
+                                        "tool_used": tool_name
+                                    })
+                                    
+                                    logger.info(f"✅ Tool '{tool_name}' executed successfully with valid data")
+                                    task_success = True
+                                    break
+                                else:
+                                    logger.warning(f"⚠️ Tool '{tool_name}' returned invalid data, trying next tool...")
+                            else:
+                                logger.warning(f"❌ Tool '{tool_name}' failed: {tool_result.get('error', 'Unknown error')}")
+                                
+                        except Exception as tool_error:
+                            logger.warning(f"❌ Tool '{tool_name}' execution error: {tool_error}")
+                            tool_attempts.append({
+                                "tool": tool_name,
+                                "success": False,
+                                "error": str(tool_error),
+                                "execution_time": 0.0
+                            })
+                            continue
+                    
+                    if not task_success:
+                        logger.error(f"❌ All tools failed for task {task.get('id')}. Attempts: {tool_attempts}")
+                        # 실패한 작업도 기록
+                        execution_results.append({
+                            "task_id": task.get("id"),
+                            "task_name": task.get("name"),
+                            "tool_used": "none",
+                            "result": None,
+                            "execution_time": 0.0,
+                            "confidence": 0.0,
+                            "attempts": len(tool_attempts),
+                            "error": "All tools failed",
+                            "tool_attempts": tool_attempts,
+                            "status": "failed"
                         })
-                        continue
-                
-                if not task_success:
-                    logger.error(f"❌ All tools failed for task {task.get('id')}. Attempts: {tool_attempts}")
-                    # 실패한 작업도 기록
+                        
+                except Exception as e:
+                    logger.error(f"❌ Critical error executing task {task.get('id')}: {e}")
                     execution_results.append({
                         "task_id": task.get("id"),
                         "task_name": task.get("name"),
@@ -688,23 +741,10 @@ class AutonomousOrchestrator:
                         "result": None,
                         "execution_time": 0.0,
                         "confidence": 0.0,
-                        "attempts": len(tool_attempts),
-                        "error": "All tools failed",
-                        "tool_attempts": tool_attempts
+                        "attempts": 0,
+                        "error": str(e),
+                        "status": "failed"
                     })
-                    
-            except Exception as e:
-                logger.error(f"❌ Critical error executing task {task.get('id')}: {e}")
-                execution_results.append({
-                    "task_id": task.get("id"),
-                    "task_name": task.get("name"),
-                    "tool_used": "none",
-                    "result": None,
-                    "execution_time": 0.0,
-                    "confidence": 0.0,
-                    "attempts": 0,
-                    "error": str(e)
-                })
         
         state.update({
             "execution_results": execution_results,
@@ -714,17 +754,19 @@ class AutonomousOrchestrator:
                 **state.get("innovation_stats", {}),
                 "tasks_executed": len(execution_results),
                 "tools_used": len(set(r.get("tool_used", "") for r in execution_results if r.get("tool_used"))),
-                "execution_success_rate": float(len(execution_results)) / max(len(tasks), 1)
+                "execution_success_rate": float(len([r for r in execution_results if r.get("status") == "completed"])) / max(len(tasks), 1),
+                "parallel_execution_used": use_parallel
             }
         })
         
         # 출력 로깅
         key_changes = {
             "tasks_executed": len(execution_results),
-            "tasks_successful": len([r for r in execution_results if r.get("result")]),
+            "tasks_successful": len([r for r in execution_results if r.get("status") == "completed"]),
             "tools_used": len(set(r.get("tool_used", "") for r in execution_results if r.get("tool_used"))),
-            "execution_success_rate": float(len([r for r in execution_results if r.get("result")])) / max(len(tasks), 1),
-            "total_execution_time": sum(r.get("execution_time", 0.0) for r in execution_results)
+            "execution_success_rate": float(len([r for r in execution_results if r.get("status") == "completed"])) / max(len(tasks), 1),
+            "total_execution_time": sum(r.get("execution_time", 0.0) for r in execution_results),
+            "parallel_execution_used": use_parallel
         }
         self._log_node_output("execute_research", state, key_changes)
         

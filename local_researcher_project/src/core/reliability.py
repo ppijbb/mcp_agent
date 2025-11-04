@@ -15,7 +15,11 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime, timedelta
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry, stop_after_attempt, wait_exponential, wait_fixed,
+    retry_if_exception_type, retry_if_not_exception_type,
+    Retrying, RetryError
+)
 
 from src.core.researcher_config import get_reliability_config
 
@@ -41,7 +45,7 @@ class CircuitBreakerConfig:
 @dataclass
 class RetryConfig:
     """재시도 설정."""
-    max_attempts: int = 3
+    max_attempts: int = 5  # Increased from 3 to 5
     base_delay: float = 1.0
     max_delay: float = 60.0
     exponential_base: float = 2.0
@@ -324,7 +328,7 @@ class ProductionReliability:
         
         # 재시도 설정
         self.retry_config = RetryConfig(
-            max_attempts=3,
+            max_attempts=5,  # Increased from 3 to 5
             base_delay=1.0,
             max_delay=60.0
         )
@@ -394,22 +398,58 @@ class ProductionReliability:
                 raise
     
     async def _execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
-        """재시도 로직과 함께 실행."""
+        """재시도 로직과 함께 실행 - 에러 타입별 전략."""
         if not self.config.enable_exponential_backoff:
             return await func(*args, **kwargs)
         
-        @retry(
-            stop=stop_after_attempt(self.retry_config.max_attempts),
-            wait=wait_exponential(
-                multiplier=self.retry_config.base_delay,
-                max=self.retry_config.max_delay
-            ),
-            retry=retry_if_exception_type(Exception)
-        )
-        async def _retry_func():
-            return await func(*args, **kwargs)
+        # Try to execute and catch exception to determine retry strategy
+        last_exception = None
+        for attempt in range(self.retry_config.max_attempts):
+            try:
+                return await func(*args, **kwargs)
+            except asyncio.TimeoutError as e:
+                last_exception = e
+                # TimeoutError: Immediate retry with increased timeout
+                if attempt < self.retry_config.max_attempts - 1:
+                    wait_time = min(self.retry_config.base_delay * (2 ** attempt), self.retry_config.max_delay)
+                    logger.debug(f"TimeoutError on attempt {attempt + 1}, retrying in {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise
+            except (ConnectionError, OSError) as e:
+                last_exception = e
+                # ConnectionError: Exponential backoff
+                if attempt < self.retry_config.max_attempts - 1:
+                    wait_time = min(
+                        self.retry_config.base_delay * (self.retry_config.exponential_base ** attempt),
+                        self.retry_config.max_delay
+                    )
+                    logger.debug(f"ConnectionError on attempt {attempt + 1}, retrying in {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise
+            except ValueError as e:
+                last_exception = e
+                # ValueError: No retry (validation error)
+                logger.warning(f"ValueError (validation error), no retry: {e}")
+                raise
+            except Exception as e:
+                last_exception = e
+                # Other exceptions: Standard exponential backoff
+                if attempt < self.retry_config.max_attempts - 1:
+                    wait_time = min(
+                        self.retry_config.base_delay * (self.retry_config.exponential_base ** attempt),
+                        self.retry_config.max_delay
+                    )
+                    logger.debug(f"Exception on attempt {attempt + 1}, retrying in {wait_time}s: {type(e).__name__}")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise
         
-        return await _retry_func()
+        # If we get here, all retries exhausted
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("Retry exhausted without exception")
     
     async def _graceful_degradation(
         self,
