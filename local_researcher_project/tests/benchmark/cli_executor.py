@@ -56,7 +56,8 @@ class CLIExecutor:
         result = self._try_actual_cli_execution(query, output_path)
         if not result.success:
             self.logger.error(f"CLI execution failed: {result.error_message}")
-            raise RuntimeError(f"Research execution failed: {result.error_message}")
+            # Return failed result instead of raising exception
+            return result
         
         return result
     

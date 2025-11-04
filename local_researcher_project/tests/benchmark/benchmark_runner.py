@@ -284,31 +284,78 @@ class BenchmarkRunner:
             'reliability_events': []
         }
         
-        # Extract navigation events (WebArena-style)
+        # Get detailed_results from actual output structure
+        detailed_results = output.get('detailed_results', {})
+        
+        # Extract navigation events (WebArena-style) - from execution_results
+        execution_results = detailed_results.get('execution_results', [])
+        if execution_results:
+            # Convert execution results to navigation events
+            for result in execution_results:
+                if result.get('tool_used') == 'g-search' or result.get('tool_used') == 'web_search':
+                    extracted['navigation_events'].append({
+                        'status': 'success' if result.get('success', True) else 'failed',
+                        'url': result.get('url', ''),
+                        'content': result.get('content', '')
+                    })
+        
+        # Extract tool usage events (ToolBench-style) - from execution_results
+        for result in execution_results:
+            if result.get('tool_used'):
+                extracted['tool_events'].append({
+                    'tool': result.get('tool_used'),
+                    'status': 'success' if result.get('success', True) else 'failed',
+                    'result': result.get('result', {})
+                })
+        
+        # Extract agent collaboration events (AgentBench-style) - from agent_status or execution_plan
+        agent_status = output.get('agent_status', {}) or detailed_results.get('agent_status', {})
+        if agent_status and len(agent_status) > 1:
+            extracted['agent_events'] = [
+                {'agent_id': agent_id, 'status': status}
+                for agent_id, status in agent_status.items()
+            ]
+        
+        # Extract reasoning steps (ALFWorld-style) - from analyzed_objectives and planned_tasks
+        analyzed_objectives = detailed_results.get('analyzed_objectives', [])
+        planned_tasks = detailed_results.get('planned_tasks', [])
+        
+        if analyzed_objectives:
+            extracted['reasoning_steps'] = [
+                {'objective': obj.get('objective', ''), 'analysis': obj.get('analysis', {})}
+                for obj in analyzed_objectives
+            ]
+        
+        if planned_tasks:
+            extracted['plan_steps'] = [
+                {'task': task.get('task', ''), 'status': task.get('status', 'planned')}
+                for task in planned_tasks
+            ]
+        
+        # Extract execution events - use execution_results directly
+        extracted['execution_events'] = execution_results
+        
+        # Extract reliability events - from quality_metrics
+        quality_metrics = detailed_results.get('quality_metrics', {})
+        if quality_metrics:
+            extracted['reliability_events'] = [
+                {'metric': metric, 'value': value}
+                for metric, value in quality_metrics.items()
+            ]
+        
+        # Fallback: Check for old format fields
         if 'navigation_log' in output:
             extracted['navigation_events'] = output['navigation_log']
-        
-        # Extract tool usage events (ToolBench-style)
         if 'tool_usage_log' in output:
             extracted['tool_events'] = output['tool_usage_log']
-        
-        # Extract agent collaboration events (AgentBench-style)
         if 'agent_collaboration_log' in output:
             extracted['agent_events'] = output['agent_collaboration_log']
-        
-        # Extract reasoning steps (ALFWorld-style)
         if 'reasoning_log' in output:
             extracted['reasoning_steps'] = output['reasoning_log']
-        
-        # Extract planning steps
         if 'planning_log' in output:
             extracted['plan_steps'] = output['planning_log']
-        
-        # Extract execution events
         if 'execution_log' in output:
             extracted['execution_events'] = output['execution_log']
-        
-        # Extract reliability events
         if 'reliability_log' in output:
             extracted['reliability_events'] = output['reliability_log']
         
