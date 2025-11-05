@@ -35,13 +35,21 @@ class BenchmarkReporter:
     """Generate comprehensive benchmark reports."""
     
     def __init__(self, output_dir: str = "results"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        # Convert to absolute path to avoid issues
+        output_path = Path(output_dir)
+        if not output_path.is_absolute():
+            # Get project root (assuming we're in tests/benchmark/)
+            current_dir = Path(__file__).parent
+            project_root = current_dir.parent.parent
+            output_path = project_root / output_dir
+        
+        self.output_dir = output_path
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
         
         # Create charts subdirectory
         self.charts_dir = self.output_dir / "charts"
-        self.charts_dir.mkdir(exist_ok=True)
+        self.charts_dir.mkdir(parents=True, exist_ok=True)
     
     def generate_json_report(self, results: List[BenchmarkResult], 
                            metadata: Optional[Dict[str, Any]] = None) -> str:
@@ -69,11 +77,24 @@ class BenchmarkReporter:
             report_data["metadata"].update(metadata)
         
         # Write JSON file
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(report_data, f, indent=2, default=str)
-        
-        self.logger.info(f"JSON report generated: {filepath}")
-        return str(filepath)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2, default=str)
+            
+            self.logger.info(f"JSON report generated: {filepath}")
+            return str(filepath)
+        except Exception as e:
+            self.logger.error(f"Failed to write JSON report to {filepath}: {e}")
+            # Try alternative location
+            alt_filepath = Path.cwd() / filename
+            try:
+                with open(alt_filepath, 'w', encoding='utf-8') as f:
+                    json.dump(report_data, f, indent=2, default=str)
+                self.logger.info(f"JSON report generated at alternative location: {alt_filepath}")
+                return str(alt_filepath)
+            except Exception as e2:
+                self.logger.error(f"Failed to write JSON report to alternative location {alt_filepath}: {e2}")
+                raise
     
     def generate_markdown_report(self, results: List[BenchmarkResult], 
                                metadata: Optional[Dict[str, Any]] = None) -> str:
@@ -89,11 +110,24 @@ class BenchmarkReporter:
         markdown_content = self._build_markdown_content(results, chart_paths, metadata)
         
         # Write markdown file
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
-        
-        self.logger.info(f"Markdown report generated: {filepath}")
-        return str(filepath)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            self.logger.info(f"Markdown report generated: {filepath}")
+            return str(filepath)
+        except Exception as e:
+            self.logger.error(f"Failed to write Markdown report to {filepath}: {e}")
+            # Try alternative location
+            alt_filepath = Path.cwd() / filename
+            try:
+                with open(alt_filepath, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                self.logger.info(f"Markdown report generated at alternative location: {alt_filepath}")
+                return str(alt_filepath)
+            except Exception as e2:
+                self.logger.error(f"Failed to write Markdown report to alternative location {alt_filepath}: {e2}")
+                raise
     
     def generate_console_summary(self, results: List[BenchmarkResult]) -> str:
         """Generate console summary for quick review."""

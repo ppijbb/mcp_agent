@@ -367,47 +367,155 @@ class BenchmarkRunner:
         """Collect ALL agent metrics for comprehensive evaluation."""
         metrics = []
         
-        # Import agent metrics collector
-        from agent_benchmark_metrics import AgentMetricsCollector
+        # Import agent metrics collector - try both absolute and relative imports
+        try:
+            from .agent_benchmark_metrics import AgentMetricsCollector
+        except ImportError:
+            try:
+                from agent_benchmark_metrics import AgentMetricsCollector
+            except ImportError:
+                self.logger.error("Failed to import AgentMetricsCollector")
+                return metrics
+        
         agent_metrics_collector = AgentMetricsCollector(self.thresholds)
+        
+        # Import MetricResult for conversion - try both absolute and relative imports
+        try:
+            from .benchmark_metrics import MetricResult
+        except ImportError:
+            try:
+                from benchmark_metrics import MetricResult
+            except ImportError:
+                self.logger.error("Failed to import MetricResult")
+                return metrics
         
         # 1. Web Navigation Metrics (WebArena-style)
         if agent_task.get('category') == 'WebNavigation':
             navigation_events = extracted_metrics.get('navigation_events', [])
-            metrics.append(agent_metrics_collector.measure_navigation_success(navigation_events))
+            nav_result = agent_metrics_collector.measure_navigation_success(navigation_events)
+            metrics.append(MetricResult(
+                name=nav_result.name,
+                value=nav_result.value,
+                threshold=nav_result.threshold,
+                passed=nav_result.passed,
+                category=nav_result.category,
+                weight=nav_result.weight,
+                metadata=nav_result.metadata
+            ))
             
             # Information accuracy based on expected actions
             expected_actions = agent_task.get('expected_actions', [])
-            metrics.append(agent_metrics_collector.measure_information_accuracy(
+            info_result = agent_metrics_collector.measure_information_accuracy(
                 navigation_events, expected_actions
+            )
+            metrics.append(MetricResult(
+                name=info_result.name,
+                value=info_result.value,
+                threshold=info_result.threshold,
+                passed=info_result.passed,
+                category=info_result.category,
+                weight=info_result.weight,
+                metadata=info_result.metadata
             ))
         
         # 2. Tool Usage Metrics (ToolBench-style)
         if agent_task.get('category') == 'ToolUsage':
             tool_events = extracted_metrics.get('tool_events', [])
-            metrics.append(agent_metrics_collector.measure_tool_usage_success(tool_events))
-            metrics.append(agent_metrics_collector.measure_tool_coordination_efficiency(tool_events))
+            tool_result = agent_metrics_collector.measure_tool_usage_success(tool_events)
+            metrics.append(MetricResult(
+                name=tool_result.name,
+                value=tool_result.value,
+                threshold=tool_result.threshold,
+                passed=tool_result.passed,
+                category=tool_result.category,
+                weight=tool_result.weight,
+                metadata=tool_result.metadata
+            ))
+            coord_result = agent_metrics_collector.measure_tool_coordination_efficiency(tool_events)
+            metrics.append(MetricResult(
+                name=coord_result.name,
+                value=coord_result.value,
+                threshold=coord_result.threshold,
+                passed=coord_result.passed,
+                category=coord_result.category,
+                weight=coord_result.weight,
+                metadata=coord_result.metadata
+            ))
         
         # 3. Multi-Agent Collaboration Metrics (AgentBench-style)
         if agent_task.get('category') == 'MultiAgent':
             agent_events = extracted_metrics.get('agent_events', [])
-            metrics.append(agent_metrics_collector.measure_coordination_efficiency(agent_events))
-            metrics.append(agent_metrics_collector.measure_task_completion_rate(agent_events))
+            coord_result = agent_metrics_collector.measure_coordination_efficiency(agent_events)
+            metrics.append(MetricResult(
+                name=coord_result.name,
+                value=coord_result.value,
+                threshold=coord_result.threshold,
+                passed=coord_result.passed,
+                category=coord_result.category,
+                weight=coord_result.weight,
+                metadata=coord_result.metadata
+            ))
+            task_result = agent_metrics_collector.measure_task_completion_rate(agent_events)
+            metrics.append(MetricResult(
+                name=task_result.name,
+                value=task_result.value,
+                threshold=task_result.threshold,
+                passed=task_result.passed,
+                category=task_result.category,
+                weight=task_result.weight,
+                metadata=task_result.metadata
+            ))
         
         # 4. Reasoning and Planning Metrics (ALFWorld-style)
         if agent_task.get('category') == 'Reasoning':
             reasoning_steps = extracted_metrics.get('reasoning_steps', [])
-            metrics.append(agent_metrics_collector.measure_reasoning_accuracy(reasoning_steps))
+            reasoning_result = agent_metrics_collector.measure_reasoning_accuracy(reasoning_steps)
+            metrics.append(MetricResult(
+                name=reasoning_result.name,
+                value=reasoning_result.value,
+                threshold=reasoning_result.threshold,
+                passed=reasoning_result.passed,
+                category=reasoning_result.category,
+                weight=reasoning_result.weight,
+                metadata=reasoning_result.metadata
+            ))
             
             plan_steps = extracted_metrics.get('plan_steps', [])
-            metrics.append(agent_metrics_collector.measure_plan_feasibility(plan_steps))
+            plan_result = agent_metrics_collector.measure_plan_feasibility(plan_steps)
+            metrics.append(MetricResult(
+                name=plan_result.name,
+                value=plan_result.value,
+                threshold=plan_result.threshold,
+                passed=plan_result.passed,
+                category=plan_result.category,
+                weight=plan_result.weight,
+                metadata=plan_result.metadata
+            ))
         
         # 5. Overall Agent Performance Metrics
         execution_events = extracted_metrics.get('execution_events', [])
-        metrics.append(agent_metrics_collector.measure_execution_efficiency(execution_events))
+        exec_result = agent_metrics_collector.measure_execution_efficiency(execution_events)
+        metrics.append(MetricResult(
+            name=exec_result.name,
+            value=exec_result.value,
+            threshold=exec_result.threshold,
+            passed=exec_result.passed,
+            category=exec_result.category,
+            weight=exec_result.weight,
+            metadata=exec_result.metadata
+        ))
         
         reliability_events = extracted_metrics.get('reliability_events', [])
-        metrics.append(agent_metrics_collector.measure_reliability_score(reliability_events))
+        reliability_result = agent_metrics_collector.measure_reliability_score(reliability_events)
+        metrics.append(MetricResult(
+            name=reliability_result.name,
+            value=reliability_result.value,
+            threshold=reliability_result.threshold,
+            passed=reliability_result.passed,
+            category=reliability_result.category,
+            weight=reliability_result.weight,
+            metadata=reliability_result.metadata
+        ))
         
         return metrics
     
