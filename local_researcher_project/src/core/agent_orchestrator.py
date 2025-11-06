@@ -25,6 +25,21 @@ from src.core.skills_loader import Skill
 
 logger = logging.getLogger(__name__)
 
+# Logger가 handler가 없으면 root logger의 handler 사용
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    # Root logger의 handler 사용 (main.py에서 설정된 handler)
+    parent_logger = logging.getLogger()
+    if parent_logger.handlers:
+        logger.handlers = parent_logger.handlers
+        logger.propagate = True
+    else:
+        # Fallback: 기본 handler 설정
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
 
 ###################
 # State Definitions
@@ -44,12 +59,16 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_query: str
     research_plan: Optional[str]
-    research_results: Annotated[list[str], override_reducer]
-    verified_results: Annotated[list[str], override_reducer]
+    research_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
+    verified_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
     final_report: Optional[str]
     current_agent: Optional[str]
     iteration: int
     session_id: Optional[str]
+    research_failed: bool
+    verification_failed: bool
+    report_failed: bool
+    error: Optional[str]
 
 
 ###################
