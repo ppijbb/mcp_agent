@@ -518,21 +518,46 @@ class AutonomousResearchSystem:
     def _extract_sources_from_workflow(self, workflow_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract sources from workflow results."""
         sources = []
+        seen_urls = set()
         
-        # Extract from research results
+        # Extract from verified results (우선)
+        verified_results = workflow_result.get("verified_results", [])
+        for result in verified_results:
+            if isinstance(result, dict):
+                url = result.get('url', '')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append({
+                        "title": result.get('title', ''),
+                        "url": url,
+                        "snippet": result.get('snippet', '')
+                    })
+        
+        # Extract from research results (백업)
         research_results = workflow_result.get("research_results", [])
         for result in research_results:
-            if isinstance(result, str) and "Source:" in result:
-                # Extract URL from result string
+            if isinstance(result, dict):
+                url = result.get('url', '')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append({
+                        "title": result.get('title', ''),
+                        "url": url,
+                        "snippet": result.get('snippet', '')
+                    })
+            elif isinstance(result, str) and "Source:" in result:
+                # Extract URL from result string (레거시)
                 parts = result.split("Source:")
                 if len(parts) > 1:
                     url = parts[1].strip()
-                    title = parts[0].split(":")[-1].strip() if ":" in parts[0] else ""
-                    sources.append({
-                        "title": title,
-                        "url": url,
-                        "snippet": ""
-                    })
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        title = parts[0].split(":")[-1].strip() if ":" in parts[0] else ""
+                        sources.append({
+                            "title": title,
+                            "url": url,
+                            "snippet": ""
+                        })
         
         return sources[:20]  # Limit to 20 sources
     

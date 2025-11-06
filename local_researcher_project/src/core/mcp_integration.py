@@ -2057,10 +2057,17 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         continue
                     
                 except Exception as mcp_error:
-                    logger.warning(f"MCP 서버 {server_name} 검색 실패: {mcp_error}, 다음 서버 시도")
-                    import traceback
-                    logger.debug(f"Traceback: {traceback.format_exc()}")
-                    continue
+                    error_str = str(mcp_error)
+                    # ToolResult 관련 오류는 명확히 처리
+                    if "ToolResult" in error_str or "cannot access local variable" in error_str:
+                        logger.error(f"MCP 서버 {server_name} 검색 실패 (코드 오류): {mcp_error}")
+                        # 다음 서버로 계속 진행
+                        continue
+                    else:
+                        logger.warning(f"MCP 서버 {server_name} 검색 실패: {mcp_error}, 다음 서버 시도")
+                        import traceback
+                        logger.debug(f"Traceback: {traceback.format_exc()}")
+                        continue
             
             # 모든 MCP 서버 실패 시 에러 반환 (fallback 제거)
             logger.error(f"All MCP search tools failed for query: {query}")

@@ -85,15 +85,23 @@ class PlannerAgent:
             self.instruction = "You are a research planning agent."
     
     async def execute(self, state: AgentState) -> AgentState:
-        """Execute planning task with Skills-based instruction."""
-        logger.info(f"[{self.name}] Planning research for: {state['user_query']}")
+        """Execute planning task with Skills-based instruction and detailed logging."""
+        logger.info(f"=" * 80)
+        logger.info(f"[{self.name.upper()}] Starting research planning")
+        logger.info(f"Query: {state['user_query']}")
+        logger.info(f"Session: {state['session_id']}")
+        logger.info(f"=" * 80)
         
         # Read from shared memory
         memory = self.context.shared_memory
         previous_plans = memory.search(state['user_query'], limit=3)
         
+        logger.info(f"[{self.name}] Previous plans found: {len(previous_plans) if previous_plans else 0}")
+        
         # Skills-based instruction 사용
         instruction = self.instruction if self.skill else "You are a research planning agent."
+        
+        logger.info(f"[{self.name}] Using skill: {self.skill is not None}")
         
         # LLM 호출은 llm_manager를 통해 Gemini 직결 사용
         from src.core.llm_manager import execute_llm_task, TaskType
@@ -114,6 +122,7 @@ Create a comprehensive research plan with:
 
 Keep it concise and actionable (max 300 words)."""
 
+        logger.info(f"[{self.name}] Calling LLM for planning...")
         # Gemini 실행
         model_result = await execute_llm_task(
             prompt=prompt,
@@ -122,6 +131,9 @@ Keep it concise and actionable (max 300 words)."""
             system_message=None
         )
         plan = model_result.content or 'No plan generated'
+        
+        logger.info(f"[{self.name}] ✅ Plan generated: {len(plan)} characters")
+        logger.info(f"[{self.name}] Plan preview: {plan[:200]}...")
         
         state['research_plan'] = plan
         state['current_agent'] = self.name
@@ -134,6 +146,9 @@ Keep it concise and actionable (max 300 words)."""
             session_id=state['session_id'],
             agent_id=self.name
         )
+        
+        logger.info(f"[{self.name}] Plan saved to shared memory")
+        logger.info(f"=" * 80)
         
         return state
 
@@ -158,8 +173,12 @@ class ExecutorAgent:
             self.instruction = "You are a research execution agent."
     
     async def execute(self, state: AgentState) -> AgentState:
-        """Execute research tasks."""
-        logger.info(f"[{self.name}] Executing research for: {state['user_query']}")
+        """Execute research tasks with detailed logging."""
+        logger.info(f"=" * 80)
+        logger.info(f"[{self.name.upper()}] Starting research execution")
+        logger.info(f"Query: {state['user_query']}")
+        logger.info(f"Session: {state['session_id']}")
+        logger.info(f"=" * 80)
         
         # Read plan from shared memory
         memory = self.context.shared_memory
@@ -168,6 +187,10 @@ class ExecutorAgent:
             scope=MemoryScope.SESSION,
             session_id=state['session_id']
         )
+        
+        logger.info(f"[{self.name}] Research plan loaded: {plan is not None}")
+        if plan:
+            logger.info(f"[{self.name}] Plan preview: {plan[:200]}...")
         
         # 실제 연구 실행 - MCP Hub를 통한 검색 수행
         query = state['user_query']
@@ -178,43 +201,93 @@ class ExecutorAgent:
             from src.core.mcp_integration import get_mcp_hub, execute_tool, ToolCategory
             
             hub = get_mcp_hub()
-            if not hub.openrouter_client or (hasattr(hub.openrouter_client, 'session') and not hub.openrouter_client.session):
-                logger.info("Initializing MCP Hub...")
+            logger.info(f"[{self.name}] MCP Hub status: {len(hub.mcp_sessions) if hub.mcp_sessions else 0} servers connected")
+            
+            if not hub.mcp_sessions:
+                logger.info(f"[{self.name}] Initializing MCP Hub...")
                 await hub.initialize_mcp()
+                logger.info(f"[{self.name}] MCP Hub initialized: {len(hub.mcp_sessions)} servers")
             
             # 검색 도구 실행
+            logger.info(f"[{self.name}] Executing search: '{query}'")
             search_result = await execute_tool(
                 "g-search",
                 {"query": query, "max_results": 10}
             )
             
+            logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, error={search_result.get('error')}")
+            
             if search_result.get('success') and search_result.get('data'):
                 data = search_result.get('data', {})
-                search_results = data.get('results', []) if isinstance(data, dict) else []
+                
+                # 검색 결과 파싱 - 다양한 형식 지원
+                search_results = []
+                if isinstance(data, dict):
+                    # 표준 형식: {"results": [...]}
+                    search_results = data.get('results', [])
+                    if not search_results:
+                        # 다른 키 시도
+                        search_results = data.get('items', data.get('data', []))
+                elif isinstance(data, list):
+                    search_results = data
+                
+                logger.info(f"[{self.name}] Parsed {len(search_results)} search results")
                 
                 if search_results and len(search_results) > 0:
-                    # 실제 검색 결과를 사용
-                    for i, result in enumerate(search_results[:5], 1):
-                        title = result.get('title', 'No title')
-                        snippet = result.get('snippet', result.get('content', ''))
-                        url = result.get('url', '')
+                    # 실제 검색 결과를 구조화된 형식으로 저장
+                    unique_results = []
+                    seen_urls = set()
+                    
+                    for i, result in enumerate(search_results, 1):
+                        # 다양한 형식 지원
+                        if isinstance(result, dict):
+                            title = result.get('title', result.get('name', 'No title'))
+                            snippet = result.get('snippet', result.get('content', result.get('summary', '')))
+                            url = result.get('url', result.get('link', result.get('href', '')))
+                        elif isinstance(result, str):
+                            # 문자열 형식인 경우 파싱 시도
+                            logger.warning(f"[{self.name}] Result {i} is string, skipping: {result[:100]}")
+                            continue
+                        else:
+                            logger.warning(f"[{self.name}] Unknown result format: {type(result)}")
+                            continue
                         
-                        result_text = f"Research Result {i}: {title}"
-                        if snippet:
-                            result_text += f" - {snippet[:200]}"
+                        # URL 중복 제거
+                        if url and url in seen_urls:
+                            logger.debug(f"[{self.name}] Duplicate URL skipped: {url}")
+                            continue
                         if url:
-                            result_text += f" (Source: {url})"
+                            seen_urls.add(url)
                         
-                        results.append(result_text)
+                        # 구조화된 결과 저장
+                        result_dict = {
+                            "index": len(unique_results) + 1,
+                            "title": title,
+                            "snippet": snippet[:500] if snippet else "",
+                            "url": url,
+                            "source": "search"
+                        }
+                        unique_results.append(result_dict)
+                        
+                        logger.info(f"[{self.name}] Result {i}: {title[:50]}... (URL: {url[:50] if url else 'N/A'}...)")
+                    
+                    # 결과를 구조화된 형식으로 저장
+                    if unique_results:
+                        results = unique_results
+                        logger.info(f"[{self.name}] ✅ Collected {len(results)} unique results")
+                    else:
+                        error_msg = f"연구 실행 실패: 검색 결과를 파싱할 수 없습니다."
+                        logger.error(f"[{self.name}] ❌ {error_msg}")
+                        raise RuntimeError(error_msg)
                 else:
                     # 검색 결과가 없음 - 실패 처리
                     error_msg = f"연구 실행 실패: '{query}'에 대한 검색 결과를 찾을 수 없습니다."
-                    logger.error(error_msg)
+                    logger.error(f"[{self.name}] ❌ {error_msg}")
                     raise RuntimeError(error_msg)
             else:
                 # 검색 실패 - 에러 반환
                 error_msg = f"연구 실행 실패: 검색 도구 실행 중 오류가 발생했습니다. {search_result.get('error', 'Unknown error')}"
-                logger.error(error_msg)
+                logger.error(f"[{self.name}] ❌ {error_msg}")
                 raise RuntimeError(error_msg)
                 
         except Exception as e:
@@ -241,19 +314,23 @@ class ExecutorAgent:
             return state
         
         # 성공적으로 결과 수집된 경우
-        state['research_results'].extend(results)
+        state['research_results'] = results  # 리스트로 저장 (덮어쓰기)
         state['current_agent'] = self.name
         state['research_failed'] = False
         
-        # Write to shared memory
-        for i, result in enumerate(results):
-            memory.write(
-                key=f"result_{i}_{state['session_id']}",
-                value=result,
-                scope=MemoryScope.SESSION,
-                session_id=state['session_id'],
-                agent_id=self.name
-            )
+        logger.info(f"[{self.name}] ✅ Research execution completed: {len(results)} results")
+        
+        # Write to shared memory (구조화된 형식)
+        memory.write(
+            key=f"research_results_{state['session_id']}",
+            value=results,
+            scope=MemoryScope.SESSION,
+            session_id=state['session_id'],
+            agent_id=self.name
+        )
+        
+        logger.info(f"[{self.name}] Results saved to shared memory")
+        logger.info(f"=" * 80)
         
         return state
 
@@ -278,12 +355,14 @@ class VerifierAgent:
             self.instruction = "You are a verification agent."
     
     async def execute(self, state: AgentState) -> AgentState:
-        """Verify research results."""
-        logger.info(f"[{self.name}] Verifying results...")
+        """Verify research results with LLM-based verification."""
+        logger.info(f"=" * 80)
+        logger.info(f"[{self.name.upper()}] Starting verification")
+        logger.info(f"=" * 80)
         
         # 연구 실패 확인
         if state.get('research_failed'):
-            logger.error("Research execution failed, skipping verification")
+            logger.error(f"[{self.name}] ❌ Research execution failed, skipping verification")
             state['verified_results'] = []
             state['verification_failed'] = True
             state['current_agent'] = self.name
@@ -291,30 +370,91 @@ class VerifierAgent:
         
         memory = self.context.shared_memory
         
-        # Read results from shared memory
+        # Read results from state or shared memory
         results = state.get('research_results', [])
+        if not results:
+            results = memory.read(
+                key=f"research_results_{state['session_id']}",
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id']
+            ) or []
+        
+        logger.info(f"[{self.name}] Found {len(results)} results to verify")
         
         if not results or len(results) == 0:
             error_msg = "검증 실패: 검증할 연구 결과가 없습니다."
-            logger.error(error_msg)
+            logger.error(f"[{self.name}] ❌ {error_msg}")
             state['verified_results'] = []
             state['verification_failed'] = True
             state['error'] = error_msg
             state['current_agent'] = self.name
             return state
         
-        # 실제 결과 검증 (단순 패턴 확인)
-        verified = []
-        for result in results:
-            # 기본 검증: 결과가 실제 정보를 포함하는지 확인
-            if result and len(result) > 20 and "Research Result" in result:
-                verified.append(f"✅ Verified: {result}")
-            else:
-                verified.append(f"⚠️ Partial verification: {result}")
+        # LLM을 사용한 실제 검증
+        from src.core.llm_manager import execute_llm_task, TaskType
         
-        state['verified_results'].extend(verified)
+        verified = []
+        for i, result in enumerate(results, 1):
+            if isinstance(result, dict):
+                title = result.get('title', '')
+                snippet = result.get('snippet', '')
+                url = result.get('url', '')
+                
+                # LLM으로 검증
+                verification_prompt = f"""다음 검색 결과를 검증하세요:
+
+제목: {title}
+내용: {snippet[:300]}
+URL: {url}
+
+원래 쿼리: {state['user_query']}
+
+이 결과가 쿼리와 관련이 있고 신뢰할 수 있는지 검증하세요.
+응답 형식: "VERIFIED" 또는 "REJECTED"와 간단한 이유를 한 줄로 작성하세요."""
+                
+                try:
+                    verification_result = await execute_llm_task(
+                        prompt=verification_prompt,
+                        task_type=TaskType.VERIFICATION,
+                        model_name=None,
+                        system_message="You are a verification agent. Verify if search results are relevant and reliable."
+                    )
+                    
+                    verification_text = verification_result.content or "UNKNOWN"
+                    is_verified = "VERIFIED" in verification_text.upper() or "REJECT" not in verification_text.upper()
+                    
+                    if is_verified:
+                        verified.append({
+                            "index": i,
+                            "title": title,
+                            "snippet": snippet,
+                            "url": url,
+                            "status": "verified",
+                            "verification_note": verification_text[:200]
+                        })
+                        logger.info(f"[{self.name}] ✅ Result {i} verified: {title[:50]}...")
+                    else:
+                        logger.info(f"[{self.name}] ⚠️ Result {i} rejected: {title[:50]}...")
+                        continue
+                except Exception as e:
+                    logger.warning(f"[{self.name}] Verification failed for result {i}: {e}, including anyway")
+                    verified.append({
+                        "index": i,
+                        "title": title,
+                        "snippet": snippet,
+                        "url": url,
+                        "status": "partial",
+                        "verification_note": "Verification failed, but included"
+                    })
+            else:
+                logger.warning(f"[{self.name}] Unknown result format: {type(result)}")
+                continue
+        
+        logger.info(f"[{self.name}] ✅ Verification completed: {len(verified)}/{len(results)} results verified")
+        
+        state['verified_results'] = verified
         state['current_agent'] = self.name
-        state['verification_failed'] = False
+        state['verification_failed'] = False if verified else True
         
         # Write to shared memory
         memory.write(
@@ -324,6 +464,9 @@ class VerifierAgent:
             session_id=state['session_id'],
             agent_id=self.name
         )
+        
+        logger.info(f"[{self.name}] Verified results saved to shared memory")
+        logger.info(f"=" * 80)
         
         return state
 
@@ -395,8 +538,16 @@ class GeneratorAgent:
         
         memory = self.context.shared_memory
         
-        # Read verified results from shared memory
+        # Read verified results from state or shared memory
         verified_results = state.get('verified_results', [])
+        if not verified_results:
+            verified_results = memory.read(
+                key=f"verified_{state['session_id']}",
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id']
+            ) or []
+        
+        logger.info(f"[{self.name}] Found {len(verified_results)} verified results for report generation")
         
         if not verified_results or len(verified_results) == 0:
             error_msg = "보고서 생성 실패: 검증된 연구 결과가 없습니다."
@@ -440,19 +591,58 @@ class GeneratorAgent:
             
             return state
         
-        # 실제 결과가 있는 경우에만 보고서 생성
-        report = f"""
-# Final Report: {state['user_query']}
+        # 실제 결과가 있는 경우 LLM으로 보고서 생성
+        logger.info(f"[{self.name}] Generating report with LLM from {len(verified_results)} verified results...")
+        
+        # 검증된 결과를 텍스트로 변환
+        verified_text = ""
+        for result in verified_results:
+            if isinstance(result, dict):
+                verified_text += f"\n- {result.get('title', '')}: {result.get('snippet', '')[:200]}... (Source: {result.get('url', '')})\n"
+            else:
+                verified_text += f"\n- {str(result)}\n"
+        
+        # LLM으로 보고서 생성
+        from src.core.llm_manager import execute_llm_task, TaskType
+        
+        generation_prompt = f"""다음 검증된 연구 결과를 바탕으로 상세한 보고서를 작성하세요.
+
+원래 질문: {state['user_query']}
+
+검증된 결과:
+{verified_text}
+
+보고서 구조:
+1. Executive Summary (요약)
+2. 주요 발견사항 (Main Findings)
+3. 관련 부품 및 소비재 (Related Components & Consumables)
+4. 결론 (Conclusion)
+
+각 섹션을 상세히 작성하고, 구체적인 정보와 출처를 포함하세요."""
+
+        try:
+            report_result = await execute_llm_task(
+                prompt=generation_prompt,
+                task_type=TaskType.GENERATION,
+                model_name=None,
+                system_message="You are an expert technical writer. Create comprehensive, detailed reports based on verified research results."
+            )
+            
+            report = report_result.content or f"# Report: {state['user_query']}\n\nNo report generated."
+            logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
+        except Exception as e:
+            logger.error(f"[{self.name}] ❌ Report generation failed: {e}")
+            # Fallback: 기본 보고서
+            report = f"""# Final Report: {state['user_query']}
 
 ## Executive Summary
-{chr(10).join(verified_results[:3])}
+Based on {len(verified_results)} verified research results.
 
 ## Detailed Findings
-{chr(10).join(verified_results)}
+{verified_text}
 
 ## Conclusion
-Based on comprehensive research and verification, this report provides
-a thorough analysis of the topic with high confidence.
+Report generation completed with {len(verified_results)} verified results.
 """
         
         state['final_report'] = report
@@ -467,6 +657,9 @@ a thorough analysis of the topic with high confidence.
             session_id=state['session_id'],
             agent_id=self.name
         )
+        
+        logger.info(f"[{self.name}] ✅ Report saved to shared memory")
+        logger.info(f"=" * 80)
         
         return state
 
@@ -538,24 +731,53 @@ class AgentOrchestrator:
         logger.info("LangGraph workflow built")
     
     async def _planner_node(self, state: AgentState) -> AgentState:
-        """Planner node execution."""
-        return await self.planner.execute(state)
+        """Planner node execution with tracking."""
+        logger.info("=" * 80)
+        logger.info("🔵 [WORKFLOW] → Planner Node")
+        logger.info("=" * 80)
+        result = await self.planner.execute(state)
+        logger.info(f"🔵 [WORKFLOW] ✓ Planner completed: {result.get('current_agent')}")
+        return result
     
     async def _executor_node(self, state: AgentState) -> AgentState:
-        """Executor node execution."""
-        return await self.executor.execute(state)
+        """Executor node execution with tracking."""
+        logger.info("=" * 80)
+        logger.info("🟢 [WORKFLOW] → Executor Node")
+        logger.info("=" * 80)
+        result = await self.executor.execute(state)
+        logger.info(f"🟢 [WORKFLOW] ✓ Executor completed: {len(result.get('research_results', []))} results")
+        return result
     
     async def _verifier_node(self, state: AgentState) -> AgentState:
-        """Verifier node execution."""
-        return await self.verifier.execute(state)
+        """Verifier node execution with tracking."""
+        logger.info("=" * 80)
+        logger.info("🟡 [WORKFLOW] → Verifier Node")
+        logger.info("=" * 80)
+        result = await self.verifier.execute(state)
+        logger.info(f"🟡 [WORKFLOW] ✓ Verifier completed: {len(result.get('verified_results', []))} verified")
+        return result
     
     async def _generator_node(self, state: AgentState) -> AgentState:
-        """Generator node execution."""
-        return await self.generator.execute(state)
+        """Generator node execution with tracking."""
+        logger.info("=" * 80)
+        logger.info("🟣 [WORKFLOW] → Generator Node")
+        logger.info("=" * 80)
+        result = await self.generator.execute(state)
+        logger.info(f"🟣 [WORKFLOW] ✓ Generator completed: report_length={len(result.get('final_report', ''))}")
+        return result
     
     async def _end_node(self, state: AgentState) -> AgentState:
-        """End node - final state."""
-        logger.info("Workflow completed")
+        """End node - final state with summary."""
+        logger.info("=" * 80)
+        logger.info("✅ [WORKFLOW] → End Node - Workflow Completed")
+        logger.info("=" * 80)
+        logger.info(f"Session: {state.get('session_id')}")
+        logger.info(f"Final Agent: {state.get('current_agent')}")
+        logger.info(f"Research Results: {len(state.get('research_results', []))}")
+        logger.info(f"Verified Results: {len(state.get('verified_results', []))}")
+        logger.info(f"Report Generated: {bool(state.get('final_report'))}")
+        logger.info(f"Failed: {state.get('research_failed') or state.get('verification_failed') or state.get('report_failed')}")
+        logger.info("=" * 80)
         return state
     
     async def execute(self, user_query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
