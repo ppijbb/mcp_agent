@@ -588,34 +588,34 @@ class UniversalMCPHub:
             settings["pre_init_delay"] = 2.0  # npx 프로세스 시작 대기
             settings["post_init_delay"] = 1.0  # 초기화 후 안정화 대기
         
-        # 특정 서버별 커스텀 설정
+        # 특정 서버별 커스텀 설정 - 타임아웃을 10초로 단축 (빠른 실패)
         if server_name == "exa":
-            settings["timeout"] = 20.0  # HTTP 서버는 빠름
+            settings["timeout"] = 10.0  # HTTP 서버는 빠름
         elif server_name == "semantic_scholar":
-            settings["timeout"] = 25.0  # HTTP 서버지만 인증 처리 필요
+            settings["timeout"] = 10.0  # HTTP 서버지만 인증 처리 필요
         elif server_name == "context7-mcp":
-            settings["timeout"] = 40.0  # Upstash 서버는 초기화 시간 필요
-            settings["pre_init_delay"] = 1.5
+            settings["timeout"] = 10.0  # Upstash 서버는 초기화 시간 필요하지만 빠른 실패 우선
+            settings["pre_init_delay"] = 0.5
         elif server_name == "parallel-search":
-            settings["timeout"] = 35.0
-            settings["pre_init_delay"] = 1.0
+            settings["timeout"] = 10.0
+            settings["pre_init_delay"] = 0.5
         elif server_name == "unified-search-mcp-server":
-            settings["timeout"] = 40.0
-            settings["pre_init_delay"] = 1.0
+            settings["timeout"] = 10.0
+            settings["pre_init_delay"] = 0.5
         elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
-            settings["timeout"] = 40.0  # API 키 검증 시간 필요
-            settings["pre_init_delay"] = 1.5
+            settings["timeout"] = 10.0  # API 키 검증 시간 필요하지만 빠른 실패 우선
+            settings["pre_init_delay"] = 0.5
         elif server_name == "ddg_search":
-            settings["timeout"] = 40.0  # uvx 기반 서버는 초기화 시간 필요
-            settings["pre_init_delay"] = 2.0  # uvx 패키지 다운로드 시간 고려
-            settings["post_init_delay"] = 1.0
+            settings["timeout"] = 10.0  # uvx 기반 서버는 초기화 시간 필요하지만 빠른 실패 우선
+            settings["pre_init_delay"] = 1.0  # uvx 패키지 다운로드 시간 고려
+            settings["post_init_delay"] = 0.5
         elif server_name in ["fetch", "docfork"]:
-            settings["timeout"] = 35.0  # smithery 서버는 안정적
-            settings["pre_init_delay"] = 1.0
+            settings["timeout"] = 10.0  # smithery 서버는 안정적이지만 빠른 실패 우선
+            settings["pre_init_delay"] = 0.5
         
         # HTTP 서버는 빠르게
         if not is_stdio:
-            settings["timeout"] = min(settings["timeout"], 20.0)
+            settings["timeout"] = min(settings["timeout"], 10.0)
             settings["pre_init_delay"] = 0.0
             settings["post_init_delay"] = 0.0
         
@@ -1828,6 +1828,7 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
     import time
     from src.core.result_cache import get_result_cache
     
+    # ToolResult는 이미 파일 상단에서 정의되어 있으므로 import 불필요
     start_time = time.time()
     query = parameters.get("query", "")
     max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
@@ -1843,7 +1844,6 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
     if cached_result:
         logger.debug(f"[MCP][_execute_search_tool] Cache hit for {tool_name}")
         # ToolResult 형식으로 변환
-        from src.core.mcp_integration import ToolResult
         return ToolResult(
             success=cached_result.get("success", False),
             data=cached_result.get("data"),
@@ -1867,17 +1867,24 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
             
             # mcp_config.json에 정의된 모든 서버 확인
             for server_name in mcp_hub.mcp_server_configs.keys():
-                # 연결이 안 되어 있으면 연결 시도
+                # 연결이 안 되어 있으면 연결 시도 (타임아웃 10초로 제한)
                 if server_name not in mcp_hub.mcp_sessions:
-                    logger.info(f"MCP server {server_name} not connected, attempting connection...")
+                    logger.info(f"MCP server {server_name} not connected, attempting connection (timeout: 10s)...")
                     try:
                         server_config = mcp_hub.mcp_server_configs[server_name]
-                        success = await mcp_hub._connect_to_mcp_server(server_name, server_config)
+                        # 타임아웃 10초로 제한하여 빠르게 실패
+                        success = await asyncio.wait_for(
+                            mcp_hub._connect_to_mcp_server(server_name, server_config),
+                            timeout=10.0
+                        )
                         if not success:
-                            logger.warning(f"Failed to connect to MCP server {server_name}")
+                            logger.warning(f"Failed to connect to MCP server {server_name} (timeout or connection failed)")
                             continue
+                    except asyncio.TimeoutError:
+                        logger.warning(f"MCP server {server_name} connection timeout (10s), skipping...")
+                        continue
                     except Exception as e:
-                        logger.error(f"Error connecting to MCP server {server_name}: {e}")
+                        logger.warning(f"Error connecting to MCP server {server_name}: {e}, skipping...")
                         continue
                 
                 # 도구 맵 확인

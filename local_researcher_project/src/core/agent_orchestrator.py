@@ -403,21 +403,32 @@ class GeneratorAgent:
             logger.error(error_msg)
             
             report = f"""
-# 연구 완료 불가: {state['user_query']}
+# 연구 실패 보고서: {state['user_query']}
 
-## ❌ 보고서 생성 실패
+## ❌ 연구 실행 실패
 
 검증된 연구 결과가 없어 보고서를 생성할 수 없습니다.
 
-### 상황
+### 오류 내용
+{error_msg}
+
+### 상황 분석
 - 연구 실행은 완료되었지만 결과가 없습니다
 - 또는 검증 단계에서 모든 결과가 제외되었습니다
+- 연구 쿼리: {state['user_query']}
+
+### 권장 조치
+1. 검색 쿼리를 다시 확인해주세요
+2. 네트워크 연결 상태를 확인해주세요
+3. MCP 서버 설정을 확인해주세요
+4. 잠시 후 다시 시도해주세요
 
 실제 연구 데이터 없이 보고서를 생성할 수 없습니다.
 """
             state['final_report'] = report
             state['current_agent'] = self.name
             state['report_failed'] = True
+            state['error'] = error_msg  # 에러 메시지 명시
             
             memory.write(
                 key=f"report_{state['session_id']}",

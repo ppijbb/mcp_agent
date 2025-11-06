@@ -34,7 +34,8 @@ from src.core.researcher_config import load_config_from_env
 # CRITICAL: Load configuration BEFORE importing any modules that depend on it
 config = load_config_from_env()
 
-# Use AutonomousOrchestrator for full research workflow
+# Use new AgentOrchestrator for multi-agent orchestration
+from src.core.agent_orchestrator import AgentOrchestrator as NewAgentOrchestrator
 from src.core.autonomous_orchestrator import AutonomousOrchestrator
 from src.monitoring.system_monitor import HealthMonitor
 
@@ -158,9 +159,9 @@ class AutonomousResearchSystem:
         # Initialize components with 8 innovations
         logger.info("🔧 Initializing system components...")
         try:
-            # Use AutonomousOrchestrator for full research workflow with 8 innovations
-            # Note: AutonomousOrchestrator loads config internally
-            self.orchestrator = AutonomousOrchestrator()
+            # Use new multi-agent orchestrator (no fallback - fail clearly)
+            self.orchestrator = NewAgentOrchestrator()
+            logger.info("✅ Multi-Agent Orchestrator initialized (no fallback mode)")
             logger.info("✅ Autonomous Orchestrator initialized")
         except Exception as e:
             logger.error(f"❌ Orchestrator initialization failed: {e}")
@@ -308,39 +309,108 @@ class AutonomousResearchSystem:
             if streaming:
                 result = await self._run_streaming_research(request)
             else:
-                # Use AutonomousOrchestrator with full research workflow
-                result = await self.orchestrator.run_research(user_request=request, context={})
+                # Use new multi-agent orchestrator (no fallback - fail clearly)
+                workflow_result = await self.orchestrator.execute(request)
                 
-                # Extract content from synthesis
-                final_synthesis = result.get("synthesis_results", {}).get("content", "")
-                if not final_synthesis:
-                    final_synthesis = result.get("content", "")
-                if not final_synthesis:
-                    # Fallback: use execution results
-                    execution_results = result.get("detailed_results", {}).get("execution_results", [])
-                    if execution_results:
-                        final_synthesis = "\n\n".join([
-                            str(r.get("result", r)) for r in execution_results[:5]
-                        ])
+                # 실패 상태 확인 - fallback 없이 명확한 오류 반환
+                research_failed = workflow_result.get('research_failed', False)
+                verification_failed = workflow_result.get('verification_failed', False)
+                report_failed = workflow_result.get('report_failed', False)
+                final_report = workflow_result.get("final_report", "")
                 
-                # Convert to expected format
-                result = {
-                    "query": request,
-                    "content": final_synthesis or "Research completed",
-                    "timestamp": datetime.now().isoformat(),
-                    "metadata": result.get("metadata", {
-                        "model_used": "multi-agent",
-                        "execution_time": 0.0,
-                        "cost": 0.0,
-                        "confidence": result.get("metadata", {}).get("confidence", 0.9)
-                    }),
-                    "synthesis_results": result.get("synthesis_results", {
-                        "content": final_synthesis
-                    }),
-                    "sources": self._extract_sources(result),
-                    "innovation_stats": result.get("innovation_stats", {}),
-                    "system_health": result.get("system_health", {"overall_status": "healthy"})
-                }
+                # 실패 보고서도 실패로 처리 (내용이 "연구 실패" 또는 "연구 완료 불가" 포함)
+                is_failure_report = (
+                    final_report and 
+                    ("연구 실패" in final_report or "연구 완료 불가" in final_report or "❌" in final_report)
+                )
+                
+                if research_failed or verification_failed or report_failed or is_failure_report:
+                    error_msg = workflow_result.get('error', '알 수 없는 오류')
+                    if not error_msg or error_msg == '알 수 없는 오류':
+                        # 실패 보고서에서 오류 메시지 추출
+                        if final_report and "오류 내용" in final_report:
+                            lines = final_report.split("\n")
+                            for i, line in enumerate(lines):
+                                if "오류 내용" in line and i + 1 < len(lines):
+                                    error_msg = lines[i + 1].strip()
+                                    break
+                        elif final_report and "❌" in final_report:
+                            # 실패 보고서에서 간단히 추출
+                            if "연구 실행 실패" in final_report:
+                                error_msg = "연구 실행이 실패했습니다"
+                            elif "보고서 생성 실패" in final_report:
+                                error_msg = "보고서 생성이 실패했습니다"
+                            else:
+                                error_msg = "연구 실행 중 오류가 발생했습니다"
+                    
+                    failed_agent = workflow_result.get('current_agent', 'unknown')
+                    session_id = workflow_result.get("session_id", 'N/A')
+                    
+                    logger.error(f"❌ Research failed at {failed_agent}: {error_msg}")
+                    
+                    # 실패 결과 반환 (사용자가 재시도할 수 있도록)
+                    result = {
+                        "success": False,
+                        "query": request,
+                        "error": error_msg,
+                        "failed_agent": failed_agent,
+                        "session_id": session_id,
+                        "content": final_report or f"연구 실패: {error_msg}",
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "model_used": "multi-agent",
+                            "execution_time": 0.0,
+                            "cost": 0.0,
+                            "confidence": 0.0,
+                            "failed": True
+                        },
+                        "synthesis_results": {
+                            "content": final_report or "",
+                            "failed": True
+                        },
+                        "sources": [],
+                        "innovation_stats": {"multi_agent_orchestration": "enabled"},
+                        "system_health": {"overall_status": "unhealthy", "error": error_msg},
+                        "retry_available": True
+                    }
+                    
+                    logger.warning("⚠️ Research completed with errors - user can retry")
+                else:
+                    # 성공 결과
+                    final_report = workflow_result.get("final_report", "")
+                    if not final_report:
+                        # 보고서가 없으면 실패로 처리
+                        result = {
+                            "success": False,
+                            "query": request,
+                            "error": "보고서 생성 실패: 최종 보고서가 생성되지 않았습니다",
+                            "failed_agent": "generator",
+                            "session_id": workflow_result.get("session_id", "N/A"),
+                            "content": "연구 실행 중 오류가 발생했습니다.",
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {"failed": True, "confidence": 0.0},
+                            "retry_available": True
+                        }
+                    else:
+                        result = {
+                            "success": True,
+                            "query": request,
+                            "content": final_report,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "model_used": "multi-agent",
+                                "execution_time": 0.0,
+                                "cost": 0.0,
+                                "confidence": 0.9
+                            },
+                            "synthesis_results": {
+                                "content": final_report
+                            },
+                            "sources": self._extract_sources_from_workflow(workflow_result),
+                            "innovation_stats": {"multi_agent_orchestration": "enabled"},
+                            "system_health": {"overall_status": "healthy"},
+                            "session_id": workflow_result.get("session_id")
+                        }
             
             # Apply hierarchical compression if enabled
             # Commented out to avoid serialization errors
@@ -369,11 +439,49 @@ class AutonomousResearchSystem:
             return result
             
         except Exception as e:
-            logger.error(f"Research failed: {e}")
+            logger.error(f"Research failed with exception: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
             # Get error health status
             error_health = self.health_monitor.get_system_health()
             logger.error(f"System health at failure: {error_health}")
-            raise
+            
+            # 실패 결과 반환 (예외 대신)
+            result = {
+                "success": False,
+                "query": request,
+                "error": f"시스템 오류: {str(e)}",
+                "failed_agent": "system",
+                "content": f"연구 실행 중 시스템 오류가 발생했습니다: {str(e)}",
+                "timestamp": datetime.now().isoformat(),
+                "metadata": {
+                    "model_used": "multi-agent",
+                    "execution_time": 0.0,
+                    "cost": 0.0,
+                    "confidence": 0.0,
+                    "failed": True
+                },
+                "synthesis_results": {"content": "", "failed": True},
+                "sources": [],
+                "innovation_stats": {},
+                "system_health": error_health,
+                "retry_available": True
+            }
+            
+            # 실패 결과도 저장
+            if output_path:
+                await self._save_results_incrementally(result, output_path, output_format)
+            else:
+                output_dir = project_root / "output"
+                output_dir.mkdir(exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                default_output = output_dir / f"research_failed_{timestamp}.{output_format}"
+                await self._save_results_incrementally(result, str(default_output), output_format)
+                self._display_results(result)
+            
+            # 예외를 발생시키지 않고 결과 반환
+            return result
     
     async def _run_streaming_research(self, request: str) -> Dict[str, Any]:
         """Run research with streaming pipeline (Innovation 5)."""
@@ -407,8 +515,29 @@ class AutonomousResearchSystem:
         logger.info("✅ Streaming research completed")
         return formatted_result
     
+    def _extract_sources_from_workflow(self, workflow_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract sources from workflow results."""
+        sources = []
+        
+        # Extract from research results
+        research_results = workflow_result.get("research_results", [])
+        for result in research_results:
+            if isinstance(result, str) and "Source:" in result:
+                # Extract URL from result string
+                parts = result.split("Source:")
+                if len(parts) > 1:
+                    url = parts[1].strip()
+                    title = parts[0].split(":")[-1].strip() if ":" in parts[0] else ""
+                    sources.append({
+                        "title": title,
+                        "url": url,
+                        "snippet": ""
+                    })
+        
+        return sources[:20]  # Limit to 20 sources
+    
     def _extract_sources(self, result: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract sources from research results."""
+        """Extract sources from research results (legacy method)."""
         sources = []
         
         # Try to extract from execution results
@@ -501,6 +630,20 @@ class AutonomousResearchSystem:
         """Display results with enhanced formatting."""
         print("\n📋 Research Results with 8 Core Innovations:")
         print("=" * 80)
+        
+        # 실패 상태 확인 및 표시
+        if not result.get('success', True):
+            print("\n❌ 연구 실행 실패")
+            print("=" * 80)
+            print(f"\n오류: {result.get('error', '알 수 없는 오류')}")
+            print(f"실패 단계: {result.get('failed_agent', 'unknown')}")
+            print(f"\n세션 ID: {result.get('session_id', 'N/A')}")
+            print("\n재시도 방법:")
+            print("1. 같은 쿼리로 다시 시도: python main.py --request 'YOUR_QUERY'")
+            print("2. 다른 검색어로 시도")
+            print("3. 네트워크 연결 확인")
+            print("=" * 80)
+            return
         
         # Display main research content
         if 'content' in result and result['content']:
