@@ -235,40 +235,74 @@ class ExecutorAgent:
             )
             
             logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, error={search_result.get('error')}")
+            logger.info(f"[{self.name}] Search result type: {type(search_result)}, keys: {list(search_result.keys()) if isinstance(search_result, dict) else 'N/A'}")
             
             if search_result.get('success') and search_result.get('data'):
                 data = search_result.get('data', {})
+                logger.info(f"[{self.name}] Data type: {type(data)}, keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
                 
                 # 검색 결과 파싱 - 다양한 형식 지원
                 search_results = []
                 if isinstance(data, dict):
-                    # 표준 형식: {"results": [...]}
+                    # 표준 형식: {"query": "...", "results": [...], "total_results": N, "source": "..."}
                     search_results = data.get('results', [])
+                    logger.info(f"[{self.name}] Found 'results' key: {len(search_results)} items")
+                    
                     if not search_results:
                         # 다른 키 시도
                         search_results = data.get('items', data.get('data', []))
+                        logger.info(f"[{self.name}] Tried 'items' or 'data' keys: {len(search_results)} items")
+                    
+                    # data 자체가 리스트인 경우 (중첩된 경우)
+                    if not search_results and isinstance(data, dict):
+                        # data의 값 중 리스트 찾기
+                        for key, value in data.items():
+                            if isinstance(value, list) and len(value) > 0:
+                                # 첫 번째 항목이 dict인지 확인
+                                if value and isinstance(value[0], dict):
+                                    search_results = value
+                                    logger.info(f"[{self.name}] Found list in key '{key}': {len(search_results)} items")
+                                    break
                 elif isinstance(data, list):
                     search_results = data
+                    logger.info(f"[{self.name}] Data is directly a list: {len(search_results)} items")
                 
-                logger.info(f"[{self.name}] Parsed {len(search_results)} search results")
+                logger.info(f"[{self.name}] ✅ Parsed {len(search_results)} search results")
+                
+                # 디버깅: 첫 번째 결과 샘플 출력
+                if search_results and len(search_results) > 0:
+                    first_result = search_results[0]
+                    logger.info(f"[{self.name}] First result type: {type(first_result)}, sample: {str(first_result)[:200]}")
                 
                 if search_results and len(search_results) > 0:
                     # 실제 검색 결과를 구조화된 형식으로 저장
                     unique_results = []
                     seen_urls = set()
                     
+                    logger.info(f"[{self.name}] Processing {len(search_results)} results...")
+                    
                     for i, result in enumerate(search_results, 1):
                         # 다양한 형식 지원
                         if isinstance(result, dict):
-                            title = result.get('title', result.get('name', 'No title'))
-                            snippet = result.get('snippet', result.get('content', result.get('summary', '')))
-                            url = result.get('url', result.get('link', result.get('href', '')))
+                            title = result.get('title', result.get('name', result.get('Title', 'No title')))
+                            snippet = result.get('snippet', result.get('content', result.get('summary', result.get('description', result.get('abstract', '')))))
+                            url = result.get('url', result.get('link', result.get('href', result.get('URL', ''))))
+                            
+                            logger.debug(f"[{self.name}] Result {i}: title={title[:50] if title else 'N/A'}, url={url[:50] if url else 'N/A'}")
                         elif isinstance(result, str):
-                            # 문자열 형식인 경우 파싱 시도
-                            logger.warning(f"[{self.name}] Result {i} is string, skipping: {result[:100]}")
-                            continue
+                            # 문자열 형식인 경우 파싱 시도 (마크다운 링크 형식)
+                            import re
+                            link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', result.strip())
+                            if link_match:
+                                title = link_match.group(1)
+                                url = link_match.group(2)
+                                snippet = ""
+                                logger.info(f"[{self.name}] Parsed string result {i} as markdown: {title[:50]}")
+                            else:
+                                logger.warning(f"[{self.name}] Result {i} is string but not markdown format, skipping: {result[:100]}")
+                                continue
                         else:
-                            logger.warning(f"[{self.name}] Unknown result format: {type(result)}")
+                            logger.warning(f"[{self.name}] Unknown result format for result {i}: {type(result)}, value: {str(result)[:100]}")
                             continue
                         
                         # URL 중복 제거
