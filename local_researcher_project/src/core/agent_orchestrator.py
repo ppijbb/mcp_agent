@@ -297,13 +297,19 @@ class ExecutorAgent:
                                 current_result = None
                                 
                                 for line in lines:
+                                    original_line = line
                                     line = line.strip()
                                     if not line:
                                         continue
                                     
-                                    # 마크다운 링크 패턴: "1. [Title](URL)" 또는 "1. Title\n   URL: ..."
+                                    # 패턴 1: 마크다운 링크 "1. [Title](URL)"
                                     link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
-                                    url_match = re.search(r'URL:\s*(https?://[^\s]+)', line)
+                                    # 패턴 2: 번호와 제목만 "1. [Title]" 또는 "1. Title"
+                                    title_match = re.match(r'^\d+\.\s*(?:\[([^\]]+)\]|(.+?))(?:\s*$|:)', line)
+                                    # 패턴 3: URL 줄 "   URL: https://..."
+                                    url_match = re.search(r'URL:\s*(https?://[^\s]+)', line, re.IGNORECASE)
+                                    # 패턴 4: Summary 줄 "   Summary: ..."
+                                    summary_match = re.search(r'Summary:\s*(.+)$', line, re.IGNORECASE)
                                     
                                     if link_match:
                                         # 이전 결과 저장
@@ -317,15 +323,38 @@ class ExecutorAgent:
                                             "url": url_parsed,
                                             "snippet": ""
                                         }
-                                    elif url_match and current_result:
+                                    elif title_match and not current_result:
+                                        # 번호와 제목만 있는 경우 (다음 줄에 URL이 올 것으로 예상)
+                                        title_parsed = title_match.group(1) or title_match.group(2)
+                                        if title_parsed:
+                                            current_result = {
+                                                "title": title_parsed.strip(),
+                                                "url": "",
+                                                "snippet": ""
+                                            }
+                                    elif url_match:
                                         # URL이 별도 줄에 있는 경우
-                                        current_result["url"] = url_match.group(1)
-                                    elif current_result and line and not line.startswith('URL:'):
-                                        # 설명 텍스트
-                                        if current_result["snippet"]:
-                                            current_result["snippet"] += " " + line
+                                        if current_result:
+                                            current_result["url"] = url_match.group(1)
                                         else:
-                                            current_result["snippet"] = line
+                                            # URL만 있고 제목이 없는 경우 (이전 결과에 추가)
+                                            if parsed_results:
+                                                parsed_results[-1]["url"] = url_match.group(1)
+                                    elif summary_match and current_result:
+                                        # Summary 줄
+                                        current_result["snippet"] = summary_match.group(1).strip()
+                                    elif current_result and line and not any([
+                                        line.startswith('URL:'), 
+                                        line.startswith('Summary:'),
+                                        line.startswith('Found'),
+                                        'search results' in line.lower()
+                                    ]):
+                                        # 설명 텍스트 (들여쓰기된 경우)
+                                        if original_line.startswith('   ') or original_line.startswith('\t'):
+                                            if current_result["snippet"]:
+                                                current_result["snippet"] += " " + line
+                                            else:
+                                                current_result["snippet"] = line
                                 
                                 # 마지막 결과 추가
                                 if current_result and current_result.get('title'):
@@ -720,83 +749,52 @@ class GeneratorAgent:
             else:
                 verified_text += f"\n- {str(result)}\n"
         
-        # LLM으로 보고서 생성
+        # LLM으로 사용자 요청에 맞는 형식으로 생성
         from src.core.llm_manager import execute_llm_task, TaskType
         
-        generation_prompt = f"""다음 검증된 연구 결과를 바탕으로 기술 보고서를 작성하세요.
+        # 사용자 요청을 그대로 전달 - LLM이 형식을 결정하도록
+        generation_prompt = f"""사용자 요청: {state['user_query']}
 
-원래 질문: {state['user_query']}
-
-검증된 결과:
+검증된 연구 결과:
 {verified_text}
 
-보고서 구조:
-1. Executive Summary (요약)
-2. 주요 발견사항 (Main Findings)
-3. 관련 부품 및 소비재 (Related Components & Consumables)
-4. 결론 (Conclusion)
+사용자의 요청을 정확히 이해하고, 요청한 형식에 맞게 결과를 생성하세요.
+- 보고서를 요청했다면 보고서 형식으로
+- 코드를 요청했다면 실행 가능한 코드로
+- 문서를 요청했다면 문서 형식으로
 
-각 섹션을 상세히 작성하고, 구체적인 정보와 출처를 포함하세요.
-기술적이고 전문적인 내용으로 작성하되, 안전하고 건전한 표현을 사용하세요."""
+요청된 형식에 맞게 완전하고 실행 가능한 결과를 생성하세요."""
 
         try:
             report_result = await execute_llm_task(
                 prompt=generation_prompt,
                 task_type=TaskType.GENERATION,
                 model_name=None,
-                system_message="You are an expert technical writer. Create comprehensive, detailed technical reports based on verified research results. Use professional and safe language."
+                system_message="You are an expert assistant. Generate results in the exact format requested by the user. If they ask for a report, create a report. If they ask for code, create executable code. Follow the user's request precisely without adding unnecessary templates or structures."
             )
             
             report = report_result.content or f"# Report: {state['user_query']}\n\nNo report generated."
             
-            # Safety filter 차단 확인
+            # Safety filter 차단 확인 - Fallback 제거, 명확한 오류 반환
             if "blocked by safety" in report.lower() or "content blocked" in report.lower() or len(report) < 100:
-                logger.warning(f"[{self.name}] ⚠️ Report may have been blocked by safety filter, creating fallback report")
-                # Fallback: 검증된 결과를 직접 정리한 보고서 생성
-                report = f"""# 기술 보고서: {state['user_query']}
-
-## Executive Summary
-
-다음 {len(verified_results)}개의 검증된 연구 결과를 바탕으로 작성된 보고서입니다.
-
-## 주요 발견사항
-
-"""
-                for i, result in enumerate(verified_results[:10], 1):
-                    if isinstance(result, dict):
-                        title = result.get('title', '')
-                        snippet = result.get('snippet', '')
-                        url = result.get('url', '')
-                        report += f"\n### {i}. {title}\n\n"
-                        if snippet:
-                            report += f"{snippet[:300]}...\n\n"
-                        if url:
-                            report += f"출처: {url}\n\n"
-                
-                report += f"""
-## 결론
-
-위의 검증된 연구 결과를 종합하여 {state['user_query']}에 대한 정보를 제공합니다.
-
-총 {len(verified_results)}개의 검증된 소스에서 정보를 수집했습니다.
-"""
-                logger.info(f"[{self.name}] ✅ Fallback report generated: {len(report)} characters")
+                error_msg = "보고서 생성 실패: Safety filter에 의해 차단되었습니다. 프롬프트를 수정하거나 다른 모델을 사용해주세요."
+                logger.error(f"[{self.name}] ❌ {error_msg}")
+                state['final_report'] = None
+                state['report_failed'] = True
+                state['error'] = error_msg
+                state['current_agent'] = self.name
+                return state
             else:
                 logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
         except Exception as e:
             logger.error(f"[{self.name}] ❌ Report generation failed: {e}")
-            # Fallback: 기본 보고서
-            report = f"""# Final Report: {state['user_query']}
-
-## Executive Summary
-Based on {len(verified_results)} verified research results.
-
-## Detailed Findings
-{verified_text}
-
-## Conclusion
-Report generation completed with {len(verified_results)} verified results.
-"""
+            # Fallback 제거 - 명확한 오류 반환
+            error_msg = f"보고서 생성 실패: {str(e)}"
+            state['final_report'] = None
+            state['report_failed'] = True
+            state['error'] = error_msg
+            state['current_agent'] = self.name
+            return state
         
         state['final_report'] = report
         state['current_agent'] = self.name

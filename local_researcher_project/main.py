@@ -272,8 +272,35 @@ class AutonomousResearchSystem:
             # sys.exit(0)은 호출하지 않음 - asyncio.run()이 자동으로 처리
             # 대신 루프에서 나가도록 함
     
+    def _detect_output_format_from_content(self, content: str, request: str) -> str:
+        """생성된 내용을 보고 파일 형식 결정 (최소한의 패턴 매칭만)."""
+        if not content:
+            return "md"
+        
+        # 코드 블록 제거 후 내용 확인
+        content_clean = content.replace("```", "").strip()
+        
+        # Python 코드 패턴
+        if ("def " in content_clean[:1000] and "import " in content_clean[:1000]) or content.startswith("```python"):
+            return "py"
+        
+        # Java 코드 패턴
+        if ("public class" in content_clean[:1000] or "public static void" in content_clean[:1000]) or content.startswith("```java"):
+            return "java"
+        
+        # JavaScript 코드 패턴
+        if (("const " in content_clean[:1000] or "function " in content_clean[:1000]) and "console" in content_clean[:1000]) or content.startswith("```javascript"):
+            return "js"
+        
+        # HTML 패턴
+        if content.strip().startswith("<!DOCTYPE") or content.strip().startswith("<html"):
+            return "html"
+        
+        # 기본: Markdown
+        return "md"
+    
     async def run_research(self, request: str, output_path: Optional[str] = None, 
-                          streaming: bool = False, output_format: str = "json") -> Dict[str, Any]:
+                          streaming: bool = False, output_format: Optional[str] = None) -> Dict[str, Any]:
         """연구 실행 - 8가지 핵심 혁신 적용"""
         logger.info("🤖 Starting Autonomous Research System with 8 Core Innovations")
         logger.info("=" * 80)
@@ -417,18 +444,33 @@ class AutonomousResearchSystem:
             # if self.config.compression.enabled:
             #     result = await self._apply_hierarchical_compression(result)
             
-            # Save results with incremental save
+            # Save results - LLM이 생성한 내용을 그대로 사용
+            content = result.get('content', '') or result.get('synthesis_results', {}).get('content', '')
+            
             if output_path:
-                await self._save_results_incrementally(result, output_path, output_format)
-                logger.info(f"📄 Results saved to: {output_path}")
+                # 사용자가 지정한 경로 사용
+                final_path = await self._save_content_as_file(content, output_path, result)
+                logger.info(f"📄 Results saved to: {final_path}")
             else:
-                # Generate default output path if not provided
+                # 생성된 내용을 보고 형식 결정
+                detected_format = self._detect_output_format_from_content(content, request)
+                if output_format is None:
+                    output_format = detected_format
+                
                 output_dir = project_root / "output"
                 output_dir.mkdir(exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                default_output = output_dir / f"research_{timestamp}.{output_format}"
-                await self._save_results_incrementally(result, str(default_output), output_format)
-                logger.info(f"📄 Results saved to default location: {default_output}")
+                
+                # 확장자 결정 (간단하게)
+                if output_format.startswith("."):
+                    ext = output_format
+                else:
+                    ext_map = {"py": ".py", "java": ".java", "js": ".js", "html": ".html", "md": ".md", "pdf": ".pdf"}
+                    ext = ext_map.get(output_format, ".md")
+                default_output = output_dir / f"research_{timestamp}{ext}"
+                
+                final_path = await self._save_content_as_file(content, str(default_output), result)
+                logger.info(f"📄 Results saved to default location: {final_path} (format: {output_format})")
                 self._display_results(result)
             
             # Get final health status
@@ -611,6 +653,25 @@ class AutonomousResearchSystem:
         
         logger.info("✅ Hierarchical compression applied")
         return result
+    
+    async def _save_content_as_file(self, content: str, output_path: str, result: Dict[str, Any]) -> str:
+        """LLM이 생성한 내용을 그대로 파일로 저장 (하드코딩 없이)."""
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # LLM이 생성한 내용을 그대로 저장 (추가 템플릿 없이)
+        # 소스 정보가 있으면 마지막에 추가
+        if result.get('sources'):
+            sources_text = "\n\n## 참고 문헌\n\n"
+            for i, source in enumerate(result.get('sources', []), 1):
+                sources_text += f"{i}. [{source.get('title', 'N/A')}]({source.get('url', '')})\n"
+                if source.get('snippet'):
+                    sources_text += f"   {source.get('snippet', '')[:200]}...\n"
+                sources_text += "\n"
+            content = content + sources_text
+        
+        output_file.write_text(content, encoding='utf-8')
+        return str(output_file)
     
     async def _save_results_incrementally(self, result: Dict[str, Any], output_path: str, output_format: str = "json"):
         """Save results with incremental save (Innovation 5)."""
