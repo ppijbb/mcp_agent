@@ -288,6 +288,71 @@ class ExecutorAgent:
                             snippet = result.get('snippet', result.get('content', result.get('summary', result.get('description', result.get('abstract', '')))))
                             url = result.get('url', result.get('link', result.get('href', result.get('URL', ''))))
                             
+                            # snippet에 마크다운 형식의 여러 결과가 들어있는 경우 파싱
+                            if snippet and ("Found" in snippet or "search results" in snippet.lower() or "\n1." in snippet):
+                                logger.info(f"[{self.name}] Detected markdown format in snippet, parsing...")
+                                import re
+                                parsed_results = []
+                                lines = snippet.split('\n')
+                                current_result = None
+                                
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line:
+                                        continue
+                                    
+                                    # 마크다운 링크 패턴: "1. [Title](URL)" 또는 "1. Title\n   URL: ..."
+                                    link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                    url_match = re.search(r'URL:\s*(https?://[^\s]+)', line)
+                                    
+                                    if link_match:
+                                        # 이전 결과 저장
+                                        if current_result and current_result.get('title'):
+                                            parsed_results.append(current_result)
+                                        
+                                        title_parsed = link_match.group(1)
+                                        url_parsed = link_match.group(2)
+                                        current_result = {
+                                            "title": title_parsed,
+                                            "url": url_parsed,
+                                            "snippet": ""
+                                        }
+                                    elif url_match and current_result:
+                                        # URL이 별도 줄에 있는 경우
+                                        current_result["url"] = url_match.group(1)
+                                    elif current_result and line and not line.startswith('URL:'):
+                                        # 설명 텍스트
+                                        if current_result["snippet"]:
+                                            current_result["snippet"] += " " + line
+                                        else:
+                                            current_result["snippet"] = line
+                                
+                                # 마지막 결과 추가
+                                if current_result and current_result.get('title'):
+                                    parsed_results.append(current_result)
+                                
+                                if parsed_results:
+                                    logger.info(f"[{self.name}] Parsed {len(parsed_results)} results from markdown snippet")
+                                    # 파싱된 결과들을 unique_results에 추가
+                                    for parsed_result in parsed_results:
+                                        parsed_url = parsed_result.get('url', '')
+                                        if parsed_url and parsed_url in seen_urls:
+                                            continue
+                                        if parsed_url:
+                                            seen_urls.add(parsed_url)
+                                        
+                                        unique_results.append({
+                                            "index": len(unique_results) + 1,
+                                            "title": parsed_result.get('title', ''),
+                                            "snippet": parsed_result.get('snippet', '')[:500],
+                                            "url": parsed_url,
+                                            "source": "search"
+                                        })
+                                        logger.info(f"[{self.name}] Parsed result: {parsed_result.get('title', '')[:50]}... (URL: {parsed_url[:50] if parsed_url else 'N/A'}...)")
+                                    
+                                    # 원본 결과는 건너뛰기
+                                    continue
+                            
                             logger.debug(f"[{self.name}] Result {i}: title={title[:50] if title else 'N/A'}, url={url[:50] if url else 'N/A'}")
                         elif isinstance(result, str):
                             # 문자열 형식인 경우 파싱 시도 (마크다운 링크 형식)
@@ -658,7 +723,7 @@ class GeneratorAgent:
         # LLM으로 보고서 생성
         from src.core.llm_manager import execute_llm_task, TaskType
         
-        generation_prompt = f"""다음 검증된 연구 결과를 바탕으로 상세한 보고서를 작성하세요.
+        generation_prompt = f"""다음 검증된 연구 결과를 바탕으로 기술 보고서를 작성하세요.
 
 원래 질문: {state['user_query']}
 
@@ -671,18 +736,53 @@ class GeneratorAgent:
 3. 관련 부품 및 소비재 (Related Components & Consumables)
 4. 결론 (Conclusion)
 
-각 섹션을 상세히 작성하고, 구체적인 정보와 출처를 포함하세요."""
+각 섹션을 상세히 작성하고, 구체적인 정보와 출처를 포함하세요.
+기술적이고 전문적인 내용으로 작성하되, 안전하고 건전한 표현을 사용하세요."""
 
         try:
             report_result = await execute_llm_task(
                 prompt=generation_prompt,
                 task_type=TaskType.GENERATION,
                 model_name=None,
-                system_message="You are an expert technical writer. Create comprehensive, detailed reports based on verified research results."
+                system_message="You are an expert technical writer. Create comprehensive, detailed technical reports based on verified research results. Use professional and safe language."
             )
             
             report = report_result.content or f"# Report: {state['user_query']}\n\nNo report generated."
-            logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
+            
+            # Safety filter 차단 확인
+            if "blocked by safety" in report.lower() or "content blocked" in report.lower() or len(report) < 100:
+                logger.warning(f"[{self.name}] ⚠️ Report may have been blocked by safety filter, creating fallback report")
+                # Fallback: 검증된 결과를 직접 정리한 보고서 생성
+                report = f"""# 기술 보고서: {state['user_query']}
+
+## Executive Summary
+
+다음 {len(verified_results)}개의 검증된 연구 결과를 바탕으로 작성된 보고서입니다.
+
+## 주요 발견사항
+
+"""
+                for i, result in enumerate(verified_results[:10], 1):
+                    if isinstance(result, dict):
+                        title = result.get('title', '')
+                        snippet = result.get('snippet', '')
+                        url = result.get('url', '')
+                        report += f"\n### {i}. {title}\n\n"
+                        if snippet:
+                            report += f"{snippet[:300]}...\n\n"
+                        if url:
+                            report += f"출처: {url}\n\n"
+                
+                report += f"""
+## 결론
+
+위의 검증된 연구 결과를 종합하여 {state['user_query']}에 대한 정보를 제공합니다.
+
+총 {len(verified_results)}개의 검증된 소스에서 정보를 수집했습니다.
+"""
+                logger.info(f"[{self.name}] ✅ Fallback report generated: {len(report)} characters")
+            else:
+                logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
         except Exception as e:
             logger.error(f"[{self.name}] ❌ Report generation failed: {e}")
             # Fallback: 기본 보고서
