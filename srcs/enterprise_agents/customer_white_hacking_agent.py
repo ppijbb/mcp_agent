@@ -156,28 +156,29 @@ class CustomerWhiteHackingAgent:
             # Execute workflow
             logger.info("Starting customer white hacking workflow")
             
+            # Model 설정: settings에서 직접 가져오거나 agent가 판단
+            # Fallback 없음: 설정이 없으면 WorkflowError 발생
+            model_name = None
+            if hasattr(settings, 'llm') and hasattr(settings.llm, 'default_model'):
+                model_name = settings.llm.default_model
+            
+            if not model_name:
+                raise WorkflowError("LLM model not configured. Please set llm.default_model in settings.")
+            
             try:
-                # Get model from settings or use default
-                # settings는 AppConfig 객체이므로 속성 접근 방식 사용
-                default_model = "gemini-2.5-flash-lite-preview-06-07"
-                try:
-                    # settings.llm.default_model이 있는 경우 사용
-                    if hasattr(settings, 'llm') and hasattr(settings.llm, 'default_model'):
-                        model_name = settings.llm.default_model
-                    else:
-                        model_name = default_model
-                except AttributeError:
-                    model_name = default_model
-                
                 result = await orchestrator.generate_str(
                     message=task,
                     request_params=RequestParams(model=model_name)
                 )
                 
                 logger.info("Customer white hacking workflow completed successfully")
+            except WorkflowError:
+                raise
+            except APIError:
+                raise
             except Exception as e:
                 logger.error(f"Error during workflow execution: {str(e)}", exc_info=True)
-                raise
+                raise WorkflowError(f"Unexpected error in workflow execution: {str(e)}") from e
             
             if save_to_file:
                 logger.info(f"All deliverables saved in {self.output_dir}/")
@@ -190,7 +191,7 @@ class CustomerWhiteHackingAgent:
     
     def _validate_product_info(self, product_info: Dict[str, Any]) -> Dict[str, Any]:
         """
-        상품 정보 검증 및 기본값 설정
+        상품 정보 검증
         
         Args:
             product_info: 입력된 상품 정보
@@ -204,19 +205,9 @@ class CustomerWhiteHackingAgent:
         if not isinstance(product_info, dict):
             raise WorkflowError("product_info must be a dictionary")
         
-        validated = {
-            'name': product_info.get('name', ''),
-            'description': product_info.get('description', ''),
-            'category': product_info.get('category', ''),
-            'target_market': product_info.get('target_market', ''),
-            'price_range': product_info.get('price_range', ''),
-            'features': product_info.get('features', []),
-            'competitors': product_info.get('competitors', []),
-        }
-        
-        # 필수 필드 검증은 agent가 수행하도록 함 (하드코딩 없음)
-        # Agent가 동적으로 판단하여 필요한 정보를 요청하거나 추론
-        return validated
+        # Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 요청하거나 추론
+        # 모든 필드는 agent가 필요에 따라 동적으로 처리
+        return product_info
     
     def _create_white_hacking_agents(
         self,
@@ -290,26 +281,13 @@ class CustomerWhiteHackingAgent:
         Returns:
             str: agent instruction
         """
-        product_name = product_info.get('name', 'the product')
-        product_description = product_info.get('description', '')
-        category = product_info.get('category', '')
-        target_market = product_info.get('target_market', '')
-        price_range = product_info.get('price_range', '')
-        features = product_info.get('features', [])
-        competitors = product_info.get('competitors', [])
-        
+        # Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 추론하거나 요청
         instruction = f"""You are an expert customer persona analyst specializing in creating comprehensive customer personas for business products.
 
 Analyze the following product and generate diverse customer personas:
 
 Product Information:
-- Name: {product_name}
-- Description: {product_description}
-- Category: {category}
-- Target Market: {target_market}
-- Price Range: {price_range}
-- Key Features: {', '.join(features) if features else 'To be analyzed'}
-- Competitors: {', '.join(competitors) if competitors else 'To be researched'}
+{self._format_product_info_for_instruction(product_info)}
 
 Your task is to:
 
@@ -370,13 +348,11 @@ Output format: Structured JSON with persona details, or detailed markdown format
         Returns:
             str: agent instruction
         """
-        product_name = product_info.get('name', 'the product')
-        product_description = product_info.get('description', '')
-        
+        # Fallback 없음: agent가 동적으로 판단
         instruction = f"""You are an expert customer behavior analyst specializing in deep persona analysis.
 
-Product: {product_name}
-Description: {product_description}
+Product Information:
+{self._format_product_info_for_instruction(product_info)}
 
 Your task is to perform comprehensive, independent analysis of each customer persona generated by the persona_generator agent.
 
@@ -481,13 +457,11 @@ Output format: Detailed markdown with clear sections for each persona's analysis
         Returns:
             str: agent instruction
         """
-        product_name = product_info.get('name', 'the product')
-        product_description = product_info.get('description', '')
-        
+        # Fallback 없음: agent가 동적으로 판단
         instruction = f"""You are an expert sales strategist specializing in creating optimized sales scenarios for different customer personas.
 
-Product: {product_name}
-Description: {product_description}
+Product Information:
+{self._format_product_info_for_instruction(product_info)}
 
 Your task is to create comprehensive sales scenarios for each customer persona identified by the persona_generator agent.
 
@@ -567,11 +541,11 @@ Output format: Detailed markdown or structured format with clear sections for ea
         Returns:
             str: agent instruction
         """
-        product_name = product_info.get('name', 'the product')
-        
+        # Fallback 없음: agent가 동적으로 판단
         instruction = f"""You are a sales optimization expert specializing in validating and optimizing sales scenarios.
 
-Product: {product_name}
+Product Information:
+{self._format_product_info_for_instruction(product_info)}
 
 Your task is to review, validate, and optimize the sales scenarios created by the sales_scenario_generator agent.
 
@@ -674,6 +648,54 @@ Focus on actionable feedback that improves sales effectiveness.
 """
         return instruction
     
+    def _format_product_info_for_instruction(self, product_info: Dict[str, Any]) -> str:
+        """
+        상품 정보를 instruction용 포맷으로 변환
+        Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 추론하거나 요청
+        
+        Args:
+            product_info: 상품 정보 딕셔너리
+        
+        Returns:
+            str: 포맷된 상품 정보 문자열
+        """
+        lines = []
+        
+        # 모든 필드를 agent가 동적으로 판단하도록 제공
+        # 필드가 없으면 agent가 추론하거나 요청하도록 함
+        if 'name' in product_info:
+            lines.append(f"- Name: {product_info['name']}")
+        if 'description' in product_info:
+            lines.append(f"- Description: {product_info['description']}")
+        if 'category' in product_info:
+            lines.append(f"- Category: {product_info['category']}")
+        if 'target_market' in product_info:
+            lines.append(f"- Target Market: {product_info['target_market']}")
+        if 'price_range' in product_info:
+            lines.append(f"- Price Range: {product_info['price_range']}")
+        if 'features' in product_info:
+            features = product_info['features']
+            if isinstance(features, list):
+                lines.append(f"- Key Features: {', '.join(str(f) for f in features)}")
+            elif features:
+                lines.append(f"- Key Features: {features}")
+        if 'competitors' in product_info:
+            competitors = product_info['competitors']
+            if isinstance(competitors, list):
+                lines.append(f"- Competitors: {', '.join(str(c) for c in competitors)}")
+            elif competitors:
+                lines.append(f"- Competitors: {competitors}")
+        
+        # 추가 필드가 있으면 모두 포함
+        for key, value in product_info.items():
+            if key not in ['name', 'description', 'category', 'target_market', 'price_range', 'features', 'competitors']:
+                lines.append(f"- {key.replace('_', ' ').title()}: {value}")
+        
+        # Fallback 없음: agent가 동적으로 판단
+        # 정보가 없으면 agent가 MCP 도구를 사용하여 조사하도록 instruction에 명시
+        # 빈 리스트를 join하면 빈 문자열이 반환되므로 fallback 불필요
+        return "\n".join(lines)
+    
     def _create_task(
         self,
         product_info: Dict[str, Any],
@@ -691,9 +713,10 @@ Focus on actionable feedback that improves sales effectiveness.
         Returns:
             str: task description
         """
-        product_name = product_info.get('name', 'the product')
-        
-        task = f"""Execute a comprehensive customer white hacking analysis for: {product_name}
+        # Fallback 없음: agent가 동적으로 판단
+        task = f"""Execute a comprehensive customer white hacking analysis for the following product:
+
+{self._format_product_info_for_instruction(product_info)}
 
 Workflow Steps:
 
@@ -796,7 +819,10 @@ async def main():
     
     print(f"Workflow completed: {result['success']}")
     if result['success']:
-        print(f"Results saved to: {result.get('output_dir')}")
+        if 'output_dir' in result:
+            output_dir = result['output_dir']
+            if output_dir:
+                print(f"Results saved to: {output_dir}")
 
 
 if __name__ == "__main__":
