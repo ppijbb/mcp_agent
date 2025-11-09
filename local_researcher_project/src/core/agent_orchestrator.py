@@ -22,6 +22,8 @@ from src.core.shared_memory import get_shared_memory, MemoryScope
 from src.core.skills_manager import get_skill_manager
 from src.core.skills_selector import get_skill_selector, SkillMatch
 from src.core.skills_loader import Skill
+from src.core.agent_result_sharing import SharedResultsManager, AgentDiscussionManager
+from src.core.researcher_config import get_agent_config
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,8 @@ class AgentContext:
     session_id: str
     shared_memory: Any
     config: Any = None
+    shared_results_manager: Optional[SharedResultsManager] = None
+    discussion_manager: Optional[AgentDiscussionManager] = None
 
 
 class PlannerAgent:
@@ -211,7 +215,7 @@ class ExecutorAgent:
         if plan:
             logger.info(f"[{self.name}] Plan preview: {plan[:200]}...")
         
-        # 실제 연구 실행 - MCP Hub를 통한 검색 수행
+        # 실제 연구 실행 - MCP Hub를 통한 병렬 검색 수행
         query = state['user_query']
         results = []
         
@@ -227,14 +231,120 @@ class ExecutorAgent:
                 await hub.initialize_mcp()
                 logger.info(f"[{self.name}] MCP Hub initialized: {len(hub.mcp_sessions)} servers")
             
-            # 검색 도구 실행
-            logger.info(f"[{self.name}] Executing search: '{query}'")
-            search_result = await execute_tool(
-                "g-search",
-                {"query": query, "max_results": 10}
-            )
+            # 연구 계획에서 여러 검색 쿼리 생성 (LLM 기반, 하드코딩 제거)
+            from src.core.llm_manager import execute_llm_task, TaskType
             
-            logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, error={search_result.get('error')}")
+            search_queries = [query]  # 기본 쿼리
+            if plan:
+                # LLM으로 연구 계획에서 검색 쿼리 추출
+                query_generation_prompt = f"""연구 계획:
+{plan}
+
+원래 질문: {query}
+
+위 연구 계획을 바탕으로 검색에 사용할 구체적인 검색 쿼리 3-5개를 생성하세요.
+각 쿼리는 서로 다른 관점이나 측면을 다루어야 합니다.
+응답 형식: 각 줄에 하나의 검색 쿼리만 작성하세요. 번호나 기호 없이 쿼리만 작성하세요."""
+                
+                try:
+                    query_result = await execute_llm_task(
+                        prompt=query_generation_prompt,
+                        task_type=TaskType.PLANNING,
+                        model_name=None,
+                        system_message="You are a research query generator. Generate specific search queries based on research plans."
+                    )
+                    
+                    generated_queries = query_result.content or ""
+                    # 각 줄을 쿼리로 파싱
+                    for line in generated_queries.split('\n'):
+                        line = line.strip()
+                        if line and not line.startswith('#') and len(line) > 5:
+                            search_queries.append(line)
+                    
+                    # 중복 제거
+                    search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
+                    logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
+                except Exception as e:
+                    logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
+            
+            # 병렬 검색 실행
+            logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
+            
+            async def execute_single_search(search_query: str, query_index: int) -> Dict[str, Any]:
+                """단일 검색 실행."""
+                try:
+                    logger.info(f"[{self.name}] Search {query_index + 1}/{len(search_queries)}: '{search_query}'")
+                    search_result = await execute_tool(
+                        "g-search",
+                        {"query": search_query, "max_results": 10}
+                    )
+                    return {
+                        "query": search_query,
+                        "index": query_index,
+                        "result": search_result,
+                        "success": search_result.get('success', False)
+                    }
+                except Exception as e:
+                    logger.error(f"[{self.name}] Search {query_index + 1} failed: {e}")
+                    return {
+                        "query": search_query,
+                        "index": query_index,
+                        "result": {"success": False, "error": str(e)},
+                        "success": False
+                    }
+            
+            # 모든 검색을 병렬로 실행
+            search_tasks = [execute_single_search(q, i) for i, q in enumerate(search_queries)]
+            search_results_list = await asyncio.gather(*search_tasks)
+            
+            logger.info(f"[{self.name}] ✅ Completed {len(search_results_list)} parallel searches")
+            
+            # 모든 성공한 검색 결과 통합
+            successful_results = [sr for sr in search_results_list if sr.get('success') and sr.get('result', {}).get('data')]
+            
+            if not successful_results:
+                error_msg = f"연구 실행 실패: 모든 검색 쿼리 실행이 실패했습니다."
+                logger.error(f"[{self.name}] ❌ {error_msg}")
+                raise RuntimeError(error_msg)
+            
+            # 모든 검색 결과를 통합 (하드코딩 제거, 동적 통합)
+            all_search_data = []
+            for sr in successful_results:
+                result_data = sr['result'].get('data', {})
+                if isinstance(result_data, dict):
+                    items = result_data.get('results', result_data.get('items', []))
+                    if isinstance(items, list):
+                        all_search_data.extend(items)
+                elif isinstance(result_data, list):
+                    all_search_data.extend(result_data)
+            
+            # 통합된 결과를 하나의 검색 결과 형식으로 구성
+            search_result = {
+                'success': True,
+                'data': {
+                    'results': all_search_data,
+                    'total_results': len(all_search_data),
+                    'source': 'parallel_search'
+                }
+            }
+            
+            logger.info(f"[{self.name}] ✅ Integrated {len(all_search_data)} results from {len(successful_results)} successful searches")
+            
+            # 모든 검색 결과를 SharedResultsManager에 공유
+            if self.context.shared_results_manager:
+                for sr in search_results_list:
+                    if sr.get('success'):
+                        task_id = f"search_{sr['index']}"
+                        await self.context.shared_results_manager.share_result(
+                            task_id=task_id,
+                            agent_id=self.name,
+                            result=sr['result'],
+                            metadata={"query": sr['query'], "index": sr['index']},
+                            confidence=1.0 if sr.get('success') else 0.0
+                        )
+                        logger.info(f"[{self.name}] Shared search result for query: '{sr['query']}'")
+            
+            logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, total_results={search_result.get('data', {}).get('total_results', 0)}")
             logger.info(f"[{self.name}] Search result type: {type(search_result)}, keys: {list(search_result.keys()) if isinstance(search_result, dict) else 'N/A'}")
             
             if search_result.get('success') and search_result.get('data'):
@@ -526,7 +636,26 @@ class VerifierAgent:
                 session_id=state['session_id']
             ) or []
         
-        logger.info(f"[{self.name}] Found {len(results)} results to verify")
+        # SharedResultsManager에서 다른 Executor의 결과도 가져오기
+        if self.context.shared_results_manager:
+            shared_results = await self.context.shared_results_manager.get_shared_results(
+                exclude_agent_id=self.name
+            )
+            logger.info(f"[{self.name}] Found {len(shared_results)} shared results from other agents")
+            
+            # 공유된 결과를 results에 추가
+            for shared_result in shared_results:
+                if isinstance(shared_result.result, dict) and shared_result.result.get('data'):
+                    # 검색 결과에서 구조화된 데이터 추출
+                    data = shared_result.result.get('data', {})
+                    if isinstance(data, dict):
+                        shared_search_results = data.get('results', data.get('items', []))
+                        if isinstance(shared_search_results, list):
+                            results.extend(shared_search_results)
+                    elif isinstance(data, list):
+                        results.extend(data)
+        
+        logger.info(f"[{self.name}] Found {len(results)} results to verify (including shared results)")
         
         if not results or len(results) == 0:
             error_msg = "검증 실패: 검증할 연구 결과가 없습니다."
@@ -599,6 +728,40 @@ URL: {url}
         
         logger.info(f"[{self.name}] ✅ Verification completed: {len(verified)}/{len(results)} results verified")
         
+        # 검증 결과를 SharedResultsManager에 공유
+        if self.context.shared_results_manager:
+            for verified_result in verified:
+                task_id = f"verification_{verified_result.get('index', 0)}"
+                await self.context.shared_results_manager.share_result(
+                    task_id=task_id,
+                    agent_id=self.name,
+                    result=verified_result,
+                    metadata={"status": verified_result.get('status', 'unknown')},
+                    confidence=1.0 if verified_result.get('status') == 'verified' else 0.5
+                )
+            
+            # 다른 에이전트의 검증 결과와 토론 (검증 결과가 다른 경우)
+            if self.context.discussion_manager and len(verified) > 0:
+                other_verified = await self.context.shared_results_manager.get_shared_results(
+                    agent_id=None,  # 모든 에이전트
+                    exclude_agent_id=self.name
+                )
+                
+                # 검증된 결과만 필터링
+                other_verified_results = [r for r in other_verified if isinstance(r.result, dict) and r.result.get('status') == 'verified']
+                
+                if other_verified_results:
+                    # 첫 번째 검증 결과에 대해 토론
+                    first_verified = verified[0]
+                    result_id = f"verification_{first_verified.get('index', 0)}"
+                    discussion = await self.context.discussion_manager.agent_discuss_result(
+                        result_id=result_id,
+                        agent_id=self.name,
+                        other_agent_results=other_verified_results[:3]  # 최대 3개
+                    )
+                    if discussion:
+                        logger.info(f"[{self.name}] Discussion completed: {discussion[:100]}...")
+        
         state['verified_results'] = verified
         state['current_agent'] = self.name
         state['verification_failed'] = False if verified else True
@@ -641,46 +804,14 @@ class GeneratorAgent:
         """Generate final report."""
         logger.info(f"[{self.name}] Generating final report...")
         
-        # 연구 또는 검증 실패 확인
+        # 연구 또는 검증 실패 확인 - Fallback 제거, 명확한 에러만 반환
         if state.get('research_failed') or state.get('verification_failed'):
             error_msg = state.get('error', '알 수 없는 오류')
-            
-            report = f"""
-# 연구 실패 보고서: {state['user_query']}
-
-## ❌ 연구 실행 실패
-
-연구를 완료할 수 없었습니다.
-
-### 오류 내용
-{error_msg}
-
-### 권장 조치
-1. 검색 쿼리를 다시 확인해주세요
-2. 네트워크 연결 상태를 확인해주세요
-3. MCP 서버 설정을 확인해주세요
-4. 잠시 후 다시 시도해주세요
-
-## 실패 원인
-- 연구 실행 단계에서 오류 발생
-- 검색 결과를 얻을 수 없음
-- 서버 연결 문제 가능성
-
-실제 연구 결과 없이 보고서를 생성할 수 없습니다.
-"""
-            state['final_report'] = report
+            logger.error(f"[{self.name}] ❌ Research or verification failed: {error_msg}")
+            state['final_report'] = None
             state['current_agent'] = self.name
             state['report_failed'] = True
-            
-            memory = self.context.shared_memory
-            memory.write(
-                key=f"report_{state['session_id']}",
-                value=report,
-                scope=MemoryScope.SESSION,
-                session_id=state['session_id'],
-                agent_id=self.name
-            )
-            
+            state['error'] = error_msg
             return state
         
         memory = self.context.shared_memory
@@ -694,48 +825,33 @@ class GeneratorAgent:
                 session_id=state['session_id']
             ) or []
         
-        logger.info(f"[{self.name}] Found {len(verified_results)} verified results for report generation")
+        # SharedResultsManager에서 모든 공유된 검증 결과 가져오기
+        if self.context.shared_results_manager:
+            all_shared_results = await self.context.shared_results_manager.get_shared_results()
+            logger.info(f"[{self.name}] Found {len(all_shared_results)} shared results from all agents")
+            
+            # 검증된 결과만 필터링하여 추가
+            for shared_result in all_shared_results:
+                if isinstance(shared_result.result, dict):
+                    # 검증된 결과인 경우
+                    if shared_result.result.get('status') == 'verified':
+                        # 중복 제거 (URL 기준)
+                        existing_urls = {r.get('url', '') for r in verified_results if isinstance(r, dict)}
+                        result_url = shared_result.result.get('url', '')
+                        if result_url and result_url not in existing_urls:
+                            verified_results.append(shared_result.result)
+                            logger.info(f"[{self.name}] Added shared verified result: {shared_result.result.get('title', '')[:50]}...")
+        
+        logger.info(f"[{self.name}] Found {len(verified_results)} verified results for report generation (including shared results)")
         
         if not verified_results or len(verified_results) == 0:
+            # Fallback 제거 - 명확한 에러만 반환
             error_msg = "보고서 생성 실패: 검증된 연구 결과가 없습니다."
-            logger.error(error_msg)
-            
-            report = f"""
-# 연구 실패 보고서: {state['user_query']}
-
-## ❌ 연구 실행 실패
-
-검증된 연구 결과가 없어 보고서를 생성할 수 없습니다.
-
-### 오류 내용
-{error_msg}
-
-### 상황 분석
-- 연구 실행은 완료되었지만 결과가 없습니다
-- 또는 검증 단계에서 모든 결과가 제외되었습니다
-- 연구 쿼리: {state['user_query']}
-
-### 권장 조치
-1. 검색 쿼리를 다시 확인해주세요
-2. 네트워크 연결 상태를 확인해주세요
-3. MCP 서버 설정을 확인해주세요
-4. 잠시 후 다시 시도해주세요
-
-실제 연구 데이터 없이 보고서를 생성할 수 없습니다.
-"""
-            state['final_report'] = report
+            logger.error(f"[{self.name}] ❌ {error_msg}")
+            state['final_report'] = None
             state['current_agent'] = self.name
             state['report_failed'] = True
-            state['error'] = error_msg  # 에러 메시지 명시
-            
-            memory.write(
-                key=f"report_{state['session_id']}",
-                value=report,
-                scope=MemoryScope.SESSION,
-                session_id=state['session_id'],
-                agent_id=self.name
-            )
-            
+            state['error'] = error_msg
             return state
         
         # 실제 결과가 있는 경우 LLM으로 보고서 생성
@@ -827,20 +943,28 @@ class AgentOrchestrator:
         self.config = config
         self.shared_memory = get_shared_memory()
         self.skill_manager = get_skill_manager()
+        self.agent_config = get_agent_config()
         self.graph = None
         # Graph는 첫 실행 시 쿼리 기반으로 빌드
         
+        # SharedResultsManager와 AgentDiscussionManager는 execute 시점에 초기화
+        # (objective_id가 필요하므로)
+        self.shared_results_manager: Optional[SharedResultsManager] = None
+        self.discussion_manager: Optional[AgentDiscussionManager] = None
+        
         logger.info("AgentOrchestrator initialized")
     
-    def _build_graph(self, user_query: Optional[str] = None) -> None:
+    def _build_graph(self, user_query: Optional[str] = None, session_id: Optional[str] = None) -> None:
         """Build LangGraph workflow with Skills auto-selection."""
         
         # Create context for all agents
         context = AgentContext(
             agent_id="orchestrator",
-            session_id="default",
+            session_id=session_id or "default",
             shared_memory=self.shared_memory,
-            config=self.config
+            config=self.config,
+            shared_results_manager=self.shared_results_manager,
+            discussion_manager=self.discussion_manager
         )
         
         # Skills 자동 선택 (쿼리가 있으면)
@@ -947,9 +1071,25 @@ class AgentOrchestrator:
         
         logger.info(f"Starting workflow for query: {user_query}")
         
+        # Objective ID 생성 (병렬 실행 및 결과 공유용)
+        objective_id = f"objective_{session_id}"
+        
+        # SharedResultsManager와 AgentDiscussionManager 초기화 (병렬 실행 활성화 시)
+        if self.agent_config.enable_agent_communication:
+            self.shared_results_manager = SharedResultsManager(objective_id=objective_id)
+            self.discussion_manager = AgentDiscussionManager(
+                objective_id=objective_id,
+                shared_results_manager=self.shared_results_manager
+            )
+            logger.info("✅ Agent result sharing and discussion enabled")
+        else:
+            self.shared_results_manager = None
+            self.discussion_manager = None
+            logger.info("Agent communication disabled")
+        
         # Graph가 없거나 쿼리 기반 재빌드가 필요한 경우 빌드
         if self.graph is None:
-            self._build_graph(user_query)
+            self._build_graph(user_query, session_id)
         
         # Initialize state
         initial_state = AgentState(
