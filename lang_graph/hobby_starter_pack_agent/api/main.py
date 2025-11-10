@@ -11,7 +11,14 @@ from ..bridge.a2a_bridge import A2AProtocolBridge, A2AMessage
 from ..mcp.manager import MCPServerManager
 from .langchain_endpoints import router as langchain_router
 
-app = FastAPI(title="Hobby Starter Pack Agent API", version="1.0.0")
+# 새로운 API 라우터들
+from .auth import router as auth_router
+from .users import router as users_router
+from .hobbies import router as hobbies_router
+from .communities import router as communities_router
+from .notifications import router as notifications_router
+
+app = FastAPI(title="Hobby Starter Pack Agent API", version="2.0.0")
 
 # Global instances
 autogen_agents = HSPAutoGenAgents()
@@ -19,8 +26,13 @@ langgraph_workflow = HSPLangGraphWorkflow()
 a2a_bridge = A2AProtocolBridge()
 mcp_manager = MCPServerManager()
 
-# LangChain 라우터 등록
+# 라우터 등록
 app.include_router(langchain_router)
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(hobbies_router)
+app.include_router(communities_router)
+app.include_router(notifications_router)
 
 class AgentConsensusRequest(BaseModel):
     agents: List[str]
