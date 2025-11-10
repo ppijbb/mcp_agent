@@ -20,7 +20,7 @@ class TestRAGAgentAdvanced:
     def config(self):
         """Create advanced test configuration"""
         return RAGAgentConfig(
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             temperature=0.1,
             max_tokens=2000,
             max_search_results=5,
@@ -561,7 +561,7 @@ class TestRAGAgentIntegration:
     def config(self):
         """Create integration test configuration"""
         return RAGAgentConfig(
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             temperature=0.1,
             max_tokens=1000,
             max_search_results=3,

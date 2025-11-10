@@ -11,7 +11,7 @@ import logging
 import requests
 import os
 import json
-from typing import Dict, Any, List, Optional, Union, Callable
+from typing import Dict, Any, List, Optional, Union, Callable, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import google.generativeai as genai
@@ -41,6 +41,8 @@ class Provider(Enum):
     """LLM 제공자."""
     GOOGLE = "google"
     OPENROUTER = "openrouter"
+    GROQ = "groq"
+    OPENAI = "openai"
     LOCAL = "local"
 
 
@@ -182,12 +184,15 @@ class MultiModelOrchestrator:
     
     def _validate_provider_config(self):
         """Provider별 API 키 검증."""
-        if self.llm_config.provider == "openrouter":
-            if not os.getenv("OPENROUTER_API_KEY"):
-                raise ValueError("OPENROUTER_API_KEY is required for OpenRouter LLM provider")
-        elif self.llm_config.provider == "google":
-            if not self.llm_config.api_key:
-                raise ValueError("GOOGLE_API_KEY is required for Google LLM provider")
+        # API 키가 없어도 경고만 출력 (폴백 메커니즘 사용)
+        if not os.getenv("OPENROUTER_API_KEY"):
+            logger.warning("OPENROUTER_API_KEY not found - OpenRouter models will be unavailable")
+        if not os.getenv("GROQ_API_KEY"):
+            logger.warning("GROQ_API_KEY not found - Groq models will be unavailable")
+        if not self.llm_config.api_key:
+            logger.warning("GOOGLE_API_KEY not found - Gemini models will be unavailable")
+        if not os.getenv("OPENAI_API_KEY"):
+            logger.warning("OPENAI_API_KEY not found - GPT models will be unavailable")
     
     def _initialize_models(self):
         """모델 초기화."""
@@ -230,15 +235,39 @@ class MultiModelOrchestrator:
             capabilities=[TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
         )
         
-        # OpenRouter 모델 로딩 비활성화 (Gemini만 사용)
-        # OpenRouter API 키가 있으면 로드 시도, 없으면 무시
+        # 모델 로딩: 우선순위에 따라 로드
+        # 1. OpenRouter 모델 (최우선)
         if os.getenv("OPENROUTER_API_KEY"):
             try:
                 self._load_openrouter_models()
+                logger.info("✅ OpenRouter models loaded")
             except Exception as e:
-                logger.warning(f"OpenRouter models not loaded (Gemini will be used instead): {e}")
+                logger.warning(f"OpenRouter models not loaded: {e}")
         else:
-            logger.info("OpenRouter disabled - using Gemini only")
+            logger.info("OpenRouter disabled - OPENROUTER_API_KEY not found")
+        
+        # 2. Groq 모델
+        if os.getenv("GROQ_API_KEY"):
+            try:
+                self._load_groq_models()
+                logger.info("✅ Groq models loaded")
+            except Exception as e:
+                logger.warning(f"Groq models not loaded: {e}")
+        else:
+            logger.info("Groq disabled - GROQ_API_KEY not found")
+        
+        # 3. Gemini 모델 (이미 위에서 로드됨)
+        logger.info("✅ Gemini models loaded")
+        
+        # 4. GPT 모델
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                self._load_openai_models()
+                logger.info("✅ OpenAI/GPT models loaded")
+            except Exception as e:
+                logger.warning(f"OpenAI/GPT models not loaded: {e}")
+        else:
+            logger.info("OpenAI/GPT disabled - OPENAI_API_KEY not found")
     
     def _load_openrouter_models(self):
         """OpenRouter API에서 무료 모델들을 동적으로 로드 (선택적)."""
@@ -364,6 +393,88 @@ class MultiModelOrchestrator:
             return 8.0
     
     
+    def _load_groq_models(self):
+        """Groq 모델 로딩."""
+        # 주요 Groq 모델들
+        groq_models = [
+            {
+                "name": "groq-llama3-70b",
+                "model_id": "llama-3.1-70b-versatile",
+                "speed_rating": 9.0,
+                "quality_rating": 8.5,
+                "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS]
+            },
+            {
+                "name": "groq-llama3-8b",
+                "model_id": "llama-3.1-8b-instant",
+                "speed_rating": 9.5,
+                "quality_rating": 7.5,
+                "capabilities": [TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
+            },
+            {
+                "name": "groq-mixtral",
+                "model_id": "mixtral-8x7b-32768",
+                "speed_rating": 8.5,
+                "quality_rating": 8.0,
+                "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
+            }
+        ]
+        
+        for model_data in groq_models:
+            self.models[model_data["name"]] = ModelConfig(
+                name=model_data["name"],
+                provider="groq",
+                model_id=model_data["model_id"],
+                temperature=0.1,
+                max_tokens=4000,
+                cost_per_token=0.0,  # Groq는 무료 티어 제공
+                speed_rating=model_data["speed_rating"],
+                quality_rating=model_data["quality_rating"],
+                capabilities=model_data["capabilities"]
+            )
+            logger.info(f"Loaded Groq model: {model_data['name']} ({model_data['model_id']})")
+    
+    def _load_openai_models(self):
+        """OpenAI/GPT 모델 로딩."""
+        # 주요 GPT 모델들
+        gpt_models = [
+            {
+                "name": "gpt-5-mini",
+                "model_id": "gpt-5-mini",
+                "speed_rating": 8.0,
+                "quality_rating": 8.5,
+                "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
+            },
+            {
+                "name": "gpt-5-mini",
+                "model_id": "gpt-5-mini",
+                "speed_rating": 7.0,
+                "quality_rating": 9.5,
+                "capabilities": [TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
+            },
+            {
+                "name": "gpt-3.5-turbo",
+                "model_id": "gpt-3.5-turbo",
+                "speed_rating": 9.0,
+                "quality_rating": 7.0,
+                "capabilities": [TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
+            }
+        ]
+        
+        for model_data in gpt_models:
+            self.models[model_data["name"]] = ModelConfig(
+                name=model_data["name"],
+                provider="openai",
+                model_id=model_data["model_id"],
+                temperature=0.1,
+                max_tokens=4000,
+                cost_per_token=0.0001,  # GPT는 유료
+                speed_rating=model_data["speed_rating"],
+                quality_rating=model_data["quality_rating"],
+                capabilities=model_data["capabilities"]
+            )
+            logger.info(f"Loaded OpenAI/GPT model: {model_data['name']} ({model_data['model_id']})")
+    
     def refresh_openrouter_models(self):
         """OpenRouter 모델 목록을 새로고침."""
         logger.info("Refreshing OpenRouter models...")
@@ -402,6 +513,34 @@ class MultiModelOrchestrator:
                         raise ValueError(f"OpenRouter API key not found for {model_name}")
                     # OpenRouter는 HTTP 요청으로 직접 처리하므로 클라이언트 저장하지 않음
                     logger.info(f"OpenRouter model {model_name} configured for HTTP requests")
+                
+                elif model_config.provider == "groq":
+                    # Groq 클라이언트 초기화
+                    try:
+                        from groq import Groq
+                        groq_api_key = os.getenv("GROQ_API_KEY")
+                        if not groq_api_key:
+                            raise ValueError(f"GROQ_API_KEY not found for {model_name}")
+                        self.model_clients[model_name] = Groq(api_key=groq_api_key)
+                        logger.info(f"Groq model {model_name} configured")
+                    except ImportError:
+                        logger.warning(f"groq library not installed. Install with: pip install groq")
+                    except Exception as e:
+                        logger.warning(f"Failed to initialize Groq client for {model_name}: {e}")
+                
+                elif model_config.provider == "openai":
+                    # OpenAI 클라이언트 초기화
+                    try:
+                        from openai import OpenAI
+                        openai_api_key = os.getenv("OPENAI_API_KEY")
+                        if not openai_api_key:
+                            raise ValueError(f"OPENAI_API_KEY not found for {model_name}")
+                        self.model_clients[model_name] = OpenAI(api_key=openai_api_key)
+                        logger.info(f"OpenAI/GPT model {model_name} configured")
+                    except ImportError:
+                        logger.warning(f"openai library not installed. Install with: pip install openai")
+                    except Exception as e:
+                        logger.warning(f"Failed to initialize OpenAI client for {model_name}: {e}")
             
             logger.info("Model clients initialized successfully")
             
@@ -415,7 +554,7 @@ class MultiModelOrchestrator:
         complexity: float = 5.0,
         budget: float = None
     ) -> str:
-        """작업에 최적 모델 선택."""
+        """작업에 최적 모델 선택 - 우선순위: OpenRouter -> Groq -> Gemini -> GPT."""
         if budget is None:
             budget = self.llm_config.budget_limit
         
@@ -429,23 +568,62 @@ class MultiModelOrchestrator:
             # 기본 모델 사용
             return "gemini-flash-lite"
         
-        # OpenRouter 제외 - Gemini만 사용
+        # 우선순위 1: OpenRouter 모델
+        openrouter_models = [
+            name for name in suitable_models
+            if self.models[name].provider == "openrouter"
+        ]
+        if openrouter_models:
+            logger.info(f"Selected OpenRouter model: {openrouter_models[0]}")
+            return openrouter_models[0]
+        
+        # 우선순위 2: Groq 모델
+        groq_models = [
+            name for name in suitable_models
+            if self.models[name].provider == "groq"
+        ]
+        if groq_models:
+            # 복잡도에 따라 Groq 모델 선택
+            if complexity > 7.0 and "groq-llama3-70b" in groq_models:
+                logger.info(f"Selected Groq model: groq-llama3-70b")
+                return "groq-llama3-70b"
+            elif complexity > 5.0 and "groq-mixtral" in groq_models:
+                logger.info(f"Selected Groq model: groq-mixtral")
+                return "groq-mixtral"
+            else:
+                logger.info(f"Selected Groq model: {groq_models[0]}")
+                return groq_models[0]
+        
+        # 우선순위 3: Gemini 모델
         gemini_models = [
             name for name in suitable_models
             if self.models[name].provider == "google"
         ]
-        
-        # Gemini 모델 우선 사용
         if gemini_models:
             if complexity > 7.0 and "gemini-pro" in gemini_models:
                 return "gemini-pro"
             elif complexity > 5.0 and "gemini-flash" in gemini_models:
                 return "gemini-flash"
             else:
-                # gemini-flash-lite 또는 첫 번째 Gemini 모델
                 return "gemini-flash-lite" if "gemini-flash-lite" in gemini_models else gemini_models[0]
         
-        # Gemini 모델이 없으면 기본 모델 사용
+        # 우선순위 4: GPT 모델
+        gpt_models = [
+            name for name in suitable_models
+            if self.models[name].provider == "openai"
+        ]
+        if gpt_models:
+            if complexity > 7.0 and "gpt-5-mini" in gpt_models:
+                logger.info(f"Selected GPT model: gpt-5-mini")
+                return "gpt-5-mini"
+            elif "gpt-5-mini" in gpt_models:
+                logger.info(f"Selected GPT model: gpt-5-mini")
+                return "gpt-5-mini"
+            else:
+                logger.info(f"Selected GPT model: {gpt_models[0]}")
+                return gpt_models[0]
+        
+        # 모든 모델이 없으면 기본 모델 사용
         return "gemini-flash-lite"
     
     async def execute_with_model(
@@ -463,57 +641,85 @@ class MultiModelOrchestrator:
         # 모델 클라이언트 확인
         model_name_clean = model_name.replace("_langchain", "")
         
-        # OpenRouter 모델이 선택되었으면 Gemini로 폴백
-        if model_name_clean in self.models and self.models[model_name_clean].provider == "openrouter":
-            logger.warning(f"OpenRouter model {model_name} selected, falling back to Gemini")
-            # Gemini 모델로 변경
-            if "gemini-flash-lite" in self.model_clients:
-                model_name = "gemini-flash-lite"
-            elif "gemini-flash" in self.model_clients:
-                model_name = "gemini-flash"
-            elif "gemini-pro" in self.model_clients:
-                model_name = "gemini-pro"
-            else:
-                # 사용 가능한 첫 번째 Gemini 모델
-                gemini_models = [name for name in self.model_clients.keys() if "gemini" in name.lower()]
-                if gemini_models:
-                    model_name = gemini_models[0]
-                else:
-                    raise ValueError(f"No Gemini models available (OpenRouter model {model_name_clean} was requested)")
-            model_name_clean = model_name
+        # 모델 provider 확인
+        if model_name_clean not in self.models:
+            raise ValueError(f"Model {model_name_clean} not found in models")
         
-        if model_name not in self.model_clients:
-            raise ValueError(f"Model {model_name} not available")
-        
+        model_provider = self.models[model_name_clean].provider
         start_time = time.time()
+        actual_model_used = model_name_clean  # 실제 사용된 모델 추적
         
         try:
-            # 모델 실행 (OpenRouter는 이미 폴백 처리됨)
-            if model_name.endswith("_langchain"):
-                # LangChain 클라이언트 사용
-                result = await self._execute_langchain_model(
-                    model_name, prompt, system_message, **kwargs
-                )
+            # 우선순위에 따라 모델 실행 및 폴백
+            if model_provider == "openrouter":
+                logger.info(f"Executing with OpenRouter model: {model_name_clean}")
+                try:
+                    result = await self._execute_openrouter_model(
+                        model_name_clean, prompt, system_message, **kwargs
+                    )
+                except Exception as error:
+                    logger.warning(f"OpenRouter model {model_name_clean} failed: {error}, trying fallback...")
+                    result, actual_model_used = await self._try_fallback_models(
+                        task_type, prompt, system_message, skip_providers=["openrouter"], **kwargs
+                    )
+            elif model_provider == "groq":
+                logger.info(f"Executing with Groq model: {model_name_clean}")
+                try:
+                    result = await self._execute_groq_model(
+                        model_name_clean, prompt, system_message, **kwargs
+                    )
+                except Exception as error:
+                    logger.warning(f"Groq model {model_name_clean} failed: {error}, trying fallback...")
+                    result, actual_model_used = await self._try_fallback_models(
+                        task_type, prompt, system_message, skip_providers=["openrouter", "groq"], **kwargs
+                    )
+            elif model_provider == "google":
+                logger.info(f"Executing with Gemini model: {model_name_clean}")
+                try:
+                    if model_name.endswith("_langchain"):
+                        result = await self._execute_langchain_model(
+                            model_name, prompt, system_message, **kwargs
+                        )
+                    else:
+                        result = await self._execute_gemini_model(
+                            model_name, prompt, system_message, **kwargs
+                        )
+                except Exception as error:
+                    logger.warning(f"Gemini model {model_name_clean} failed: {error}, trying fallback...")
+                    result, actual_model_used = await self._try_fallback_models(
+                        task_type, prompt, system_message, skip_providers=["openrouter", "groq", "google"], **kwargs
+                    )
+            elif model_provider == "openai":
+                logger.info(f"Executing with GPT model: {model_name_clean}")
+                try:
+                    result = await self._execute_openai_model(
+                        model_name_clean, prompt, system_message, **kwargs
+                    )
+                except Exception as error:
+                    logger.warning(f"GPT model {model_name_clean} failed: {error}, trying fallback...")
+                    result, actual_model_used = await self._try_fallback_models(
+                        task_type, prompt, system_message, skip_providers=["openrouter", "groq", "google", "openai"], **kwargs
+                    )
             else:
-                # Google Generative AI 클라이언트 사용 (OpenRouter는 폴백됨)
-                result = await self._execute_gemini_model(
-                    model_name, prompt, system_message, **kwargs
-                )
+                raise ValueError(f"Unknown provider: {model_provider}")
             
             execution_time = time.time() - start_time
             
-            # 비용 계산
-            model_config = self.models[model_name.replace("_langchain", "")]
-            cost = len(prompt.split()) * model_config.cost_per_token
+            # 비용 계산 (실제 사용된 모델 기준)
+            if actual_model_used in self.models:
+                model_config = self.models[actual_model_used]
+                cost = len(prompt.split()) * model_config.cost_per_token
+            else:
+                cost = 0.0
             
-            # 성능 기록
+            # 성능 기록 (실제 사용된 모델 기준)
             self.performance_tracker.record_execution(
-                model_name, task_type, execution_time, True, result.get("quality_score", 0.8)
+                actual_model_used, task_type, execution_time, True, result.get("quality_score", 0.8)
             )
             
             return ModelResult(
                 content=result["content"],
-                model_used=model_name,
+                model_used=actual_model_used,  # 실제 사용된 모델 반환
                 execution_time=execution_time,
                 confidence=result.get("confidence", 0.8),
                 cost=cost,
@@ -524,9 +730,9 @@ class MultiModelOrchestrator:
             execution_time = time.time() - start_time
             logger.error(f"Model execution failed: {e}")
             
-            # 실패 기록
+            # 실패 기록 (실제 사용된 모델 기준)
             self.performance_tracker.record_execution(
-                model_name, task_type, execution_time, False
+                actual_model_used, task_type, execution_time, False
             )
             
             raise
@@ -717,6 +923,167 @@ class MultiModelOrchestrator:
         except Exception as e:
             logger.error(f"OpenRouter API error: {e}")
             raise RuntimeError(f"OpenRouter model {model_name} failed: {e}")
+    
+    async def _try_fallback_models(
+        self,
+        task_type: TaskType,
+        prompt: str,
+        system_message: str = None,
+        skip_providers: List[str] = None,
+        **kwargs
+    ) -> Tuple[Dict[str, Any], str]:
+        """우선순위에 따라 폴백 모델 시도: OpenRouter -> Groq -> Gemini -> GPT."""
+        if skip_providers is None:
+            skip_providers = []
+        
+        # 우선순위에 따라 폴백 시도
+        fallback_order = ["openrouter", "groq", "google", "openai"]
+        
+        for provider in fallback_order:
+            if provider in skip_providers:
+                continue
+            
+            # 해당 provider의 사용 가능한 모델 찾기
+            available_models = [
+                name for name, config in self.models.items()
+                if config.provider == provider and task_type in config.capabilities
+            ]
+            
+            if not available_models:
+                continue
+            
+            # 첫 번째 사용 가능한 모델 시도
+            fallback_model = available_models[0]
+            logger.info(f"Trying fallback model: {fallback_model} (provider: {provider})")
+            
+            try:
+                if provider == "openrouter":
+                    result = await self._execute_openrouter_model(
+                        fallback_model, prompt, system_message, **kwargs
+                    )
+                elif provider == "groq":
+                    result = await self._execute_groq_model(
+                        fallback_model, prompt, system_message, **kwargs
+                    )
+                elif provider == "google":
+                    result = await self._execute_gemini_model(
+                        fallback_model, prompt, system_message, **kwargs
+                    )
+                elif provider == "openai":
+                    result = await self._execute_openai_model(
+                        fallback_model, prompt, system_message, **kwargs
+                    )
+                else:
+                    continue
+                
+                logger.info(f"✅ Fallback successful with {fallback_model}")
+                return result, fallback_model
+            except Exception as e:
+                logger.warning(f"Fallback model {fallback_model} failed: {e}, trying next...")
+                continue
+        
+        # 모든 폴백 실패
+        raise RuntimeError("All fallback models failed. No available models.")
+    
+    async def _execute_groq_model(
+        self,
+        model_name: str,
+        prompt: str,
+        system_message: str = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Groq 모델 실행."""
+        if model_name not in self.model_clients:
+            raise ValueError(f"Groq client not initialized for {model_name}")
+        
+        client = self.model_clients[model_name]
+        model_config = self.models[model_name]
+        
+        # 메시지 구성
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            # Groq API 호출
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model=model_config.model_id,
+                    messages=messages,
+                    temperature=model_config.temperature,
+                    max_tokens=model_config.max_tokens,
+                    **kwargs
+                )
+            )
+            
+            content = response.choices[0].message.content
+            
+            return {
+                "content": content,
+                "confidence": 0.8,
+                "quality_score": 0.8,
+                "metadata": {
+                    "model": model_name,
+                    "provider": "groq",
+                    "model_id": model_config.model_id,
+                    "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else len(content.split())
+                }
+            }
+        except Exception as e:
+            logger.error(f"Groq API error: {e}")
+            raise RuntimeError(f"Groq model {model_name} failed: {e}")
+    
+    async def _execute_openai_model(
+        self,
+        model_name: str,
+        prompt: str,
+        system_message: str = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """OpenAI/GPT 모델 실행."""
+        if model_name not in self.model_clients:
+            raise ValueError(f"OpenAI client not initialized for {model_name}")
+        
+        client = self.model_clients[model_name]
+        model_config = self.models[model_name]
+        
+        # 메시지 구성
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+        
+        try:
+            # OpenAI API 호출
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model=model_config.model_id,
+                    messages=messages,
+                    temperature=model_config.temperature,
+                    max_tokens=model_config.max_tokens,
+                    **kwargs
+                )
+            )
+            
+            content = response.choices[0].message.content
+            
+            return {
+                "content": content,
+                "confidence": 0.8,
+                "quality_score": 0.8,
+                "metadata": {
+                    "model": model_name,
+                    "provider": "openai",
+                    "model_id": model_config.model_id,
+                    "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else len(content.split())
+                }
+            }
+        except Exception as e:
+            logger.error(f"OpenAI API error: {e}")
+            raise RuntimeError(f"OpenAI model {model_name} failed: {e}")
     
     async def _execute_langchain_model(
         self,

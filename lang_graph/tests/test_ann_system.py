@@ -46,7 +46,7 @@ class TestLLMClient:
             
             with patch('openai.OpenAI', return_value=mock_openai):
                 client = LLMClient()
-                result = client.call_llm("Test prompt", "gpt-4")
+                result = client.call_llm("Test prompt", "gpt-5-mini")
                 assert result == "Test response"
     
     def test_call_llm_gemini(self):

@@ -163,7 +163,7 @@ class HSPLangChainAgent:
     """HSP Agent 전용 LangChain 에이전트"""
     
     def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
-        self.llm_config = llm_config or {"model": "gpt-4", "temperature": 0.7}
+        self.llm_config = llm_config or {"model": "gpt-5-mini", "temperature": 0.7}
         self.llm = None
         self.tools = []
         self.agent = None
@@ -187,7 +187,7 @@ class HSPLangChainAgent:
                 raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
             
             self.llm = ChatOpenAI(
-                model=self.llm_config.get("model", "gpt-4"),
+                model=self.llm_config.get("model", "gpt-5-mini"),
                 temperature=self.llm_config.get("temperature", 0.7),
                 openai_api_key=api_key
             )

@@ -84,7 +84,7 @@ class CodeReviewAgent:
                 
                 result = await llm.generate_str(
                     message=review_prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # 결과 파싱 및 구조화
@@ -117,7 +117,7 @@ class CodeReviewAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # 결과 파싱

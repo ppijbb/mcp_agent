@@ -89,7 +89,7 @@ class SecurityAgent:
                 
                 result = await llm.generate_str(
                     message=scan_prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # 결과 파싱 및 구조화
@@ -126,7 +126,7 @@ class SecurityAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 security_result = self._parse_security_result(result, deployment_path, "DEPLOYMENT_VERIFICATION")
@@ -161,7 +161,7 @@ class SecurityAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 security_result = self._parse_security_result(result, target_path, "COMPLIANCE_CHECK")
@@ -195,7 +195,7 @@ class SecurityAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 security_result = self._parse_security_result(result, f"rollback_{deployment_id}", "ROLLBACK")

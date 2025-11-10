@@ -22,7 +22,7 @@ class TestGraphCounselorConfig:
         """Test default configuration values"""
         config = GraphCounselorConfig()
         
-        assert config.model_name == "gpt-4o-mini"
+        assert config.model_name == "gpt-5-mini"
         assert config.temperature == 0.1
         assert config.max_tokens == 4000
         assert config.num_explorer_agents == 3
@@ -50,14 +50,14 @@ class TestGraphCounselorConfig:
         """Test configuration validation"""
         # Test valid config
         config = GraphCounselorConfig(
-            model_name="gpt-4",
+            model_name="gpt-5-mini",
             temperature=0.5,
             max_tokens=2000,
             num_explorer_agents=5,
             num_analyzer_agents=3,
             num_optimizer_agents=2
         )
-        assert config.model_name == "gpt-4"
+        assert config.model_name == "gpt-5-mini"
         assert config.temperature == 0.5
         assert config.max_tokens == 2000
         assert config.num_explorer_agents == 5
@@ -95,7 +95,7 @@ class TestGraphCounselorAgent:
     def config(self):
         """Create test configuration"""
         return GraphCounselorConfig(
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             temperature=0.1,
             max_tokens=1000,
             num_explorer_agents=2,
@@ -511,7 +511,7 @@ class TestGraphCounselorIntegration:
     def config(self):
         """Create integration test configuration"""
         return GraphCounselorConfig(
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             temperature=0.1,
             max_tokens=1000,
             num_explorer_agents=1,

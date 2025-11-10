@@ -113,7 +113,7 @@ class KubernetesAgent:
                 
                 result = await llm.generate_str(
                     message=deploy_prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # kubectl 명령어 실행
@@ -179,7 +179,7 @@ class KubernetesAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # kubectl 명령어 실행
@@ -245,7 +245,7 @@ class KubernetesAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # kubectl 명령어 실행
@@ -311,7 +311,7 @@ class KubernetesAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # kubectl 명령어 실행
@@ -375,7 +375,7 @@ class KubernetesAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # kubectl 명령어 실행

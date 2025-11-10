@@ -82,7 +82,7 @@ class DocumentationAgent:
                 
                 result = await llm.generate_str(
                     message=doc_prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # 결과 파싱 및 구조화
@@ -118,7 +118,7 @@ class DocumentationAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 doc_result = self._parse_single_documentation(result, "README.md", project_path)
@@ -151,7 +151,7 @@ class DocumentationAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 doc_result = self._parse_single_documentation(result, "API.md", source_path)
@@ -187,7 +187,7 @@ class DocumentationAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 doc_result = self._parse_single_documentation(result, "CHANGELOG.md", project_path)

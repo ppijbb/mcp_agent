@@ -718,9 +718,12 @@ class UniversalMCPHub:
                 logger.info(f"Connecting to HTTP MCP server: {server_name} ({url})")
                 
                 try:
-                    # HTTP transport 사용 (headers는 URL 파라미터로 처리되거나 서버가 자동으로 처리)
-                    # streamablehttp_client는 기본적으로 headers를 직접 지원하지 않으므로
-                    # 필요한 경우 URL에 포함되거나 서버 설정에서 처리됨
+                    # HTTP Connection Pooling: streamablehttp_client는 내부적으로 연결을 재사용
+                    # MCP ClientSession 자체가 연결 풀 역할을 하므로, 같은 서버에 대한 연결은 재사용됨
+                    # (이미 self.mcp_sessions에 있으면 재사용, 없으면 새로 생성)
+                    
+                    # HTTP transport 사용 (streamablehttp_client는 MCP 프로토콜 전송용)
+                    # streamablehttp_client는 내부적으로 HTTP 연결을 관리하므로 별도 세션 풀 불필요
                     http_transport = await exit_stack.enter_async_context(streamablehttp_client(url))
                     read, write, _ = http_transport
                     session = await exit_stack.enter_async_context(ClientSession(read, write))

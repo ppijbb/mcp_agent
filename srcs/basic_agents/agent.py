@@ -39,7 +39,7 @@ class Agent:
             instruction=instruction,
             server_names=["g-search", "fetch", "filesystem"],
             llm_factory=lambda: OpenAIAugmentedLLM(
-                model="gpt-4",
+                model="gpt-5-mini",
             ),
         )
 

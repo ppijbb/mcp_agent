@@ -84,7 +84,7 @@ class PerformanceAgent:
                 
                 result = await llm.generate_str(
                     message=analysis_prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 # 결과 파싱 및 구조화
@@ -117,7 +117,7 @@ class PerformanceAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 perf_result = self._parse_performance_result(result, target_path, "BENCHMARK")
@@ -151,7 +151,7 @@ class PerformanceAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 perf_result = self._parse_performance_result(result, target_path, "OPTIMIZATION")
@@ -185,7 +185,7 @@ class PerformanceAgent:
                 
                 result = await llm.generate_str(
                     message=prompt,
-                    request_params=RequestParams(model="gpt-4o")
+                    request_params=RequestParams(model="gpt-5-mini")
                 )
                 
                 perf_result = self._parse_performance_result(result, target_path, "BENCHMARK")

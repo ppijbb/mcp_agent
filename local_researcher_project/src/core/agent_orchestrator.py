@@ -61,6 +61,7 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_query: str
     research_plan: Optional[str]
+    research_tasks: Annotated[list, override_reducer]  # List of research tasks for parallel execution
     research_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
     verified_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
     final_report: Optional[str]
@@ -159,6 +160,138 @@ Keep it concise and actionable (max 300 words)."""
         logger.info(f"[{self.name}] Plan preview: {plan[:200]}...")
         
         state['research_plan'] = plan
+        
+        # 작업 분할: 연구 계획을 여러 독립적인 작업으로 분할
+        logger.info(f"[{self.name}] Splitting research plan into parallel tasks...")
+        
+        task_split_prompt = f"""연구 계획:
+{plan}
+
+원래 질문: {state['user_query']}
+
+위 연구 계획을 분석하여 여러 독립적으로 실행 가능한 연구 작업으로 분할하세요.
+각 작업은 별도의 연구자(ExecutorAgent)가 동시에 처리할 수 있어야 합니다.
+
+응답 형식 (JSON):
+{{
+  "tasks": [
+    {{
+      "task_id": "task_1",
+      "description": "작업 설명",
+      "search_queries": ["검색 쿼리 1", "검색 쿼리 2"],
+      "priority": 1,
+      "estimated_time": "medium",
+      "dependencies": []
+    }},
+    ...
+  ]
+}}
+
+각 작업은:
+- 독립적으로 실행 가능해야 함
+- 명확한 검색 쿼리를 포함해야 함
+- 우선순위와 예상 시간을 포함해야 함
+- 의존성이 없어야 함 (병렬 실행을 위해)
+
+작업 수: 3-5개 권장"""
+
+        try:
+            task_split_result = await execute_llm_task(
+                prompt=task_split_prompt,
+                task_type=TaskType.PLANNING,
+                model_name=None,
+                system_message="You are a task decomposition agent. Split research plans into independent parallel tasks."
+            )
+            
+            task_split_text = task_split_result.content or ""
+            
+            # JSON 파싱 시도
+            import json
+            import re
+            
+            # JSON 블록 추출
+            json_match = re.search(r'\{[\s\S]*\}', task_split_text)
+            if json_match:
+                task_split_json = json.loads(json_match.group())
+                tasks = task_split_json.get('tasks', [])
+            else:
+                # JSON이 없으면 텍스트에서 작업 추출 시도
+                tasks = []
+                lines = task_split_text.split('\n')
+                current_task = None
+                for line in lines:
+                    line = line.strip()
+                    if 'task_id' in line.lower() or 'task' in line.lower() and ':' in line:
+                        if current_task:
+                            tasks.append(current_task)
+                        task_id_match = re.search(r'task[_\s]*(\d+)', line, re.IGNORECASE)
+                        task_id = f"task_{task_id_match.group(1) if task_id_match else len(tasks) + 1}"
+                        current_task = {
+                            "task_id": task_id,
+                            "description": "",
+                            "search_queries": [],
+                            "priority": len(tasks) + 1,
+                            "estimated_time": "medium",
+                            "dependencies": []
+                        }
+                    elif current_task:
+                        if 'description' in line.lower() or '설명' in line:
+                            desc_match = re.search(r':\s*(.+)', line)
+                            if desc_match:
+                                current_task["description"] = desc_match.group(1).strip()
+                        elif 'query' in line.lower() or '쿼리' in line:
+                            query_match = re.search(r':\s*(.+)', line)
+                            if query_match:
+                                current_task["search_queries"].append(query_match.group(1).strip())
+                
+                if current_task:
+                    tasks.append(current_task)
+            
+            # 작업이 없으면 기본 작업 생성
+            if not tasks:
+                logger.warning(f"[{self.name}] Failed to parse tasks, creating default task")
+                tasks = [{
+                    "task_id": "task_1",
+                    "description": state['user_query'],
+                    "search_queries": [state['user_query']],
+                    "priority": 1,
+                    "estimated_time": "medium",
+                    "dependencies": []
+                }]
+            
+            # 각 작업에 메타데이터 추가
+            for i, task in enumerate(tasks):
+                if 'task_id' not in task:
+                    task['task_id'] = f"task_{i + 1}"
+                if 'description' not in task:
+                    task['description'] = state['user_query']
+                if 'search_queries' not in task or not task['search_queries']:
+                    task['search_queries'] = [state['user_query']]
+                if 'priority' not in task:
+                    task['priority'] = i + 1
+                if 'estimated_time' not in task:
+                    task['estimated_time'] = "medium"
+                if 'dependencies' not in task:
+                    task['dependencies'] = []
+            
+            state['research_tasks'] = tasks
+            logger.info(f"[{self.name}] ✅ Split research plan into {len(tasks)} parallel tasks")
+            for task in tasks:
+                logger.info(f"[{self.name}]   - {task.get('task_id')}: {task.get('description', '')[:50]}... ({len(task.get('search_queries', []))} queries)")
+                
+        except Exception as e:
+            logger.error(f"[{self.name}] ❌ Failed to split tasks: {e}")
+            # 실패 시 기본 작업 생성
+            state['research_tasks'] = [{
+                "task_id": "task_1",
+                "description": state['user_query'],
+                "search_queries": [state['user_query']],
+                "priority": 1,
+                "estimated_time": "medium",
+                "dependencies": []
+            }]
+            logger.warning(f"[{self.name}] Using default single task")
+        
         state['current_agent'] = self.name
         
         # Write to shared memory
@@ -170,7 +303,15 @@ Keep it concise and actionable (max 300 words)."""
             agent_id=self.name
         )
         
-        logger.info(f"[{self.name}] Plan saved to shared memory")
+        memory.write(
+            key=f"tasks_{state['session_id']}",
+            value=state['research_tasks'],
+            scope=MemoryScope.SESSION,
+            session_id=state['session_id'],
+            agent_id=self.name
+        )
+        
+        logger.info(f"[{self.name}] Plan and tasks saved to shared memory")
         logger.info(f"=" * 80)
         
         return state
@@ -195,13 +336,48 @@ class ExecutorAgent:
         else:
             self.instruction = "You are a research execution agent."
     
-    async def execute(self, state: AgentState) -> AgentState:
+    async def execute(self, state: AgentState, assigned_task: Optional[Dict[str, Any]] = None) -> AgentState:
         """Execute research tasks with detailed logging."""
         logger.info(f"=" * 80)
         logger.info(f"[{self.name.upper()}] Starting research execution")
+        logger.info(f"Agent ID: {self.context.agent_id}")
         logger.info(f"Query: {state['user_query']}")
         logger.info(f"Session: {state['session_id']}")
         logger.info(f"=" * 80)
+        
+        # 작업 할당: assigned_task가 있으면 사용, 없으면 state에서 찾기
+        if assigned_task is None:
+            # state['research_tasks']에서 이 에이전트에게 할당된 작업 찾기
+            tasks = state.get('research_tasks', [])
+            if tasks:
+                # agent_id를 기반으로 작업 할당 (라운드로빈)
+                agent_id = self.context.agent_id
+                if agent_id.startswith("executor_"):
+                    try:
+                        agent_index = int(agent_id.split("_")[1])
+                        if agent_index < len(tasks):
+                            assigned_task = tasks[agent_index]
+                            logger.info(f"[{self.name}] Assigned task {assigned_task.get('task_id', 'unknown')} to {agent_id}")
+                        else:
+                            # 인덱스가 범위를 벗어나면 첫 번째 작업 할당
+                            assigned_task = tasks[0]
+                            logger.info(f"[{self.name}] Agent index out of range, using first task")
+                    except (ValueError, IndexError):
+                        assigned_task = tasks[0] if tasks else None
+                        logger.info(f"[{self.name}] Using first task (fallback)")
+                else:
+                    # agent_id가 executor_ 형식이 아니면 첫 번째 작업 사용
+                    assigned_task = tasks[0] if tasks else None
+            else:
+                # 작업이 없으면 메모리에서 읽기
+                memory = self.context.shared_memory
+                tasks = memory.read(
+                    key=f"tasks_{state['session_id']}",
+                    scope=MemoryScope.SESSION,
+                    session_id=state['session_id']
+                ) or []
+                if tasks:
+                    assigned_task = tasks[0] if tasks else None
         
         # Read plan from shared memory
         memory = self.context.shared_memory
@@ -231,13 +407,18 @@ class ExecutorAgent:
                 await hub.initialize_mcp()
                 logger.info(f"[{self.name}] MCP Hub initialized: {len(hub.mcp_sessions)} servers")
             
-            # 연구 계획에서 여러 검색 쿼리 생성 (LLM 기반, 하드코딩 제거)
-            from src.core.llm_manager import execute_llm_task, TaskType
+            # 작업 할당이 있으면 해당 작업의 검색 쿼리 사용
+            search_queries = []
+            if assigned_task:
+                search_queries = assigned_task.get('search_queries', [])
+                logger.info(f"[{self.name}] Using assigned task queries: {len(search_queries)} queries from task {assigned_task.get('task_id', 'unknown')}")
             
-            search_queries = [query]  # 기본 쿼리
-            if plan:
-                # LLM으로 연구 계획에서 검색 쿼리 추출
-                query_generation_prompt = f"""연구 계획:
+            # 작업 할당이 없거나 쿼리가 없으면 기존 로직 사용
+            if not search_queries:
+                search_queries = [query]  # 기본 쿼리
+                if plan:
+                    # LLM으로 연구 계획에서 검색 쿼리 추출
+                    query_generation_prompt = f"""연구 계획:
 {plan}
 
 원래 질문: {query}
@@ -337,12 +518,12 @@ class ExecutorAgent:
                         task_id = f"search_{sr['index']}"
                         await self.context.shared_results_manager.share_result(
                             task_id=task_id,
-                            agent_id=self.name,
+                            agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                             result=sr['result'],
                             metadata={"query": sr['query'], "index": sr['index']},
                             confidence=1.0 if sr.get('success') else 0.0
                         )
-                        logger.info(f"[{self.name}] Shared search result for query: '{sr['query']}'")
+                        logger.info(f"[{self.name}] Shared search result for query: '{sr['query']}' (agent_id: {self.context.agent_id})")
             
             logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, total_results={search_result.get('data', {}).get('total_results', 0)}")
             logger.info(f"[{self.name}] Search result type: {type(search_result)}, keys: {list(search_result.keys()) if isinstance(search_result, dict) else 'N/A'}")
@@ -734,7 +915,7 @@ URL: {url}
                 task_id = f"verification_{verified_result.get('index', 0)}"
                 await self.context.shared_results_manager.share_result(
                     task_id=task_id,
-                    agent_id=self.name,
+                    agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                     result=verified_result,
                     metadata={"status": verified_result.get('status', 'unknown')},
                     confidence=1.0 if verified_result.get('status') == 'verified' else 0.5
@@ -744,7 +925,7 @@ URL: {url}
             if self.context.discussion_manager and len(verified) > 0:
                 other_verified = await self.context.shared_results_manager.get_shared_results(
                     agent_id=None,  # 모든 에이전트
-                    exclude_agent_id=self.name
+                    exclude_agent_id=self.context.agent_id  # 고유한 agent_id 사용
                 )
                 
                 # 검증된 결과만 필터링
@@ -756,11 +937,11 @@ URL: {url}
                     result_id = f"verification_{first_verified.get('index', 0)}"
                     discussion = await self.context.discussion_manager.agent_discuss_result(
                         result_id=result_id,
-                        agent_id=self.name,
+                        agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                         other_agent_results=other_verified_results[:3]  # 최대 3개
                     )
                     if discussion:
-                        logger.info(f"[{self.name}] Discussion completed: {discussion[:100]}...")
+                        logger.info(f"[{self.name}] Discussion completed: {discussion[:100]}... (agent_id: {self.context.agent_id})")
         
         state['verified_results'] = verified
         state['current_agent'] = self.name
@@ -988,16 +1169,18 @@ class AgentOrchestrator:
         
         # Add nodes
         workflow.add_node("planner", self._planner_node)
-        workflow.add_node("executor", self._executor_node)
-        workflow.add_node("verifier", self._verifier_node)
+        workflow.add_node("executor", self._executor_node)  # Legacy
+        workflow.add_node("parallel_executor", self._parallel_executor_node)  # New parallel executor
+        workflow.add_node("verifier", self._verifier_node)  # Legacy
+        workflow.add_node("parallel_verifier", self._parallel_verifier_node)  # New parallel verifier
         workflow.add_node("generator", self._generator_node)
         workflow.add_node("end", self._end_node)
         
-        # Define edges
+        # Define edges - 병렬 실행 노드 사용
         workflow.set_entry_point("planner")
-        workflow.add_edge("planner", "executor")
-        workflow.add_edge("executor", "verifier")
-        workflow.add_edge("verifier", "generator")
+        workflow.add_edge("planner", "parallel_executor")  # 병렬 실행 사용
+        workflow.add_edge("parallel_executor", "parallel_verifier")  # 병렬 검증 사용
+        workflow.add_edge("parallel_verifier", "generator")
         workflow.add_edge("generator", "end")
         
         # Compile graph
@@ -1015,22 +1198,294 @@ class AgentOrchestrator:
         return result
     
     async def _executor_node(self, state: AgentState) -> AgentState:
-        """Executor node execution with tracking."""
+        """Executor node execution with tracking (legacy - for backward compatibility)."""
         logger.info("=" * 80)
-        logger.info("🟢 [WORKFLOW] → Executor Node")
+        logger.info("🟢 [WORKFLOW] → Executor Node (legacy)")
         logger.info("=" * 80)
         result = await self.executor.execute(state)
         logger.info(f"🟢 [WORKFLOW] ✓ Executor completed: {len(result.get('research_results', []))} results")
         return result
     
-    async def _verifier_node(self, state: AgentState) -> AgentState:
-        """Verifier node execution with tracking."""
+    async def _parallel_executor_node(self, state: AgentState) -> AgentState:
+        """Parallel executor node - runs multiple ExecutorAgent instances simultaneously."""
         logger.info("=" * 80)
-        logger.info("🟡 [WORKFLOW] → Verifier Node")
+        logger.info("🟢 [WORKFLOW] → Parallel Executor Node")
+        logger.info("=" * 80)
+        
+        # 작업 목록 가져오기
+        tasks = state.get('research_tasks', [])
+        if not tasks:
+            # 메모리에서 읽기
+            memory = self.shared_memory
+            tasks = memory.read(
+                key=f"tasks_{state['session_id']}",
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id']
+            ) or []
+        
+        if not tasks:
+            logger.warning("[WORKFLOW] No tasks found, falling back to single executor")
+            return await self._executor_node(state)
+        
+        logger.info(f"[WORKFLOW] Executing {len(tasks)} tasks in parallel with {len(tasks)} ExecutorAgent instances")
+        
+        # 동적 동시성 관리 통합
+        from src.core.concurrency_manager import get_concurrency_manager
+        concurrency_manager = get_concurrency_manager()
+        max_concurrent = concurrency_manager.get_current_concurrency() or self.agent_config.max_concurrent_research_units
+        max_concurrent = min(max_concurrent, len(tasks))  # 작업 수를 초과하지 않도록
+        
+        logger.info(f"[WORKFLOW] Using concurrency limit: {max_concurrent} (from concurrency_manager)")
+        
+        # Skills 자동 선택
+        selected_skills = {}
+        if state.get('user_query'):
+            skill_selector = get_skill_selector()
+            matches = skill_selector.select_skills_for_task(state['user_query'])
+            for match in matches:
+                skill = self.skill_manager.load_skill(match.skill_id)
+                if skill:
+                    selected_skills[match.skill_id] = skill
+        
+        # 여러 ExecutorAgent 인스턴스 생성 및 병렬 실행
+        async def execute_single_task(task: Dict[str, Any], task_index: int) -> AgentState:
+            """단일 작업을 실행하는 ExecutorAgent."""
+            agent_id = f"executor_{task_index}"
+            context = AgentContext(
+                agent_id=agent_id,
+                session_id=state['session_id'],
+                shared_memory=self.shared_memory,
+                config=self.config,
+                shared_results_manager=self.shared_results_manager,
+                discussion_manager=self.discussion_manager
+            )
+            
+            executor_agent = ExecutorAgent(context, selected_skills.get("research_executor"))
+            
+            try:
+                logger.info(f"[WORKFLOW] ExecutorAgent {agent_id} starting task {task.get('task_id', 'unknown')}")
+                result_state = await executor_agent.execute(state, assigned_task=task)
+                logger.info(f"[WORKFLOW] ExecutorAgent {agent_id} completed: {len(result_state.get('research_results', []))} results")
+                return result_state
+            except Exception as e:
+                logger.error(f"[WORKFLOW] ExecutorAgent {agent_id} failed: {e}")
+                # 실패한 에이전트의 상태 반환
+                failed_state = state.copy()
+                failed_state['research_results'] = []
+                failed_state['research_failed'] = True
+                failed_state['error'] = f"Task {task.get('task_id', 'unknown')} failed: {str(e)}"
+                failed_state['current_agent'] = agent_id
+                return failed_state
+        
+        # 모든 작업을 병렬로 실행 (동적 동시성 제한 적용)
+        if max_concurrent < len(tasks):
+            # Semaphore를 사용하여 동시 실행 수 제한
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def execute_with_limit(task: Dict[str, Any], task_index: int) -> AgentState:
+                async with semaphore:
+                    return await execute_single_task(task, task_index)
+            
+            executor_tasks = [execute_with_limit(task, i) for i, task in enumerate(tasks)]
+        else:
+            # 동시성 제한이 작업 수보다 크면 모든 작업을 동시에 실행
+            executor_tasks = [execute_single_task(task, i) for i, task in enumerate(tasks)]
+        
+        # 병렬 실행
+        executor_results = await asyncio.gather(*executor_tasks, return_exceptions=True)
+        
+        # 결과 통합
+        all_results = []
+        all_failed = False
+        errors = []
+        
+        for i, result in enumerate(executor_results):
+            if isinstance(result, Exception):
+                logger.error(f"[WORKFLOW] ExecutorAgent {i} raised exception: {result}")
+                all_failed = True
+                errors.append(f"Task {tasks[i].get('task_id', 'unknown')}: {str(result)}")
+            elif isinstance(result, dict):
+                # 결과 수집
+                task_results = result.get('research_results', [])
+                if task_results:
+                    all_results.extend(task_results)
+                    logger.info(f"[WORKFLOW] ExecutorAgent {i} contributed {len(task_results)} results")
+                
+                # 실패 상태 확인
+                if result.get('research_failed'):
+                    all_failed = True
+                    if result.get('error'):
+                        errors.append(result['error'])
+        
+        # 통합된 상태 생성
+        final_state = state.copy()
+        final_state['research_results'] = all_results
+        final_state['research_failed'] = all_failed
+        final_state['current_agent'] = "parallel_executor"
+        
+        if errors:
+            final_state['error'] = "; ".join(errors)
+        
+        logger.info(f"[WORKFLOW] ✅ Parallel execution completed: {len(all_results)} total results from {len(tasks)} tasks")
+        logger.info(f"[WORKFLOW] Failed: {all_failed}")
+        
+        return final_state
+    
+    async def _verifier_node(self, state: AgentState) -> AgentState:
+        """Verifier node execution with tracking (legacy - for backward compatibility)."""
+        logger.info("=" * 80)
+        logger.info("🟡 [WORKFLOW] → Verifier Node (legacy)")
         logger.info("=" * 80)
         result = await self.verifier.execute(state)
         logger.info(f"🟡 [WORKFLOW] ✓ Verifier completed: {len(result.get('verified_results', []))} verified")
         return result
+    
+    async def _parallel_verifier_node(self, state: AgentState) -> AgentState:
+        """Parallel verifier node - runs multiple VerifierAgent instances simultaneously."""
+        logger.info("=" * 80)
+        logger.info("🟡 [WORKFLOW] → Parallel Verifier Node")
+        logger.info("=" * 80)
+        
+        # 연구 실패 확인
+        if state.get('research_failed'):
+            logger.error("[WORKFLOW] Research execution failed, skipping verification")
+            state['verified_results'] = []
+            state['verification_failed'] = True
+            state['current_agent'] = "parallel_verifier"
+            return state
+        
+        # 검증할 결과 가져오기
+        results = state.get('research_results', [])
+        if not results:
+            memory = self.shared_memory
+            results = memory.read(
+                key=f"research_results_{state['session_id']}",
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id']
+            ) or []
+        
+        if not results:
+            logger.warning("[WORKFLOW] No results to verify, falling back to single verifier")
+            return await self._verifier_node(state)
+        
+        # 결과를 여러 청크로 분할하여 여러 VerifierAgent에 할당
+        num_verifiers = min(len(results), self.agent_config.max_concurrent_research_units or 3)
+        chunk_size = max(1, len(results) // num_verifiers)
+        result_chunks = [results[i:i + chunk_size] for i in range(0, len(results), chunk_size)]
+        
+        logger.info(f"[WORKFLOW] Verifying {len(results)} results with {len(result_chunks)} VerifierAgent instances")
+        
+        # 동적 동시성 관리 통합
+        from src.core.concurrency_manager import get_concurrency_manager
+        concurrency_manager = get_concurrency_manager()
+        max_concurrent = concurrency_manager.get_current_concurrency() or self.agent_config.max_concurrent_research_units
+        max_concurrent = min(max_concurrent, len(result_chunks))
+        
+        logger.info(f"[WORKFLOW] Using concurrency limit: {max_concurrent} (from concurrency_manager)")
+        
+        # Skills 자동 선택
+        selected_skills = {}
+        if state.get('user_query'):
+            skill_selector = get_skill_selector()
+            matches = skill_selector.select_skills_for_task(state['user_query'])
+            for match in matches:
+                skill = self.skill_manager.load_skill(match.skill_id)
+                if skill:
+                    selected_skills[match.skill_id] = skill
+        
+        # 여러 VerifierAgent 인스턴스 생성 및 병렬 실행
+        async def verify_single_chunk(chunk: List[Dict[str, Any]], chunk_index: int) -> List[Dict[str, Any]]:
+            """단일 청크를 검증하는 VerifierAgent."""
+            agent_id = f"verifier_{chunk_index}"
+            context = AgentContext(
+                agent_id=agent_id,
+                session_id=state['session_id'],
+                shared_memory=self.shared_memory,
+                config=self.config,
+                shared_results_manager=self.shared_results_manager,
+                discussion_manager=self.discussion_manager
+            )
+            
+            verifier_agent = VerifierAgent(context, selected_skills.get("evaluator"))
+            
+            # 청크만 포함하는 임시 state 생성
+            chunk_state = state.copy()
+            chunk_state['research_results'] = chunk
+            
+            try:
+                logger.info(f"[WORKFLOW] VerifierAgent {agent_id} starting verification of {len(chunk)} results")
+                result_state = await verifier_agent.execute(chunk_state)
+                verified_chunk = result_state.get('verified_results', [])
+                logger.info(f"[WORKFLOW] VerifierAgent {agent_id} completed: {len(verified_chunk)} verified")
+                return verified_chunk
+            except Exception as e:
+                logger.error(f"[WORKFLOW] VerifierAgent {agent_id} failed: {e}")
+                return []  # 실패 시 빈 리스트 반환
+        
+        # 모든 청크를 병렬로 검증 (동적 동시성 제한 적용)
+        if max_concurrent < len(result_chunks):
+            semaphore = asyncio.Semaphore(max_concurrent)
+            
+            async def verify_with_limit(chunk: List[Dict[str, Any]], chunk_index: int) -> List[Dict[str, Any]]:
+                async with semaphore:
+                    return await verify_single_chunk(chunk, chunk_index)
+            
+            verifier_tasks = [verify_with_limit(chunk, i) for i, chunk in enumerate(result_chunks)]
+        else:
+            verifier_tasks = [verify_single_chunk(chunk, i) for i, chunk in enumerate(result_chunks)]
+        
+        # 병렬 실행
+        verifier_results = await asyncio.gather(*verifier_tasks, return_exceptions=True)
+        
+        # 결과 통합
+        all_verified = []
+        for i, result in enumerate(verifier_results):
+            if isinstance(result, Exception):
+                logger.error(f"[WORKFLOW] VerifierAgent {i} raised exception: {result}")
+            elif isinstance(result, list):
+                all_verified.extend(result)
+                logger.info(f"[WORKFLOW] VerifierAgent {i} contributed {len(result)} verified results")
+        
+        # 중복 제거 (URL 기준)
+        seen_urls = set()
+        unique_verified = []
+        for verified_result in all_verified:
+            if isinstance(verified_result, dict):
+                url = verified_result.get('url', '')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    unique_verified.append(verified_result)
+                elif not url:
+                    unique_verified.append(verified_result)
+        
+        # 여러 VerifierAgent 간 토론 (검증 결과가 다른 경우)
+        if self.discussion_manager and len(unique_verified) > 0:
+            # 다른 VerifierAgent의 검증 결과 가져오기
+            if self.shared_results_manager:
+                other_verified = await self.shared_results_manager.get_shared_results()
+                other_verified_results = [r for r in other_verified if isinstance(r.result, dict) and r.result.get('status') == 'verified']
+                
+                if other_verified_results:
+                    # 첫 번째 검증 결과에 대해 토론
+                    first_verified = unique_verified[0]
+                    result_id = f"verification_{first_verified.get('index', 0)}"
+                    discussion = await self.discussion_manager.agent_discuss_result(
+                        result_id=result_id,
+                        agent_id="parallel_verifier",
+                        other_agent_results=other_verified_results[:3]
+                    )
+                    if discussion:
+                        logger.info(f"[WORKFLOW] Discussion completed: {discussion[:100]}...")
+        
+        # 통합된 상태 생성
+        final_state = state.copy()
+        final_state['verified_results'] = unique_verified
+        final_state['verification_failed'] = False if unique_verified else True
+        final_state['current_agent'] = "parallel_verifier"
+        
+        logger.info(f"[WORKFLOW] ✅ Parallel verification completed: {len(unique_verified)} total verified results from {len(result_chunks)} verifiers")
+        
+        return final_state
     
     async def _generator_node(self, state: AgentState) -> AgentState:
         """Generator node execution with tracking."""
@@ -1096,12 +1551,17 @@ class AgentOrchestrator:
             messages=[],
             user_query=user_query,
             research_plan=None,
+            research_tasks=[],
             research_results=[],
             verified_results=[],
             final_report=None,
             current_agent=None,
             iteration=0,
-            session_id=session_id
+            session_id=session_id,
+            research_failed=False,
+            verification_failed=False,
+            report_failed=False,
+            error=None
         )
         
         # Execute workflow
@@ -1123,12 +1583,17 @@ class AgentOrchestrator:
             messages=[],
             user_query=user_query,
             research_plan=None,
+            research_tasks=[],
             research_results=[],
             verified_results=[],
             final_report=None,
             current_agent=None,
             iteration=0,
-            session_id=session_id
+            session_id=session_id,
+            research_failed=False,
+            verification_failed=False,
+            report_failed=False,
+            error=None
         )
         
         # Stream execution

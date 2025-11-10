@@ -21,7 +21,7 @@ class HSPLangChainWorkflow:
     """LangChain 기반 통합 워크플로우"""
     
     def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
-        self.llm_config = llm_config or {"model": "gpt-4", "temperature": 0.7}
+        self.llm_config = llm_config or {"model": "gpt-5-mini", "temperature": 0.7}
         
         # LangChain 컴포넌트들 초기화
         self.memory_manager = HSPMemoryManager()

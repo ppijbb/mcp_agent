@@ -33,7 +33,7 @@ class AutoGenDecisionEngine:
             import openai
             import os
             
-            model_name = os.getenv("LLM_MODEL", "gpt-4")
+            model_name = os.getenv("LLM_MODEL", "gpt-5-mini")
             api_key = os.getenv("OPENAI_API_KEY")
             
             if not api_key:

@@ -72,7 +72,7 @@ class MCPIntegrationManager:
         
         # LLM 초기화
         self.llm = ChatOpenAI(
-            model="gpt-4o",
+            model="gpt-5-mini",
             temperature=0.1,
             api_key=config.llm.openai_api_key
         )

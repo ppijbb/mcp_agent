@@ -35,7 +35,7 @@ def config():
     """Test configuration"""
     return GraphGeneratorConfig(
         openai_api_key="test-key",
-        model_name="gpt-4o-mini",
+        model_name="gpt-5-mini",
         temperature=0.0,
         max_concurrency=2,
         batch_size=3,
@@ -68,12 +68,12 @@ class TestGraphGeneratorConfig:
         """Test valid configuration"""
         config = GraphGeneratorConfig(
             openai_api_key="test-key",
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             temperature=0.5,
             max_concurrency=4
         )
         assert config.openai_api_key == "test-key"
-        assert config.model_name == "gpt-4o-mini"
+        assert config.model_name == "gpt-5-mini"
         assert config.temperature == 0.5
         assert config.max_concurrency == 4
     

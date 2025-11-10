@@ -36,7 +36,7 @@ class LLMClient:
         
         Args:
             prompt (str): The prompt to send to the LLM
-            model (str): Model identifier (e.g., "gemini-1.5-flash", "gpt-4")
+            model (str): Model identifier (e.g., "gemini-1.5-flash", "gpt-5-mini")
             **kwargs: Additional parameters for the LLM call
             
         Returns:
@@ -58,7 +58,7 @@ class LLMClient:
                 if self.gemini_client:
                     return self._call_gemini(prompt, "gemini-1.5-flash", **kwargs)
                 else:
-                    return self._call_openai(prompt, "gpt-4", **kwargs)
+                    return self._call_openai(prompt, "gpt-5-mini", **kwargs)
         except Exception as e:
             raise RuntimeError(f"LLM API call failed: {str(e)}")
     
