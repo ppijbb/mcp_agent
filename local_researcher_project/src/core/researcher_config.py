@@ -483,7 +483,23 @@ def load_config_from_env() -> ResearcherSystemConfig:
         state_backend=get_required_env("STATE_BACKEND"),
         state_ttl=get_required_env("STATE_TTL", int)
     )
-    
+
+    # Load Agent Tool configuration
+    agent_tool_config = AgentToolConfig(
+        planner_servers=get_required_list_env("AGENT_TOOL_PLANNER_SERVERS") if os.getenv("AGENT_TOOL_PLANNER_SERVERS") else [],
+        executor_servers=get_required_list_env("AGENT_TOOL_EXECUTOR_SERVERS") if os.getenv("AGENT_TOOL_EXECUTOR_SERVERS") else [],
+        verifier_servers=get_required_list_env("AGENT_TOOL_VERIFIER_SERVERS") if os.getenv("AGENT_TOOL_VERIFIER_SERVERS") else [],
+        generator_servers=get_required_list_env("AGENT_TOOL_GENERATOR_SERVERS") if os.getenv("AGENT_TOOL_GENERATOR_SERVERS") else [],
+        planner_categories=get_required_list_env("AGENT_TOOL_PLANNER_CATEGORIES") if os.getenv("AGENT_TOOL_PLANNER_CATEGORIES") else ["planning", "search", "utility"],
+        executor_categories=get_required_list_env("AGENT_TOOL_EXECUTOR_CATEGORIES") if os.getenv("AGENT_TOOL_EXECUTOR_CATEGORIES") else ["search", "data", "academic", "business", "code"],
+        verifier_categories=get_required_list_env("AGENT_TOOL_VERIFIER_CATEGORIES") if os.getenv("AGENT_TOOL_VERIFIER_CATEGORIES") else ["verification", "search", "data", "academic"],
+        generator_categories=get_required_list_env("AGENT_TOOL_GENERATOR_CATEGORIES") if os.getenv("AGENT_TOOL_GENERATOR_CATEGORIES") else ["generation", "utility", "search"],
+        max_tools_per_agent=get_required_env("AGENT_TOOL_MAX_PER_AGENT", int) if os.getenv("AGENT_TOOL_MAX_PER_AGENT") else 5,
+        enable_auto_discovery=get_required_env("AGENT_TOOL_ENABLE_AUTO_DISCOVERY", bool) if os.getenv("AGENT_TOOL_ENABLE_AUTO_DISCOVERY") else True,
+        enable_cross_agent_tools=get_required_env("AGENT_TOOL_ENABLE_CROSS_AGENT", bool) if os.getenv("AGENT_TOOL_ENABLE_CROSS_AGENT") else True,
+        cross_agent_timeout=get_required_env("AGENT_TOOL_CROSS_AGENT_TIMEOUT", float) if os.getenv("AGENT_TOOL_CROSS_AGENT_TIMEOUT") else 30.0
+    )
+
     # Load Output configuration
     output_config = OutputConfig(
         output_dir=get_required_env("OUTPUT_DIR"),
@@ -506,10 +522,66 @@ def load_config_from_env() -> ResearcherSystemConfig:
         compression=compression_config,
         verification=verification_config,
         context_window=context_window_config,
-        reliability=reliability_config
+        reliability=reliability_config,
+        agent_tools=agent_tool_config
     )
     
     return config
+
+
+class AgentToolConfig(BaseModel):
+    """에이전트별 MCP 도구 할당 설정."""
+
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+
+    # 에이전트별 서버 할당
+    planner_servers: List[str] = Field(default_factory=list, description="PlannerAgent용 MCP 서버 목록")
+    executor_servers: List[str] = Field(default_factory=list, description="ExecutorAgent용 MCP 서버 목록")
+    verifier_servers: List[str] = Field(default_factory=list, description="VerifierAgent용 MCP 서버 목록")
+    generator_servers: List[str] = Field(default_factory=list, description="GeneratorAgent용 MCP 서버 목록")
+
+    # 도구 카테고리 필터링
+    planner_categories: List[str] = Field(default_factory=lambda: ["planning", "search", "utility"], description="PlannerAgent용 도구 카테고리")
+    executor_categories: List[str] = Field(default_factory=lambda: ["search", "data", "academic", "business", "code"], description="ExecutorAgent용 도구 카테고리")
+    verifier_categories: List[str] = Field(default_factory=lambda: ["verification", "search", "data", "academic"], description="VerifierAgent용 도구 카테고리")
+    generator_categories: List[str] = Field(default_factory=lambda: ["generation", "utility", "search"], description="GeneratorAgent용 도구 카테고리")
+
+    # 도구 할당 제한
+    max_tools_per_agent: int = Field(default=5, ge=1, le=20, description="에이전트당 최대 도구 수")
+    enable_auto_discovery: bool = Field(default=True, description="자동 도구 발견 활성화")
+
+    # Cross-Agent 통신 설정
+    enable_cross_agent_tools: bool = Field(default=True, description="Cross-Agent 도구 활성화")
+    cross_agent_timeout: float = Field(default=30.0, ge=5.0, le=300.0, description="Cross-Agent 호출 타임아웃(초)")
+
+
+# ResearcherSystemConfig에 agent_tools 필드 추가
+class ResearcherSystemConfig(BaseModel):
+    """통합 연구 시스템 설정."""
+
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+
+    # 기존 필드들
+    llm: LLMConfig
+    agent: AgentConfig
+    research: ResearchConfig
+    mcp: MCPConfig
+    output: OutputConfig
+    compression: CompressionConfig
+    verification: VerificationConfig
+    context_window: ContextWindowConfig
+    reliability: ReliabilityConfig
+
+    # 신규: 에이전트별 도구 설정
+    agent_tools: AgentToolConfig = Field(default_factory=AgentToolConfig)
+
+
+def get_required_list_env(key: str) -> List[str]:
+    """환경 변수에서 콤마로 구분된 리스트를 가져옵니다."""
+    value = os.getenv(key)
+    if not value:
+        raise ValueError(f"필수 환경 변수가 설정되지 않음: {key}")
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
 # Configuration is loaded via load_config_from_env() function

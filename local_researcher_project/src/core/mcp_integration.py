@@ -65,6 +65,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.researcher_config import get_mcp_config, get_llm_config
+from src.core.mcp_auto_discovery import FastMCPMulti
+from src.core.mcp_tool_loader import MCPToolLoader, ToolInfo as MCPToolInfo
+from src.core.config import HTTPServerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -243,8 +246,8 @@ class UniversalMCPHub:
         self.registry = ToolRegistry()
         self.tools: Dict[str, ToolInfo] = {}  # 하위 호환성을 위해 유지 (registry.tools 참조)
         self.openrouter_client: Optional[OpenRouterClient] = None
-        
-        # MCP 클라이언트
+
+        # MCP 클라이언트 (기존 시스템)
         self.mcp_sessions: Dict[str, ClientSession] = {}
         self.exit_stacks: Dict[str, AsyncExitStack] = {}  # 참조만 유지, cleanup에서 aclose() 호출 안 함
         self.mcp_tools_map: Dict[str, Dict[str, Any]] = {}  # server_name -> {tool_name -> tool_info}
@@ -253,6 +256,13 @@ class UniversalMCPHub:
         self.connection_diagnostics: Dict[str, Dict[str, Any]] = {}
         # 종료/차단 플래그 (종료 중 신규 연결 방지)
         self.stopping: bool = False
+
+        # FastMCP 자동 발견 시스템 (신규)
+        self.fastmcp_servers: Dict[str, HTTPServerSpec] = {}  # 자동 발견용 서버 설정
+        self.fastmcp_multi: Optional[FastMCPMulti] = None
+        self.fastmcp_tool_loader: Optional[MCPToolLoader] = None
+        self.auto_discovered_tools: Dict[str, BaseTool] = {}  # 자동 발견된 도구들
+        self.auto_discovered_tool_infos: Dict[str, MCPToolInfo] = {}  # 도구 메타데이터
 
         self._load_tools_config()
         self._initialize_tools()
@@ -440,14 +450,30 @@ class UniversalMCPHub:
             return None
     
     def _initialize_tools(self):
-        """도구 초기화 - tools_config.json 기반."""
+        """도구 초기화 - tools_config.json 기반 + FastMCP 자동 발견."""
+        # 1. 수동 등록 도구 초기화
+        self._initialize_manual_tools()
+
+        # 2. FastMCP 자동 발견 도구 초기화 (비동기)
+        # 메인 스레드에서 호출되므로 동기 래퍼 사용
+        try:
+            asyncio.run(self._initialize_auto_discovered_tools())
+        except Exception as e:
+            logger.warning(f"Failed to initialize auto-discovered MCP tools: {e}")
+            # 자동 발견 실패 시에도 계속 진행
+
+        # 3. 도구 통합 및 충돌 해결
+        self._merge_tools()
+
+    def _initialize_manual_tools(self):
+        """수동 등록 도구 초기화 - tools_config.json 기반."""
         local_tools = self.tools_config.get("local_tools", {})
-        
+
         for tool_name, tool_config in local_tools.items():
             # MCP 전용 Tool은 건너뛰기 (MCP 서버에서 동적 등록됨)
             if tool_config.get("implementation") == "mcp_only":
                 continue
-            
+
             # 카테고리 매핑
             category_map = {
                 "search": ToolCategory.SEARCH,
@@ -457,11 +483,11 @@ class UniversalMCPHub:
                 "business": ToolCategory.BUSINESS,
                 "utility": ToolCategory.UTILITY
             }
-            
+
             category_str = tool_config.get("category", "utility")
             category = category_map.get(category_str, ToolCategory.UTILITY)
             description = tool_config.get("description", f"{tool_name} tool")
-            
+
             # ToolInfo 생성
             tool_info = ToolInfo(
                 name=tool_name,
@@ -470,10 +496,10 @@ class UniversalMCPHub:
                 parameters=tool_config.get("parameters", {}),
                 mcp_server=tool_config.get("mcp_server_name", "")
             )
-            
+
             # LangChain Tool 래퍼 생성
             langchain_tool = self._create_langchain_tool_wrapper(tool_name, tool_config)
-            
+
             if langchain_tool:
                 # Registry에 등록
                 self.registry.register_local_tool(tool_info, langchain_tool)
@@ -485,12 +511,96 @@ class UniversalMCPHub:
                 logger.warning(f"⚠️ Failed to create LangChain wrapper for {tool_name}, registering without wrapper")
                 self.registry.tools[tool_name] = tool_info
                 self.tools[tool_name] = tool_info
-        
+
         # Registry의 tools를 self.tools와 동기화
         self.tools.update(self.registry.tools)
         
         logger.info(f"✅ Initialized {len(self.registry.tools)} tools in registry ({len(self.registry.langchain_tools)} with LangChain wrappers)")
-    
+
+    async def _initialize_auto_discovered_tools(self):
+        """FastMCP를 통한 자동 발견 도구 초기화."""
+        # FastMCP 서버 설정 초기화
+        self._initialize_fastmcp_servers()
+
+        if not self.fastmcp_servers:
+            logger.info("No FastMCP servers configured for auto-discovery")
+            return
+
+        # FastMCP 클라이언트 초기화
+        self.fastmcp_multi = FastMCPMulti(self.fastmcp_servers)
+        self.fastmcp_tool_loader = MCPToolLoader(self.fastmcp_multi)
+
+        try:
+            # 도구 자동 발견
+            discovered_tools = await self.fastmcp_tool_loader.get_all_tools()
+            tool_infos = await self.fastmcp_tool_loader.list_tool_info()
+
+            # 발견된 도구 저장
+            for tool, info in zip(discovered_tools, tool_infos):
+                tool_name = info.name
+                self.auto_discovered_tools[tool_name] = tool
+                self.auto_discovered_tool_infos[tool_name] = info
+
+            logger.info(f"Auto-discovered {len(discovered_tools)} tools from {len(self.fastmcp_servers)} FastMCP servers")
+
+        except Exception as e:
+            logger.error(f"Failed to auto-discover MCP tools: {e}")
+            raise
+
+    def _initialize_fastmcp_servers(self):
+        """환경 변수 및 구성에서 FastMCP 서버 설정 초기화."""
+        # 환경 변수에서 서버 설정 로드 (예: FASTMCP_SERVERS)
+        # 실제로는 config나 환경 변수에서 로드해야 함
+        # 여기서는 예시로 빈 설정 유지
+        pass
+
+    def _merge_tools(self):
+        """자동 발견 도구와 수동 등록 도구 통합 및 충돌 해결."""
+        # 자동 발견된 도구들을 ToolRegistry에 통합
+        for tool_name, tool in self.auto_discovered_tools.items():
+            tool_info = self.auto_discovered_tool_infos[tool_name]
+
+            # 카테고리 매핑 (MCP ToolInfo -> 기존 ToolCategory)
+            category_map = {
+                "search": ToolCategory.SEARCH,
+                "data": ToolCategory.DATA,
+                "code": ToolCategory.CODE,
+                "academic": ToolCategory.ACADEMIC,
+                "business": ToolCategory.BUSINESS,
+                "utility": ToolCategory.UTILITY
+            }
+
+            # 도구 설명에서 카테고리 추론 (단순 키워드 기반)
+            description_lower = tool_info.description.lower()
+            category = ToolCategory.UTILITY  # 기본값
+            for keyword, cat in category_map.items():
+                if keyword in description_lower:
+                    category = cat
+                    break
+
+            # 기존 ToolInfo 형식으로 변환
+            legacy_tool_info = ToolInfo(
+                name=tool_name,
+                category=category,
+                description=tool_info.description,
+                parameters={},  # MCP 스키마는 별도 처리
+                mcp_server=tool_info.server_guess
+            )
+
+            # 이름 충돌 확인
+            if tool_name in self.registry.tools:
+                # 충돌 시 자동 발견 도구 우선 (mcp_auto_ 접두사로 구분)
+                auto_tool_name = f"mcp_auto_{tool_name}"
+                logger.warning(f"Tool name conflict: '{tool_name}' already exists. Using '{auto_tool_name}' for auto-discovered tool.")
+                legacy_tool_info.name = auto_tool_name
+
+            # Registry에 등록
+            self.registry.register_local_tool(legacy_tool_info, tool)
+
+        # Registry와 self.tools 동기화
+        self.tools.update(self.registry.tools)
+        logger.info(f"✅ Merged tools: {len(self.registry.tools)} total tools in registry")
+
     def _initialize_clients(self):
         """클라이언트 초기화 - Gemini 직결 사용, OpenRouter 비활성화."""
         self.openrouter_client = None

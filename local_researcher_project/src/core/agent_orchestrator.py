@@ -24,6 +24,10 @@ from src.core.skills_selector import get_skill_selector, SkillMatch
 from src.core.skills_loader import Skill
 from src.core.agent_result_sharing import SharedResultsManager, AgentDiscussionManager
 from src.core.researcher_config import get_agent_config
+from src.core.mcp_auto_discovery import FastMCPMulti
+from src.core.mcp_tool_loader import MCPToolLoader
+from src.core.agent_tool_selector import AgentToolSelector, AgentType
+from src.core.config import HTTPServerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +99,8 @@ class PlannerAgent:
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "planner"
+        self.available_tools: list = []  # MCP 자동 할당 도구
+        self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
         
         # Skill이 없으면 로드 시도
@@ -323,6 +329,8 @@ class ExecutorAgent:
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "executor"
+        self.available_tools: list = []  # MCP 자동 할당 도구
+        self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
         
         # Skill이 없으면 로드 시도
@@ -786,6 +794,8 @@ class VerifierAgent:
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "verifier"
+        self.available_tools: list = []  # MCP 자동 할당 도구
+        self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
         
         # Skill이 없으면 로드 시도
@@ -997,6 +1007,8 @@ class GeneratorAgent:
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "generator"
+        self.available_tools: list = []  # MCP 자동 할당 도구
+        self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
         
         # Skill이 없으면 로드 시도
@@ -1167,14 +1179,64 @@ class AgentOrchestrator:
         self.agent_config = get_agent_config()
         self.graph = None
         # Graph는 첫 실행 시 쿼리 기반으로 빌드
-        
+
         # SharedResultsManager와 AgentDiscussionManager는 execute 시점에 초기화
         # (objective_id가 필요하므로)
         self.shared_results_manager: Optional[SharedResultsManager] = None
         self.discussion_manager: Optional[AgentDiscussionManager] = None
-        
-        logger.info("AgentOrchestrator initialized")
-    
+
+        # MCP 도구 자동 발견 및 선택 시스템 초기화
+        self.mcp_servers = self._initialize_mcp_servers()
+        self.tool_loader = MCPToolLoader(FastMCPMulti(self.mcp_servers))
+        self.tool_selector = AgentToolSelector()
+
+        logger.info("AgentOrchestrator initialized with MCP tool auto-discovery")
+
+    def _initialize_mcp_servers(self) -> dict[str, Any]:
+        """환경 변수 및 구성에서 MCP 서버 설정을 초기화."""
+        # 기본 MCP 서버 설정 (환경 변수나 config에서 로드 가능)
+        servers = {}
+
+        # 예시: 기본 검색 서버
+        # 실제로는 환경 변수나 config에서 로드해야 함
+        # servers["search"] = HTTPServerSpec(
+        #     url="http://localhost:8000/mcp",
+        #     transport="http"
+        # )
+
+        logger.info(f"Initialized {len(servers)} MCP servers for auto-discovery")
+        return servers
+
+    async def _assign_tools_to_agents(self, session_id: str) -> None:
+        """모든 에이전트에 자동으로 MCP 도구 할당."""
+        try:
+            # MCP 도구 자동 발견
+            discovered_tools = await self.tool_loader.get_all_tools()
+            tool_infos = await self.tool_loader.list_tool_info()
+
+            logger.info(f"Discovered {len(discovered_tools)} MCP tools from {len(self.mcp_servers)} servers")
+
+            # 각 에이전트별 도구 선택 및 할당
+            assignments = self.tool_selector.select_tools_for_all_agents(
+                discovered_tools, tool_infos
+            )
+
+            # 각 에이전트에 도구 할당
+            for agent_type, assignment in assignments.items():
+                agent = getattr(self, agent_type.value, None)
+                if agent:
+                    agent.available_tools = assignment.tools
+                    agent.tool_infos = assignment.tool_infos
+                    logger.info(f"Assigned {len(assignment.tools)} tools to {agent_type.value} agent")
+
+                    # 도구 할당 요약 로깅
+                    summary = self.tool_selector.get_agent_tool_summary(assignment)
+                    logger.info(f"Tool assignment summary for {agent_type.value}: {summary}")
+
+        except Exception as e:
+            logger.warning(f"Failed to assign MCP tools to agents: {e}")
+            # 도구 할당 실패 시에도 계속 진행 (기존 로직 유지)
+
     def _build_graph(self, user_query: Optional[str] = None, session_id: Optional[str] = None) -> None:
         """Build LangGraph workflow with Skills auto-selection."""
         
@@ -1203,7 +1265,11 @@ class AgentOrchestrator:
         self.executor = ExecutorAgent(context, selected_skills.get("research_executor"))
         self.verifier = VerifierAgent(context, selected_skills.get("evaluator"))
         self.generator = GeneratorAgent(context, selected_skills.get("synthesizer"))
-        
+
+        # 각 에이전트에 MCP 도구 자동 할당 (비동기)
+        if session_id:
+            asyncio.create_task(self._assign_tools_to_agents(session_id))
+
         # Build graph
         workflow = StateGraph(AgentState)
         
