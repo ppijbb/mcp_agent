@@ -19,3 +19,9 @@
 [submodule "open_researcher/LightMem"]
 	path = open_researcher/LightMem
 	url = https://github.com/zjunlp/LightMem.git
+[submodule "open_researcher/Hephaestus"]
+	path = open_researcher/Hephaestus
+	url = https://github.com/Ido-Levi/Hephaestus.git
+[submodule "open_researcher/DeepMCPAgent"]
+	path = open_researcher/DeepMCPAgent
+	url = https://github.com/cryxnet/DeepMCPAgent.git
