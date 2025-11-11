@@ -1,313 +1,570 @@
-#!/usr/bin/env python3
 """
-Error Handler - Type-Specific Error Handling
+구조화된 에러 처리 시스템
 
-Provides specialized error handling strategies for different exception types
-to improve success rate and system reliability.
+에러 분류, 상세한 에러 메시지 및 스택 트레이스, 복구 제안,
+에러 로깅 및 리포트를 제공하는 통합 에러 처리 시스템
 """
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional, Callable, Tuple
+import traceback
+import sys
 from datetime import datetime
+from enum import Enum
+from typing import Dict, Any, Optional, List, Callable, Union
+from dataclasses import dataclass, field
+from contextlib import asynccontextmanager
 
-logger = logging.getLogger(__name__)
+
+class ErrorSeverity(Enum):
+    """에러 심각도 레벨."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class ErrorCategory(Enum):
+    """에러 카테고리."""
+    NETWORK = "network"
+    API = "api"
+    LLM = "llm"
+    TOOL = "tool"
+    CONFIGURATION = "configuration"
+    VALIDATION = "validation"
+    TIMEOUT = "timeout"
+    PERMISSION = "permission"
+    RESOURCE = "resource"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class ErrorContext:
+    """에러 발생 컨텍스트."""
+    component: str
+    operation: str
+    agent_id: Optional[str] = None
+    session_id: Optional[str] = None
+    workflow_stage: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ErrorInfo:
+    """구조화된 에러 정보."""
+    error_id: str
+    timestamp: datetime
+    category: ErrorCategory
+    severity: ErrorSeverity
+    message: str
+    original_error: Optional[Exception] = None
+    stack_trace: Optional[str] = None
+    context: Optional[ErrorContext] = None
+    recovery_suggestions: List[str] = field(default_factory=list)
+    related_errors: List[str] = field(default_factory=list)
+    retry_count: int = 0
+    max_retries: int = 3
+
+    def __post_init__(self):
+        if not self.error_id:
+            self.error_id = f"err_{int(self.timestamp.timestamp())}_{hash(self.message) % 10000:04d}"
+
+        # 스택 트레이스 자동 추출
+        if self.original_error and not self.stack_trace:
+            self.stack_trace = self._extract_stack_trace()
+
+        # 복구 제안 자동 생성
+        if not self.recovery_suggestions:
+            self.recovery_suggestions = self._generate_recovery_suggestions()
+
+    def _extract_stack_trace(self) -> str:
+        """예외에서 스택 트레이스 추출."""
+        if not self.original_error:
+            return ""
+
+        # 현재 스택 트레이스 가져오기
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        if exc_tb:
+            return "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        else:
+            # 예외 객체에서 스택 트레이스 추출 시도
+            try:
+                return "".join(traceback.format_exception(
+                    type(self.original_error),
+                    self.original_error,
+                    self.original_error.__traceback__
+                ))
+            except:
+                return str(self.original_error)
+
+    def _generate_recovery_suggestions(self) -> List[str]:
+        """에러 카테고리에 따른 복구 제안 생성."""
+        suggestions = []
+
+        if self.category == ErrorCategory.NETWORK:
+            suggestions.extend([
+                "네트워크 연결 상태를 확인하세요",
+                "프록시 설정을 검토하세요",
+                "잠시 후 다시 시도하세요"
+            ])
+
+        elif self.category == ErrorCategory.API:
+            suggestions.extend([
+                "API 키가 유효한지 확인하세요",
+                "API 할당량을 확인하세요",
+                "API 엔드포인트가 올바른지 검토하세요"
+            ])
+
+        elif self.category == ErrorCategory.LLM:
+            suggestions.extend([
+                "LLM 모델이 사용 가능한지 확인하세요",
+                "토큰 제한을 초과하지 않았는지 확인하세요",
+                "다른 LLM 모델로 전환을 고려하세요"
+            ])
+
+        elif self.category == ErrorCategory.TOOL:
+            suggestions.extend([
+                "도구가 올바르게 설치되었는지 확인하세요",
+                "도구 파라미터가 유효한지 검토하세요",
+                "도구 버전을 업데이트하세요"
+            ])
+
+        elif self.category == ErrorCategory.TIMEOUT:
+            suggestions.extend([
+                "타임아웃 시간을 늘리세요",
+                "네트워크 연결을 개선하세요",
+                "작업을 더 작은 단위로 분할하세요"
+            ])
+
+        elif self.category == ErrorCategory.PERMISSION:
+            suggestions.extend([
+                "필요한 권한이 있는지 확인하세요",
+                "보안 설정을 검토하세요",
+                "관리자에게 문의하세요"
+            ])
+
+        elif self.category == ErrorCategory.CONFIGURATION:
+            suggestions.extend([
+                "환경 변수 설정을 확인하세요",
+                "설정 파일을 검토하세요",
+                "기본 설정으로 재설정하세요"
+            ])
+
+        # 일반적인 제안
+        suggestions.extend([
+            "로그 파일에서 자세한 정보를 확인하세요",
+            "문제를 재현할 수 있는 최소 예제를 만들어 보세요",
+            "최신 버전으로 업데이트하세요"
+        ])
+
+        return suggestions[:5]  # 최대 5개 제안
 
 
 class ErrorHandler:
-    """Error handler with type-specific strategies."""
-    
-    def __init__(
-        self,
-        default_max_retries: int = 3,
-        timeout_increase_factor: float = 1.5,
-        connection_retry_delay: float = 2.0
-    ):
-        """
-        Initialize error handler.
-        
-        Args:
-            default_max_retries: Default maximum retry attempts
-            timeout_increase_factor: Factor to increase timeout on retry
-            connection_retry_delay: Base delay for connection retries
-        """
-        self.default_max_retries = default_max_retries
-        self.timeout_increase_factor = timeout_increase_factor
-        self.connection_retry_delay = connection_retry_delay
-        
-        # Error handling statistics
-        self.stats = {
-            'timeout_errors': 0,
-            'connection_errors': 0,
-            'value_errors': 0,
-            'runtime_errors': 0,
-            'total_errors': 0,
-            'successful_recoveries': 0
-        }
-        
-        logger.info("ErrorHandler initialized")
-    
-    async def handle_timeout_error(
-        self,
-        error: asyncio.TimeoutError,
-        func: Callable,
-        *args,
-        current_timeout: Optional[float] = None,
-        max_retries: int = 3,
-        **kwargs
-    ) -> Tuple[Any, bool]:
-        """
-        Handle TimeoutError: Increase timeout or retry immediately.
-        
-        Args:
-            error: The TimeoutError exception
-            func: Function to retry
-            args: Function arguments
-            current_timeout: Current timeout value (if applicable)
-            max_retries: Maximum retry attempts
-            kwargs: Function keyword arguments
-        
-        Returns:
-            Tuple of (result, success)
-        """
-        self.stats['timeout_errors'] += 1
-        self.stats['total_errors'] += 1
-        
-        logger.warning(f"TimeoutError occurred: {error}")
-        
-        # Increase timeout if current_timeout is provided
-        if current_timeout is not None:
-            new_timeout = current_timeout * self.timeout_increase_factor
-            logger.info(f"Increasing timeout from {current_timeout}s to {new_timeout}s")
-            
-            # If function accepts timeout parameter, update it
-            if 'timeout' in kwargs:
-                kwargs['timeout'] = new_timeout
-            elif len(args) > 0 and isinstance(args[-1], dict):
-                # Try to update timeout in last positional arg if it's a dict
-                pass  # Would need to modify args, which is immutable
-        
-        # Retry with exponential backoff
-        for attempt in range(max_retries):
-            try:
-                wait_time = 0.5 * (2 ** attempt)  # 0.5s, 1s, 2s
-                if attempt > 0:
-                    logger.debug(f"Retrying after timeout (attempt {attempt + 1}/{max_retries}) in {wait_time}s")
-                    await asyncio.sleep(wait_time)
-                
-                result = await func(*args, **kwargs)
-                self.stats['successful_recoveries'] += 1
-                logger.info(f"Successfully recovered from TimeoutError after {attempt + 1} retries")
-                return result, True
-                
-            except asyncio.TimeoutError as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"TimeoutError persists after {max_retries} retries")
-                    return None, False
-                continue
-            except Exception as e:
-                logger.error(f"Unexpected error during timeout retry: {e}")
-                return None, False
-        
-        return None, False
-    
-    async def handle_connection_error(
-        self,
-        error: ConnectionError,
-        func: Callable,
-        *args,
-        max_retries: int = 5,
-        **kwargs
-    ) -> Tuple[Any, bool]:
-        """
-        Handle ConnectionError: Connection retry with exponential backoff.
-        
-        Args:
-            error: The ConnectionError exception
-            func: Function to retry
-            args: Function arguments
-            max_retries: Maximum retry attempts
-            kwargs: Function keyword arguments
-        
-        Returns:
-            Tuple of (result, success)
-        """
-        self.stats['connection_errors'] += 1
-        self.stats['total_errors'] += 1
-        
-        logger.warning(f"ConnectionError occurred: {error}")
-        
-        # Exponential backoff retry
-        for attempt in range(max_retries):
-            try:
-                wait_time = self.connection_retry_delay * (2 ** attempt)
-                if attempt > 0:
-                    logger.debug(f"Retrying connection (attempt {attempt + 1}/{max_retries}) in {wait_time}s")
-                    await asyncio.sleep(wait_time)
-                
-                result = await func(*args, **kwargs)
-                self.stats['successful_recoveries'] += 1
-                logger.info(f"Successfully recovered from ConnectionError after {attempt + 1} retries")
-                return result, True
-                
-            except (ConnectionError, OSError) as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"ConnectionError persists after {max_retries} retries")
-                    return None, False
-                continue
-            except Exception as e:
-                logger.error(f"Unexpected error during connection retry: {e}")
-                return None, False
-        
-        return None, False
-    
-    async def handle_value_error(
-        self,
-        error: ValueError,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> Tuple[Any, bool]:
-        """
-        Handle ValueError: Enhanced input validation before retry.
-        
-        Args:
-            error: The ValueError exception
-            func: Function to retry (usually won't retry)
-            args: Function arguments
-            kwargs: Function keyword arguments
-        
-        Returns:
-            Tuple of (result, success) - usually (None, False) as no retry
-        """
-        self.stats['value_errors'] += 1
-        self.stats['total_errors'] += 1
-        
-        logger.warning(f"ValueError (validation error): {error}")
-        logger.info("ValueError indicates input validation issue - no automatic retry")
-        
-        # ValueErrors are typically validation errors, so we don't retry
-        # But we log it for analysis
-        return None, False
-    
-    async def handle_runtime_error(
-        self,
-        error: RuntimeError,
-        func: Callable,
-        *args,
-        max_retries: int = 3,
-        **kwargs
-    ) -> Tuple[Any, bool]:
-        """
-        Handle RuntimeError: Standard exponential backoff retry.
-        
-        Args:
-            error: The RuntimeError exception
-            func: Function to retry
-            args: Function arguments
-            max_retries: Maximum retry attempts
-            kwargs: Function keyword arguments
-        
-        Returns:
-            Tuple of (result, success)
-        """
-        self.stats['runtime_errors'] += 1
-        self.stats['total_errors'] += 1
-        
-        error_msg = str(error)
-        logger.warning(f"RuntimeError occurred: {error_msg}")
-        
-        # Check if error message indicates non-retryable error
-        non_retryable_patterns = [
-            'circuit breaker',
-            'not found',
-            'invalid',
-            'unauthorized',
-            'forbidden'
+    """
+    통합 에러 처리 시스템.
+
+    에러 분류, 로깅, 복구 제안, 재시도 로직을 제공.
+    """
+
+    def __init__(self, log_errors: bool = True, enable_recovery: bool = True):
+        """초기화."""
+        self.log_errors = log_errors
+        self.enable_recovery = enable_recovery
+        self.error_history: List[ErrorInfo] = []
+        self.error_counts: Dict[str, int] = {}
+        self.recovery_strategies: Dict[ErrorCategory, List[Callable]] = {}
+        self.logger = self._setup_error_logger()
+
+        # 기본 복구 전략 등록
+        self._register_default_recovery_strategies()
+
+    def _setup_error_logger(self) -> logging.Logger:
+        """에러 전용 로거 설정."""
+        logger = logging.getLogger("error_handler")
+        logger.setLevel(logging.ERROR)
+
+        # 중복 핸들러 방지
+        if logger.handlers:
+            return logger
+
+        # 콘솔 핸들러
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.ERROR)
+        formatter = logging.Formatter(
+            '%(asctime)s - ERROR - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+        # 파일 핸들러 (선택적)
+        try:
+            from pathlib import Path
+            error_log_path = Path("logs/errors.log")
+            error_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            file_handler = logging.FileHandler(error_log_path, encoding='utf-8')
+            file_handler.setLevel(logging.ERROR)
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s\n%(exc_info)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            logger.warning(f"Failed to setup error file logging: {e}")
+
+        logger.propagate = False
+        return logger
+
+    def _register_default_recovery_strategies(self):
+        """기본 복구 전략 등록."""
+        # 네트워크 에러 복구
+        self.recovery_strategies[ErrorCategory.NETWORK] = [
+            self._retry_with_backoff,
+            self._check_network_connectivity
         ]
-        
-        if any(pattern in error_msg.lower() for pattern in non_retryable_patterns):
-            logger.info(f"RuntimeError appears non-retryable based on error message")
-            return None, False
-        
-        # Standard exponential backoff retry
-        for attempt in range(max_retries):
-            try:
-                wait_time = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
-                if attempt > 0:
-                    logger.debug(f"Retrying after RuntimeError (attempt {attempt + 1}/{max_retries}) in {wait_time}s")
-                    await asyncio.sleep(wait_time)
-                
-                result = await func(*args, **kwargs)
-                self.stats['successful_recoveries'] += 1
-                logger.info(f"Successfully recovered from RuntimeError after {attempt + 1} retries")
-                return result, True
-                
-            except RuntimeError as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"RuntimeError persists after {max_retries} retries")
-                    return None, False
-                continue
-            except Exception as e:
-                logger.error(f"Unexpected error during runtime retry: {e}")
-                return None, False
-        
-        return None, False
-    
+
+        # API 에러 복구
+        self.recovery_strategies[ErrorCategory.API] = [
+            self._retry_with_backoff,
+            self._validate_api_key
+        ]
+
+        # 타임아웃 복구
+        self.recovery_strategies[ErrorCategory.TIMEOUT] = [
+            self._increase_timeout,
+            self._retry_with_backoff
+        ]
+
     async def handle_error(
         self,
         error: Exception,
-        func: Callable,
+        category: ErrorCategory = ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+        context: Optional[ErrorContext] = None,
+        custom_message: Optional[str] = None
+    ) -> ErrorInfo:
+        """
+        에러 처리 및 구조화.
+
+        Args:
+            error: 발생한 예외
+            category: 에러 카테고리
+            severity: 에러 심각도
+            context: 에러 발생 컨텍스트
+            custom_message: 사용자 정의 메시지
+
+        Returns:
+            구조화된 에러 정보
+        """
+        # 에러 정보 생성
+        error_info = ErrorInfo(
+            error_id="",
+            timestamp=datetime.now(),
+            category=category,
+            severity=severity,
+            message=custom_message or str(error),
+            original_error=error,
+            context=context
+        )
+
+        # 에러 히스토리 저장
+        self.error_history.append(error_info)
+        self.error_counts[str(category)] = self.error_counts.get(str(category), 0) + 1
+
+        # 로깅
+        if self.log_errors:
+            await self._log_error(error_info)
+
+        # 출력 매니저를 통한 사용자 표시
+        await self._display_error(error_info)
+
+        return error_info
+
+    async def _log_error(self, error_info: ErrorInfo):
+        """에러 로깅."""
+        log_message = f"[{error_info.category.value.upper()}] {error_info.message}"
+
+        if error_info.context:
+            context_parts = []
+            if error_info.context.component:
+                context_parts.append(f"component={error_info.context.component}")
+            if error_info.context.operation:
+                context_parts.append(f"operation={error_info.context.operation}")
+            if error_info.context.agent_id:
+                context_parts.append(f"agent={error_info.context.agent_id}")
+            if context_parts:
+                log_message += f" ({', '.join(context_parts)})"
+
+        self.logger.error(log_message)
+
+        # 심각한 에러의 경우 스택 트레이스도 로깅
+        if error_info.severity in [ErrorSeverity.HIGH, ErrorSeverity.CRITICAL] and error_info.stack_trace:
+            self.logger.error(f"Stack trace for {error_info.error_id}:\n{error_info.stack_trace}")
+
+    async def _display_error(self, error_info: ErrorInfo):
+        """출력 매니저를 통한 에러 표시."""
+        try:
+            from src.utils.output_manager import get_output_manager, OutputLevel
+            output_manager = get_output_manager()
+
+            # 심각도에 따른 출력 레벨 결정
+            if error_info.severity == ErrorSeverity.CRITICAL:
+                level = OutputLevel.USER
+            elif error_info.severity == ErrorSeverity.HIGH:
+                level = OutputLevel.USER
+            else:
+                level = OutputLevel.SERVICE
+
+            # 에러 메시지 구성
+            error_message = f"[{error_info.category.value.upper()}] {error_info.message}"
+
+            if error_info.context and error_info.context.agent_id:
+                error_message = f"{output_manager._format_agent_name(error_info.context.agent_id)} {error_message}"
+
+            # 복구 제안 표시
+            if error_info.recovery_suggestions:
+                error_message += "\n💡 복구 제안:"
+                for i, suggestion in enumerate(error_info.recovery_suggestions[:3], 1):
+                    error_message += f"\n  {i}. {suggestion}"
+
+            await output_manager.output(
+                error_message,
+                level=level,
+                status_type='error'
+            )
+
+        except Exception as display_error:
+            # 출력 매니저 실패 시 기본 로깅
+            self.logger.error(f"Failed to display error: {display_error}")
+
+    async def attempt_recovery(
+        self,
+        error_info: ErrorInfo,
+        recovery_func: Optional[Callable] = None
+    ) -> bool:
+        """
+        에러 복구 시도.
+
+        Args:
+            error_info: 에러 정보
+            recovery_func: 사용자 정의 복구 함수
+
+        Returns:
+            복구 성공 여부
+        """
+        if not self.enable_recovery:
+            return False
+
+        try:
+            # 사용자 정의 복구 함수 우선 사용
+            if recovery_func:
+                result = await recovery_func(error_info)
+                if result:
+                    self.logger.info(f"Custom recovery succeeded for {error_info.error_id}")
+                    return True
+
+            # 자동 복구 전략 적용
+            strategies = self.recovery_strategies.get(error_info.category, [])
+            for strategy in strategies:
+                try:
+                    result = await strategy(error_info)
+                    if result:
+                        self.logger.info(f"Auto recovery succeeded for {error_info.error_id} using {strategy.__name__}")
+                        return True
+                except Exception as recovery_error:
+                    self.logger.warning(f"Recovery strategy {strategy.__name__} failed: {recovery_error}")
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Recovery attempt failed: {e}")
+            return False
+
+    async def retry_operation(
+        self,
+        operation: Callable,
+        max_retries: int = 3,
+        backoff_factor: float = 1.5,
+        error_category: ErrorCategory = ErrorCategory.UNKNOWN,
         *args,
         **kwargs
-    ) -> Tuple[Any, bool]:
+    ):
         """
-        Handle any error with appropriate strategy.
-        
+        재시도 로직이 포함된 작업 실행.
+
         Args:
-            error: The exception
-            func: Function to retry
-            args: Function arguments
-            kwargs: Function keyword arguments
-        
+            operation: 실행할 작업 함수
+            max_retries: 최대 재시도 횟수
+            backoff_factor: 백오프 계수
+            error_category: 에러 카테고리
+            *args, **kwargs: 작업 함수에 전달할 인자
+
         Returns:
-            Tuple of (result, success)
+            작업 결과 또는 마지막 에러
         """
-        if isinstance(error, asyncio.TimeoutError):
-            return await self.handle_timeout_error(error, func, *args, **kwargs)
-        elif isinstance(error, (ConnectionError, OSError)):
-            return await self.handle_connection_error(error, func, *args, **kwargs)
-        elif isinstance(error, ValueError):
-            return await self.handle_value_error(error, func, *args, **kwargs)
-        elif isinstance(error, RuntimeError):
-            return await self.handle_runtime_error(error, func, *args, **kwargs)
-        else:
-            # Unknown error type - use RuntimeError handler
-            logger.warning(f"Unknown error type: {type(error).__name__}, using RuntimeError handler")
-            return await self.handle_runtime_error(RuntimeError(str(error)), func, *args, **kwargs)
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get error handling statistics."""
-        recovery_rate = (
-            self.stats['successful_recoveries'] / self.stats['total_errors']
-            if self.stats['total_errors'] > 0 else 0.0
-        )
-        
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                return await operation(*args, **kwargs)
+            except Exception as e:
+                last_error = e
+
+                if attempt < max_retries:
+                    # 재시도 전 대기
+                    wait_time = backoff_factor ** attempt
+                    self.logger.warning(f"Operation failed (attempt {attempt + 1}/{max_retries + 1}), retrying in {wait_time:.1f}s: {e}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    # 마지막 시도 실패
+                    await self.handle_error(
+                        e,
+                        category=error_category,
+                        severity=ErrorSeverity.MEDIUM,
+                        custom_message=f"Operation failed after {max_retries + 1} attempts: {str(e)}"
+                    )
+
+        return last_error
+
+    # 기본 복구 전략들
+    async def _retry_with_backoff(self, error_info: ErrorInfo) -> bool:
+        """백오프를 사용한 재시도."""
+        if error_info.retry_count >= error_info.max_retries:
+            return False
+
+        wait_time = 2 ** error_info.retry_count  # 지수 백오프
+        await asyncio.sleep(min(wait_time, 30))  # 최대 30초
+
+        error_info.retry_count += 1
+        return True  # 재시도 신호
+
+    async def _check_network_connectivity(self, error_info: ErrorInfo) -> bool:
+        """네트워크 연결성 확인."""
+        try:
+            import socket
+            # 간단한 연결 테스트
+            socket.create_connection(("8.8.8.8", 53), timeout=5)
+            return True
+        except:
+            return False
+
+    async def _validate_api_key(self, error_info: ErrorInfo) -> bool:
+        """API 키 유효성 검증 (플레이스홀더)."""
+        # 실제 구현에서는 API 키 검증 로직 추가
+        return False
+
+    async def _increase_timeout(self, error_info: ErrorInfo) -> bool:
+        """타임아웃 증가 (플레이스홀더)."""
+        # 실제 구현에서는 타임아웃 설정 조정
+        return False
+
+    def get_error_summary(self) -> Dict[str, Any]:
+        """에러 통계 요약."""
         return {
-            **self.stats,
-            'recovery_rate': recovery_rate,
-            'timestamp': datetime.now().isoformat()
+            "total_errors": len(self.error_history),
+            "error_counts_by_category": self.error_counts.copy(),
+            "recent_errors": [
+                {
+                    "id": e.error_id,
+                    "category": e.category.value,
+                    "severity": e.severity.value,
+                    "message": e.message[:100] + "..." if len(e.message) > 100 else e.message,
+                    "timestamp": e.timestamp.isoformat()
+                }
+                for e in self.error_history[-10:]  # 최근 10개
+            ]
         }
 
+    @asynccontextmanager
+    async def error_context(
+        self,
+        component: str,
+        operation: str,
+        agent_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ):
+        """
+        에러 컨텍스트 매니저.
 
-# Global error handler instance
-_error_handler_instance: Optional[ErrorHandler] = None
+        자동으로 에러 컨텍스트를 설정하고 에러 발생 시 처리.
+        """
+        context = ErrorContext(
+            component=component,
+            operation=operation,
+            agent_id=agent_id,
+            session_id=session_id
+        )
 
+        try:
+            yield context
+        except Exception as e:
+            await self.handle_error(
+                e,
+                context=context,
+                custom_message=f"{operation} failed in {component}"
+            )
+            raise
+
+
+# 전역 에러 핸들러 인스턴스
+_error_handler = None
 
 def get_error_handler() -> ErrorHandler:
-    """Get or create global error handler instance."""
-    global _error_handler_instance
-    if _error_handler_instance is None:
-        _error_handler_instance = ErrorHandler()
-    return _error_handler_instance
+    """전역 에러 핸들러 인스턴스 반환."""
+    global _error_handler
+    if _error_handler is None:
+        _error_handler = ErrorHandler()
+    return _error_handler
 
+def set_error_handler(handler: ErrorHandler):
+    """전역 에러 핸들러 설정."""
+    global _error_handler
+    _error_handler = handler
+
+
+# 편의 함수들
+async def handle_error_async(
+    error: Exception,
+    category: ErrorCategory = ErrorCategory.UNKNOWN,
+    severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+    context: Optional[ErrorContext] = None,
+    custom_message: Optional[str] = None
+) -> ErrorInfo:
+    """비동기 에러 처리 헬퍼 함수."""
+    handler = get_error_handler()
+    return await handler.handle_error(error, category, severity, context, custom_message)
+
+def handle_error_sync(
+    error: Exception,
+    category: ErrorCategory = ErrorCategory.UNKNOWN,
+    severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+    context: Optional[ErrorContext] = None,
+    custom_message: Optional[str] = None
+) -> None:
+    """동기 에러 처리 헬퍼 함수."""
+    handler = get_error_handler()
+    # 동기 컨텍스트에서 비동기 함수 실행
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # 이미 실행 중인 이벤트 루프에서는 태스크 생성
+            loop.create_task(handler.handle_error(error, category, severity, context, custom_message))
+        else:
+            # 이벤트 루프 실행
+            loop.run_until_complete(handler.handle_error(error, category, severity, context, custom_message))
+    except RuntimeError:
+        # 이벤트 루프가 없는 경우 (메인 스레드 외부)
+        import threading
+        def run_async():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                new_loop.run_until_complete(handler.handle_error(error, category, severity, context, custom_message))
+            finally:
+                new_loop.close()
+
+        thread = threading.Thread(target=run_async, daemon=True)
+        thread.start()

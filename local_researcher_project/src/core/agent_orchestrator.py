@@ -513,17 +513,24 @@ class ExecutorAgent:
             
             # 모든 검색 결과를 SharedResultsManager에 공유
             if self.context.shared_results_manager:
+                shared_count = 0
                 for sr in search_results_list:
                     if sr.get('success'):
                         task_id = f"search_{sr['index']}"
-                        await self.context.shared_results_manager.share_result(
+                        result_id = await self.context.shared_results_manager.share_result(
                             task_id=task_id,
                             agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                             result=sr['result'],
                             metadata={"query": sr['query'], "index": sr['index']},
                             confidence=1.0 if sr.get('success') else 0.0
                         )
-                        logger.info(f"[{self.name}] Shared search result for query: '{sr['query']}' (agent_id: {self.context.agent_id})")
+                        shared_count += 1
+                        logger.info(f"[{self.name}] 🔗 Shared search result for query: '{sr['query'][:50]}...' (result_id: {result_id[:8]}..., agent_id: {self.context.agent_id})")
+
+                # 공유 통계 로깅
+                total_results = len([sr for sr in search_results_list if sr.get('success')])
+                logger.info(f"[{self.name}] 📤 Shared {shared_count}/{total_results} successful search results with other agents")
+                logger.info(f"[{self.name}] 🤝 Agent communication: {shared_count} results shared via SharedResultsManager")
             
             logger.info(f"[{self.name}] Search completed: success={search_result.get('success')}, total_results={search_result.get('data', {}).get('total_results', 0)}")
             logger.info(f"[{self.name}] Search result type: {type(search_result)}, keys: {list(search_result.keys()) if isinstance(search_result, dict) else 'N/A'}")
@@ -822,9 +829,10 @@ class VerifierAgent:
             shared_results = await self.context.shared_results_manager.get_shared_results(
                 exclude_agent_id=self.name
             )
-            logger.info(f"[{self.name}] Found {len(shared_results)} shared results from other agents")
-            
+            logger.info(f"[{self.name}] 🔍 Found {len(shared_results)} shared results from other agents")
+
             # 공유된 결과를 results에 추가
+            shared_data_count = 0
             for shared_result in shared_results:
                 if isinstance(shared_result.result, dict) and shared_result.result.get('data'):
                     # 검색 결과에서 구조화된 데이터 추출
@@ -833,8 +841,13 @@ class VerifierAgent:
                         shared_search_results = data.get('results', data.get('items', []))
                         if isinstance(shared_search_results, list):
                             results.extend(shared_search_results)
+                            shared_data_count += len(shared_search_results)
                     elif isinstance(data, list):
                         results.extend(data)
+                        shared_data_count += len(data)
+
+            logger.info(f"[{self.name}] 📥 Retrieved {shared_data_count} additional results from {len(shared_results)} shared agent results")
+            logger.info(f"[{self.name}] 🤝 Agent communication: Retrieved results from agents: {[r.agent_id for r in shared_results]}")
         
         logger.info(f"[{self.name}] Found {len(results)} results to verify (including shared results)")
         
@@ -911,37 +924,53 @@ URL: {url}
         
         # 검증 결과를 SharedResultsManager에 공유
         if self.context.shared_results_manager:
+            shared_verification_count = 0
             for verified_result in verified:
                 task_id = f"verification_{verified_result.get('index', 0)}"
-                await self.context.shared_results_manager.share_result(
+                result_id = await self.context.shared_results_manager.share_result(
                     task_id=task_id,
                     agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                     result=verified_result,
                     metadata={"status": verified_result.get('status', 'unknown')},
                     confidence=1.0 if verified_result.get('status') == 'verified' else 0.5
                 )
-            
+                shared_verification_count += 1
+                logger.info(f"[{self.name}] 🔗 Shared verification result {verified_result.get('index', 0)} (result_id: {result_id[:8]}..., status: {verified_result.get('status', 'unknown')})")
+
+            logger.info(f"[{self.name}] 📤 Shared {shared_verification_count} verification results with other agents")
+
             # 다른 에이전트의 검증 결과와 토론 (검증 결과가 다른 경우)
             if self.context.discussion_manager and len(verified) > 0:
                 other_verified = await self.context.shared_results_manager.get_shared_results(
                     agent_id=None,  # 모든 에이전트
                     exclude_agent_id=self.context.agent_id  # 고유한 agent_id 사용
                 )
-                
+
                 # 검증된 결과만 필터링
                 other_verified_results = [r for r in other_verified if isinstance(r.result, dict) and r.result.get('status') == 'verified']
-                
+
                 if other_verified_results:
+                    logger.info(f"[{self.name}] 💬 Found {len(other_verified_results)} verified results from other agents for discussion")
+
                     # 첫 번째 검증 결과에 대해 토론
                     first_verified = verified[0]
                     result_id = f"verification_{first_verified.get('index', 0)}"
+                    logger.info(f"[{self.name}] 💬 Starting discussion on verification result {first_verified.get('index', 0)} with {len(other_verified_results[:3])} other agents")
+
                     discussion = await self.context.discussion_manager.agent_discuss_result(
                         result_id=result_id,
                         agent_id=self.context.agent_id,  # 고유한 agent_id 사용
                         other_agent_results=other_verified_results[:3]  # 최대 3개
                     )
                     if discussion:
-                        logger.info(f"[{self.name}] Discussion completed: {discussion[:100]}... (agent_id: {self.context.agent_id})")
+                        logger.info(f"[{self.name}] 💬 Discussion completed: {discussion[:150]}... (agent_id: {self.context.agent_id})")
+                        logger.info(f"[{self.name}] 🤝 Agent discussion: Analyzed verification consistency with {len(other_verified_results[:3])} peer agents")
+                    else:
+                        logger.info(f"[{self.name}] 💬 No discussion generated for verification result")
+                else:
+                    logger.info(f"[{self.name}] 💬 No other verified results found for discussion")
+            else:
+                logger.info(f"[{self.name}] Agent discussion disabled or no verified results to discuss")
         
         state['verified_results'] = verified
         state['current_agent'] = self.name
@@ -1009,9 +1038,16 @@ class GeneratorAgent:
         # SharedResultsManager에서 모든 공유된 검증 결과 가져오기
         if self.context.shared_results_manager:
             all_shared_results = await self.context.shared_results_manager.get_shared_results()
-            logger.info(f"[{self.name}] Found {len(all_shared_results)} shared results from all agents")
-            
+            logger.info(f"[{self.name}] 🔍 Found {len(all_shared_results)} total shared results from all agents")
+
+            # 공유 결과 통계
+            verification_results = [r for r in all_shared_results if isinstance(r.result, dict) and r.result.get('status') == 'verified']
+            search_results = [r for r in all_shared_results if not isinstance(r.result, dict) or r.result.get('status') != 'verified']
+
+            logger.info(f"[{self.name}] 📊 Shared results breakdown: {len(verification_results)} verified, {len(search_results)} search results")
+
             # 검증된 결과만 필터링하여 추가
+            added_from_shared = 0
             for shared_result in all_shared_results:
                 if isinstance(shared_result.result, dict):
                     # 검증된 결과인 경우
@@ -1021,7 +1057,11 @@ class GeneratorAgent:
                         result_url = shared_result.result.get('url', '')
                         if result_url and result_url not in existing_urls:
                             verified_results.append(shared_result.result)
-                            logger.info(f"[{self.name}] Added shared verified result: {shared_result.result.get('title', '')[:50]}...")
+                            added_from_shared += 1
+                            logger.info(f"[{self.name}] ➕ Added shared verified result from agent {shared_result.agent_id}: {shared_result.result.get('title', '')[:50]}...")
+
+            logger.info(f"[{self.name}] 📥 Added {added_from_shared} verified results from shared agent communications")
+            logger.info(f"[{self.name}] 🤝 Agent communication: Incorporated results from agents: {list(set(r.agent_id for r in all_shared_results))}")
         
         logger.info(f"[{self.name}] Found {len(verified_results)} verified results for report generation (including shared results)")
         
@@ -1294,28 +1334,44 @@ class AgentOrchestrator:
         # 병렬 실행
         executor_results = await asyncio.gather(*executor_tasks, return_exceptions=True)
         
-        # 결과 통합
+        # 결과 통합 및 통신 상태 확인
         all_results = []
         all_failed = False
         errors = []
-        
+        communication_stats = {
+            'agents_contributed': 0,
+            'results_shared': 0,
+            'communication_errors': 0
+        }
+
         for i, result in enumerate(executor_results):
             if isinstance(result, Exception):
                 logger.error(f"[WORKFLOW] ExecutorAgent {i} raised exception: {result}")
                 all_failed = True
                 errors.append(f"Task {tasks[i].get('task_id', 'unknown')}: {str(result)}")
+                communication_stats['communication_errors'] += 1
             elif isinstance(result, dict):
                 # 결과 수집
                 task_results = result.get('research_results', [])
                 if task_results:
                     all_results.extend(task_results)
+                    communication_stats['agents_contributed'] += 1
                     logger.info(f"[WORKFLOW] ExecutorAgent {i} contributed {len(task_results)} results")
-                
+
+                # SharedResultsManager 통신 상태 확인
+                if self.shared_results_manager:
+                    agent_id = f"executor_{i}"
+                    agent_results = await self.shared_results_manager.get_shared_results(agent_id=agent_id)
+                    if agent_results:
+                        communication_stats['results_shared'] += len(agent_results)
+                        logger.info(f"[WORKFLOW] 🤝 ExecutorAgent {agent_id} shared {len(agent_results)} results via SharedResultsManager")
+
                 # 실패 상태 확인
                 if result.get('research_failed'):
                     all_failed = True
                     if result.get('error'):
                         errors.append(result['error'])
+                        communication_stats['communication_errors'] += 1
         
         # 통합된 상태 생성
         final_state = state.copy()
@@ -1327,6 +1383,9 @@ class AgentOrchestrator:
             final_state['error'] = "; ".join(errors)
         
         logger.info(f"[WORKFLOW] ✅ Parallel execution completed: {len(all_results)} total results from {len(tasks)} tasks")
+        logger.info(f"[WORKFLOW] 🤝 Agent communication summary: {communication_stats['agents_contributed']} agents contributed, {communication_stats['results_shared']} results shared")
+        if communication_stats['communication_errors'] > 0:
+            logger.warning(f"[WORKFLOW] ⚠️ Communication errors: {communication_stats['communication_errors']}")
         logger.info(f"[WORKFLOW] Failed: {all_failed}")
         
         return final_state
@@ -1397,6 +1456,7 @@ class AgentOrchestrator:
         async def verify_single_chunk(chunk: List[Dict[str, Any]], chunk_index: int) -> List[Dict[str, Any]]:
             """단일 청크를 검증하는 VerifierAgent."""
             agent_id = f"verifier_{chunk_index}"
+            logger.info(f"[WORKFLOW] 💬 Creating VerifierAgent {agent_id} for {len(chunk)} results")
             context = AgentContext(
                 agent_id=agent_id,
                 session_id=state['session_id'],
@@ -1437,15 +1497,31 @@ class AgentOrchestrator:
         # 병렬 실행
         verifier_results = await asyncio.gather(*verifier_tasks, return_exceptions=True)
         
-        # 결과 통합
+        # 결과 통합 및 통신 상태 확인
         all_verified = []
+        communication_stats = {
+            'verifiers_contributed': 0,
+            'verification_results_shared': 0,
+            'discussion_participants': 0
+        }
+
         for i, result in enumerate(verifier_results):
             if isinstance(result, Exception):
                 logger.error(f"[WORKFLOW] VerifierAgent {i} raised exception: {result}")
             elif isinstance(result, list):
                 all_verified.extend(result)
+                communication_stats['verifiers_contributed'] += 1
                 logger.info(f"[WORKFLOW] VerifierAgent {i} contributed {len(result)} verified results")
-        
+
+                # SharedResultsManager 통신 상태 확인
+                if self.shared_results_manager:
+                    agent_id = f"verifier_{i}"
+                    agent_results = await self.shared_results_manager.get_shared_results(agent_id=agent_id)
+                    verification_shared = [r for r in agent_results if isinstance(r.result, dict) and r.result.get('status') == 'verified']
+                    if verification_shared:
+                        communication_stats['verification_results_shared'] += len(verification_shared)
+                        logger.info(f"[WORKFLOW] 🤝 VerifierAgent {agent_id} shared {len(verification_shared)} verification results")
+
         # 중복 제거 (URL 기준)
         seen_urls = set()
         unique_verified = []
@@ -1457,15 +1533,20 @@ class AgentOrchestrator:
                     unique_verified.append(verified_result)
                 elif not url:
                     unique_verified.append(verified_result)
-        
+
+        logger.info(f"[WORKFLOW] 📊 Verification deduplication: {len(all_verified)} → {len(unique_verified)} unique results")
+
         # 여러 VerifierAgent 간 토론 (검증 결과가 다른 경우)
         if self.discussion_manager and len(unique_verified) > 0:
             # 다른 VerifierAgent의 검증 결과 가져오기
             if self.shared_results_manager:
                 other_verified = await self.shared_results_manager.get_shared_results()
                 other_verified_results = [r for r in other_verified if isinstance(r.result, dict) and r.result.get('status') == 'verified']
-                
+
                 if other_verified_results:
+                    communication_stats['discussion_participants'] = len(set(r.agent_id for r in other_verified_results))
+                    logger.info(f"[WORKFLOW] 💬 Starting inter-verifier discussion with {len(other_verified_results)} results from {communication_stats['discussion_participants']} agents")
+
                     # 첫 번째 검증 결과에 대해 토론
                     first_verified = unique_verified[0]
                     result_id = f"verification_{first_verified.get('index', 0)}"
@@ -1475,7 +1556,12 @@ class AgentOrchestrator:
                         other_agent_results=other_verified_results[:3]
                     )
                     if discussion:
-                        logger.info(f"[WORKFLOW] Discussion completed: {discussion[:100]}...")
+                        logger.info(f"[WORKFLOW] 💬 Inter-verifier discussion completed: {discussion[:150]}...")
+                        logger.info(f"[WORKFLOW] 🤝 Agent discussion: {communication_stats['discussion_participants']} verifiers participated in result validation")
+                    else:
+                        logger.info(f"[WORKFLOW] 💬 No discussion generated between verifiers")
+                else:
+                    logger.info(f"[WORKFLOW] 💬 No other verified results available for inter-verifier discussion")
         
         # 통합된 상태 생성
         final_state = state.copy()
@@ -1484,6 +1570,9 @@ class AgentOrchestrator:
         final_state['current_agent'] = "parallel_verifier"
         
         logger.info(f"[WORKFLOW] ✅ Parallel verification completed: {len(unique_verified)} total verified results from {len(result_chunks)} verifiers")
+        logger.info(f"[WORKFLOW] 🤝 Agent communication summary: {communication_stats['verifiers_contributed']} verifiers contributed, {communication_stats['verification_results_shared']} verification results shared")
+        if communication_stats['discussion_participants'] > 0:
+            logger.info(f"[WORKFLOW] 💬 Inter-verifier discussion: {communication_stats['discussion_participants']} agents participated")
         
         return final_state
     
@@ -1537,6 +1626,8 @@ class AgentOrchestrator:
                 shared_results_manager=self.shared_results_manager
             )
             logger.info("✅ Agent result sharing and discussion enabled")
+            logger.info(f"🤝 SharedResultsManager initialized for objective: {objective_id}")
+            logger.info(f"💬 AgentDiscussionManager initialized with agent communication support")
         else:
             self.shared_results_manager = None
             self.discussion_manager = None

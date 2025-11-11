@@ -1193,14 +1193,27 @@ class UniversalMCPHub:
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         Tool 실행 - MCP 프로토콜만 사용.
-        
+
         실행 우선순위:
         1. MCP 서버에서 Tool 실행 (server_name::tool_name 형식 또는 tool_name으로 찾기)
         2. 실패 시 명확한 에러 반환 (fallback 없음)
         """
         import time
         start_time = time.time()
+
+        # 출력 매니저 통합
+        from src.utils.output_manager import get_output_manager
+        output_manager = get_output_manager()
+
+        # 도구 실행 시작 알림
+        await output_manager.output(
+            f"🔧 도구 '{tool_name}' 실행 시작...",
+            level=output_manager.OutputLevel.SERVICE,
+            agent_name="mcp_integration"
+        )
+
         logger.info(f"[MCP][exec.start] tool={tool_name} params_keys={list(parameters.keys())}")
+        logger.info(f"[MCP][exec.start] parameters_preview={str(parameters)[:200]}...")
         
         # g-search, tavily, exa는 먼저 라우팅 확인 (도구 찾기 전에)
         if tool_name in ["g-search", "tavily", "exa"]:
@@ -1208,24 +1221,60 @@ class UniversalMCPHub:
             try:
                 from src.core.mcp_integration import _execute_search_tool, ToolResult
                 tool_result = await _execute_search_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
                 logger.info(f"[MCP][exec.route.success] {tool_name} routing succeeded: success={tool_result.success}")
+
+                # 도구 실행 결과 표시
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict) and 'results' in tool_result.data:
+                        result_count = len(tool_result.data['results'])
+                        result_summary = f"{result_count}개 결과 검색됨"
+                    else:
+                        result_summary = f"데이터 반환됨 ({type(tool_result.data).__name__})"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+
+                tool_exec_result = output_manager.ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+
                 return {
                     "success": tool_result.success,
                     "data": tool_result.data,
                     "error": tool_result.error,
-                    "execution_time": time.time() - start_time,
+                    "execution_time": execution_time,
                     "confidence": tool_result.confidence,
                     "source": "mcp_search"
                 }
             except Exception as e:
+                execution_time = time.time() - start_time
                 logger.error(f"[MCP][exec.route.error] {tool_name} routing failed: {e}", exc_info=True)
+
+                # 도구 실행 실패 결과 표시
+                tool_exec_result = output_manager.ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"라우팅 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+
                 # 라우팅 실패 시 일반 도구 찾기로 fallback
                 # 하지만 라우팅이 실패하면 검색 도구 자체가 문제이므로 빈 결과 반환
                 return {
                     "success": False,
                     "data": None,
                     "error": f"Search tool routing failed: {str(e)}",
-                    "execution_time": time.time() - start_time,
+                    "execution_time": execution_time,
                     "confidence": 0.0,
                     "source": "mcp_search_routing_failed"
                 }
@@ -1269,12 +1318,26 @@ class UniversalMCPHub:
         if not tool_info:
             # 사용 가능한 모든 tool 목록 로깅
             available_tools = self.registry.get_all_tool_names()
+            execution_time = time.time() - start_time
             logger.error(f"[MCP][exec.unknown] tool={tool_name} available={available_tools}")
+
+            # 도구 찾기 실패 결과 표시
+            available_preview = ', '.join(available_tools[:5]) + ('...' if len(available_tools) > 5 else '')
+            tool_exec_result = output_manager.ToolExecutionResult(
+                tool_name=tool_name,
+                success=False,
+                execution_time=execution_time,
+                result_summary=f"알 수 없는 도구. 사용 가능한 도구: {available_preview}",
+                confidence=0.0,
+                error_message=f"Unknown tool: {tool_name}"
+            )
+            await output_manager.output_tool_execution(tool_exec_result)
+
             return {
                 "success": False,
                 "data": None,
                 "error": f"Unknown tool: {tool_name}. Available tools: {', '.join(available_tools[:10])}",
-                "execution_time": time.time() - start_time,
+                "execution_time": execution_time,
                 "confidence": 0.0
             }
 
@@ -1386,12 +1449,25 @@ class UniversalMCPHub:
                                     break
                             
                             if is_error:
+                                execution_time = time.time() - start_time
                                 logger.error(f"MCP tool {tool_name} returned error: {error_msg}")
+
+                                # MCP 도구 에러 결과 표시
+                                tool_exec_result = output_manager.ToolExecutionResult(
+                                    tool_name=tool_name,
+                                    success=False,
+                                    execution_time=execution_time,
+                                    result_summary=f"MCP 도구 에러: {error_msg[:100]}...",
+                                    confidence=0.0,
+                                    error_message=error_msg
+                                )
+                                await output_manager.output_tool_execution(tool_exec_result)
+
                                 return {
                                     "success": False,
                                     "data": None,
                                     "error": f"MCP tool returned error: {error_msg}",
-                                    "execution_time": time.time() - start_time,
+                                    "execution_time": execution_time,
                                     "confidence": 0.0,
                                     "source": "mcp"
                                 }
@@ -1435,46 +1511,109 @@ class UniversalMCPHub:
                                         result_data = {"result": mcp_result}
                             else:
                                 result_data = mcp_result if isinstance(mcp_result, dict) else {"result": mcp_result}
-                            
+
+                            execution_time = time.time() - start_time
+
+                            # MCP 도구 성공 결과 표시
+                            result_summary = ""
+                            if isinstance(result_data, dict):
+                                if 'results' in result_data and isinstance(result_data['results'], list):
+                                    result_count = len(result_data['results'])
+                                    result_summary = f"{result_count}개 결과 반환됨"
+                                elif 'result' in result_data:
+                                    result_summary = f"결과 반환됨 ({type(result_data['result']).__name__})"
+                                else:
+                                    result_summary = f"데이터 반환됨 ({len(result_data)}개 필드)"
+                            else:
+                                result_summary = f"결과 반환됨 ({type(result_data).__name__})"
+
+                            tool_exec_result = output_manager.ToolExecutionResult(
+                                tool_name=tool_name,
+                                success=True,
+                                execution_time=execution_time,
+                                result_summary=result_summary,
+                                confidence=0.9
+                            )
+                            await output_manager.output_tool_execution(tool_exec_result)
+
                             return {
                                 "success": True,
                                 "data": result_data,
                                 "error": None,
-                                "execution_time": time.time() - start_time,
+                                "execution_time": execution_time,
                                 "confidence": 0.9,
                                 "source": "mcp"
                             }
                     except Exception as mcp_error:
+                        execution_time = time.time() - start_time
                         logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error}")
+
+                        # MCP 실행 실패 결과 표시
+                        tool_exec_result = output_manager.ToolExecutionResult(
+                            tool_name=tool_name,
+                            success=False,
+                            execution_time=execution_time,
+                            result_summary=f"MCP 실행 실패: {str(mcp_error)[:100]}...",
+                            confidence=0.0,
+                            error_message=str(mcp_error)
+                        )
+                        await output_manager.output_tool_execution(tool_exec_result)
+
                         # MCP 실패 시 에러 반환 (fallback 제거)
                         return {
                             "success": False,
                             "data": None,
                             "error": f"MCP tool execution failed: {str(mcp_error)}",
-                            "execution_time": time.time() - start_time,
+                            "execution_time": execution_time,
                             "confidence": 0.0,
                             "source": "mcp"
                         }
             
             # MCP 도구가 아닌 경우 에러 반환 (fallback 제거)
             error_msg = f"Tool '{tool_name}' is not available via MCP servers"
+            execution_time = time.time() - start_time
             logger.error(f"[MCP][exec.error] {error_msg}")
+
+            # MCP 도구 없음 결과 표시
+            tool_exec_result = output_manager.ToolExecutionResult(
+                tool_name=tool_name,
+                success=False,
+                execution_time=execution_time,
+                result_summary="MCP 서버를 통한 도구를 사용할 수 없음",
+                confidence=0.0,
+                error_message=error_msg
+            )
+            await output_manager.output_tool_execution(tool_exec_result)
+
             return {
                 "success": False,
                 "data": None,
                 "error": error_msg,
-                "execution_time": time.time() - start_time,
+                "execution_time": execution_time,
                 "confidence": 0.0,
                 "source": "mcp"
             }
 
         except Exception as e:
+            execution_time = time.time() - start_time
             logger.exception(f"[MCP][exec.error] tool={tool_name} err={e}")
+
+            # 일반 예외 결과 표시
+            tool_exec_result = output_manager.ToolExecutionResult(
+                tool_name=tool_name,
+                success=False,
+                execution_time=execution_time,
+                result_summary=f"예외 발생: {str(e)[:100]}...",
+                confidence=0.0,
+                error_message=str(e)
+            )
+            await output_manager.output_tool_execution(tool_exec_result)
+
             return {
                 "success": False,
                 "data": None,
                 "error": str(e),
-                "execution_time": time.time() - start_time,
+                "execution_time": execution_time,
                 "confidence": 0.0
             }
     

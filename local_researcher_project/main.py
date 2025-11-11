@@ -947,16 +947,91 @@ Examples:
     # Create logs directory
     logs_dir = project_root / "logs"
     logs_dir.mkdir(exist_ok=True)
-    
+
+    # Initialize enhanced systems
+    from src.utils.output_manager import UserCenteredOutputManager, set_output_manager
+    from src.core.error_handler import ErrorHandler, set_error_handler
+    from src.core.progress_tracker import ProgressTracker, set_progress_tracker
+
+    # 출력 매니저 초기화
+    output_manager = UserCenteredOutputManager(
+        output_level=UserCenteredOutputManager.OutputLevel.USER,
+        output_format=UserCenteredOutputManager.OutputFormat.TEXT,
+        enable_colors=True,
+        stream_output=True,
+        show_progress=True
+    )
+    set_output_manager(output_manager)
+
+    # 에러 핸들러 초기화
+    error_handler = ErrorHandler(
+        log_errors=True,
+        enable_recovery=True
+    )
+    set_error_handler(error_handler)
+
+    # 진행 상황 추적기 초기화 (세션별로 생성)
+    session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    progress_tracker = ProgressTracker(
+        session_id=session_id,
+        enable_real_time_updates=True,
+        update_interval=1.0
+    )
+    set_progress_tracker(progress_tracker)
+
+    # 진행 상황 추적기 콜백 설정 (출력 매니저와 연동)
+    async def progress_callback(workflow_progress):
+        """진행 상황 업데이트 시 출력 매니저에 표시."""
+        try:
+            progress_pct = int(workflow_progress.overall_progress * 100)
+            stage_name = workflow_progress.current_stage.value
+
+            eta_str = ""
+            if workflow_progress.estimated_completion:
+                eta_seconds = max(0, int(workflow_progress.estimated_completion - time.time()))
+                eta_str = f" (예상 {eta_seconds}초 남음)"
+
+            message = f"📊 진행률: {progress_pct}% - {stage_name.upper()}{eta_str}"
+
+            # 진행률 바 스타일로 표시
+            await output_manager.start_progress(
+                stage_name,
+                100,
+                f"{progress_pct}% 완료",
+                workflow_progress.estimated_completion
+            )
+            await output_manager.update_progress(progress_pct)
+
+        except Exception as e:
+            logger.warning(f"Progress callback failed: {e}")
+
+    progress_tracker.add_progress_callback(progress_callback)
+
     # Initialize system
     system = AutonomousResearchSystem()
     
     try:
         if args.request:
             # CLI Research Mode with 8 innovations
+            logger.info("🚀 Starting Local Researcher with enhanced systems...")
+
+            # 진행 상황 추적 시작
+            await progress_tracker.start_tracking()
+
+            # 워크플로우 시작 알림
+            await output_manager.output(
+                f"🔬 연구 주제: {args.request}",
+                level=output_manager.OutputLevel.USER
+            )
+            await output_manager.output(
+                "실시간 진행 상황 추적 및 향상된 에러 처리가 활성화되었습니다.",
+                level=output_manager.OutputLevel.SERVICE
+            )
+
+            # 연구 실행
             await system.run_research(
-                args.request, 
-                args.output, 
+                args.request,
+                args.output,
                 streaming=args.streaming,
                 output_format=args.format
             )
@@ -1028,9 +1103,24 @@ Examples:
         # asyncio.CancelledError는 다시 raise하여 정상적인 취소 흐름 유지
         raise
     except Exception as e:
-        logger.error(f"Error: {e}")
+        # 향상된 에러 처리
+        from src.core.error_handler import ErrorContext, ErrorCategory
         import traceback
-        logger.error(traceback.format_exc())
+
+        error_context = ErrorContext(
+            component="main",
+            operation="run_research" if args.request else "system_operation",
+            session_id=session_id
+        )
+
+        await error_handler.handle_error(
+            e,
+            category=ErrorCategory.UNKNOWN,
+            severity=error_handler.ErrorSeverity.HIGH,
+            context=error_context,
+            custom_message=f"시스템 실행 중 치명적 오류 발생: {str(e)}"
+        )
+
         system._shutdown_requested = True
         try:
             await system._graceful_shutdown()
@@ -1039,6 +1129,26 @@ Examples:
         # 에러 발생 시 종료 코드 1로 종료
         sys.exit(1)
     finally:
+        # 진행 상황 추적 중지 및 요약 출력
+        try:
+            await progress_tracker.stop_tracking()
+
+            if args.request:
+                # 워크플로우 완료 요약
+                await output_manager.complete_progress(success=True)
+                await output_manager.output_workflow_summary()
+
+                # 진행 상황 통계 출력
+                stats = progress_tracker.get_statistics()
+                await output_manager.output(
+                    f"📈 세션 통계: {stats['total_agents_created']}개 에이전트 생성, "
+                    f"{stats['agents_completed']}개 완료, {stats['agents_failed']}개 실패",
+                    level=output_manager.OutputLevel.SERVICE
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to finalize progress tracking: {e}")
+
         # 최종 정리 보장
         if hasattr(system, 'mcp_hub') and system.mcp_hub and hasattr(system.mcp_hub, 'mcp_sessions'):
             try:
