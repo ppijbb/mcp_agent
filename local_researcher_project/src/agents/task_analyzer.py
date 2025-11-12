@@ -941,5 +941,3 @@ class TaskAnalyzerAgent:
         except Exception as e:
             logger.error(f"Learning enhancement failed: {e}")
             return objectives
-        except Exception as e:
-            logger.error(f"Task Analyzer Agent cleanup failed: {e}")

@@ -24,7 +24,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import json
 import os
-
+import time
 # Add project root to path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
@@ -682,8 +682,15 @@ class AutonomousResearchSystem:
         temp_file = output_file.with_suffix('.tmp')
         
         if output_format.lower() == "json":
+            # Custom JSON encoder for datetime objects
+            class DateTimeEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    return super().default(obj)
+            
             with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
+                json.dump(result, f, indent=2, ensure_ascii=False, cls=DateTimeEncoder)
         elif output_format.lower() == "yaml":
             import yaml
             with open(temp_file, 'w', encoding='utf-8') as f:
@@ -949,14 +956,19 @@ Examples:
     logs_dir.mkdir(exist_ok=True)
 
     # Initialize enhanced systems
-    from src.utils.output_manager import UserCenteredOutputManager, set_output_manager
+    from src.utils.output_manager import (
+        UserCenteredOutputManager,
+        set_output_manager,
+        OutputLevel,
+        OutputFormat
+    )
     from src.core.error_handler import ErrorHandler, set_error_handler
     from src.core.progress_tracker import ProgressTracker, set_progress_tracker
 
     # 출력 매니저 초기화
     output_manager = UserCenteredOutputManager(
-        output_level=UserCenteredOutputManager.OutputLevel.USER,
-        output_format=UserCenteredOutputManager.OutputFormat.TEXT,
+        output_level=OutputLevel.USER,
+        output_format=OutputFormat.TEXT,
         enable_colors=True,
         stream_output=True,
         show_progress=True
@@ -1021,11 +1033,11 @@ Examples:
             # 워크플로우 시작 알림
             await output_manager.output(
                 f"🔬 연구 주제: {args.request}",
-                level=output_manager.OutputLevel.USER
+                level=OutputLevel.USER
             )
             await output_manager.output(
                 "실시간 진행 상황 추적 및 향상된 에러 처리가 활성화되었습니다.",
-                level=output_manager.OutputLevel.SERVICE
+                level=OutputLevel.SERVICE
             )
 
             # 연구 실행
@@ -1104,7 +1116,7 @@ Examples:
         raise
     except Exception as e:
         # 향상된 에러 처리
-        from src.core.error_handler import ErrorContext, ErrorCategory
+        from src.core.error_handler import ErrorContext, ErrorCategory, ErrorSeverity
         import traceback
 
         error_context = ErrorContext(
@@ -1116,7 +1128,7 @@ Examples:
         await error_handler.handle_error(
             e,
             category=ErrorCategory.UNKNOWN,
-            severity=error_handler.ErrorSeverity.HIGH,
+            severity=ErrorSeverity.HIGH,
             context=error_context,
             custom_message=f"시스템 실행 중 치명적 오류 발생: {str(e)}"
         )
@@ -1143,7 +1155,7 @@ Examples:
                 await output_manager.output(
                     f"📈 세션 통계: {stats['total_agents_created']}개 에이전트 생성, "
                     f"{stats['agents_completed']}개 완료, {stats['agents_failed']}개 실패",
-                    level=output_manager.OutputLevel.SERVICE
+                    level=OutputLevel.SERVICE
                 )
 
         except Exception as e:

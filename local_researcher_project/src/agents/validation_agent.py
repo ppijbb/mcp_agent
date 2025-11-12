@@ -664,7 +664,7 @@ class ValidationAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert research validator evaluating objective alignment."
+                system_message=self.config.prompts["objective_alignment"]["system_message"]
             )
             
             try:
@@ -696,7 +696,7 @@ class ValidationAgent:
             result_score = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert quality assessor."
+                system_message=self.config.prompts["quality_assessment"]["system_message"]
             )
             
             try:
@@ -727,7 +727,7 @@ class ValidationAgent:
             result_score = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert completeness evaluator."
+                system_message=self.config.prompts["completeness_evaluation"]["system_message"]
             )
             
             try:
@@ -758,7 +758,7 @@ class ValidationAgent:
             result_score = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert accuracy assessor."
+                system_message=self.config.prompts["accuracy_assessment"]["system_message"]
             )
             
             try:
@@ -793,7 +793,7 @@ class ValidationAgent:
             result_score = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert relevance evaluator."
+                system_message=self.config.prompts["relevance_evaluation"]["system_message"]
             )
             
             try:

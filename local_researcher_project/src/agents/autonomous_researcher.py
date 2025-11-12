@@ -101,6 +101,9 @@ class AutonomousResearcherAgent:
     
     async def self_plan_research(self, user_request: str) -> Dict[str, Any]:
         """자율적으로 연구 계획을 수립합니다 (Multi-Model Orchestration)."""
+        # Lazy import
+        execute_llm_task, TaskType, _, _, _, _, _, _ = get_core_functions()
+        
         planning_prompt = f"""
         {self.agent_instructions['task_analyzer']}
         
@@ -138,6 +141,11 @@ class AutonomousResearcherAgent:
     
     async def execute_research(self, research_plan: Dict[str, Any]) -> Dict[str, Any]:
         """연구 계획을 실행합니다 (Universal MCP Hub + Streaming Pipeline)."""
+        # Lazy import
+        execute_llm_task, TaskType, _, execute_tool, get_best_tool_for_task, ToolCategory, _, _ = get_core_functions()
+        import logging
+        logger = logging.getLogger(__name__)
+        
         execution_prompt = f"""
         {self.agent_instructions['research_executor']}
         
@@ -217,6 +225,9 @@ class AutonomousResearcherAgent:
     
     async def evaluate_research(self, research_results: Dict[str, Any]) -> Dict[str, Any]:
         """연구 결과를 평가합니다 (Continuous Verification)."""
+        # Lazy import
+        execute_llm_task, TaskType, _, _, _, _, _, _ = get_core_functions()
+        
         evaluation_prompt = f"""
         {self.agent_instructions['evaluator']}
         
@@ -256,6 +267,11 @@ class AutonomousResearcherAgent:
     
     async def synthesize_findings(self, research_results: Dict[str, Any], evaluation_results: Dict[str, Any]) -> Dict[str, Any]:
         """연구 결과를 종합합니다 (Adaptive Context Window + Hierarchical Compression)."""
+        # Lazy import
+        execute_llm_task, TaskType, _, _, _, _, _, compress_data = get_core_functions()
+        import logging
+        logger = logging.getLogger(__name__)
+        
         synthesis_prompt = f"""
         {self.agent_instructions['synthesizer']}
         
@@ -309,6 +325,9 @@ class AutonomousResearcherAgent:
     
     async def run_autonomous_research(self, user_request: str) -> Dict[str, Any]:
         """자율적으로 전체 연구 프로세스를 실행합니다 (8대 혁신 통합)."""
+        # Lazy import
+        _, _, _, _, _, _, execute_with_reliability, _ = get_core_functions()
+        
         print(f"🚀 Starting autonomous research with 8 core innovations for: {user_request}")
         
         # Production-Grade Reliability로 전체 프로세스 실행

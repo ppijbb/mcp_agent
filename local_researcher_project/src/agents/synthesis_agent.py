@@ -335,7 +335,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=analysis_prompt,
             task_type=TaskType.ANALYSIS,
-            system_message="You are an expert data analyst with pattern recognition capabilities."
+            system_message=self.config.prompts["data_analysis"]["system_message"]
         )
         
         return [{
@@ -366,7 +366,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=analysis_prompt,
             task_type=TaskType.ANALYSIS,
-            system_message="You are an expert comparative analyst with cross-source evaluation capabilities."
+            system_message=self.config.prompts["comparative_analysis"]["system_message"]
         )
         
         return [{
@@ -397,7 +397,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=analysis_prompt,
             task_type=TaskType.ANALYSIS,
-            system_message="You are an expert predictive analyst with forecasting capabilities."
+            system_message=self.config.prompts["predictive_analysis"]["system_message"]
         )
         
         return [{
@@ -428,7 +428,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=analysis_prompt,
             task_type=TaskType.SYNTHESIS,
-            system_message="You are an expert strategic advisor with recommendation generation capabilities."
+            system_message=self.config.prompts["strategic_advice"]["system_message"]
         )
         
         return [{
@@ -470,7 +470,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=synthesis_prompt,
             task_type=TaskType.SYNTHESIS,
-            system_message="You are an expert research synthesizer with professional writing capabilities."
+            system_message=self.config.prompts["synthesis_report"]["system_message"]
         )
         
         return {
@@ -591,7 +591,7 @@ class SynthesisAgent:
         result = await execute_llm_task(
             prompt=validation_prompt,
             task_type=TaskType.VERIFICATION,
-            system_message="You are an expert quality validator with synthesis assessment capabilities."
+            system_message=self.config.prompts["quality_validation"]["system_message"]
         )
         
         # 품질 점수 추출 (실제 구현에서는 더 정교한 파싱)

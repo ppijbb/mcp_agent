@@ -7,10 +7,14 @@ LangGraph 기반 에이전트 오케스트레이션 시스템
 
 import asyncio
 import logging
+import json
+import operator
+import os
+import re
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Literal, Annotated
 from datetime import datetime
 from dataclasses import dataclass, field
-import operator
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
@@ -27,7 +31,6 @@ from src.core.researcher_config import get_agent_config
 from src.core.mcp_auto_discovery import FastMCPMulti
 from src.core.mcp_tool_loader import MCPToolLoader
 from src.core.agent_tool_selector import AgentToolSelector, AgentType
-from src.core.config import HTTPServerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -94,25 +97,19 @@ class AgentContext:
 
 
 class PlannerAgent:
-    """Planner agent - creates research plans (Skills-based)."""
-    
+    """Planner agent - creates research plans (YAML-based configuration)."""
+
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "planner"
         self.available_tools: list = []  # MCP 자동 할당 도구
         self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
-        
-        # Skill이 없으면 로드 시도
-        if self.skill is None:
-            skill_manager = get_skill_manager()
-            self.skill = skill_manager.load_skill("research_planner")
-        
-        # Skill instruction 사용
-        if self.skill:
-            self.instruction = self.skill.instructions
-        else:
-            self.instruction = "You are a research planning agent."
+
+        # YAML 설정 로드
+        from src.core.skills.agent_loader import load_agent_config
+        self.config = load_agent_config("planner")
+        self.instruction = self.config.instructions
     
     async def execute(self, state: AgentState) -> AgentState:
         """Execute planning task with Skills-based instruction and detailed logging."""
@@ -136,21 +133,12 @@ class PlannerAgent:
         # LLM 호출은 llm_manager를 통해 Gemini 직결 사용
         from src.core.llm_manager import execute_llm_task, TaskType
         
-        # Use Skills instruction
-        prompt = f"""{instruction}
-
-Task: Create a detailed research plan for: {state['user_query']}
-
-Based on previous research:
-{previous_plans if previous_plans else "No previous research found"}
-
-Create a comprehensive research plan with:
-1. Research objectives
-2. Key areas to investigate
-3. Expected sources and methods
-4. Success criteria
-
-Keep it concise and actionable (max 300 words)."""
+        # Use YAML-based prompt
+        from src.core.skills.agent_loader import get_prompt
+        prompt = get_prompt("planner", "planning",
+                           instruction=self.instruction,
+                           user_query=state['user_query'],
+                           previous_plans=previous_plans if previous_plans else "No previous research found")
 
         logger.info(f"[{self.name}] Calling LLM for planning...")
         # Gemini 실행
@@ -170,36 +158,14 @@ Keep it concise and actionable (max 300 words)."""
         # 작업 분할: 연구 계획을 여러 독립적인 작업으로 분할
         logger.info(f"[{self.name}] Splitting research plan into parallel tasks...")
         
-        task_split_prompt = f"""연구 계획:
-{plan}
-
-원래 질문: {state['user_query']}
-
-위 연구 계획을 분석하여 여러 독립적으로 실행 가능한 연구 작업으로 분할하세요.
-각 작업은 별도의 연구자(ExecutorAgent)가 동시에 처리할 수 있어야 합니다.
-
-응답 형식 (JSON):
-{{
-  "tasks": [
-    {{
-      "task_id": "task_1",
-      "description": "작업 설명",
-      "search_queries": ["검색 쿼리 1", "검색 쿼리 2"],
-      "priority": 1,
-      "estimated_time": "medium",
-      "dependencies": []
-    }},
-    ...
-  ]
-}}
-
-각 작업은:
-- 독립적으로 실행 가능해야 함
-- 명확한 검색 쿼리를 포함해야 함
-- 우선순위와 예상 시간을 포함해야 함
-- 의존성이 없어야 함 (병렬 실행을 위해)
-
-작업 수: 3-5개 권장"""
+        # Use YAML-based prompt template for task decomposition
+        from src.core.skills.agent_loader import get_prompt
+        task_split_prompt = get_prompt(
+            "planner",
+            "task_decomposition",
+            plan=plan,
+            query=state['user_query']
+        )
 
         try:
             task_split_result = await execute_llm_task(
@@ -426,35 +392,35 @@ class ExecutorAgent:
                 search_queries = [query]  # 기본 쿼리
                 if plan:
                     # LLM으로 연구 계획에서 검색 쿼리 추출
-                    query_generation_prompt = f"""연구 계획:
-{plan}
-
-원래 질문: {query}
-
-위 연구 계획을 바탕으로 검색에 사용할 구체적인 검색 쿼리 3-5개를 생성하세요.
-각 쿼리는 서로 다른 관점이나 측면을 다루어야 합니다.
-응답 형식: 각 줄에 하나의 검색 쿼리만 작성하세요. 번호나 기호 없이 쿼리만 작성하세요."""
-                
-                try:
-                    query_result = await execute_llm_task(
-                        prompt=query_generation_prompt,
-                        task_type=TaskType.PLANNING,
-                        model_name=None,
-                        system_message="You are a research query generator. Generate specific search queries based on research plans."
-                    )
+                    from src.core.llm_manager import execute_llm_task, TaskType
                     
-                    generated_queries = query_result.content or ""
-                    # 각 줄을 쿼리로 파싱
-                    for line in generated_queries.split('\n'):
-                        line = line.strip()
-                        if line and not line.startswith('#') and len(line) > 5:
-                            search_queries.append(line)
+                    # Use YAML-based prompt for query generation
+                    from src.core.skills.agent_loader import get_prompt
+                    query_generation_prompt = get_prompt("planner", "query_generation",
+                                                        plan=plan,
+                                                        query=query)
+                    
+                    try:
+                        system_message = self.config.prompts["query_generation"]["system_message"]
+                        query_result = await execute_llm_task(
+                            prompt=query_generation_prompt,
+                            task_type=TaskType.PLANNING,
+                            model_name=None,
+                            system_message=system_message
+                        )
+                        
+                        generated_queries = query_result.content or ""
+                        # 각 줄을 쿼리로 파싱
+                        for line in generated_queries.split('\n'):
+                            line = line.strip()
+                            if line and not line.startswith('#') and len(line) > 5:
+                                search_queries.append(line)
                     
                     # 중복 제거
-                    search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
-                    logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
-                except Exception as e:
-                    logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
+                        search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
+                        logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
             
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
@@ -897,7 +863,7 @@ URL: {url}
                         prompt=verification_prompt,
                         task_type=TaskType.VERIFICATION,
                         model_name=None,
-                        system_message="You are a verification agent. Verify if search results are relevant and reliable."
+                        system_message=None
                     )
                     
                     verification_text = verification_result.content or "UNKNOWN"
@@ -1119,7 +1085,7 @@ class GeneratorAgent:
                 prompt=generation_prompt,
                 task_type=TaskType.GENERATION,
                 model_name=None,
-                system_message="You are an expert assistant. Generate results in the exact format requested by the user. If they ask for a report, create a report. If they ask for code, create executable code. Follow the user's request precisely without adding unnecessary templates or structures."
+                system_message=None
             )
             
             report = report_result.content or f"# Report: {state['user_query']}\n\nNo report generated."
@@ -1193,19 +1159,98 @@ class AgentOrchestrator:
         logger.info("AgentOrchestrator initialized with MCP tool auto-discovery")
 
     def _initialize_mcp_servers(self) -> dict[str, Any]:
-        """환경 변수 및 구성에서 MCP 서버 설정을 초기화."""
-        # 기본 MCP 서버 설정 (환경 변수나 config에서 로드 가능)
-        servers = {}
-
-        # 예시: 기본 검색 서버
-        # 실제로는 환경 변수나 config에서 로드해야 함
-        # servers["search"] = HTTPServerSpec(
-        #     url="http://localhost:8000/mcp",
-        #     transport="http"
-        # )
-
+        """환경 변수 및 구성에서 MCP 서버 설정을 초기화.
+        
+        Returns:
+            mcp_config.json 원본 형식의 dict (FastMCP가 직접 사용할 수 있는 형식)
+        """
+        servers: dict[str, Any] = {}
+        
+        try:
+            # 프로젝트 루트 찾기
+            current_file = Path(__file__)
+            project_root = current_file.parent.parent.parent
+            
+            # configs 폴더에서 로드 시도 (우선)
+            config_file = project_root / "configs" / "mcp_config.json"
+            if not config_file.exists():
+                # 하위 호환성: 루트에서도 시도
+                config_file = project_root / "mcp_config.json"
+            
+            if config_file.exists():
+                with open(config_file, 'r') as f:
+                    config_data = json.load(f)
+                    raw_configs = config_data.get("mcpServers", {})
+                    
+                    # 환경변수 치환
+                    resolved_configs = self._resolve_env_vars_in_value(raw_configs)
+                    
+                    # FastMCP가 기대하는 형식으로 정리
+                    # - stdio 서버: command, args, env, cwd만 유지
+                    # - HTTP 서버: type 필드 제거, httpUrl 또는 url만 유지
+                    for server_name, server_config in resolved_configs.items():
+                        cleaned_config = {}
+                        
+                        # stdio 서버인 경우
+                        if "command" in server_config:
+                            cleaned_config["command"] = server_config["command"]
+                            if "args" in server_config:
+                                cleaned_config["args"] = server_config["args"]
+                            if "env" in server_config and server_config["env"]:
+                                cleaned_config["env"] = server_config["env"]
+                            if "cwd" in server_config and server_config["cwd"]:
+                                cleaned_config["cwd"] = server_config["cwd"]
+                        # HTTP 서버인 경우
+                        elif "httpUrl" in server_config or "url" in server_config:
+                            # FastMCP는 url 필드를 기대함 (httpUrl을 url로 변환)
+                            if "httpUrl" in server_config:
+                                cleaned_config["url"] = server_config["httpUrl"]
+                            elif "url" in server_config:
+                                cleaned_config["url"] = server_config["url"]
+                            if "headers" in server_config and server_config["headers"]:
+                                cleaned_config["headers"] = server_config["headers"]
+                            if "params" in server_config and server_config["params"]:
+                                cleaned_config["params"] = server_config["params"]
+                        
+                        if cleaned_config:
+                            servers[server_name] = cleaned_config
+                    
+                    logger.info(f"✅ Loaded {len(servers)} MCP servers from config: {list(servers.keys())}")
+            else:
+                logger.warning(f"MCP config file not found at {config_file}")
+                
+        except Exception as e:
+            logger.warning(f"Failed to load MCP server configs: {e}")
+        
         logger.info(f"Initialized {len(servers)} MCP servers for auto-discovery")
         return servers
+    
+    def _resolve_env_vars_in_value(self, value: Any) -> Any:
+        """
+        재귀적으로 객체 내의 환경변수 플레이스홀더를 실제 값으로 치환.
+        ${VAR_NAME} 또는 $VAR_NAME 형식 지원.
+        """
+        if isinstance(value, str):
+            # ${VAR_NAME} 또는 $VAR_NAME 패턴 찾기
+            pattern = r'\$\{([^}]+)\}|\$(\w+)'
+            
+            def replace_env_var(match):
+                var_name = match.group(1) or match.group(2)
+                env_value = os.getenv(var_name)
+                if env_value is not None:
+                    return env_value
+                # 환경변수가 없으면 원본 유지 (또는 경고)
+                logger.warning(f"Environment variable '{var_name}' not found, keeping placeholder")
+                return match.group(0)
+            
+            result = re.sub(pattern, replace_env_var, value)
+            return result
+        elif isinstance(value, dict):
+            return {k: self._resolve_env_vars_in_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._resolve_env_vars_in_value(item) for item in value]
+        else:
+            return value
 
     async def _assign_tools_to_agents(self, session_id: str) -> None:
         """모든 에이전트에 자동으로 MCP 도구 할당."""
@@ -1648,7 +1693,9 @@ class AgentOrchestrator:
         logger.info("🟣 [WORKFLOW] → Generator Node")
         logger.info("=" * 80)
         result = await self.generator.execute(state)
-        logger.info(f"🟣 [WORKFLOW] ✓ Generator completed: report_length={len(result.get('final_report', ''))}")
+        final_report = result.get('final_report') or ''
+        report_length = len(final_report) if final_report else 0
+        logger.info(f"🟣 [WORKFLOW] ✓ Generator completed: report_length={report_length}")
         return result
     
     async def _end_node(self, state: AgentState) -> AgentState:

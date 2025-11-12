@@ -287,7 +287,7 @@ class CreativityAgent:
             result = await execute_llm_task(
                 prompt=analogical_prompt,
                 task_type=TaskType.CREATIVE,
-                system_message="You are a creative analogical reasoning expert who finds innovative connections between different domains."
+                system_message=self.config.prompts["analogical_reasoning"]["system_message"]
             )
             
             analysis = json.loads(result.content)
@@ -455,7 +455,7 @@ class CreativityAgent:
             result = await execute_llm_task(
                 prompt=lateral_prompt,
                 task_type=TaskType.CREATIVE,
-                system_message="You are a lateral thinking expert who challenges conventional approaches and generates unconventional solutions."
+                system_message=self.config.prompts["lateral_thinking"]["system_message"]
             )
             
             analysis = json.loads(result.content)
@@ -535,7 +535,7 @@ class CreativityAgent:
             result = await execute_llm_task(
                 prompt=convergent_prompt,
                 task_type=TaskType.CREATIVE,
-                system_message="You are a convergent thinking expert who finds unifying patterns and core principles across different ideas."
+                system_message=self.config.prompts["convergent_thinking"]["system_message"]
             )
             
             analysis = json.loads(result.content)
@@ -615,7 +615,7 @@ class CreativityAgent:
             result = await execute_llm_task(
                 prompt=divergent_prompt,
                 task_type=TaskType.CREATIVE,
-                system_message="You are a divergent thinking expert who explores all possible variations and alternatives."
+                system_message=self.config.prompts["divergent_thinking"]["system_message"]
             )
             
             analysis = json.loads(result.content)
@@ -741,7 +741,7 @@ class CreativityAgent:
             result = await execute_llm_task(
                 prompt=combination_prompt,
                 task_type=TaskType.CREATIVE,
-                system_message="You are an expert at combining ideas to create novel solutions."
+                system_message=self.config.prompts["idea_combination"]["system_message"]
             )
             
             analysis = json.loads(result.content)

@@ -31,13 +31,25 @@ class FastMCPClientWrapper:
 class FastMCPMulti:
     """다중 서버를 위한 FastMCP 클라이언트 래퍼."""
 
-    def __init__(self, servers: Mapping[str, ServerSpec]) -> None:
+    def __init__(self, servers: Mapping[str, ServerSpec] | dict[str, dict[str, Any]]) -> None:
         """다중 서버 FastMCP 클라이언트 초기화.
 
         Args:
-            servers: 서버 이름 -> ServerSpec 매핑
+            servers: 서버 이름 -> ServerSpec 매핑 또는 원본 mcp_config.json 형식의 dict
         """
-        mcp_cfg = {"mcpServers": servers_to_mcp_config(servers)}
+        # 이미 dict 형식이면 그대로 사용, ServerSpec이면 변환
+        if servers:
+            # 첫 번째 값의 타입을 확인하여 판단
+            first_value = next(iter(servers.values()))
+            if isinstance(first_value, dict):
+                # 원본 mcp_config.json 형식인 경우
+                mcp_cfg = {"mcpServers": servers}
+            else:
+                # ServerSpec 형식인 경우 변환
+                mcp_cfg = {"mcpServers": servers_to_mcp_config(servers)}
+        else:
+            # 빈 dict인 경우
+            mcp_cfg = {"mcpServers": {}}
         self._client: Any = FastMCPClient(mcp_cfg)  # <-- annotate as Any to avoid unparameterized generic
 
     @property

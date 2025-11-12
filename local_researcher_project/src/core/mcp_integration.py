@@ -1312,13 +1312,13 @@ class UniversalMCPHub:
         start_time = time.time()
 
         # 출력 매니저 통합
-        from src.utils.output_manager import get_output_manager
+        from src.utils.output_manager import get_output_manager, OutputLevel, ToolExecutionResult
         output_manager = get_output_manager()
 
         # 도구 실행 시작 알림
         await output_manager.output(
             f"🔧 도구 '{tool_name}' 실행 시작...",
-            level=output_manager.OutputLevel.SERVICE,
+            level=OutputLevel.SERVICE,
             agent_name="mcp_integration"
         )
 
@@ -1345,7 +1345,7 @@ class UniversalMCPHub:
                 elif tool_result.error:
                     result_summary = f"오류: {tool_result.error[:100]}..."
 
-                tool_exec_result = output_manager.ToolExecutionResult(
+                tool_exec_result = ToolExecutionResult(
                     tool_name=tool_name,
                     success=tool_result.success,
                     execution_time=execution_time,
@@ -1368,7 +1368,7 @@ class UniversalMCPHub:
                 logger.error(f"[MCP][exec.route.error] {tool_name} routing failed: {e}", exc_info=True)
 
                 # 도구 실행 실패 결과 표시
-                tool_exec_result = output_manager.ToolExecutionResult(
+                tool_exec_result = ToolExecutionResult(
                     tool_name=tool_name,
                     success=False,
                     execution_time=execution_time,
@@ -1563,7 +1563,7 @@ class UniversalMCPHub:
                                 logger.error(f"MCP tool {tool_name} returned error: {error_msg}")
 
                                 # MCP 도구 에러 결과 표시
-                                tool_exec_result = output_manager.ToolExecutionResult(
+                                tool_exec_result = ToolExecutionResult(
                                     tool_name=tool_name,
                                     success=False,
                                     execution_time=execution_time,
@@ -1637,7 +1637,7 @@ class UniversalMCPHub:
                             else:
                                 result_summary = f"결과 반환됨 ({type(result_data).__name__})"
 
-                            tool_exec_result = output_manager.ToolExecutionResult(
+                            tool_exec_result = ToolExecutionResult(
                                 tool_name=tool_name,
                                 success=True,
                                 execution_time=execution_time,
@@ -1659,7 +1659,7 @@ class UniversalMCPHub:
                         logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error}")
 
                         # MCP 실행 실패 결과 표시
-                        tool_exec_result = output_manager.ToolExecutionResult(
+                        tool_exec_result = ToolExecutionResult(
                             tool_name=tool_name,
                             success=False,
                             execution_time=execution_time,

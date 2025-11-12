@@ -59,14 +59,10 @@ class ResearchAgent:
         self.learning_data = []
         self.research_history = []
         
-        # Enhanced browser automation
-        self.browser_manager = BrowserManager(config_path)
+        # Enhanced browser automation (optional, initialized when needed)
+        self.browser_manager = None
         
-        # Search configuration
-        self.search_config = self.config_manager.get_search_config()
-        self.advanced_config = self.config_manager.get_advanced_config()
-        
-        logger.info("Research Agent initialized with LLM-based research capabilities and browser automation")
+        logger.info("Research Agent initialized with LLM-based research capabilities")
     
     def _initialize_llm(self):
         """Initialize the LLM client."""
@@ -1739,7 +1735,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.REASONING,
-                system_message="You are an expert research analyst generating insights."
+                system_message=self.config.prompts["search_execution"]["system_message"]
             )
             
             import json
@@ -1775,7 +1771,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.GENERATION,
-                system_message="You are an expert research report writer."
+                system_message=self.config.prompts["content_analysis"]["system_message"]
             )
             
             import json
@@ -1844,7 +1840,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.SYNTHESIS,
-                system_message="You are an expert research synthesizer."
+                system_message=self.config.prompts["synthesis_report"]["system_message"]
             )
             
             import json
@@ -1875,7 +1871,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.REASONING,
-                system_message="You are an expert consultant providing recommendations."
+                system_message=self.config.prompts["recommendation_generation"]["system_message"]
             )
             
             import json
@@ -1972,7 +1968,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.VERIFICATION,
-                system_message="You are an expert research validator."
+                system_message=self.config.prompts["quality_validation"]["system_message"]
             )
             
             import json
@@ -2005,7 +2001,7 @@ class ResearchAgent:
             result = await execute_llm_task(
                 prompt=prompt,
                 task_type=TaskType.GENERATION,
-                system_message="You are an expert validation report writer."
+                system_message=self.config.prompts["final_assessment"]["system_message"]
             )
             
             import json
@@ -2626,6 +2622,10 @@ class ResearchAgent:
             Dictionary containing extracted content and metadata
         """
         try:
+            # Initialize browser manager if not already done
+            if self.browser_manager is None:
+                self.browser_manager = BrowserManager()
+            
             # Initialize browser if not already done
             if not self.browser_manager.browser_available:
                 await self.browser_manager.initialize_browser()
@@ -2660,6 +2660,10 @@ class ResearchAgent:
             List of extracted content from search results
         """
         try:
+            # Initialize browser manager if not already done
+            if self.browser_manager is None:
+                self.browser_manager = BrowserManager()
+            
             # Initialize browser if not already done
             if not self.browser_manager.browser_available:
                 await self.browser_manager.initialize_browser()
@@ -2684,6 +2688,10 @@ class ResearchAgent:
             Dictionary containing research results
         """
         try:
+            # Initialize browser manager if not already done
+            if self.browser_manager is None:
+                self.browser_manager = BrowserManager()
+            
             # Initialize browser if not already done
             if not self.browser_manager.browser_available:
                 await self.browser_manager.initialize_browser()
@@ -2720,8 +2728,9 @@ class ResearchAgent:
     async def cleanup_browser(self):
         """Clean up browser resources using browser manager."""
         try:
-            await self.browser_manager.cleanup()
-            logger.info("Browser resources cleaned up")
+            if self.browser_manager is not None:
+                await self.browser_manager.cleanup()
+                logger.info("Browser resources cleaned up")
                 
         except Exception as e:
             logger.error(f"Browser cleanup failed: {e}")

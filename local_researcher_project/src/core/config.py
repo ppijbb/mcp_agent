@@ -70,19 +70,27 @@ def servers_to_mcp_config(servers: Mapping[str, ServerSpec]) -> dict[str, dict[s
     cfg: dict[str, dict[str, object]] = {}
     for name, s in servers.items():
         if isinstance(s, StdioServerSpec):
-            cfg[name] = {
-                "transport": "stdio",
+            # FastMCP는 stdio 서버에 대해 transport 필드 없이 command, args, env만 사용
+            entry: dict[str, object] = {
                 "command": s.command,
                 "args": s.args,
-                "env": s.env or None,
-                "cwd": s.cwd or None,
-                "keep_alive": s.keep_alive,
             }
+            # env가 비어있지 않으면 추가 (None이 아닌 dict만)
+            if s.env:
+                entry["env"] = s.env
+            # cwd가 있으면 추가
+            if s.cwd:
+                entry["cwd"] = s.cwd
+            cfg[name] = entry
         else:
-            entry: dict[str, object] = {
-                "transport": s.transport,
-                "url": s.url,
-            }
+            # HTTP 서버의 경우 httpUrl 또는 url 사용
+            entry: dict[str, object] = {}
+            if s.transport == "http":
+                # httpUrl 사용 (FastMCP 표준)
+                entry["httpUrl"] = s.url
+            else:
+                # SSE나 다른 transport의 경우 url 사용
+                entry["url"] = s.url
             if s.headers:
                 entry["headers"] = s.headers
             if s.auth is not None:

@@ -170,11 +170,11 @@ class ProgressTracker:
             except Exception as e:
                 # 업데이트 실패 시 로깅만 하고 계속 진행
                 try:
-                    from src.utils.output_manager import get_output_manager
+                    from src.utils.output_manager import get_output_manager, OutputLevel
                     output_manager = get_output_manager()
                     await output_manager.output(
                         f"진행 상황 업데이트 실패: {e}",
-                        level=output_manager.OutputLevel.DEBUG
+                        level=OutputLevel.DEBUG
                     )
                 except:
                     pass  # 출력 매니저도 실패하면 무시
@@ -263,11 +263,11 @@ class ProgressTracker:
             except Exception as e:
                 # 콜백 실패는 로깅만 하고 계속 진행
                 try:
-                    from src.utils.output_manager import get_output_manager
+                    from src.utils.output_manager import get_output_manager, OutputLevel
                     output_manager = get_output_manager()
                     await output_manager.output(
                         f"진행 상황 콜백 실패: {e}",
-                        level=output_manager.OutputLevel.DEBUG
+                        level=OutputLevel.DEBUG
                     )
                 except:
                     pass
