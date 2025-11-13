@@ -13,3 +13,4 @@ report_generation = {
     'variables': ['user_query', 'research_data'],
     'description': '연구 결과를 바탕으로 보고서를 생성하는 프롬프트'
 }
+

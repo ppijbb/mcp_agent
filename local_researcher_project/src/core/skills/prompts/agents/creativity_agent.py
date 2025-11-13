@@ -142,3 +142,4 @@ creativity_agent_prompts = {
     'conceptual_blending': conceptual_blending,
     'idea_combination': idea_combination
 }
+

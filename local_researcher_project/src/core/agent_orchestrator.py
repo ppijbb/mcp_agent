@@ -34,6 +34,45 @@ from src.core.agent_tool_selector import AgentToolSelector, AgentType
 
 logger = logging.getLogger(__name__)
 
+# HTTP 에러 메시지 필터링 클래스
+class HTTPErrorFilter(logging.Filter):
+    """HTML 에러 응답을 필터링하여 간단한 메시지만 출력"""
+    def filter(self, record):
+        message = record.getMessage()
+        
+        # HTML 에러 페이지 감지 및 필터링
+        if '<!DOCTYPE html>' in message or '<html' in message.lower():
+            # HTML에서 에러 메시지 추출 시도
+            import re
+            
+            # HTTP 상태 코드 추출
+            status_match = re.search(r'HTTP (\d{3})', message)
+            status_code = status_match.group(1) if status_match else "Unknown"
+            
+            # 에러 제목 추출 시도
+            title_match = re.search(r'<title>([^<]+)</title>', message, re.IGNORECASE)
+            error_title = title_match.group(1).strip() if title_match else None
+            
+            # 간단한 에러 메시지 생성
+            if error_title:
+                record.msg = f"HTTP {status_code}: {error_title}"
+            else:
+                # 상태 코드에 따른 기본 메시지
+                if status_code == "502":
+                    record.msg = f"HTTP {status_code}: Bad Gateway - Server temporarily unavailable"
+                elif status_code == "401":
+                    record.msg = f"HTTP {status_code}: Unauthorized - Authentication failed"
+                elif status_code == "404":
+                    record.msg = f"HTTP {status_code}: Not Found"
+                elif status_code == "500":
+                    record.msg = f"HTTP {status_code}: Internal Server Error"
+                else:
+                    record.msg = f"HTTP {status_code}: Server Error"
+            
+            record.args = ()  # args 초기화
+        
+        return True
+
 # Logger가 handler가 없으면 root logger의 handler 사용
 if not logger.handlers:
     logger.setLevel(logging.INFO)
@@ -46,8 +85,21 @@ if not logger.handlers:
         # Fallback: 기본 handler 설정
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        handler.addFilter(HTTPErrorFilter())  # HTTP 에러 필터 추가
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
+else:
+    # 기존 handler에 필터 추가
+    for handler in logger.handlers:
+        if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
+            handler.addFilter(HTTPErrorFilter())
+
+# FastMCP Runner 로거에도 필터 추가 (외부 라이브러리 로깅 필터링)
+runner_logger = logging.getLogger("Runner")
+if runner_logger:
+    for handler in runner_logger.handlers:
+        if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
+            handler.addFilter(HTTPErrorFilter())
 
 
 ###################
@@ -842,16 +894,33 @@ class VerifierAgent:
         verified = []
         for i, result in enumerate(results, 1):
             if isinstance(result, dict):
-                title = result.get('title', '')
-                snippet = result.get('snippet', '')
-                url = result.get('url', '')
+                # 다양한 키에서 title, snippet, url 추출 시도
+                title = result.get('title') or result.get('name') or result.get('Title') or result.get('headline') or ''
+                snippet = result.get('snippet') or result.get('content') or result.get('summary') or result.get('description') or result.get('abstract') or ''
+                url = result.get('url') or result.get('link') or result.get('href') or result.get('URL') or ''
+                
+                # title이 비어있거나 "Search Results" 같은 메타데이터인 경우 스킵
+                if not title or len(title.strip()) < 3:
+                    logger.debug(f"[{self.name}] Skipping result {i}: empty or invalid title")
+                    continue
+                
+                # "Search Results", "Results", "Error" 같은 메타데이터 제외
+                title_lower = title.lower().strip()
+                if title_lower in ['search results', 'results', 'error', 'no results', 'no title']:
+                    logger.debug(f"[{self.name}] Skipping result {i}: metadata title '{title}'")
+                    continue
+                
+                # snippet이 비어있고 url도 없는 경우 스킵
+                if not snippet and not url:
+                    logger.debug(f"[{self.name}] Skipping result {i}: no content or URL")
+                    continue
                 
                 # LLM으로 검증
                 verification_prompt = f"""다음 검색 결과를 검증하세요:
 
 제목: {title}
-내용: {snippet[:300]}
-URL: {url}
+내용: {snippet[:300] if snippet else '내용 없음'}
+URL: {url if url else 'URL 없음'}
 
 원래 쿼리: {state['user_query']}
 
@@ -867,7 +936,9 @@ URL: {url}
                     )
                     
                     verification_text = verification_result.content or "UNKNOWN"
-                    is_verified = "VERIFIED" in verification_text.upper() or "REJECT" not in verification_text.upper()
+                    # 검증 로직 개선: 명시적으로 VERIFIED가 있거나 REJECTED가 없으면 검증됨
+                    verification_upper = verification_text.upper()
+                    is_verified = "VERIFIED" in verification_upper and "REJECTED" not in verification_upper
                     
                     if is_verified:
                         verified.append({
@@ -880,20 +951,22 @@ URL: {url}
                         })
                         logger.info(f"[{self.name}] ✅ Result {i} verified: {title[:50]}...")
                     else:
-                        logger.info(f"[{self.name}] ⚠️ Result {i} rejected: {title[:50]}...")
+                        logger.debug(f"[{self.name}] ⚠️ Result {i} rejected: {title[:50]}... (reason: {verification_text[:100]})")
                         continue
                 except Exception as e:
                     logger.warning(f"[{self.name}] Verification failed for result {i}: {e}, including anyway")
-                    verified.append({
-                        "index": i,
-                        "title": title,
-                        "snippet": snippet,
-                        "url": url,
-                        "status": "partial",
-                        "verification_note": "Verification failed, but included"
-                    })
+                    # 검증 실패해도 기본 정보가 있으면 포함
+                    if title and (snippet or url):
+                        verified.append({
+                            "index": i,
+                            "title": title,
+                            "snippet": snippet,
+                            "url": url,
+                            "status": "partial",
+                            "verification_note": f"Verification failed: {str(e)[:100]}"
+                        })
             else:
-                logger.warning(f"[{self.name}] Unknown result format: {type(result)}")
+                logger.warning(f"[{self.name}] Unknown result format: {type(result)}, value: {str(result)[:100]}")
                 continue
         
         logger.info(f"[{self.name}] ✅ Verification completed: {len(verified)}/{len(results)} results verified")

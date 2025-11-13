@@ -116,3 +116,4 @@ def get_prompt(category: str, prompt_name: str, **kwargs) -> str:
 def get_system_message(category: str, prompt_name: str) -> str:
     """편의 함수: 시스템 메시지 반환"""
     return get_prompt_manager().get_system_message(category, prompt_name)
+

@@ -37,3 +37,4 @@ task_decomposition = {
     'variables': ['plan', 'query'],
     'description': '연구 계획을 독립적인 작업으로 분해하는 프롬프트'
 }
+

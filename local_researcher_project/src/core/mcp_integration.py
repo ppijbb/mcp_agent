@@ -27,6 +27,7 @@ try:
     from mcp.client.stdio import stdio_client
     from mcp.client.streamable_http import streamablehttp_client
     from mcp.types import ListToolsResult, TextContent
+    from mcp.shared.exceptions import McpError
     from urllib.parse import urlencode
     MCP_AVAILABLE = True
     HTTP_CLIENT_AVAILABLE = True
@@ -40,6 +41,7 @@ except ImportError:
     urlencode = None
     ListToolsResult = None
     TextContent = None
+    McpError = Exception  # Fallback
 
 # LangChain imports
 try:
@@ -923,6 +925,59 @@ class UniversalMCPHub:
                     del self.exit_stacks[server_name]
                 await self._disconnect_from_mcp_server(server_name)
                 return False
+            except McpError as e:
+                # MCP 프로토콜 에러 - 명확한 에러 메시지 출력
+                error_msg = str(e) if e else "Unknown MCP error"
+                error_code = getattr(e.error, 'code', None) if hasattr(e, 'error') else None
+                error_data = getattr(e.error, 'data', None) if hasattr(e, 'error') else None
+                
+                # 에러 메시지 구성
+                error_details = f"[MCP][connect.error] server={server_name} operation=initialize"
+                if error_code:
+                    error_details += f" code={error_code}"
+                if error_data:
+                    error_details += f" data={error_data}"
+                error_details += f" error={error_msg}"
+                
+                logger.error(error_details)
+                
+                # 연결 진단 정보 업데이트
+                di = self.connection_diagnostics.get(server_name, {})
+                di.update({
+                    "stage": "mcp_error_initialize",
+                    "error": error_msg,
+                    "error_code": error_code,
+                    "error_data": str(error_data) if error_data else None
+                })
+                self.connection_diagnostics[server_name] = di
+                
+                # 세션 정리
+                if server_name in self.exit_stacks:
+                    del self.exit_stacks[server_name]
+                await self._disconnect_from_mcp_server(server_name)
+                return False
+            except Exception as e:
+                # 기타 예외 - 명확한 에러 메시지 출력
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
+                logger.error(f"[MCP][connect.error] server={server_name} operation=initialize_or_list type={error_type} error={error_msg}")
+                logger.exception(f"[MCP][connect.exception] server={server_name} - Full traceback:")
+                
+                # 연결 진단 정보 업데이트
+                di = self.connection_diagnostics.get(server_name, {})
+                di.update({
+                    "stage": "exception_initialize_or_list",
+                    "error": f"{error_type}: {error_msg}",
+                    "error_type": error_type
+                })
+                self.connection_diagnostics[server_name] = di
+                
+                # 세션 정리
+                if server_name in self.exit_stacks:
+                    del self.exit_stacks[server_name]
+                await self._disconnect_from_mcp_server(server_name)
+                return False
             
             # 도구 맵 생성 및 Registry에 동적 등록
             self.mcp_tools_map[server_name] = {}
@@ -1184,10 +1239,30 @@ class UniversalMCPHub:
                 logger.warning(f"Tool {tool_name} returned empty result")
                 return None
             
+        except McpError as e:
+            # MCP 프로토콜 에러 - 명확한 에러 메시지 출력
+            error_msg = str(e) if e else "Unknown MCP error"
+            error_code = getattr(e.error, 'code', None) if hasattr(e, 'error') else None
+            error_data = getattr(e.error, 'data', None) if hasattr(e, 'error') else None
+            
+            # 에러 메시지 구성
+            error_details = f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool"
+            if error_code:
+                error_details += f" code={error_code}"
+            if error_data:
+                error_details += f" data={error_data}"
+            error_details += f" error={error_msg}"
+            
+            logger.error(error_details)
+            return None
         except Exception as e:
-            logger.error(f"Failed to execute tool {tool_name} on server {server_name}: {e}")
+            # 기타 예외 - 명확한 에러 메시지 출력
+            error_type = type(e).__name__
+            error_msg = str(e)
+            
+            logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
             import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
+            logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
             return None
     
     async def _validate_essential_tools(self):

@@ -779,33 +779,102 @@ class AutonomousOrchestrator:
         execution_results = state.get("execution_results", [])
         compression_results = []
         
+        # 실행 결과가 없는 경우 처리
+        if not execution_results:
+            logger.warning("⚠️ No execution results available for compression. Skipping compression step.")
+            state.update({
+                "compression_results": [],
+                "compression_metadata": {
+                    "overall_compression_ratio": 1.0,
+                    "total_original_size": 0,
+                    "total_compressed_size": 0,
+                    "compression_count": 0
+                },
+                "current_step": "continuous_verification",
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "compression_ratio": 1.0,
+                    "compression_applied": 0
+                }
+            })
+            return state
+        
         # 각 실행 결과에 대해 압축 적용
         for result in execution_results:
+            task_id = result.get("task_id", "unknown")
+            result_data = result.get("result")
+            
+            # result가 None이거나 빈 데이터인 경우 스킵
+            if result_data is None:
+                logger.warning(f"⚠️ Skipping compression for task {task_id}: result is None (execution may have failed)")
+                compression_results.append({
+                    "task_id": task_id,
+                    "original_size": 0,
+                    "compressed_size": 0,
+                    "compression_ratio": 1.0,
+                    "validation_score": 0.0,
+                    "compressed_data": None,
+                    "important_info_preserved": [],
+                    "status": "skipped_no_data"
+                })
+                continue
+            
+            # 빈 딕셔너리나 빈 문자열인 경우도 스킵
+            if isinstance(result_data, dict) and not result_data:
+                logger.warning(f"⚠️ Skipping compression for task {task_id}: result is empty dict")
+                compression_results.append({
+                    "task_id": task_id,
+                    "original_size": 0,
+                    "compressed_size": 0,
+                    "compression_ratio": 1.0,
+                    "validation_score": 0.0,
+                    "compressed_data": None,
+                    "important_info_preserved": [],
+                    "status": "skipped_empty_data"
+                })
+                continue
+            
+            if isinstance(result_data, str) and not result_data.strip():
+                logger.warning(f"⚠️ Skipping compression for task {task_id}: result is empty string")
+                compression_results.append({
+                    "task_id": task_id,
+                    "original_size": 0,
+                    "compressed_size": 0,
+                    "compression_ratio": 1.0,
+                    "validation_score": 0.0,
+                    "compressed_data": None,
+                    "important_info_preserved": [],
+                    "status": "skipped_empty_string"
+                })
+                continue
+            
             try:
                 # 데이터 압축
-                compressed = await compress_data(result.get("result", {}))
+                compressed = await compress_data(result_data)
                 
                 compression_results.append({
-                    "task_id": result.get("task_id"),
-                    "original_size": len(str(result.get("result", {}))),
+                    "task_id": task_id,
+                    "original_size": len(str(result_data)),
                     "compressed_size": len(str(compressed.data)),
                     "compression_ratio": compressed.compression_ratio,
                     "validation_score": compressed.validation_score,
                     "compressed_data": compressed.data,
-                    "important_info_preserved": compressed.important_info_preserved
+                    "important_info_preserved": compressed.important_info_preserved,
+                    "status": "compressed"
                 })
                 
             except Exception as e:
-                logger.warning(f"Compression failed for task {result.get('task_id')}: {e}")
+                logger.warning(f"⚠️ Compression failed for task {task_id}: {e}. Using original data.")
                 # 압축 실패 시 원본 데이터 사용
                 compression_results.append({
-                    "task_id": result.get("task_id"),
-                    "original_size": len(str(result.get("result", {}))),
-                    "compressed_size": len(str(result.get("result", {}))),
+                    "task_id": task_id,
+                    "original_size": len(str(result_data)),
+                    "compressed_size": len(str(result_data)),
                     "compression_ratio": 1.0,
                     "validation_score": 1.0,
-                    "compressed_data": result.get("result", {}),
-                    "important_info_preserved": []
+                    "compressed_data": result_data,
+                    "important_info_preserved": [],
+                    "status": "compression_failed_using_original"
                 })
         
         # 전체 압축 통계
@@ -836,46 +905,134 @@ class AutonomousOrchestrator:
         logger.info("🔬 Applying Continuous Verification")
         
         compression_results = state.get("compression_results", [])
+        execution_results = state.get("execution_results", [])
+        
+        # 검색 실패 확인: compression_results가 비어있거나 모든 결과가 실패한 경우
+        if not compression_results:
+            logger.warning("⚠️ No compression results available for verification. Checking execution results...")
+            
+            # execution_results 확인
+            if not execution_results:
+                logger.error("❌ No execution results available. Research execution may have failed completely.")
+                state.update({
+                    "verification_stages": [],
+                    "confidence_scores": {},
+                    "verification_failed": True,
+                    "error_message": "No research results available for verification. Search execution may have failed.",
+                    "current_step": "evaluate_results",  # 검증 실패해도 평가 단계로 진행
+                    "innovation_stats": {
+                        **state.get("innovation_stats", {}),
+                        "verification_applied": 0,
+                        "avg_confidence": 0.0,
+                        "verification_status": "skipped_no_results"
+                    }
+                })
+                return state
+            
+            # execution_results에서 실패한 작업만 있는지 확인
+            successful_results = [r for r in execution_results if r.get("status") == "completed" and r.get("result") is not None]
+            if not successful_results:
+                logger.error("❌ All execution results failed. No successful research results to verify.")
+                state.update({
+                    "verification_stages": [],
+                    "confidence_scores": {},
+                    "verification_failed": True,
+                    "error_message": "All research execution failed. No successful results to verify.",
+                    "current_step": "evaluate_results",  # 검증 실패해도 평가 단계로 진행
+                    "innovation_stats": {
+                        **state.get("innovation_stats", {}),
+                        "verification_applied": 0,
+                        "avg_confidence": 0.0,
+                        "verification_status": "skipped_all_failed",
+                        "failed_tasks": len(execution_results)
+                    }
+                })
+                return state
+        
+        # 유효한 결과만 필터링 (result가 None이거나 빈 데이터인 경우 제외)
+        valid_results = []
+        for result in compression_results:
+            compressed_data = result.get("compressed_data")
+            if compressed_data is not None and compressed_data != "":
+                valid_results.append(result)
+            else:
+                task_id = result.get("task_id", "unknown")
+                logger.warning(f"⚠️ Skipping verification for task {task_id}: no valid compressed data")
+        
+        if not valid_results:
+            logger.warning("⚠️ No valid compression results after filtering. Proceeding with minimal verification.")
+            state.update({
+                "verification_stages": [],
+                "confidence_scores": {},
+                "verification_failed": True,
+                "error_message": "No valid compression results available for verification.",
+                "current_step": "evaluate_results",  # 검증 실패해도 평가 단계로 진행
+                "innovation_stats": {
+                    **state.get("innovation_stats", {}),
+                    "verification_applied": 0,
+                    "avg_confidence": 0.0,
+                    "verification_status": "skipped_no_valid_data"
+                }
+            })
+            return state
+        
         verification_stages = []
         confidence_scores = {}
         
-        # 3단계 검증
-        for i, result in enumerate(compression_results):
+        # 3단계 검증 (유효한 결과만)
+        for i, result in enumerate(valid_results):
             task_id = result.get("task_id")
             
-            # Stage 1: Self-Verification
-            self_score = await self._self_verification(result)
-            
-            # Stage 2: Cross-Verification
-            cross_score = await self._cross_verification(result, compression_results)
-            
-            # Stage 3: External Verification (선택적)
-            if self_score < 0.7 or cross_score < 0.7:
-                external_score = await self._external_verification(result)
-            else:
-                external_score = 1.0
-            
-            # 종합 신뢰도 점수
-            final_score = (self_score * 0.3 + cross_score * 0.4 + external_score * 0.3)
-            
-            verification_stages.append({
-                "task_id": task_id,
-                "stage_1_self": self_score,
-                "stage_2_cross": cross_score,
-                "stage_3_external": external_score,
-                "final_score": final_score
-            })
-            
-            confidence_scores[task_id] = final_score
+            try:
+                # Stage 1: Self-Verification
+                self_score = await self._self_verification(result)
+                
+                # Stage 2: Cross-Verification
+                cross_score = await self._cross_verification(result, valid_results)
+                
+                # Stage 3: External Verification (선택적)
+                if self_score < 0.7 or cross_score < 0.7:
+                    external_score = await self._external_verification(result)
+                else:
+                    external_score = 1.0
+                
+                # 종합 신뢰도 점수
+                final_score = (self_score * 0.3 + cross_score * 0.4 + external_score * 0.3)
+                
+                verification_stages.append({
+                    "task_id": task_id,
+                    "stage_1_self": self_score,
+                    "stage_2_cross": cross_score,
+                    "stage_3_external": external_score,
+                    "final_score": final_score
+                })
+                
+                confidence_scores[task_id] = final_score
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Verification failed for task {task_id}: {e}. Assigning low confidence score.")
+                # 검증 실패 시 낮은 신뢰도 점수 할당
+                verification_stages.append({
+                    "task_id": task_id,
+                    "stage_1_self": 0.3,
+                    "stage_2_cross": 0.3,
+                    "stage_3_external": 0.3,
+                    "final_score": 0.3,
+                    "verification_error": str(e)
+                })
+                confidence_scores[task_id] = 0.3
         
         state.update({
             "verification_stages": verification_stages,
             "confidence_scores": confidence_scores,
+            "verification_failed": False,
             "current_step": "evaluate_results",
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
                 "verification_applied": len(verification_stages),
-                "avg_confidence": float(sum(confidence_scores.values())) / max(len(confidence_scores), 1)
+                "avg_confidence": float(sum(confidence_scores.values())) / max(len(confidence_scores), 1) if confidence_scores else 0.0,
+                "valid_results_count": len(valid_results),
+                "total_results_count": len(compression_results)
             }
         })
         

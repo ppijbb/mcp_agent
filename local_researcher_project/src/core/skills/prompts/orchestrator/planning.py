@@ -21,3 +21,4 @@ Keep it concise and actionable (max 300 words).''',
     'variables': ['instruction', 'user_query', 'previous_plans'],
     'description': '연구 계획 수립을 위한 프롬프트'
 }
+

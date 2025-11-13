@@ -20,3 +20,4 @@ verification = {
     'variables': ['query', 'results'],
     'description': '검색 결과를 검증하는 프롬프트'
 }
+

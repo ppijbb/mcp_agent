@@ -15,3 +15,4 @@ query_generation = {
     'variables': ['plan', 'query'],
     'description': '연구 계획을 바탕으로 검색 쿼리를 생성하는 프롬프트'
 }
+

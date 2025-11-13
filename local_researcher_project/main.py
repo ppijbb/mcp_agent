@@ -45,6 +45,45 @@ log_dir = project_root / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "researcher.log"
 
+# HTTP 에러 메시지 필터링 클래스
+class HTTPErrorFilter(logging.Filter):
+    """HTML 에러 응답을 필터링하여 간단한 메시지만 출력"""
+    def filter(self, record):
+        message = record.getMessage()
+        
+        # HTML 에러 페이지 감지 및 필터링
+        if '<!DOCTYPE html>' in message or '<html' in message.lower():
+            # HTML에서 에러 메시지 추출 시도
+            import re
+            
+            # HTTP 상태 코드 추출
+            status_match = re.search(r'HTTP (\d{3})', message)
+            status_code = status_match.group(1) if status_match else "Unknown"
+            
+            # 에러 제목 추출 시도
+            title_match = re.search(r'<title>([^<]+)</title>', message, re.IGNORECASE)
+            error_title = title_match.group(1).strip() if title_match else None
+            
+            # 간단한 에러 메시지 생성
+            if error_title:
+                record.msg = f"HTTP {status_code}: {error_title}"
+            else:
+                # 상태 코드에 따른 기본 메시지
+                if status_code == "502":
+                    record.msg = f"HTTP {status_code}: Bad Gateway - Server temporarily unavailable"
+                elif status_code == "401":
+                    record.msg = f"HTTP {status_code}: Unauthorized - Authentication failed"
+                elif status_code == "404":
+                    record.msg = f"HTTP {status_code}: Not Found"
+                elif status_code == "500":
+                    record.msg = f"HTTP {status_code}: Internal Server Error"
+                else:
+                    record.msg = f"HTTP {status_code}: Server Error"
+            
+            record.args = ()  # args 초기화
+        
+        return True
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -62,7 +101,21 @@ logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+console_handler.addFilter(HTTPErrorFilter())  # HTTP 에러 필터 추가
 logger.addHandler(console_handler)
+
+# FastMCP Runner 로거에도 필터 추가 (외부 라이브러리 로깅 필터링)
+runner_logger = logging.getLogger("Runner")
+if runner_logger:
+    for handler in runner_logger.handlers:
+        if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
+            handler.addFilter(HTTPErrorFilter())
+
+# Root logger에도 필터 추가
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    if isinstance(handler, logging.StreamHandler) and not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
+        handler.addFilter(HTTPErrorFilter())
 
 
 class WebAppManager:

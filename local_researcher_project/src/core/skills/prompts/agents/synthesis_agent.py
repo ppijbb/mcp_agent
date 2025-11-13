@@ -140,3 +140,4 @@ synthesis_agent_prompts = {
     'synthesis': synthesis,
     'validation': validation
 }
+
