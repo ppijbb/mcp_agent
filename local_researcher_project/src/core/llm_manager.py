@@ -309,6 +309,18 @@ class MultiModelOrchestrator:
     
     def _is_free_model(self, model_data):
         """모델이 무료인지 확인."""
+        model_id = model_data.get("id", "").lower()
+        
+        # 사용 중단된 모델 필터링
+        deprecated_models = [
+            "kwaipilot-kat-coder-pro-free",
+            "kwaipilot/kat-coder-pro:free",
+            "kat-coder-pro-free"
+        ]
+        if any(deprecated in model_id for deprecated in deprecated_models):
+            logger.debug(f"Skipping deprecated model: {model_id}")
+            return False
+        
         pricing = model_data.get("pricing", {})
         prompt_price = pricing.get("prompt", "0")
         completion_price = pricing.get("completion", "0")
@@ -396,10 +408,12 @@ class MultiModelOrchestrator:
     def _load_groq_models(self):
         """Groq 모델 로딩."""
         # 주요 Groq 모델들
+        # 참고: llama-3.1-70b-versatile은 decommissioned됨 (2025년)
+        # 대체 모델: llama-3.3-70b-versatile 또는 llama-3.2-70b-versatile 사용
         groq_models = [
             {
                 "name": "groq-llama3-70b",
-                "model_id": "llama-3.1-70b-versatile",
+                "model_id": "llama-3.2-70b-versatile",  # llama-3.1-70b-versatile 대체 (decommissioned)
                 "speed_rating": 9.0,
                 "quality_rating": 8.5,
                 "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS]
@@ -1028,6 +1042,21 @@ class MultiModelOrchestrator:
             except Exception as e:
                 # 에러 메시지에서 HTML 필터링 및 중첩 방지
                 error_str = str(e)
+                
+                # Decommissioned 모델 감지
+                if "decommissioned" in error_str.lower() or "model_decommissioned" in error_str.lower():
+                    logger.warning(f"Fallback model {fallback_model} is decommissioned, trying next...")
+                    # Groq 모델이 decommissioned된 경우 모델 목록에서 제거
+                    if provider == "groq" and fallback_model in self.models:
+                        logger.warning(f"Removing decommissioned Groq model from available models: {fallback_model}")
+                        del self.models[fallback_model]
+                    continue
+                
+                # Rate limit 에러 (429)는 재시도 가능하지만 fallback에서는 다음 모델로
+                if "429" in error_str or "rate limit" in error_str.lower() or "rate-limited" in error_str.lower():
+                    logger.warning(f"Fallback model {fallback_model} rate limited, trying next...")
+                    continue
+                
                 if '<!DOCTYPE html>' in error_str or '<html' in error_str.lower():
                     import re
                     status_match = re.search(r'(\d{3})', error_str)
@@ -1102,6 +1131,61 @@ class MultiModelOrchestrator:
                 }
             }
         except Exception as e:
+            error_str = str(e).lower()
+            
+            # Decommissioned 모델 감지 및 자동 대체
+            if "decommissioned" in error_str or "model_decommissioned" in error_str:
+                logger.warning(f"Groq model {model_name} ({model_config.model_id}) is decommissioned")
+                
+                # llama-3.1-70b-versatile 대체 모델 시도
+                if "llama-3.1-70b-versatile" in model_config.model_id:
+                    # 대체 모델 우선순위: llama-3.2-70b-versatile -> llama-3.3-70b-versatile -> mixtral-8x7b-32768
+                    replacement_models = [
+                        "llama-3.2-70b-versatile",
+                        "llama-3.3-70b-versatile",
+                        "mixtral-8x7b-32768"
+                    ]
+                    
+                    for replacement_model in replacement_models:
+                        logger.info(f"Attempting to use replacement model: {replacement_model}")
+                        try:
+                            # 대체 모델로 재시도
+                            replacement_response = await asyncio.get_event_loop().run_in_executor(
+                                None,
+                                lambda rm=replacement_model: client.chat.completions.create(
+                                    model=rm,
+                                    messages=messages,
+                                    temperature=model_config.temperature,
+                                    max_tokens=model_config.max_tokens,
+                                    **kwargs
+                                )
+                            )
+                            content = replacement_response.choices[0].message.content
+                            logger.info(f"✅ Successfully used replacement model: {replacement_model}")
+                            
+                            # 모델 설정 업데이트 (다음 요청을 위해)
+                            self.models[model_name].model_id = replacement_model
+                            
+                            return {
+                                "content": content,
+                                "confidence": 0.8,
+                                "quality_score": 0.8,
+                                "metadata": {
+                                    "model": model_name,
+                                    "provider": "groq",
+                                    "model_id": replacement_model,  # 실제 사용된 모델
+                                    "original_model_id": model_config.model_id,  # 원래 요청한 모델
+                                    "tokens_used": replacement_response.usage.total_tokens if hasattr(replacement_response, 'usage') else len(content.split())
+                                }
+                            }
+                        except Exception as replacement_error:
+                            logger.debug(f"Replacement model {replacement_model} failed: {replacement_error}, trying next...")
+                            continue
+                    
+                    # 모든 대체 모델 실패
+                    logger.error(f"All replacement models failed for decommissioned model {model_config.model_id}")
+                    raise RuntimeError(f"Groq model {model_name} ({model_config.model_id}) is decommissioned and all replacement models failed")
+            
             logger.error(f"Groq API error: {e}")
             raise RuntimeError(f"Groq model {model_name} failed: {e}")
     

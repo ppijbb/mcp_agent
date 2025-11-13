@@ -20,6 +20,7 @@ import subprocess
 import os
 from datetime import datetime, timedelta
 from contextlib import AsyncExitStack
+import random
 
 # MCP imports
 try:
@@ -258,6 +259,30 @@ class UniversalMCPHub:
         self.connection_diagnostics: Dict[str, Dict[str, Any]] = {}
         # 종료/차단 플래그 (종료 중 신규 연결 방지)
         self.stopping: bool = False
+        
+        # Anti-bot 우회를 위한 User-Agent 풀 (Skyvern 스타일)
+        self.user_agents = [
+            # Chrome (Windows)
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            # Chrome (macOS)
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            # Chrome (Linux)
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            # Firefox (Windows)
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+            # Firefox (macOS)
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0",
+            # Safari (macOS)
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+            # Edge (Windows)
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+        ]
+        
+        # 요청 간격 변동성을 위한 히스토리 (Skyvern 스타일: 인간 행동 패턴 모방)
+        self.request_timing_history: Dict[str, List[float]] = {}  # server_name -> [timestamps]
 
         # FastMCP 자동 발견 시스템 (신규)
         self.fastmcp_servers: Dict[str, HTTPServerSpec] = {}  # 자동 발견용 서버 설정
@@ -825,7 +850,35 @@ class UniversalMCPHub:
                     url = base_url
                 
                 # Headers 구성 (exa 서버 등에서 사용)
-                headers = server_config.get("headers", {})
+                headers = server_config.get("headers", {}).copy()  # 원본 수정 방지
+                
+                # Skyvern 스타일: User-Agent 로테이션 (봇 감지 우회)
+                # DuckDuckGo 검색 서버의 경우 User-Agent 추가
+                if server_name == "ddg_search" or "duckduckgo" in server_name.lower():
+                    if "User-Agent" not in headers:
+                        # User-Agent 풀에서 랜덤 선택
+                        user_agent = random.choice(self.user_agents)
+                        headers["User-Agent"] = user_agent
+                        logger.debug(f"[MCP][anti-bot] Using User-Agent: {user_agent[:50]}...")
+                    
+                    # 추가 헤더 (Skyvern 스타일: 자연스러운 브라우저 헤더)
+                    if "Accept" not in headers:
+                        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+                    if "Accept-Language" not in headers:
+                        headers["Accept-Language"] = random.choice([
+                            "en-US,en;q=0.9",
+                            "en-US,en;q=0.9,ko;q=0.8",
+                            "en-GB,en;q=0.9",
+                            "en-US,en;q=0.9,ja;q=0.8"
+                        ])
+                    if "Accept-Encoding" not in headers:
+                        headers["Accept-Encoding"] = "gzip, deflate, br"
+                    if "DNT" not in headers:
+                        headers["DNT"] = "1"
+                    if "Connection" not in headers:
+                        headers["Connection"] = "keep-alive"
+                    if "Upgrade-Insecure-Requests" not in headers:
+                        headers["Upgrade-Insecure-Requests"] = "1"
                 
                 logger.info(f"Connecting to HTTP MCP server: {server_name} ({url})")
                 
@@ -2469,11 +2522,18 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         failed_servers.append({"server": server_name, "reason": f"no_search_tool_found (available: {list(tools.keys())})"})
                         continue
                     
-                    # DuckDuckGo 봇 감지 우회: 요청 간 딜레이 및 빈도 제한
+                    # DuckDuckGo 봇 감지 우회: Skyvern 스타일 개선 (자연스러운 요청 패턴)
                     if server_name == "ddg_search":
                         async with _get_ddg_lock():
-                            import random
                             current_time = time.time()
+                            
+                            # 요청 히스토리 초기화 (최근 10개만 유지)
+                            if server_name not in mcp_hub.request_timing_history:
+                                mcp_hub.request_timing_history[server_name] = []
+                            history = mcp_hub.request_timing_history[server_name]
+                            
+                            # 오래된 히스토리 제거 (최근 1시간 이내만 유지)
+                            history[:] = [t for t in history if current_time - t < 3600]
                             
                             # 마지막 요청 시간 확인
                             if "last_request" in _ddg_last_request_time:
@@ -2485,13 +2545,30 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                     logger.debug(f"[MCP][_execute_search_tool] Rate limiting: waiting {wait_time:.2f}s before DuckDuckGo request")
                                     await asyncio.sleep(wait_time)
                             
-                            # 랜덤 딜레이 추가 (1.5~3초)
-                            delay = random.uniform(1.5, 3.0)
-                            logger.debug(f"[MCP][_execute_search_tool] Adding {delay:.2f}s random delay before DuckDuckGo request to avoid bot detection")
+                            # Skyvern 스타일: 인간 행동 패턴 모방 - 가변 딜레이
+                            # 히스토리가 있으면 평균 간격을 계산하여 자연스러운 변동성 추가
+                            if len(history) > 0:
+                                # 평균 간격 계산
+                                intervals = [history[i+1] - history[i] for i in range(len(history)-1)]
+                                avg_interval = sum(intervals) / len(intervals) if intervals else 3.0
+                                
+                                # 평균 간격을 기준으로 ±50% 변동 (최소 1.5초, 최대 5초)
+                                base_delay = max(1.5, min(5.0, avg_interval * random.uniform(0.5, 1.5)))
+                            else:
+                                # 첫 요청: 2~4초 랜덤 딜레이
+                                base_delay = random.uniform(2.0, 4.0)
+                            
+                            # 추가 변동성: ±0.5초 랜덤 추가 (더 자연스러운 패턴)
+                            delay = base_delay + random.uniform(-0.5, 0.5)
+                            delay = max(1.5, delay)  # 최소 1.5초 보장
+                            
+                            logger.debug(f"[MCP][_execute_search_tool] Skyvern-style delay: {delay:.2f}s before DuckDuckGo request (history: {len(history)} requests)")
                             await asyncio.sleep(delay)
                             
                             # 마지막 요청 시간 업데이트
                             _ddg_last_request_time["last_request"] = time.time()
+                            # 히스토리에 추가
+                            history.append(time.time())
                     
                     # 검색 실행 (재시도 로직 포함, 봇 감지 우회)
                     logger.info(f"Using MCP server {server_name} with tool {search_tool_name} for search: {query}")

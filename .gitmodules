@@ -25,3 +25,6 @@
 [submodule "open_researcher/DeepMCPAgent"]
 	path = open_researcher/DeepMCPAgent
 	url = https://github.com/cryxnet/DeepMCPAgent.git
+[submodule "local_researcher_project/open_researcher/skyvern"]
+	path = local_researcher_project/open_researcher/skyvern
+	url = https://github.com/Skyvern-AI/skyvern.git
