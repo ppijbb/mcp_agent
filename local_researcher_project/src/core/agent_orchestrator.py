@@ -60,6 +60,10 @@ class HTTPErrorFilter(logging.Filter):
                 # 상태 코드에 따른 기본 메시지
                 if status_code == "502":
                     record.msg = f"HTTP {status_code}: Bad Gateway - Server temporarily unavailable"
+                elif status_code == "504":
+                    record.msg = f"HTTP {status_code}: Gateway Timeout - Server response timeout"
+                elif status_code == "503":
+                    record.msg = f"HTTP {status_code}: Service Unavailable - Server temporarily unavailable"
                 elif status_code == "401":
                     record.msg = f"HTTP {status_code}: Unauthorized - Authentication failed"
                 elif status_code == "404":
@@ -95,11 +99,19 @@ else:
             handler.addFilter(HTTPErrorFilter())
 
 # FastMCP Runner 로거에도 필터 추가 (외부 라이브러리 로깅 필터링)
-runner_logger = logging.getLogger("Runner")
-if runner_logger:
-    for handler in runner_logger.handlers:
-        if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
-            handler.addFilter(HTTPErrorFilter())
+# Runner 로거는 나중에 생성될 수 있으므로, propagate를 활성화하고 root logger의 필터 사용
+def setup_runner_logger_filter():
+    """Runner 로거에 HTML 필터 추가 (지연 초기화)"""
+    runner_logger = logging.getLogger("Runner")
+    if runner_logger:
+        runner_logger.propagate = True  # Root logger로 전파하여 필터 적용
+        # 기존 handler에 필터 추가 (혹시 직접 handler가 있는 경우)
+        for handler in runner_logger.handlers:
+            if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
+                handler.addFilter(HTTPErrorFilter())
+
+# 초기 설정
+setup_runner_logger_filter()
 
 
 ###################
@@ -510,8 +522,31 @@ class ExecutorAgent:
             successful_results = [sr for sr in search_results_list if sr.get('success') and sr.get('result', {}).get('data')]
             
             if not successful_results:
-                error_msg = f"연구 실행 실패: 모든 검색 쿼리 실행이 실패했습니다."
-                logger.error(f"[{self.name}] ❌ {error_msg}")
+                # 실패한 검색 상세 정보 수집
+                failed_searches = [sr for sr in search_results_list if not sr.get('success')]
+                error_details = []
+                for fs in failed_searches:
+                    query = fs.get('query', 'unknown')
+                    result = fs.get('result', {})
+                    error = result.get('error', 'Unknown error')
+                    error_details.append(f"  - Query: '{query[:60]}...' → Error: {str(error)[:100]}")
+                
+                logger.error(f"[{self.name}] ❌ 모든 검색 쿼리 실행 실패 ({len(failed_searches)}/{len(search_results_list)} 실패)")
+                logger.error(f"[{self.name}] 📋 실패 상세:")
+                for detail in error_details:
+                    logger.error(f"[{self.name}] {detail}")
+                
+                # MCP 서버 연결 상태 확인
+                try:
+                    from src.core.mcp_integration import get_mcp_hub
+                    mcp_hub = get_mcp_hub()
+                    connected_servers = list(mcp_hub.mcp_sessions.keys()) if mcp_hub.mcp_sessions else []
+                    logger.error(f"[{self.name}] 🔌 현재 연결된 MCP 서버: {connected_servers if connected_servers else '없음'}")
+                    logger.error(f"[{self.name}] 📝 Fallback (duckduckgo_search 라이브러리)가 작동했는지 확인 필요")
+                except Exception as e:
+                    logger.debug(f"[{self.name}] MCP Hub 상태 확인 실패: {e}")
+                
+                error_msg = f"연구 실행 실패: 모든 검색 쿼리 실행이 실패했습니다. ({len(failed_searches)}/{len(search_results_list)} 실패)"
                 raise RuntimeError(error_msg)
             
             # 모든 검색 결과를 통합 (하드코딩 제거, 동적 통합)
@@ -602,8 +637,10 @@ class ExecutorAgent:
                     # 실제 검색 결과를 구조화된 형식으로 저장
                     unique_results = []
                     seen_urls = set()
+                    filtered_count = 0
+                    filtered_reasons = []
                     
-                    logger.info(f"[{self.name}] Processing {len(search_results)} results...")
+                    logger.info(f"[{self.name}] Processing {len(search_results)} results for query: '{query[:100]}...'")
                     
                     for i, result in enumerate(search_results, 1):
                         # 다양한 형식 지원
@@ -689,19 +726,44 @@ class ExecutorAgent:
                                     # 파싱된 결과들을 unique_results에 추가
                                     for parsed_result in parsed_results:
                                         parsed_url = parsed_result.get('url', '')
+                                        parsed_title = parsed_result.get('title', '')
+                                        parsed_snippet = parsed_result.get('snippet', '')
+                                        
                                         if parsed_url and parsed_url in seen_urls:
+                                            logger.debug(f"[{self.name}] Duplicate URL skipped in parsed results: {parsed_url[:50]}")
                                             continue
                                         if parsed_url:
                                             seen_urls.add(parsed_url)
                                         
+                                        # 마크다운 파싱 결과도 필터링 적용
+                                        invalid_indicators = [
+                                            "no results were found", "bot detection",
+                                            "no results", "not found", "try again",
+                                            "unable to", "error occurred", "no matches"
+                                        ]
+                                        parsed_snippet_lower = parsed_snippet.lower() if parsed_snippet else ""
+                                        matched_indicators = [ind for ind in invalid_indicators if ind in parsed_snippet_lower]
+                                        
+                                        if matched_indicators:
+                                            filtered_count += 1
+                                            reason = f"Matched indicators: {', '.join(matched_indicators)}"
+                                            filtered_reasons.append({
+                                                "result_index": f"{i}(parsed)",
+                                                "title": parsed_title[:80],
+                                                "reason": reason,
+                                                "snippet_preview": parsed_snippet[:200] if parsed_snippet else "(empty)"
+                                            })
+                                            logger.warning(f"[{self.name}] ⚠️ Filtering invalid parsed result: '{parsed_title[:60]}...' - Reason: {reason}")
+                                            continue
+                                        
                                         unique_results.append({
                                             "index": len(unique_results) + 1,
-                                            "title": parsed_result.get('title', ''),
-                                            "snippet": parsed_result.get('snippet', '')[:500],
+                                            "title": parsed_title,
+                                            "snippet": parsed_snippet[:500],
                                             "url": parsed_url,
                                             "source": "search"
                                         })
-                                        logger.info(f"[{self.name}] Parsed result: {parsed_result.get('title', '')[:50]}... (URL: {parsed_url[:50] if parsed_url else 'N/A'}...)")
+                                        logger.info(f"[{self.name}] Parsed result: {parsed_title[:50]}... (URL: {parsed_url[:50] if parsed_url else 'N/A'}...)")
                                     
                                     # 원본 결과는 건너뛰기
                                     continue
@@ -730,6 +792,31 @@ class ExecutorAgent:
                         if url:
                             seen_urls.add(url)
                         
+                        # 디버깅: 원본 데이터 로깅
+                        logger.debug(f"[{self.name}] Result {i} 원본 데이터 - title: '{title[:80]}', snippet: '{snippet[:150] if snippet else '(empty)'}', url: '{url[:80] if url else '(empty)'}'")
+                        
+                        # snippet 내용으로 유효하지 않은 검색 결과 필터링
+                        invalid_indicators = [
+                            "no results were found", "bot detection",
+                            "no results", "not found", "try again",
+                            "unable to", "error occurred", "no matches"
+                        ]
+                        snippet_lower = snippet.lower() if snippet else ""
+                        matched_indicators = [ind for ind in invalid_indicators if ind in snippet_lower]
+                        
+                        if matched_indicators:
+                            filtered_count += 1
+                            reason = f"Matched indicators: {', '.join(matched_indicators)}"
+                            filtered_reasons.append({
+                                "result_index": i,
+                                "title": title[:80],
+                                "reason": reason,
+                                "snippet_preview": snippet[:200] if snippet else "(empty)"
+                            })
+                            logger.warning(f"[{self.name}] ⚠️ Filtering invalid search result {i}: '{title[:60]}...' - Reason: {reason}")
+                            logger.debug(f"[{self.name}]   Filtered snippet preview: '{snippet[:200] if snippet else '(empty)'}'")
+                            continue
+
                         # 구조화된 결과 저장
                         result_dict = {
                             "index": len(unique_results) + 1,
@@ -739,32 +826,76 @@ class ExecutorAgent:
                             "source": "search"
                         }
                         unique_results.append(result_dict)
-                        
+
                         logger.info(f"[{self.name}] Result {i}: {title[:50]}... (URL: {url[:50] if url else 'N/A'}...)")
+                    
+                    # 필터링 통계 로깅
+                    total_processed = len(search_results)
+                    valid_results = len(unique_results)
+                    logger.info(f"[{self.name}] 📊 필터링 통계: 총 {total_processed}개 중 {filtered_count}개 필터링됨, {valid_results}개 유효한 결과")
+                    
+                    if filtered_count > 0:
+                        logger.warning(f"[{self.name}] ⚠️ 필터링된 결과 상세:")
+                        for fr in filtered_reasons[:5]:  # 최대 5개만 상세 로깅
+                            logger.warning(f"[{self.name}]   - 결과 {fr['result_index']}: '{fr['title']}' - {fr['reason']}")
+                            logger.warning(f"[{self.name}]     Snippet: '{fr['snippet_preview']}'")
+                        if len(filtered_reasons) > 5:
+                            logger.warning(f"[{self.name}]   ... 외 {len(filtered_reasons) - 5}개 결과도 필터링됨")
                     
                     # 결과를 구조화된 형식으로 저장
                     if unique_results:
                         results = unique_results
                         logger.info(f"[{self.name}] ✅ Collected {len(results)} unique results")
                     else:
-                        error_msg = f"연구 실행 실패: 검색 결과를 파싱할 수 없습니다."
+                        # 모든 결과가 필터링된 경우 상세한 에러 메시지
+                        error_details = []
+                        error_details.append(f"검색 쿼리: '{query[:100]}'")
+                        error_details.append(f"총 검색 결과: {total_processed}개")
+                        error_details.append(f"필터링된 결과: {filtered_count}개")
+                        error_details.append(f"유효한 결과: 0개")
+                        
+                        if filtered_reasons:
+                            error_details.append("\n필터링된 결과 상세:")
+                            for fr in filtered_reasons[:3]:  # 최대 3개만 에러 메시지에 포함
+                                error_details.append(f"  - 결과 {fr['result_index']}: '{fr['title']}' - {fr['reason']}")
+                        
+                        error_msg = f"연구 실행 실패: 모든 검색 결과가 필터링되었습니다.\n" + "\n".join(error_details)
                         logger.error(f"[{self.name}] ❌ {error_msg}")
                         raise RuntimeError(error_msg)
                 else:
                     # 검색 결과가 없음 - 실패 처리
-                    error_msg = f"연구 실행 실패: '{query}'에 대한 검색 결과를 찾을 수 없습니다."
+                    logger.error(f"[{self.name}] ❌ 검색 결과가 비어있습니다.")
+                    logger.error(f"[{self.name}]   검색 쿼리: '{query[:100]}'")
+                    logger.error(f"[{self.name}]   검색 도구: {search_result.get('source', 'unknown')}")
+                    logger.error(f"[{self.name}]   검색 성공 여부: {search_result.get('success', False)}")
+                    if search_result.get('error'):
+                        logger.error(f"[{self.name}]   검색 에러: {search_result.get('error')}")
+                    error_msg = f"연구 실행 실패: '{query[:100]}'에 대한 검색 결과를 찾을 수 없습니다."
                     logger.error(f"[{self.name}] ❌ {error_msg}")
                     raise RuntimeError(error_msg)
             else:
                 # 검색 실패 - 에러 반환
+                logger.error(f"[{self.name}] ❌ 검색 도구 실행 실패")
+                logger.error(f"[{self.name}]   검색 쿼리: '{query[:100]}'")
+                logger.error(f"[{self.name}]   검색 도구: {search_result.get('source', 'unknown')}")
+                logger.error(f"[{self.name}]   검색 성공 여부: {search_result.get('success', False)}")
+                logger.error(f"[{self.name}]   에러 메시지: {search_result.get('error', 'Unknown error')}")
+                if search_result.get('data'):
+                    logger.debug(f"[{self.name}]   응답 데이터 타입: {type(search_result.get('data'))}")
+                    logger.debug(f"[{self.name}]   응답 데이터 샘플: {str(search_result.get('data'))[:200]}")
                 error_msg = f"연구 실행 실패: 검색 도구 실행 중 오류가 발생했습니다. {search_result.get('error', 'Unknown error')}"
                 logger.error(f"[{self.name}] ❌ {error_msg}")
                 raise RuntimeError(error_msg)
                 
         except Exception as e:
             # 실제 오류 발생 - 실패 처리
+            import traceback
+            error_type = type(e).__name__
             error_msg = f"연구 실행 실패: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"[{self.name}] ❌ 예외 발생: {error_type}")
+            logger.error(f"[{self.name}]   에러 메시지: {error_msg}")
+            logger.error(f"[{self.name}]   검색 쿼리: '{query[:100] if 'query' in locals() else 'N/A'}'")
+            logger.debug(f"[{self.name}]   Traceback:\n{traceback.format_exc()}")
             
             # 실패 상태 기록
             state['research_results'] = []
@@ -880,6 +1011,48 @@ class VerifierAgent:
         logger.info(f"[{self.name}] Found {len(results)} results to verify (including shared results)")
         
         if not results or len(results) == 0:
+            # 검증할 결과가 없는 이유 상세 분석
+            logger.error(f"[{self.name}] ❌ 검증할 연구 결과가 없습니다.")
+            
+            # state에서 결과 추적
+            execution_results = state.get('execution_results', [])
+            compression_results = state.get('compression_results', [])
+            shared_results = state.get('shared_results', [])
+            
+            logger.error(f"[{self.name}] 📋 결과 추적:")
+            logger.error(f"[{self.name}]   - execution_results: {len(execution_results) if isinstance(execution_results, list) else 0}개")
+            logger.error(f"[{self.name}]   - compression_results: {len(compression_results) if isinstance(compression_results, list) else 0}개")
+            logger.error(f"[{self.name}]   - shared_results: {len(shared_results) if isinstance(shared_results, list) else 0}개")
+            logger.error(f"[{self.name}]   - 검증에 전달된 results: {len(results) if isinstance(results, list) else 0}개")
+            
+            # execution_results 상세 분석
+            if execution_results:
+                successful_executions = [er for er in execution_results if er.get('success', False)]
+                failed_executions = [er for er in execution_results if not er.get('success', False)]
+                logger.error(f"[{self.name}]   - 성공한 실행: {len(successful_executions)}개")
+                logger.error(f"[{self.name}]   - 실패한 실행: {len(failed_executions)}개")
+                
+                if failed_executions:
+                    logger.error(f"[{self.name}]   📝 실패한 실행 상세:")
+                    for i, fe in enumerate(failed_executions[:3], 1):  # 최대 3개만 표시
+                        error = fe.get('error', 'Unknown error')
+                        logger.error(f"[{self.name}]     {i}. {str(error)[:100]}")
+            
+            # 검색 결과가 있는지 확인
+            search_results_found = False
+            for er in execution_results if isinstance(execution_results, list) else []:
+                if isinstance(er, dict):
+                    data = er.get('data', {})
+                    if isinstance(data, dict):
+                        results_data = data.get('results', data.get('items', []))
+                        if results_data and len(results_data) > 0:
+                            search_results_found = True
+                            logger.error(f"[{self.name}]   ⚠️ 검색 결과는 있지만 검증 단계에 전달되지 않았습니다!")
+                            break
+            
+            if not search_results_found:
+                logger.error(f"[{self.name}]   ⚠️ 검색 단계에서 결과를 얻지 못했습니다. ExecutorAgent의 검색 실패를 확인하세요.")
+            
             error_msg = "검증 실패: 검증할 연구 결과가 없습니다."
             logger.error(f"[{self.name}] ❌ {error_msg}")
             state['verified_results'] = []
@@ -913,6 +1086,17 @@ class VerifierAgent:
                 # snippet이 비어있고 url도 없는 경우 스킵
                 if not snippet and not url:
                     logger.debug(f"[{self.name}] Skipping result {i}: no content or URL")
+                    continue
+
+                # snippet 내용으로 유효하지 않은 검색 결과 필터링
+                invalid_indicators = [
+                    "no results were found", "bot detection",
+                    "no results", "not found", "try again",
+                    "unable to", "error occurred", "no matches"
+                ]
+                snippet_lower = snippet.lower() if snippet else ""
+                if any(indicator in snippet_lower for indicator in invalid_indicators):
+                    logger.debug(f"[{self.name}] Skipping result {i}: invalid snippet content (contains error message)")
                     continue
                 
                 # LLM으로 검증
@@ -1067,7 +1251,15 @@ class GeneratorAgent:
         
         # 연구 또는 검증 실패 확인 - Fallback 제거, 명확한 에러만 반환
         if state.get('research_failed') or state.get('verification_failed'):
-            error_msg = state.get('error', '알 수 없는 오류')
+            error_msg = state.get('error')
+            if not error_msg:
+                if state.get('verification_failed'):
+                    error_msg = "검증 실패: 검증된 결과가 없습니다"
+                elif state.get('research_failed'):
+                    error_msg = "연구 실행 실패"
+                else:
+                    error_msg = "알 수 없는 오류"
+
             logger.error(f"[{self.name}] ❌ Research or verification failed: {error_msg}")
             state['final_report'] = None
             state['current_agent'] = self.name

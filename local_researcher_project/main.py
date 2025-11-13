@@ -71,6 +71,10 @@ class HTTPErrorFilter(logging.Filter):
                 # 상태 코드에 따른 기본 메시지
                 if status_code == "502":
                     record.msg = f"HTTP {status_code}: Bad Gateway - Server temporarily unavailable"
+                elif status_code == "504":
+                    record.msg = f"HTTP {status_code}: Gateway Timeout - Server response timeout"
+                elif status_code == "503":
+                    record.msg = f"HTTP {status_code}: Service Unavailable - Server temporarily unavailable"
                 elif status_code == "401":
                     record.msg = f"HTTP {status_code}: Unauthorized - Authentication failed"
                 elif status_code == "404":
@@ -105,8 +109,11 @@ console_handler.addFilter(HTTPErrorFilter())  # HTTP 에러 필터 추가
 logger.addHandler(console_handler)
 
 # FastMCP Runner 로거에도 필터 추가 (외부 라이브러리 로깅 필터링)
+# Runner 로거는 나중에 생성될 수 있으므로, propagate를 활성화하고 root logger의 필터 사용
 runner_logger = logging.getLogger("Runner")
 if runner_logger:
+    runner_logger.propagate = True  # Root logger로 전파하여 필터 적용
+    # 기존 handler에도 필터 추가 (혹시 직접 handler가 있는 경우)
     for handler in runner_logger.handlers:
         if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
             handler.addFilter(HTTPErrorFilter())
@@ -253,13 +260,14 @@ class AutonomousResearchSystem:
         
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
-        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         import sys
-        
+        # Reentrant call 방지를 위해 print 사용
+        print(f"Received signal {signum}, initiating graceful shutdown...", file=sys.stderr)
+
         # Shutdown 플래그 설정 (중복 방지)
         if hasattr(self, '_shutdown_requested') and self._shutdown_requested:
             # 이미 종료 중이면 재진입 방지만 수행
-            logger.warning("Shutdown already in progress; ignoring additional signal")
+            print("Shutdown already in progress; ignoring additional signal", file=sys.stderr)
             return
         
         self._shutdown_requested = True

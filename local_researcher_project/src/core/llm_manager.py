@@ -890,39 +890,86 @@ class MultiModelOrchestrator:
             **kwargs
         }
         
-        try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=30
+        # 재시도 로직: 502, 500, 503 등 서버 에러는 재시도, 401/403/404는 재시도 안 함
+        max_retries = 3
+        retryable_status_codes = [500, 502, 503, 504]  # 서버 에러만 재시도
+        response = None
+        
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: requests.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=30
+                    )
                 )
-            )
-            
-            if response.status_code != 200:
-                raise RuntimeError(f"OpenRouter API error: {response.status_code} - {response.text}")
-            
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            
-            return {
-                "content": content,
-                "confidence": 0.8,
-                "quality_score": 0.8,
-                "metadata": {
-                    "model": model_name,
-                    "provider": "openrouter",
-                    "model_id": model_config.model_id,
-                    "tokens_used": len(content.split()),
-                    "usage": data.get("usage", {})
-                }
+                
+                if response.status_code == 200:
+                    # 성공
+                    break
+                
+                # HTML 에러 페이지 필터링
+                error_text = response.text
+                if '<!DOCTYPE html>' in error_text or '<html' in error_text.lower():
+                    # HTML에서 간단한 에러 메시지 추출
+                    import re
+                    status_code = response.status_code
+                    title_match = re.search(r'<title>([^<]+)</title>', error_text, re.IGNORECASE)
+                    if title_match:
+                        error_msg = f"HTTP {status_code}: {title_match.group(1).strip()}"
+                    elif status_code == 502:
+                        error_msg = f"HTTP {status_code}: Bad Gateway - Server temporarily unavailable"
+                    elif status_code == 500:
+                        error_msg = f"HTTP {status_code}: Internal Server Error"
+                    else:
+                        error_msg = f"HTTP {status_code}: Server Error"
+                else:
+                    error_msg = f"HTTP {response.status_code}: {error_text[:200]}"
+                
+                # 재시도 가능한 에러인지 확인
+                if response.status_code in retryable_status_codes and attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # 지수 백오프: 1초, 2초, 4초
+                    logger.warning(f"OpenRouter API error (attempt {attempt + 1}/{max_retries}): {error_msg}, retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    continue  # 재시도
+                else:
+                    # 재시도 불가능한 에러 (401, 403, 404 등) 또는 최대 재시도 횟수 초과
+                    logger.error(f"OpenRouter API error: {error_msg}")
+                    raise RuntimeError(f"OpenRouter API error: {error_msg}")
+                    
+            except requests.exceptions.RequestException as e:
+                # 네트워크 에러도 재시도
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"OpenRouter API request failed (attempt {attempt + 1}/{max_retries}): {e}, retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"OpenRouter API request failed after {max_retries} attempts: {e}")
+                    raise RuntimeError(f"OpenRouter API request failed: {e}")
+        
+        # 마지막 시도 결과 확인
+        if not response or response.status_code != 200:
+            raise RuntimeError(f"OpenRouter API error after {max_retries} attempts: HTTP {response.status_code if response else 'No response'}")
+        
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        
+        return {
+            "content": content,
+            "confidence": 0.8,
+            "quality_score": 0.8,
+            "metadata": {
+                "model": model_name,
+                "provider": "openrouter",
+                "model_id": model_config.model_id,
+                "tokens_used": len(content.split()),
+                "usage": data.get("usage", {})
             }
-            
-        except Exception as e:
-            logger.error(f"OpenRouter API error: {e}")
-            raise RuntimeError(f"OpenRouter model {model_name} failed: {e}")
+        }
     
     async def _try_fallback_models(
         self,
@@ -979,7 +1026,30 @@ class MultiModelOrchestrator:
                 logger.info(f"✅ Fallback successful with {fallback_model}")
                 return result, fallback_model
             except Exception as e:
-                logger.warning(f"Fallback model {fallback_model} failed: {e}, trying next...")
+                # 에러 메시지에서 HTML 필터링 및 중첩 방지
+                error_str = str(e)
+                if '<!DOCTYPE html>' in error_str or '<html' in error_str.lower():
+                    import re
+                    status_match = re.search(r'(\d{3})', error_str)
+                    status_code = status_match.group(1) if status_match else "Unknown"
+                    title_match = re.search(r'<title>([^<]+)</title>', error_str, re.IGNORECASE)
+                    if title_match:
+                        error_msg = f"HTTP {status_code}: {title_match.group(1).strip()}"
+                    else:
+                        error_msg = f"HTTP {status_code}: Server Error"
+                else:
+                    # 중첩된 메시지 방지: "OpenRouter model X failed: OpenRouter model X failed: ..." 형식 제거
+                    if "failed:" in error_str:
+                        # 마지막 "failed:" 이후의 메시지만 사용
+                        parts = error_str.split("failed:")
+                        if len(parts) > 1:
+                            error_msg = parts[-1].strip()
+                        else:
+                            error_msg = error_str[:200]
+                    else:
+                        error_msg = error_str[:200]
+                
+                logger.warning(f"Fallback model {fallback_model} failed: {error_msg}, trying next...")
                 continue
         
         # 모든 폴백 실패

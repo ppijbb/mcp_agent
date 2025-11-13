@@ -1090,7 +1090,7 @@ class UniversalMCPHub:
                 enabled_server_items = base_items
                 logger.info(f"[MCP][allowlist] not set; connecting to all enabled servers: { [n for n,_ in enabled_server_items] }")
 
-            # 서버별 타임아웃 설정 적용
+            # 서버별 타임아웃 설정 적용 (재시도 로직 포함)
             async def connect_one_with_settings(name: str, cfg: Dict[str, Any]) -> tuple[str, bool]:
                 try:
                     async with semaphore:
@@ -1102,11 +1102,58 @@ class UniversalMCPHub:
                         server_settings = self._get_server_specific_settings(name, cfg)
                         server_timeout = server_settings["timeout"]
                         
-                        logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s)...")
-                        ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
-                        if not ok:
-                            logger.warning(f"Failed to connect to MCP server {name}")
-                        return name, ok
+                        # 재시도 로직: 타임아웃이나 일시적 에러는 재시도
+                        max_connection_retries = 3
+                        connection_success = False
+                        
+                        for retry_attempt in range(max_connection_retries):
+                            try:
+                                logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
+                                ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
+                                if ok:
+                                    connection_success = True
+                                    if retry_attempt > 0:
+                                        logger.info(f"[MCP][init.success] server={name} connected after {retry_attempt + 1} attempts")
+                                    break
+                                else:
+                                    # 연결 실패
+                                    if retry_attempt < max_connection_retries - 1:
+                                        wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                        logger.warning(f"[MCP][init.retry] server={name} connection failed (attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
+                                        await asyncio.sleep(wait_time)
+                                        continue
+                                    else:
+                                        logger.warning(f"[MCP][init.failed] server={name} failed after {max_connection_retries} attempts")
+                                        break
+                                        
+                            except asyncio.TimeoutError:
+                                # 타임아웃 에러는 재시도 가능
+                                if retry_attempt < max_connection_retries - 1:
+                                    wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                    logger.warning(f"[MCP][init.timeout] server={name} timeout (attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
+                                    await asyncio.sleep(wait_time)
+                                    continue
+                                else:
+                                    logger.warning(f"[MCP][init.timeout] server={name} timeout after {max_connection_retries} attempts")
+                                    break
+                                    
+                            except Exception as e:
+                                error_str = str(e).lower()
+                                # 504, 502, 503 등 서버 에러는 재시도
+                                is_retryable = any(code in error_str for code in ["504", "502", "503", "500", "gateway", "timeout", "unavailable"])
+                                
+                                if is_retryable and retry_attempt < max_connection_retries - 1:
+                                    wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                    logger.warning(f"[MCP][init.retry] server={name} error (attempt {retry_attempt + 1}/{max_connection_retries}): {str(e)[:100]}, retrying in {wait_time}s...")
+                                    await asyncio.sleep(wait_time)
+                                    continue
+                                else:
+                                    # 재시도 불가능한 에러 또는 최대 재시도 횟수 초과
+                                    logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
+                                    break
+                        
+                        return name, connection_success
+                        
                 except asyncio.CancelledError:
                     # shutdown 중 취소는 정상적인 동작 - 다른 서버 연결은 계속 진행
                     logger.info(f"[MCP][init.cancelled] server={name} (shutdown in progress)")
@@ -1508,7 +1555,7 @@ class UniversalMCPHub:
 
             # 도구 찾기 실패 결과 표시
             available_preview = ', '.join(available_tools[:5]) + ('...' if len(available_tools) > 5 else '')
-            tool_exec_result = output_manager.ToolExecutionResult(
+            tool_exec_result = ToolExecutionResult(
                 tool_name=tool_name,
                 success=False,
                 execution_time=execution_time,
@@ -1754,17 +1801,104 @@ class UniversalMCPHub:
                             "source": "mcp"
                         }
             
-            # MCP 도구가 아닌 경우 에러 반환 (fallback 제거)
-            error_msg = f"Tool '{tool_name}' is not available via MCP servers"
+            # MCP 도구가 아닌 경우 로컬 도구 확인
+            tool_info = self.registry.get_tool_info(tool_name)
+            if tool_info and self.registry.tool_sources.get(tool_name) == "local":
+                # 로컬 도구 실행
+                logger.info(f"[MCP][exec.local] Executing local tool: {tool_name}")
+                try:
+                    # 로컬 도구는 카테고리에 따라 다른 실행 함수 사용
+                    category = tool_info.category
+                    
+                    if category == ToolCategory.SEARCH:
+                        from src.core.mcp_integration import _execute_search_tool, ToolResult
+                        tool_result = await _execute_search_tool(tool_name, parameters)
+                    elif category == ToolCategory.DATA:
+                        from src.core.mcp_integration import _execute_data_tool
+                        tool_result = await _execute_data_tool(tool_name, parameters)
+                    elif category == ToolCategory.CODE:
+                        from src.core.mcp_integration import _execute_code_tool
+                        tool_result = await _execute_code_tool(tool_name, parameters)
+                    elif category == ToolCategory.ACADEMIC:
+                        from src.core.mcp_integration import _execute_academic_tool
+                        tool_result = await _execute_academic_tool(tool_name, parameters)
+                    else:
+                        # 기본적으로 데이터 도구로 처리
+                        from src.core.mcp_integration import _execute_data_tool
+                        tool_result = await _execute_data_tool(tool_name, parameters)
+                    
+                    execution_time = time.time() - start_time
+                    
+                    # 결과 요약 생성
+                    result_summary = ""
+                    if tool_result.success and tool_result.data:
+                        if isinstance(tool_result.data, dict):
+                            if 'results' in tool_result.data:
+                                result_count = len(tool_result.data['results'])
+                                result_summary = f"{result_count}개 결과 반환됨"
+                            elif 'content' in tool_result.data:
+                                content_len = len(str(tool_result.data['content']))
+                                result_summary = f"콘텐츠 반환됨 ({content_len}자)"
+                            else:
+                                result_summary = f"데이터 반환됨 ({type(tool_result.data).__name__})"
+                        else:
+                            result_summary = f"결과 반환됨 ({type(tool_result.data).__name__})"
+                    elif tool_result.error:
+                        result_summary = f"오류: {tool_result.error[:100]}..."
+                    
+                    tool_exec_result = ToolExecutionResult(
+                        tool_name=tool_name,
+                        success=tool_result.success,
+                        execution_time=execution_time,
+                        result_summary=result_summary,
+                        confidence=tool_result.confidence,
+                        error_message=tool_result.error
+                    )
+                    await output_manager.output_tool_execution(tool_exec_result)
+                    
+                    return {
+                        "success": tool_result.success,
+                        "data": tool_result.data,
+                        "error": tool_result.error,
+                        "execution_time": execution_time,
+                        "confidence": tool_result.confidence,
+                        "source": "local"
+                    }
+                    
+                except Exception as local_error:
+                    execution_time = time.time() - start_time
+                    logger.error(f"[MCP][exec.local.error] Local tool execution failed: {local_error}")
+                    
+                    tool_exec_result = ToolExecutionResult(
+                        tool_name=tool_name,
+                        success=False,
+                        execution_time=execution_time,
+                        result_summary=f"로컬 도구 실행 실패: {str(local_error)[:100]}...",
+                        confidence=0.0,
+                        error_message=str(local_error)
+                    )
+                    await output_manager.output_tool_execution(tool_exec_result)
+                    
+                    return {
+                        "success": False,
+                        "data": None,
+                        "error": f"Local tool execution failed: {str(local_error)}",
+                        "execution_time": execution_time,
+                        "confidence": 0.0,
+                        "source": "local"
+                    }
+            
+            # MCP 도구도 로컬 도구도 아닌 경우 에러 반환
+            error_msg = f"Tool '{tool_name}' is not available (neither MCP nor local)"
             execution_time = time.time() - start_time
             logger.error(f"[MCP][exec.error] {error_msg}")
 
-            # MCP 도구 없음 결과 표시
-            tool_exec_result = output_manager.ToolExecutionResult(
+            # 도구 없음 결과 표시
+            tool_exec_result = ToolExecutionResult(
                 tool_name=tool_name,
                 success=False,
                 execution_time=execution_time,
-                result_summary="MCP 서버를 통한 도구를 사용할 수 없음",
+                result_summary="도구를 사용할 수 없음 (MCP 서버 및 로컬 도구 모두 확인됨)",
                 confidence=0.0,
                 error_message=error_msg
             )
@@ -1776,7 +1910,7 @@ class UniversalMCPHub:
                 "error": error_msg,
                 "execution_time": execution_time,
                 "confidence": 0.0,
-                "source": "mcp"
+                "source": "unknown"
             }
 
         except Exception as e:
@@ -1784,7 +1918,7 @@ class UniversalMCPHub:
             logger.exception(f"[MCP][exec.error] tool={tool_name} err={e}")
 
             # 일반 예외 결과 표시
-            tool_exec_result = output_manager.ToolExecutionResult(
+            tool_exec_result = ToolExecutionResult(
                 tool_name=tool_name,
                 success=False,
                 execution_time=execution_time,
@@ -2150,8 +2284,19 @@ def _execute_code_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> str:
         raise RuntimeError(f"Tool execution failed: {str(e)}")
 
 
+# DuckDuckGo 요청 빈도 제한을 위한 전역 변수
+_ddg_last_request_time = {}
+_ddg_request_lock = None
+
+def _get_ddg_lock():
+    """DuckDuckGo 요청 락을 지연 초기화."""
+    global _ddg_request_lock
+    if _ddg_request_lock is None:
+        _ddg_request_lock = asyncio.Lock()
+    return _ddg_request_lock
+
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """MCP 서버를 통한 검색 도구 실행 (with caching)."""
+    """MCP 서버를 통한 검색 도구 실행 (with caching and bot detection bypass)."""
     import time
     from src.core.result_cache import get_result_cache
     
@@ -2159,6 +2304,9 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
     start_time = time.time()
     query = parameters.get("query", "")
     max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
+    
+    # DuckDuckGo 요청 빈도 제한 (동시 요청 방지)
+    global _ddg_last_request_time
     
     # 캐시 확인
     result_cache = get_result_cache()
@@ -2192,63 +2340,217 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                 except Exception as e:
                     logger.warning(f"Failed to initialize MCP servers: {e}")
             
-            # mcp_config.json에 정의된 모든 서버 확인
-            for server_name in mcp_hub.mcp_server_configs.keys():
-                # 연결이 안 되어 있으면 연결 시도 (타임아웃 10초로 제한)
+            # 검색 서버 우선순위 설정 (DuckDuckGo를 우선 사용, 봇 감지 우회 로직 적용)
+            search_server_priority = [
+                "ddg_search",  # DuckDuckGo 우선 사용 (봇 감지 우회 로직 적용)
+                "tavily-mcp",  # TAVILY API 키 사용, 대안
+                "exa",  # Exa 검색, 대안
+                "WebSearch-MCP",  # 대안 검색
+            ]
+            
+            # 우선순위 서버 먼저, 나머지는 나중에
+            all_servers = list(mcp_hub.mcp_server_configs.keys())
+            priority_servers = [s for s in search_server_priority if s in all_servers]
+            other_servers = [s for s in all_servers if s not in search_server_priority]
+            server_order = priority_servers + other_servers
+            
+            logger.info(f"[MCP][_execute_search_tool] Trying search servers in order: {server_order}")
+            
+            # mcp_config.json에 정의된 모든 서버 확인 (우선순위 순서로)
+            failed_servers = []  # 실패한 서버 추적
+            for server_name in server_order:
+                logger.info(f"[MCP][_execute_search_tool] 🔍 Attempting server {server_name} ({server_order.index(server_name) + 1}/{len(server_order)})")
+                
+                # 연결이 안 되어 있으면 연결 시도 (타임아웃 10초로 제한, 재시도 로직 포함)
                 if server_name not in mcp_hub.mcp_sessions:
                     logger.info(f"MCP server {server_name} not connected, attempting connection (timeout: 10s)...")
-                    try:
-                        server_config = mcp_hub.mcp_server_configs[server_name]
-                        # 타임아웃 10초로 제한하여 빠르게 실패
-                        success = await asyncio.wait_for(
-                            mcp_hub._connect_to_mcp_server(server_name, server_config),
-                            timeout=10.0
-                        )
-                        if not success:
-                            logger.warning(f"Failed to connect to MCP server {server_name} (timeout or connection failed)")
-                            continue
-                    except asyncio.TimeoutError:
-                        logger.warning(f"MCP server {server_name} connection timeout (10s), skipping...")
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Error connecting to MCP server {server_name}: {e}, skipping...")
-                        continue
+                    server_config = mcp_hub.mcp_server_configs[server_name]
+                    
+                    # 재시도 로직: 타임아웃이나 일시적 에러는 재시도
+                    max_connection_retries = 3
+                    connection_success = False
+                    
+                    for retry_attempt in range(max_connection_retries):
+                        try:
+                            # 타임아웃 10초로 제한하여 빠르게 실패
+                            success = await asyncio.wait_for(
+                                mcp_hub._connect_to_mcp_server(server_name, server_config),
+                                timeout=10.0
+                            )
+                            if success:
+                                connection_success = True
+                                logger.info(f"[MCP][_execute_search_tool] ✅ Successfully connected to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries})")
+                                break
+                            else:
+                                # 연결 실패 (서버가 False 반환)
+                                if retry_attempt < max_connection_retries - 1:
+                                    wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                    logger.warning(f"[MCP][_execute_search_tool] ⚠️ Connection to {server_name} failed (attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
+                                    await asyncio.sleep(wait_time)
+                                    continue
+                                else:
+                                    logger.warning(f"[MCP][_execute_search_tool] ❌ Failed to connect to MCP server {server_name} after {max_connection_retries} attempts")
+                                    failed_servers.append({"server": server_name, "reason": "connection_failed"})
+                                    break
+                                
+                        except asyncio.TimeoutError:
+                            # 타임아웃 에러는 재시도 가능
+                            if retry_attempt < max_connection_retries - 1:
+                                wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                logger.warning(f"[MCP][_execute_search_tool] ⚠️ MCP server {server_name} connection timeout (10s, attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} connection timeout after {max_connection_retries} attempts, skipping...")
+                                failed_servers.append({"server": server_name, "reason": "timeout"})
+                                break
+                                
+                        except Exception as e:
+                            error_str = str(e).lower()
+                            # 504, 502, 503 등 서버 에러는 재시도
+                            is_retryable = any(code in error_str for code in ["504", "502", "503", "500", "gateway", "timeout", "unavailable"])
+                            
+                            if is_retryable and retry_attempt < max_connection_retries - 1:
+                                wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
+                                logger.warning(f"[MCP][_execute_search_tool] ⚠️ Error connecting to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries}): {str(e)[:100]}, retrying in {wait_time}s...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                logger.warning(f"[MCP][_execute_search_tool] ❌ Error connecting to MCP server {server_name}: {e}, skipping...")
+                                failed_servers.append({"server": server_name, "reason": f"connection_error: {str(e)[:100]}"})
+                                break
+                    
+                    if not connection_success:
+                        continue  # 다음 서버로
                 
                 # 도구 맵 확인
                 if server_name not in mcp_hub.mcp_tools_map:
-                    logger.warning(f"MCP server {server_name} has no tools map")
+                    logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} has no tools map")
+                    failed_servers.append({"server": server_name, "reason": "no_tools_map"})
                     continue
                 
                 try:
                     tools = mcp_hub.mcp_tools_map[server_name]
                     if not tools:
-                        logger.warning(f"MCP server {server_name} has no tools available")
+                        logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} has no tools available")
+                        failed_servers.append({"server": server_name, "reason": "no_tools_available"})
                         continue
                     
                     search_tool_name = None
                     
-                    # 검색 도구 찾기 (search, query, ddg 등 키워드로)
-                    for tool_name_key in tools.keys():
-                        tool_lower = tool_name_key.lower()
-                        if "search" in tool_lower or "query" in tool_lower or "ddg" in tool_lower:
-                            search_tool_name = tool_name_key
-                            logger.info(f"Found search tool '{search_tool_name}' in server {server_name}")
-                            break
+                    # 검색 도구 찾기 (search, query, ddg, tavily, web_search 등 키워드로)
+                    # 서버별 우선순위 도구 이름
+                    server_specific_tools = {
+                        "tavily-mcp": ["tavily-search", "search"],
+                        "exa": ["web_search_exa", "search"],
+                        "WebSearch-MCP": ["web_search", "search"],
+                        "ddg_search": ["search", "query"],
+                    }
+                    
+                    # 서버별 우선순위 도구 먼저 찾기
+                    if server_name in server_specific_tools:
+                        for preferred_tool in server_specific_tools[server_name]:
+                            if preferred_tool in tools:
+                                search_tool_name = preferred_tool
+                                logger.info(f"Found preferred search tool '{search_tool_name}' in server {server_name}")
+                                break
+                    
+                    # 우선순위 도구를 못 찾으면 일반 검색
+                    if not search_tool_name:
+                        for tool_name_key in tools.keys():
+                            tool_lower = tool_name_key.lower()
+                            if any(keyword in tool_lower for keyword in ["search", "query", "ddg", "tavily", "web_search"]):
+                                search_tool_name = tool_name_key
+                                logger.info(f"Found search tool '{search_tool_name}' in server {server_name}")
+                                break
                     
                     if not search_tool_name:
-                        logger.debug(f"No search tool found in MCP server {server_name}, available tools: {list(tools.keys())}")
+                        logger.warning(f"[MCP][_execute_search_tool] ❌ No search tool found in MCP server {server_name}, available tools: {list(tools.keys())}")
+                        failed_servers.append({"server": server_name, "reason": f"no_search_tool_found (available: {list(tools.keys())})"})
                         continue
                     
-                    # 검색 실행
+                    # DuckDuckGo 봇 감지 우회: 요청 간 딜레이 및 빈도 제한
+                    if server_name == "ddg_search":
+                        async with _get_ddg_lock():
+                            import random
+                            current_time = time.time()
+                            
+                            # 마지막 요청 시간 확인
+                            if "last_request" in _ddg_last_request_time:
+                                time_since_last = current_time - _ddg_last_request_time["last_request"]
+                                min_interval = 2.0  # 최소 2초 간격
+                                
+                                if time_since_last < min_interval:
+                                    wait_time = min_interval - time_since_last
+                                    logger.debug(f"[MCP][_execute_search_tool] Rate limiting: waiting {wait_time:.2f}s before DuckDuckGo request")
+                                    await asyncio.sleep(wait_time)
+                            
+                            # 랜덤 딜레이 추가 (1.5~3초)
+                            delay = random.uniform(1.5, 3.0)
+                            logger.debug(f"[MCP][_execute_search_tool] Adding {delay:.2f}s random delay before DuckDuckGo request to avoid bot detection")
+                            await asyncio.sleep(delay)
+                            
+                            # 마지막 요청 시간 업데이트
+                            _ddg_last_request_time["last_request"] = time.time()
+                    
+                    # 검색 실행 (재시도 로직 포함, 봇 감지 우회)
                     logger.info(f"Using MCP server {server_name} with tool {search_tool_name} for search: {query}")
-                    result = await mcp_hub._execute_via_mcp_server(
-                        server_name,
-                        search_tool_name,
-                        {"query": query, "max_results": max_results}
-                    )
+                    result = None
+                    max_retries = 3 if server_name == "ddg_search" else 1
+                    bot_detection_indicators = ["bot detection", "no results were found", "try again"]
+                    
+                    for retry_attempt in range(max_retries):
+                        try:
+                            result = await mcp_hub._execute_via_mcp_server(
+                                server_name,
+                                search_tool_name,
+                                {"query": query, "max_results": max_results}
+                            )
+                            
+                            # 결과가 없으면 재시도
+                            if not result:
+                                if retry_attempt < max_retries - 1:
+                                    wait_time = 2 * (2 ** retry_attempt)
+                                    logger.debug(f"[MCP][_execute_search_tool] No result from {server_name}, retrying after {wait_time}s")
+                                    await asyncio.sleep(wait_time)
+                                    continue
+                                break
+                            
+                            # 봇 감지 메시지 확인 (DuckDuckGo만) - 즉시 확인
+                            if server_name == "ddg_search" and result:
+                                result_str = str(result).lower() if isinstance(result, str) else str(result).lower()
+                                is_bot_detected = any(indicator in result_str for indicator in bot_detection_indicators)
+                                
+                                if is_bot_detected:
+                                    if retry_attempt < max_retries - 1:
+                                        wait_time = 3 * (2 ** retry_attempt)  # 봇 감지 시 더 긴 딜레이: 3초, 6초, 12초
+                                        logger.warning(f"[MCP][_execute_search_tool] Bot detection detected from {server_name} (attempt {retry_attempt + 1}/{max_retries}), retrying after {wait_time}s")
+                                        await asyncio.sleep(wait_time)
+                                        result = None  # 재시도를 위해 None으로 설정
+                                        continue
+                                    else:
+                                        logger.error(f"[MCP][_execute_search_tool] Bot detection persisted after {max_retries} attempts, skipping {server_name}")
+                                        result = None  # 모든 재시도 실패
+                                        break
+                            
+                            # 유효한 결과가 있으면 재시도 루프 종료
+                            if result:
+                                break
+                                
+                        except Exception as e:
+                            logger.warning(f"[MCP][_execute_search_tool] Attempt {retry_attempt + 1}/{max_retries} failed for {server_name}: {e}")
+                            if retry_attempt < max_retries - 1:
+                                # 지수 백오프: 2초, 4초, 8초
+                                wait_time = 2 * (2 ** retry_attempt)
+                                logger.debug(f"[MCP][_execute_search_tool] Retrying {server_name} after {wait_time}s delay")
+                                await asyncio.sleep(wait_time)
+                            else:
+                                logger.error(f"[MCP][_execute_search_tool] All {max_retries} attempts failed for {server_name}")
+                                result = None
                     
                     if not result:
-                        logger.warning(f"MCP server {server_name} tool {search_tool_name} returned no result")
+                        logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} tool {search_tool_name} returned no result after {max_retries} attempts")
+                        failed_servers.append({"server": server_name, "reason": "no_result_returned", "tool": search_tool_name})
                         continue
                     
                     # 결과 파싱 - 실제 외부 서버 응답 형식 처리 및 에러 체크
@@ -2288,8 +2590,16 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                             break
                     
                     if is_error:
-                        logger.error(f"MCP server {server_name} returned error response: {error_msg}")
+                        logger.error(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} returned error response: {error_msg}")
+                        failed_servers.append({"server": server_name, "reason": f"error_response: {error_msg}"})
                         continue  # 다음 서버 시도
+                    
+                    # result가 dict이고 'result' 키가 문자열인 경우 (tavily-mcp 등)
+                    if isinstance(result, dict) and "result" in result and isinstance(result.get("result"), str):
+                        result_str = result.get("result", "")
+                        logger.debug(f"[MCP][_execute_search_tool] Server {server_name} returned string result (length: {len(result_str)})")
+                        # 문자열 결과를 dict로 변환
+                        result = result_str
                     
                     if isinstance(result, str):
                         # 텍스트 결과를 파싱 시도
@@ -2297,48 +2607,125 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         try:
                             result_data = json.loads(result)
                         except:
-                            # 2. 마크다운 형식 텍스트 파싱 (ddg_search 등이 반환하는 형식)
-                            # 예: "1. [Title](url)\n   Description..."
-                            results = []
-                            lines = result.strip().split('\n')
-                            current_result = None
-                            
-                            for line in lines:
-                                line = line.strip()
-                                if not line:
-                                    continue
+                            # 2. TAVILY 형식 파싱 시도 ("Title: ... URL: ... Content: ...")
+                            if "Title:" in result and "URL:" in result:
+                                results = []
+                                lines = result.strip().split('\n')
+                                current_result = {}
                                 
-                                # 마크다운 링크 패턴: [Title](url)
-                                link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
-                                if link_match:
-                                    # 이전 결과 저장
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line:
+                                        # 빈 줄이면 현재 결과 저장하고 새로 시작
+                                        if current_result and current_result.get("title"):
+                                            results.append(current_result)
+                                            current_result = {}
+                                        continue
+                                    
+                                    # TAVILY 형식: "Title: ...", "URL: ...", "Content: ..."
+                                    if line.startswith("Title:"):
+                                        if current_result and current_result.get("title"):
+                                            results.append(current_result)
+                                        current_result = {"title": line[6:].strip(), "url": "", "snippet": ""}
+                                    elif line.startswith("URL:"):
+                                        if current_result:
+                                            current_result["url"] = line[4:].strip()
+                                    elif line.startswith("Content:"):
+                                        if current_result:
+                                            current_result["snippet"] = line[8:].strip()
+                                    elif current_result:
+                                        # Content 다음 줄들
+                                        if current_result.get("snippet"):
+                                            current_result["snippet"] += " " + line
+                                        else:
+                                            current_result["snippet"] = line
+                                
+                                # 마지막 결과 추가
+                                if current_result and current_result.get("title"):
+                                    results.append(current_result)
+                                
+                                if results:
+                                    logger.debug(f"[MCP][_execute_search_tool] Parsed {len(results)} results from TAVILY format")
+                                    result_data = {"results": results}
+                                else:
+                                    # TAVILY 파싱 실패, 마크다운 형식 시도
+                                    results = []
+                                    current_result = None
+                                    
+                                    for line in lines:
+                                        line = line.strip()
+                                        if not line:
+                                            continue
+                                        
+                                        # 마크다운 링크 패턴: [Title](url)
+                                        link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                        if link_match:
+                                            if current_result:
+                                                results.append(current_result)
+                                            title = link_match.group(1)
+                                            url = link_match.group(2)
+                                            current_result = {
+                                                "title": title,
+                                                "url": url,
+                                                "snippet": ""
+                                            }
+                                        elif current_result and line:
+                                            if current_result["snippet"]:
+                                                current_result["snippet"] += " " + line
+                                            else:
+                                                current_result["snippet"] = line
+                                    
                                     if current_result:
                                         results.append(current_result)
                                     
-                                    title = link_match.group(1)
-                                    url = link_match.group(2)
-                                    current_result = {
-                                        "title": title,
-                                        "url": url,
-                                        "snippet": ""
-                                    }
-                                elif current_result and line:
-                                    # 설명 텍스트
-                                    if current_result["snippet"]:
-                                        current_result["snippet"] += " " + line
+                                    if results:
+                                        result_data = {"results": results}
                                     else:
-                                        current_result["snippet"] = line
-                            
-                            # 마지막 결과 추가
-                            if current_result:
-                                results.append(current_result)
-                            
-                            if results:
-                                result_data = {"results": results}
+                                        logger.debug(f"[MCP][_execute_search_tool] Could not parse result format, using raw text: {result[:100]}")
+                                        result_data = {"results": [{"title": "Search Results", "snippet": result[:500], "url": ""}]}
                             else:
-                                # 파싱 실패 시 원본 텍스트를 snippet으로 사용
-                                logger.debug(f"Could not parse markdown format, using raw text: {result[:100]}")
-                                result_data = {"results": [{"title": "Search Results", "snippet": result, "url": ""}]}
+                                # 3. 마크다운 형식 텍스트 파싱 (ddg_search 등이 반환하는 형식)
+                                # 예: "1. [Title](url)\n   Description..."
+                                results = []
+                                lines = result.strip().split('\n')
+                                current_result = None
+                                
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line:
+                                        continue
+                                    
+                                    # 마크다운 링크 패턴: [Title](url)
+                                    link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', line)
+                                    if link_match:
+                                        # 이전 결과 저장
+                                        if current_result:
+                                            results.append(current_result)
+                                        
+                                        title = link_match.group(1)
+                                        url = link_match.group(2)
+                                        current_result = {
+                                            "title": title,
+                                            "url": url,
+                                            "snippet": ""
+                                        }
+                                    elif current_result and line:
+                                        # 설명 텍스트
+                                        if current_result["snippet"]:
+                                            current_result["snippet"] += " " + line
+                                        else:
+                                            current_result["snippet"] = line
+                                
+                                # 마지막 결과 추가
+                                if current_result:
+                                    results.append(current_result)
+                                
+                                if results:
+                                    result_data = {"results": results}
+                                else:
+                                    # 파싱 실패 시 원본 텍스트를 snippet으로 사용
+                                    logger.debug(f"[MCP][_execute_search_tool] Could not parse markdown format, using raw text: {result[:100]}")
+                                    result_data = {"results": [{"title": "Search Results", "snippet": result[:500], "url": ""}]}
                     else:
                         result_data = result
                     
@@ -2349,13 +2736,75 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         results = result_data.get("items", result_data.get("data", []))
                     
                     if results:
-                        logger.info(f"✅ Search successful via MCP server {server_name}: {len(results)} results")
+                        # 결과 내용 검증: 봇 감지나 에러 메시지가 포함된 결과 필터링
+                        valid_results = []
+                        invalid_indicators = [
+                            "no results were found", "bot detection",
+                            "no results", "not found", "try again",
+                            "unable to", "error occurred", "no matches"
+                        ]
+                        
+                        for result_item in (results if isinstance(results, list) else [results]):
+                            if isinstance(result_item, dict):
+                                snippet = result_item.get("snippet", result_item.get("content", result_item.get("description", "")))
+                                title = result_item.get("title", result_item.get("name", ""))
+                                
+                                snippet_lower = str(snippet).lower() if snippet else ""
+                                title_lower = str(title).lower() if title else ""
+                                
+                                # 에러 메시지가 포함된 결과 필터링
+                                is_invalid = False
+                                matched_indicators = []
+                                
+                                for indicator in invalid_indicators:
+                                    if indicator in snippet_lower:
+                                        is_invalid = True
+                                        matched_indicators.append(indicator)
+                                    elif indicator in title_lower:
+                                        is_invalid = True
+                                        matched_indicators.append(indicator)
+                                
+                                # "Search Results" 제목 + 빈 내용 또는 에러 메시지인 경우
+                                if "search results" in title_lower and (not snippet or is_invalid):
+                                    is_invalid = True
+                                
+                                if is_invalid:
+                                    logger.warning(f"[MCP][_execute_search_tool] Filtering invalid result from {server_name}: matched indicators: {', '.join(matched_indicators)}")
+                                    continue
+                                
+                                valid_results.append(result_item)
+                            elif isinstance(result_item, str):
+                                # 문자열 결과도 검증
+                                result_lower = result_item.lower()
+                                is_invalid = any(indicator in result_lower for indicator in invalid_indicators)
+                                
+                                if is_invalid:
+                                    logger.warning(f"[MCP][_execute_search_tool] Filtering invalid string result from {server_name}: contains error message")
+                                    continue
+                                
+                                # 문자열 결과를 dict 형식으로 변환
+                                valid_results.append({
+                                    "title": "Search Result",
+                                    "snippet": result_item,
+                                    "url": ""
+                                })
+                        
+                        # 유효한 결과가 있는지 확인
+                        if not valid_results:
+                            original_count = len(results) if isinstance(results, list) else 1
+                            logger.warning(f"[MCP][_execute_search_tool] ❌ All {original_count} results from {server_name} were filtered out (bot detection or error messages), trying next server...")
+                            failed_servers.append({"server": server_name, "reason": f"all_results_filtered ({original_count} results filtered)"})
+                            continue  # 다음 서버 시도
+                        
+                        original_count = len(results) if isinstance(results, list) else 1
+                        filtered_count = original_count - len(valid_results)
+                        logger.info(f"✅ Search successful via MCP server {server_name}: {len(valid_results)} valid results (filtered {filtered_count} invalid results)")
                         tool_result = ToolResult(
                             success=True,
                             data={
                                 "query": query,
-                                "results": results if isinstance(results, list) else [results],
-                                "total_results": len(results) if isinstance(results, list) else 1,
+                                "results": valid_results,
+                                "total_results": len(valid_results),
                                 "source": f"{server_name}-mcp"
                             },
                             execution_time=time.time() - start_time,
@@ -2380,25 +2829,113 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                         
                         return tool_result
                     else:
-                        logger.warning(f"MCP server {server_name} returned empty results")
+                        logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} returned empty results")
+                        failed_servers.append({"server": server_name, "reason": "empty_results"})
                         continue
                     
                 except Exception as mcp_error:
                     error_str = str(mcp_error)
                     # ToolResult 관련 오류는 명확히 처리
                     if "ToolResult" in error_str or "cannot access local variable" in error_str:
-                        logger.error(f"MCP 서버 {server_name} 검색 실패 (코드 오류): {mcp_error}")
+                        logger.error(f"[MCP][_execute_search_tool] ❌ MCP 서버 {server_name} 검색 실패 (코드 오류): {mcp_error}")
+                        failed_servers.append({"server": server_name, "reason": f"code_error: {str(mcp_error)[:100]}"})
                         # 다음 서버로 계속 진행
                         continue
                     else:
-                        logger.warning(f"MCP 서버 {server_name} 검색 실패: {mcp_error}, 다음 서버 시도")
+                        logger.warning(f"[MCP][_execute_search_tool] ❌ MCP 서버 {server_name} 검색 실패: {mcp_error}, 다음 서버 시도")
+                        failed_servers.append({"server": server_name, "reason": f"exception: {str(mcp_error)[:100]}"})
                         import traceback
                         logger.debug(f"Traceback: {traceback.format_exc()}")
                         continue
             
-            # 모든 MCP 서버 실패 시 에러 반환 (fallback 제거)
-            logger.error(f"All MCP search tools failed for query: {query}")
-            raise RuntimeError(f"All MCP search tools failed for query: {query}. No fallback available.")
+            # 모든 MCP 서버 실패 시 duckduckgo_search 라이브러리 fallback 사용
+            logger.warning(f"[MCP][_execute_search_tool] ⚠️ All {len(server_order)} MCP search servers failed for query: '{query}'")
+            logger.info(f"[MCP][_execute_search_tool] 📋 Failed servers summary:")
+            for i, failed in enumerate(failed_servers, 1):
+                logger.info(f"[MCP][_execute_search_tool]   {i}. {failed['server']}: {failed['reason']}")
+            logger.warning(f"[MCP][_execute_search_tool] 🔄 Trying duckduckgo_search library fallback...")
+            
+            try:
+                logger.info(f"[MCP][_execute_search_tool] 📦 Importing duckduckgo_search library...")
+                from duckduckgo_search import DDGS
+                logger.info(f"[MCP][_execute_search_tool] ✅ duckduckgo_search library imported successfully")
+                
+                # 동기 함수를 비동기로 실행
+                def run_ddg_search():
+                    logger.debug(f"[MCP][_execute_search_tool] 🔄 Running duckduckgo_search for query: '{query}'")
+                    with DDGS() as ddgs:
+                        results = list(ddgs.text(query, max_results=max_results))
+                        logger.debug(f"[MCP][_execute_search_tool] 🔄 duckduckgo_search returned {len(results)} results")
+                        return results
+                
+                # 별도 스레드에서 실행 (동기 함수이므로)
+                # asyncio는 파일 상단에서 이미 import됨
+                try:
+                    loop = asyncio.get_running_loop()
+                    logger.debug(f"[MCP][_execute_search_tool] ✅ Got running event loop")
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    logger.debug(f"[MCP][_execute_search_tool] ✅ Created new event loop")
+                
+                logger.info(f"[MCP][_execute_search_tool] 🔄 Executing duckduckgo_search in executor...")
+                ddg_results = await loop.run_in_executor(None, run_ddg_search)
+                logger.info(f"[MCP][_execute_search_tool] ✅ duckduckgo_search executor completed: {len(ddg_results) if ddg_results else 0} results")
+                
+                if ddg_results and len(ddg_results) > 0:
+                    # 결과 형식 변환 (duckduckgo_search 형식 -> 표준 형식)
+                    formatted_results = []
+                    for result in ddg_results:
+                        formatted_results.append({
+                            "title": result.get("title", ""),
+                            "url": result.get("href", ""),
+                            "snippet": result.get("body", "")[:500] if result.get("body") else "",
+                            "source": "duckduckgo_search-library"
+                        })
+                    
+                    logger.info(f"✅ Fallback search successful via duckduckgo_search library: {len(formatted_results)} results")
+                    
+                    tool_result = ToolResult(
+                        success=True,
+                        data={
+                            "query": query,
+                            "results": formatted_results,
+                            "total_results": len(formatted_results),
+                            "source": "duckduckgo_search-library-fallback"
+                        },
+                        execution_time=time.time() - start_time,
+                        confidence=0.85  # 라이브러리 fallback이므로 약간 낮은 신뢰도
+                    )
+                    
+                    # 캐시에 저장
+                    cache_dict = {
+                        "success": tool_result.success,
+                        "data": tool_result.data,
+                        "error": tool_result.error,
+                        "execution_time": tool_result.execution_time,
+                        "confidence": tool_result.confidence
+                    }
+                    await result_cache.set(
+                        tool_name=tool_name,
+                        parameters=parameters,
+                        value=cache_dict,
+                        ttl=3600
+                    )
+                    
+                    return tool_result
+                else:
+                    logger.error(f"duckduckgo_search library also returned no results for query: {query}")
+                    raise RuntimeError(f"All search methods failed (MCP servers and duckduckgo_search library) for query: {query}")
+                    
+            except ImportError as import_err:
+                logger.error(f"[MCP][_execute_search_tool] ❌ duckduckgo_search library not available: {import_err}")
+                logger.error(f"[MCP][_execute_search_tool] 💡 Install with: pip install duckduckgo-search")
+                raise RuntimeError(f"All MCP search tools failed and duckduckgo_search library not available. Install with: pip install duckduckgo-search")
+            except Exception as fallback_error:
+                logger.error(f"[MCP][_execute_search_tool] ❌ duckduckgo_search library fallback also failed: {fallback_error}")
+                import traceback
+                logger.error(f"[MCP][_execute_search_tool] 📋 Fallback error traceback:\n{traceback.format_exc()}")
+                raise RuntimeError(f"All search methods failed (MCP servers and duckduckgo_search library) for query: {query}. Error: {str(fallback_error)}")
         
         elif tool_name == "tavily":
             # MCP 서버를 통해 tavily 사용 (mcp_config.json에 정의된 서버)
