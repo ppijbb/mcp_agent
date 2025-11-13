@@ -46,7 +46,7 @@ class FastMCPMulti:
                 mcp_cfg = {"mcpServers": servers}
             else:
                 # ServerSpec 형식인 경우 변환
-        mcp_cfg = {"mcpServers": servers_to_mcp_config(servers)}
+                mcp_cfg = {"mcpServers": servers_to_mcp_config(servers)}
         else:
             # 빈 dict인 경우
             mcp_cfg = {"mcpServers": {}}

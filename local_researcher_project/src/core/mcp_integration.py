@@ -1162,7 +1162,7 @@ class UniversalMCPHub:
                         for retry_attempt in range(max_connection_retries):
                             try:
                                 logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
-                        ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
+                                ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
                                 if ok:
                                     connection_success = True
                                     if retry_attempt > 0:
@@ -2417,7 +2417,7 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                 # 연결이 안 되어 있으면 연결 시도 (타임아웃 10초로 제한, 재시도 로직 포함)
                 if server_name not in mcp_hub.mcp_sessions:
                     logger.info(f"MCP server {server_name} not connected, attempting connection (timeout: 10s)...")
-                        server_config = mcp_hub.mcp_server_configs[server_name]
+                    server_config = mcp_hub.mcp_server_configs[server_name]
                     
                     # 재시도 로직: 타임아웃이나 일시적 에러는 재시도
                     max_connection_retries = 3
@@ -2425,11 +2425,11 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     
                     for retry_attempt in range(max_connection_retries):
                         try:
-                        # 타임아웃 10초로 제한하여 빠르게 실패
-                        success = await asyncio.wait_for(
-                            mcp_hub._connect_to_mcp_server(server_name, server_config),
-                            timeout=10.0
-                        )
+                            # 타임아웃 10초로 제한하여 빠르게 실패
+                            success = await asyncio.wait_for(
+                                mcp_hub._connect_to_mcp_server(server_name, server_config),
+                                timeout=10.0
+                            )
                             if success:
                                 connection_success = True
                                 logger.info(f"[MCP][_execute_search_tool] ✅ Successfully connected to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries})")
@@ -2440,34 +2440,34 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                     wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
                                     logger.warning(f"[MCP][_execute_search_tool] ⚠️ Connection to {server_name} failed (attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
                                     await asyncio.sleep(wait_time)
-                            continue
+                                    continue
                                 else:
                                     logger.warning(f"[MCP][_execute_search_tool] ❌ Failed to connect to MCP server {server_name} after {max_connection_retries} attempts")
                                     failed_servers.append({"server": server_name, "reason": "connection_failed"})
                                     break
-                                
-                    except asyncio.TimeoutError:
+
+                        except asyncio.TimeoutError:
                             # 타임아웃 에러는 재시도 가능
                             if retry_attempt < max_connection_retries - 1:
                                 wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
                                 logger.warning(f"[MCP][_execute_search_tool] ⚠️ MCP server {server_name} connection timeout (10s, attempt {retry_attempt + 1}/{max_connection_retries}), retrying in {wait_time}s...")
                                 await asyncio.sleep(wait_time)
-                        continue
+                                continue
                             else:
                                 logger.warning(f"[MCP][_execute_search_tool] ❌ MCP server {server_name} connection timeout after {max_connection_retries} attempts, skipping...")
                                 failed_servers.append({"server": server_name, "reason": "timeout"})
                                 break
-                                
-                    except Exception as e:
+
+                        except Exception as e:
                             error_str = str(e).lower()
                             # 504, 502, 503 등 서버 에러는 재시도
                             is_retryable = any(code in error_str for code in ["504", "502", "503", "500", "gateway", "timeout", "unavailable"])
-                            
+
                             if is_retryable and retry_attempt < max_connection_retries - 1:
                                 wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
                                 logger.warning(f"[MCP][_execute_search_tool] ⚠️ Error connecting to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries}): {str(e)[:100]}, retrying in {wait_time}s...")
                                 await asyncio.sleep(wait_time)
-                        continue
+                                continue
                             else:
                                 logger.warning(f"[MCP][_execute_search_tool] ❌ Error connecting to MCP server {server_name}: {e}, skipping...")
                                 failed_servers.append({"server": server_name, "reason": f"connection_error: {str(e)[:100]}"})
@@ -2510,12 +2510,12 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     
                     # 우선순위 도구를 못 찾으면 일반 검색
                     if not search_tool_name:
-                    for tool_name_key in tools.keys():
-                        tool_lower = tool_name_key.lower()
+                        for tool_name_key in tools.keys():
+                            tool_lower = tool_name_key.lower()
                             if any(keyword in tool_lower for keyword in ["search", "query", "ddg", "tavily", "web_search"]):
-                            search_tool_name = tool_name_key
-                            logger.info(f"Found search tool '{search_tool_name}' in server {server_name}")
-                            break
+                                search_tool_name = tool_name_key
+                                logger.info(f"Found search tool '{search_tool_name}' in server {server_name}")
+                                break
                     
                     if not search_tool_name:
                         logger.warning(f"[MCP][_execute_search_tool] ❌ No search tool found in MCP server {server_name}, available tools: {list(tools.keys())}")
@@ -2578,14 +2578,14 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                     
                     for retry_attempt in range(max_retries):
                         try:
-                    result = await mcp_hub._execute_via_mcp_server(
-                        server_name,
-                        search_tool_name,
-                        {"query": query, "max_results": max_results}
-                    )
-                    
+                            result = await mcp_hub._execute_via_mcp_server(
+                                server_name,
+                                search_tool_name,
+                                {"query": query, "max_results": max_results}
+                            )
+
                             # 결과가 없으면 재시도
-                    if not result:
+                            if not result:
                                 if retry_attempt < max_retries - 1:
                                     wait_time = 2 * (2 ** retry_attempt)
                                     logger.debug(f"[MCP][_execute_search_tool] No result from {server_name}, retrying after {wait_time}s")
@@ -2762,9 +2762,9 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                         result_data = {"results": [{"title": "Search Results", "snippet": result[:500], "url": ""}]}
                             else:
                                 # 3. 마크다운 형식 텍스트 파싱 (ddg_search 등이 반환하는 형식)
-                            # 예: "1. [Title](url)\n   Description..."
-                            results = []
-                            lines = result.strip().split('\n')
+                                # 예: "1. [Title](url)\n   Description..."
+                                results = []
+                                lines = result.strip().split('\n')
                             current_result = None
                             
                             for line in lines:

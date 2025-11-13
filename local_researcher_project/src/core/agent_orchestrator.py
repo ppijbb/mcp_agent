@@ -488,34 +488,34 @@ class ExecutorAgent:
                 if plan:
                     # LLM으로 연구 계획에서 검색 쿼리 추출
                     from src.core.llm_manager import execute_llm_task, TaskType
-                    
+
                     # Use YAML-based prompt for query generation
                     from src.core.skills.agent_loader import get_prompt
                     query_generation_prompt = get_prompt("planner", "query_generation",
                                                         plan=plan,
                                                         query=query)
-                    
+
                     try:
                         system_message = self.config.prompts["query_generation"]["system_message"]
-                    query_result = await execute_llm_task(
-                        prompt=query_generation_prompt,
-                        task_type=TaskType.PLANNING,
-                        model_name=None,
+                        query_result = await execute_llm_task(
+                            prompt=query_generation_prompt,
+                            task_type=TaskType.PLANNING,
+                            model_name=None,
                             system_message=system_message
-                    )
-                    
-                    generated_queries = query_result.content or ""
-                    # 각 줄을 쿼리로 파싱
-                    for line in generated_queries.split('\n'):
-                        line = line.strip()
-                        if line and not line.startswith('#') and len(line) > 5:
-                            search_queries.append(line)
-                    
-                    # 중복 제거
-                    search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
-                    logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
-                except Exception as e:
-                    logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
+                        )
+
+                        generated_queries = query_result.content or ""
+                        # 각 줄을 쿼리로 파싱
+                        for line in generated_queries.split('\n'):
+                            line = line.strip()
+                            if line and not line.startswith('#') and len(line) > 5:
+                                search_queries.append(line)
+
+                        # 중복 제거
+                        search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
+                        logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
             
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
