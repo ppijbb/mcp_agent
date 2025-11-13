@@ -408,14 +408,15 @@ class MultiModelOrchestrator:
     def _load_groq_models(self):
         """Groq 모델 로딩."""
         # 주요 Groq 모델들
-        # 참고: llama-3.1-70b-versatile은 decommissioned됨 (2025년)
-        # 대체 모델: llama-3.3-70b-versatile 또는 llama-3.2-70b-versatile 사용
+        # 참고: llama-3.1-70b-versatile과 llama-3.2-70b-versatile은 존재하지 않음
+        # 실제 사용 가능한 모델: llama-3.1-70b-versatile (decommissioned), llama-3.1-8b-instant, mixtral-8x7b-32768
+        # llama-3.1-70b-versatile 대체: mixtral-8x7b-32768 사용 (더 안정적)
         groq_models = [
             {
                 "name": "groq-llama3-70b",
-                "model_id": "llama-3.2-70b-versatile",  # llama-3.1-70b-versatile 대체 (decommissioned)
-                "speed_rating": 9.0,
-                "quality_rating": 8.5,
+                "model_id": "llama-3.1-8b-instant",  # llama-3.1-70b-versatile은 decommissioned, 8b-instant 사용
+                "speed_rating": 9.5,
+                "quality_rating": 7.5,
                 "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS]
             },
             {
@@ -758,7 +759,7 @@ class MultiModelOrchestrator:
         system_message: str = None,
         **kwargs
     ) -> Dict[str, Any]:
-        """Gemini 모델 실행."""
+        """Gemini 모델 실행 (rate limit 재시도 포함)."""
         client = self.model_clients[model_name]
         model_config = self.models[model_name]
         
@@ -767,17 +768,34 @@ class MultiModelOrchestrator:
         if system_message:
             full_prompt = f"{system_message}\n\n{prompt}"
         
-        # 실행
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: client.generate_content(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=model_config.temperature,
-                    max_output_tokens=model_config.max_tokens
+        # Rate limit 재시도 로직
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 실행
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: client.generate_content(
+                        full_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=model_config.temperature,
+                            max_output_tokens=model_config.max_tokens
+                        )
+                    )
                 )
-            )
-        )
+                break  # 성공 시 루프 종료
+            except Exception as e:
+                error_str = str(e).lower()
+                # Rate limit 에러 감지
+                if ("429" in error_str or "rate limit" in error_str or "quota exceeded" in error_str or 
+                    "resource_exhausted" in error_str) and attempt < max_retries - 1:
+                    wait_time = 5 * (2 ** attempt)  # 지수 백오프: 5초, 10초, 20초
+                    logger.warning(f"Gemini API rate limit (attempt {attempt + 1}/{max_retries}), retrying in {wait_time:.1f}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    # Rate limit이 아니거나 최대 재시도 횟수 초과
+                    raise
         
         # finish_reason 체크 및 안전한 응답 처리
         finish_reason = None
@@ -904,9 +922,9 @@ class MultiModelOrchestrator:
             **kwargs
         }
         
-        # 재시도 로직: 502, 500, 503 등 서버 에러는 재시도, 401/403/404는 재시도 안 함
+        # 재시도 로직: 502, 500, 503, 429 등 서버 에러와 rate limit은 재시도, 401/403/404는 재시도 안 함
         max_retries = 3
-        retryable_status_codes = [500, 502, 503, 504]  # 서버 에러만 재시도
+        retryable_status_codes = [429, 500, 502, 503, 504]  # Rate limit과 서버 에러 재시도
         response = None
         
         for attempt in range(max_retries):
@@ -945,8 +963,23 @@ class MultiModelOrchestrator:
                 
                 # 재시도 가능한 에러인지 확인
                 if response.status_code in retryable_status_codes and attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # 지수 백오프: 1초, 2초, 4초
-                    logger.warning(f"OpenRouter API error (attempt {attempt + 1}/{max_retries}): {error_msg}, retrying in {wait_time}s...")
+                    # Rate limit (429)은 더 긴 대기 시간 필요
+                    if response.status_code == 429:
+                        # Rate limit 헤더에서 reset 시간 확인 시도
+                        reset_time = response.headers.get('X-RateLimit-Reset')
+                        if reset_time:
+                            try:
+                                reset_timestamp = int(reset_time) / 1000  # 밀리초를 초로 변환
+                                current_time = time.time()
+                                wait_time = max(5.0, reset_timestamp - current_time + 1)  # 최소 5초, reset 시간까지 + 1초 여유
+                                logger.warning(f"OpenRouter API rate limit (429) - waiting until reset: {wait_time:.1f}s")
+                            except (ValueError, TypeError):
+                                wait_time = 5 * (2 ** attempt)  # 지수 백오프: 5초, 10초, 20초
+                        else:
+                            wait_time = 5 * (2 ** attempt)  # 지수 백오프: 5초, 10초, 20초
+                    else:
+                        wait_time = 2 ** attempt  # 지수 백오프: 1초, 2초, 4초
+                    logger.warning(f"OpenRouter API error (attempt {attempt + 1}/{max_retries}): {error_msg}, retrying in {wait_time:.1f}s...")
                     await asyncio.sleep(wait_time)
                     continue  # 재시도
                 else:
@@ -993,22 +1026,31 @@ class MultiModelOrchestrator:
         skip_providers: List[str] = None,
         **kwargs
     ) -> Tuple[Dict[str, Any], str]:
-        """우선순위에 따라 폴백 모델 시도: OpenRouter -> Groq -> Gemini -> GPT."""
+        """우선순위에 따라 폴백 모델 시도: OpenRouter -> Groq -> Cerebras (OpenRouter) -> Gemini -> GPT -> Claude."""
         if skip_providers is None:
             skip_providers = []
         
-        # 우선순위에 따라 폴백 시도
-        fallback_order = ["openrouter", "groq", "google", "openai"]
+        # 사용자 지정 우선순위: openrouter -> groq -> cerebras (openrouter) -> google -> openai -> claude
+        fallback_order = ["openrouter", "groq", "cerebras", "google", "openai", "claude"]
         
         for provider in fallback_order:
             if provider in skip_providers:
                 continue
             
             # 해당 provider의 사용 가능한 모델 찾기
-            available_models = [
-                name for name, config in self.models.items()
-                if config.provider == provider and task_type in config.capabilities
-            ]
+            if provider == "cerebras":
+                # Cerebras는 OpenRouter를 통해 접근 (cerebras/llama-3.1-70b-instruct 등)
+                available_models = [
+                    name for name, config in self.models.items()
+                    if config.provider == "openrouter" 
+                    and "cerebras" in config.model_id.lower()
+                    and task_type in config.capabilities
+                ]
+            else:
+                available_models = [
+                    name for name, config in self.models.items()
+                    if config.provider == provider and task_type in config.capabilities
+                ]
             
             if not available_models:
                 continue
@@ -1018,7 +1060,8 @@ class MultiModelOrchestrator:
             logger.info(f"Trying fallback model: {fallback_model} (provider: {provider})")
             
             try:
-                if provider == "openrouter":
+                if provider == "openrouter" or provider == "cerebras":
+                    # Cerebras도 OpenRouter를 통해 접근
                     result = await self._execute_openrouter_model(
                         fallback_model, prompt, system_message, **kwargs
                     )
@@ -1034,6 +1077,21 @@ class MultiModelOrchestrator:
                     result = await self._execute_openai_model(
                         fallback_model, prompt, system_message, **kwargs
                     )
+                elif provider == "claude":
+                    # Claude는 OpenAI API 호환 또는 OpenRouter를 통해 접근
+                    # OpenRouter를 통해 Claude 모델 찾기
+                    claude_models = [
+                        name for name, config in self.models.items()
+                        if config.provider == "openrouter" 
+                        and "claude" in config.model_id.lower()
+                        and task_type in config.capabilities
+                    ]
+                    if claude_models:
+                        result = await self._execute_openrouter_model(
+                            claude_models[0], prompt, system_message, **kwargs
+                        )
+                    else:
+                        continue
                 else:
                     continue
                 
@@ -1043,18 +1101,19 @@ class MultiModelOrchestrator:
                 # 에러 메시지에서 HTML 필터링 및 중첩 방지
                 error_str = str(e)
                 
-                # Decommissioned 모델 감지
-                if "decommissioned" in error_str.lower() or "model_decommissioned" in error_str.lower():
-                    logger.warning(f"Fallback model {fallback_model} is decommissioned, trying next...")
-                    # Groq 모델이 decommissioned된 경우 모델 목록에서 제거
+                # 모델 존재하지 않음 (404) 또는 Decommissioned 모델 감지
+                if ("does not exist" in error_str.lower() or "model_not_found" in error_str.lower() or
+                    "decommissioned" in error_str.lower() or "model_decommissioned" in error_str.lower()):
+                    logger.warning(f"Fallback model {fallback_model} is not available (404/decommissioned), trying next...")
+                    # Groq 모델이 존재하지 않는 경우 모델 목록에서 제거
                     if provider == "groq" and fallback_model in self.models:
-                        logger.warning(f"Removing decommissioned Groq model from available models: {fallback_model}")
+                        logger.warning(f"Removing unavailable Groq model from available models: {fallback_model}")
                         del self.models[fallback_model]
                     continue
                 
                 # Rate limit 에러 (429)는 재시도 가능하지만 fallback에서는 다음 모델로
-                if "429" in error_str or "rate limit" in error_str.lower() or "rate-limited" in error_str.lower():
-                    logger.warning(f"Fallback model {fallback_model} rate limited, trying next...")
+                if "429" in error_str or "rate limit" in error_str.lower() or "rate-limited" in error_str.lower() or "rate limit exceeded" in error_str.lower():
+                    logger.warning(f"Fallback model {fallback_model} rate limited (429), trying next...")
                     continue
                 
                 if '<!DOCTYPE html>' in error_str or '<html' in error_str.lower():
@@ -1133,58 +1192,56 @@ class MultiModelOrchestrator:
         except Exception as e:
             error_str = str(e).lower()
             
-            # Decommissioned 모델 감지 및 자동 대체
-            if "decommissioned" in error_str or "model_decommissioned" in error_str:
-                logger.warning(f"Groq model {model_name} ({model_config.model_id}) is decommissioned")
+            # 모델 존재하지 않음 (404) 또는 Decommissioned 모델 감지 및 자동 대체
+            if ("does not exist" in error_str or "model_not_found" in error_str or 
+                "decommissioned" in error_str or "model_decommissioned" in error_str):
+                logger.warning(f"Groq model {model_name} ({model_config.model_id}) is not available")
                 
-                # llama-3.1-70b-versatile 대체 모델 시도
-                if "llama-3.1-70b-versatile" in model_config.model_id:
-                    # 대체 모델 우선순위: llama-3.2-70b-versatile -> llama-3.3-70b-versatile -> mixtral-8x7b-32768
-                    replacement_models = [
-                        "llama-3.2-70b-versatile",
-                        "llama-3.3-70b-versatile",
-                        "mixtral-8x7b-32768"
-                    ]
-                    
-                    for replacement_model in replacement_models:
-                        logger.info(f"Attempting to use replacement model: {replacement_model}")
-                        try:
-                            # 대체 모델로 재시도
-                            replacement_response = await asyncio.get_event_loop().run_in_executor(
-                                None,
-                                lambda rm=replacement_model: client.chat.completions.create(
-                                    model=rm,
-                                    messages=messages,
-                                    temperature=model_config.temperature,
-                                    max_tokens=model_config.max_tokens,
-                                    **kwargs
-                                )
+                # 실제 존재하는 Groq 모델로 대체 시도
+                replacement_models = [
+                    "llama-3.1-8b-instant",  # 실제 존재하는 모델
+                    "mixtral-8x7b-32768"  # 실제 존재하는 모델
+                ]
+                
+                for replacement_model in replacement_models:
+                    logger.info(f"Attempting to use replacement model: {replacement_model}")
+                    try:
+                        # 대체 모델로 재시도
+                        replacement_response = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda rm=replacement_model: client.chat.completions.create(
+                                model=rm,
+                                messages=messages,
+                                temperature=model_config.temperature,
+                                max_tokens=model_config.max_tokens,
+                                **kwargs
                             )
-                            content = replacement_response.choices[0].message.content
-                            logger.info(f"✅ Successfully used replacement model: {replacement_model}")
-                            
-                            # 모델 설정 업데이트 (다음 요청을 위해)
-                            self.models[model_name].model_id = replacement_model
-                            
-                            return {
-                                "content": content,
-                                "confidence": 0.8,
-                                "quality_score": 0.8,
-                                "metadata": {
-                                    "model": model_name,
-                                    "provider": "groq",
-                                    "model_id": replacement_model,  # 실제 사용된 모델
-                                    "original_model_id": model_config.model_id,  # 원래 요청한 모델
-                                    "tokens_used": replacement_response.usage.total_tokens if hasattr(replacement_response, 'usage') else len(content.split())
-                                }
+                        )
+                        content = replacement_response.choices[0].message.content
+                        logger.info(f"✅ Successfully used replacement model: {replacement_model}")
+                        
+                        # 모델 설정 업데이트 (다음 요청을 위해)
+                        self.models[model_name].model_id = replacement_model
+                        
+                        return {
+                            "content": content,
+                            "confidence": 0.8,
+                            "quality_score": 0.8,
+                            "metadata": {
+                                "model": model_name,
+                                "provider": "groq",
+                                "model_id": replacement_model,  # 실제 사용된 모델
+                                "original_model_id": model_config.model_id,  # 원래 요청한 모델
+                                "tokens_used": replacement_response.usage.total_tokens if hasattr(replacement_response, 'usage') else len(content.split())
                             }
-                        except Exception as replacement_error:
-                            logger.debug(f"Replacement model {replacement_model} failed: {replacement_error}, trying next...")
-                            continue
-                    
-                    # 모든 대체 모델 실패
-                    logger.error(f"All replacement models failed for decommissioned model {model_config.model_id}")
-                    raise RuntimeError(f"Groq model {model_name} ({model_config.model_id}) is decommissioned and all replacement models failed")
+                        }
+                    except Exception as replacement_error:
+                        logger.debug(f"Replacement model {replacement_model} failed: {replacement_error}, trying next...")
+                        continue
+                
+                # 모든 대체 모델 실패
+                logger.error(f"All replacement models failed for unavailable model {model_config.model_id}")
+                raise RuntimeError(f"Groq model {model_name} ({model_config.model_id}) is not available and all replacement models failed")
             
             logger.error(f"Groq API error: {e}")
             raise RuntimeError(f"Groq model {model_name} failed: {e}")

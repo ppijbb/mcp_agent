@@ -152,7 +152,8 @@ class SharedMemory:
     def search(self, 
                query: str, 
                limit: int = 10,
-               scope: str = MemoryScope.GLOBAL) -> List[Dict[str, Any]]:
+               scope: str = MemoryScope.GLOBAL,
+               session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Search memories by query.
         
@@ -160,6 +161,7 @@ class SharedMemory:
             query: Search query
             limit: Result limit
             scope: Memory scope
+            session_id: Optional session ID to filter results (prevents cross-session contamination)
             
         Returns:
             List of matching memories
@@ -179,15 +181,37 @@ class SharedMemory:
             search_spaces = []
             
             if scope == MemoryScope.GLOBAL:
-                search_spaces.append(self.memories)
+                # Global scope: search all memories (but filter by session_id if provided)
+                if session_id:
+                    # If session_id provided, only search within that session even for GLOBAL scope
+                    if session_id in self.sessions:
+                        search_spaces.append(self.sessions[session_id])
+                else:
+                    search_spaces.append(self.memories)
             elif scope == MemoryScope.SESSION:
-                for session_data in self.sessions.values():
-                    if isinstance(session_data, dict):
-                        search_spaces.append(session_data)
+                # Session scope: only search within specified session or all sessions
+                if session_id:
+                    # Only search within the specified session
+                    if session_id in self.sessions:
+                        search_spaces.append(self.sessions[session_id])
+                else:
+                    # Search all sessions (legacy behavior, but should be avoided)
+                    logger.warning("Searching across all sessions without session_id filter - this may cause cross-session contamination")
+                    for session_data in self.sessions.values():
+                        if isinstance(session_data, dict):
+                            search_spaces.append(session_data)
             
             for space in search_spaces:
                 for key, memory_entry in space.items():
                     if isinstance(memory_entry, dict):
+                        # Skip agent-specific entries in session search
+                        if key == "agents":
+                            continue
+                        
+                        # Verify session_id matches if provided
+                        if session_id and memory_entry.get("session_id") != session_id:
+                            continue
+                        
                         key_str = key.lower()
                         value_str = str(memory_entry.get("value", "")).lower()
                         
@@ -195,7 +219,8 @@ class SharedMemory:
                             results.append({
                                 "key": key,
                                 "value": memory_entry.get("value"),
-                                "timestamp": memory_entry.get("timestamp")
+                                "timestamp": memory_entry.get("timestamp"),
+                                "session_id": memory_entry.get("session_id")
                             })
             
             return results[:limit]

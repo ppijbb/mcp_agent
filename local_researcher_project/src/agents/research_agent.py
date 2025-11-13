@@ -2729,8 +2729,8 @@ class ResearchAgent:
         """Clean up browser resources using browser manager."""
         try:
             if self.browser_manager is not None:
-                await self.browser_manager.cleanup()
-                logger.info("Browser resources cleaned up")
+            await self.browser_manager.cleanup()
+            logger.info("Browser resources cleaned up")
                 
         except Exception as e:
             logger.error(f"Browser cleanup failed: {e}")

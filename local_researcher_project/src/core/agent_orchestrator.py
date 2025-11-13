@@ -162,14 +162,14 @@ class AgentContext:
 
 class PlannerAgent:
     """Planner agent - creates research plans (YAML-based configuration)."""
-
+    
     def __init__(self, context: AgentContext, skill: Optional[Skill] = None):
         self.context = context
         self.name = "planner"
         self.available_tools: list = []  # MCP 자동 할당 도구
         self.tool_infos: list = []  # 도구 메타데이터
         self.skill = skill
-
+        
         # YAML 설정 로드
         from src.core.skills.agent_loader import load_agent_config
         self.config = load_agent_config("planner")
@@ -183,11 +183,24 @@ class PlannerAgent:
         logger.info(f"Session: {state['session_id']}")
         logger.info(f"=" * 80)
         
-        # Read from shared memory
+        # Read from shared memory - ONLY search within current session to prevent cross-task contamination
         memory = self.context.shared_memory
-        previous_plans = memory.search(state['user_query'], limit=3)
+        current_session_id = state['session_id']
         
-        logger.info(f"[{self.name}] Previous plans found: {len(previous_plans) if previous_plans else 0}")
+        # Search only within current session to prevent mixing previous task memories
+        previous_plans = memory.search(
+            state['user_query'], 
+            limit=3,
+            scope=MemoryScope.SESSION,
+            session_id=current_session_id  # Critical: filter by current session only
+        )
+        
+        logger.info(f"[{self.name}] Previous plans found in current session ({current_session_id}): {len(previous_plans) if previous_plans else 0}")
+        
+        # If no plans found in current session, explicitly set to empty to avoid confusion
+        if not previous_plans:
+            previous_plans = []
+            logger.info(f"[{self.name}] No previous plans in current session - starting fresh task")
         
         # Skills-based instruction 사용
         instruction = self.instruction if self.skill else "You are a research planning agent."
@@ -199,10 +212,28 @@ class PlannerAgent:
         
         # Use YAML-based prompt
         from src.core.skills.agent_loader import get_prompt
+        
+        # Format previous_plans for prompt - only include if from current session
+        if previous_plans:
+            # Filter to ensure only current session plans are included
+            current_session_plans = [
+                p for p in previous_plans 
+                if p.get("session_id") == current_session_id
+            ]
+            if current_session_plans:
+                previous_plans_text = "\n".join([
+                    f"- {p.get('key', 'plan')}: {str(p.get('value', ''))[:200]}"
+                    for p in current_session_plans
+                ])
+            else:
+                previous_plans_text = "No previous research found in current session. This is a NEW task - focus only on the current query."
+        else:
+            previous_plans_text = "No previous research found in current session. This is a NEW task - focus only on the current query."
+        
         prompt = get_prompt("planner", "planning",
                            instruction=self.instruction,
                            user_query=state['user_query'],
-                           previous_plans=previous_plans if previous_plans else "No previous research found")
+                           previous_plans=previous_plans_text)
 
         logger.info(f"[{self.name}] Calling LLM for planning...")
         # Gemini 실행
@@ -466,25 +497,25 @@ class ExecutorAgent:
                     
                     try:
                         system_message = self.config.prompts["query_generation"]["system_message"]
-                        query_result = await execute_llm_task(
-                            prompt=query_generation_prompt,
-                            task_type=TaskType.PLANNING,
-                            model_name=None,
+                    query_result = await execute_llm_task(
+                        prompt=query_generation_prompt,
+                        task_type=TaskType.PLANNING,
+                        model_name=None,
                             system_message=system_message
-                        )
-                        
-                        generated_queries = query_result.content or ""
-                        # 각 줄을 쿼리로 파싱
-                        for line in generated_queries.split('\n'):
-                            line = line.strip()
-                            if line and not line.startswith('#') and len(line) > 5:
-                                search_queries.append(line)
+                    )
+                    
+                    generated_queries = query_result.content or ""
+                    # 각 줄을 쿼리로 파싱
+                    for line in generated_queries.split('\n'):
+                        line = line.strip()
+                        if line and not line.startswith('#') and len(line) > 5:
+                            search_queries.append(line)
                     
                     # 중복 제거
-                        search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
-                        logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
-                    except Exception as e:
-                        logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
+                    search_queries = list(dict.fromkeys(search_queries))[:5]  # 최대 5개
+                    logger.info(f"[{self.name}] Generated {len(search_queries)} search queries from plan")
+                except Exception as e:
+                    logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
             
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
@@ -816,7 +847,7 @@ class ExecutorAgent:
                             logger.warning(f"[{self.name}] ⚠️ Filtering invalid search result {i}: '{title[:60]}...' - Reason: {reason}")
                             logger.debug(f"[{self.name}]   Filtered snippet preview: '{snippet[:200] if snippet else '(empty)'}'")
                             continue
-
+                        
                         # 구조화된 결과 저장
                         result_dict = {
                             "index": len(unique_results) + 1,
@@ -826,7 +857,7 @@ class ExecutorAgent:
                             "source": "search"
                         }
                         unique_results.append(result_dict)
-
+                        
                         logger.info(f"[{self.name}] Result {i}: {title[:50]}... (URL: {url[:50] if url else 'N/A'}...)")
                     
                     # 필터링 통계 로깅
@@ -1138,17 +1169,23 @@ URL: {url if url else 'URL 없음'}
                         logger.debug(f"[{self.name}] ⚠️ Result {i} rejected: {title[:50]}... (reason: {verification_text[:100]})")
                         continue
                 except Exception as e:
-                    logger.warning(f"[{self.name}] Verification failed for result {i}: {e}, including anyway")
-                    # 검증 실패해도 기본 정보가 있으면 포함
-                    if title and (snippet or url):
-                        verified.append({
-                            "index": i,
-                            "title": title,
-                            "snippet": snippet,
-                            "url": url,
-                            "status": "partial",
-                            "verification_note": f"Verification failed: {str(e)[:100]}"
-                        })
+                    error_str = str(e).lower()
+                    # Rate limit이나 모든 모델 실패 시에는 포함하지 않음 (품질 저하 방지)
+                    if "rate limit" in error_str or "429" in error_str or "all fallback models failed" in error_str or "no available models" in error_str:
+                        logger.warning(f"[{self.name}] Verification failed for result {i}: {e} (rate limit/all models failed), excluding from results")
+                        continue  # 품질 저하 방지를 위해 제외
+                    else:
+                        logger.warning(f"[{self.name}] Verification failed for result {i}: {e}, including anyway")
+                        # 검증 실패해도 기본 정보가 있으면 포함 (단, rate limit이 아닌 경우만)
+                        if title and (snippet or url):
+                            verified.append({
+                                "index": i,
+                                "title": title,
+                                "snippet": snippet,
+                                "url": url,
+                                "status": "partial",
+                                "verification_note": f"Verification failed: {str(e)[:100]}"
+                            })
             else:
                 logger.warning(f"[{self.name}] Unknown result format: {type(result)}, value: {str(result)[:100]}")
                 continue
@@ -1486,7 +1523,7 @@ class AgentOrchestrator:
                 
         except Exception as e:
             logger.warning(f"Failed to load MCP server configs: {e}")
-        
+
         logger.info(f"Initialized {len(servers)} MCP servers for auto-discovery")
         return servers
     

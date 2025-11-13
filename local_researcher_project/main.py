@@ -263,7 +263,7 @@ class AutonomousResearchSystem:
         import sys
         # Reentrant call 방지를 위해 print 사용
         print(f"Received signal {signum}, initiating graceful shutdown...", file=sys.stderr)
-
+        
         # Shutdown 플래그 설정 (중복 방지)
         if hasattr(self, '_shutdown_requested') and self._shutdown_requested:
             # 이미 종료 중이면 재진입 방지만 수행
