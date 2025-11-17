@@ -347,21 +347,31 @@ class PlannerAgent:
                     # 잘못된 검색 쿼리 필터링
                     valid_queries = []
                     for query in task['search_queries']:
-                        query_lower = query.lower()
+                        query_str = str(query).strip()
+                        query_lower = query_str.lower()
+                        
+                        # {query} 플레이스홀더가 포함된 쿼리 완전 제외
+                        if "{query}" in query_str or "{query}" in query_lower:
+                            logger.warning(f"[{self.name}] Task {task.get('task_id')}: Filtered out query with placeholder: '{query_str[:50]}...'")
+                            continue
+                        
                         # 메타 정보 관련 키워드가 포함된 쿼리 제외
                         is_invalid = any(keyword in query_lower for keyword in invalid_keywords)
                         # 사용자 쿼리와 관련이 없는 쿼리 제외 (너무 짧거나 일반적인 경우)
-                        is_too_generic = len(query.strip()) < 10 or query == "{query}"
+                        is_too_generic = len(query_str) < 10
                         
                         if not is_invalid and not is_too_generic:
-                            valid_queries.append(query)
+                            valid_queries.append(query_str)
+                        else:
+                            logger.warning(f"[{self.name}] Task {task.get('task_id')}: Filtered out invalid query: '{query_str[:50]}...' (invalid={is_invalid}, generic={is_too_generic})")
                     
                     # 유효한 쿼리가 없으면 사용자 쿼리 사용
                     if not valid_queries:
-                        logger.warning(f"[{self.name}] Task {task.get('task_id')} has no valid search queries, using user query")
+                        logger.warning(f"[{self.name}] Task {task.get('task_id')} has no valid search queries, using user query: '{state['user_query']}'")
                         valid_queries = [state['user_query']]
                     
                     task['search_queries'] = valid_queries
+                    logger.info(f"[{self.name}] Task {task.get('task_id')}: Final search queries: {valid_queries}")
                 else:
                     # search_queries가 없으면 사용자 쿼리 사용
                     task['search_queries'] = [state['user_query']]
@@ -376,7 +386,9 @@ class PlannerAgent:
             state['research_tasks'] = tasks
             logger.info(f"[{self.name}] ✅ Split research plan into {len(tasks)} parallel tasks")
             for task in tasks:
-                logger.info(f"[{self.name}]   - {task.get('task_id')}: {task.get('description', '')[:50]}... ({len(task.get('search_queries', []))} queries)")
+                queries = task.get('search_queries', [])
+                queries_preview = [q[:40] + '...' if len(q) > 40 else q for q in queries[:3]]
+                logger.info(f"[{self.name}]   - {task.get('task_id')}: {task.get('description', '')[:50]}... ({len(queries)} queries: {queries_preview})")
                 
         except Exception as e:
             logger.error(f"[{self.name}] ❌ Failed to split tasks: {e}")
@@ -522,14 +534,21 @@ class ExecutorAgent:
                 ]
                 
                 for q in raw_queries:
-                    q_lower = q.lower()
+                    q_str = str(q).strip()
+                    q_lower = q_str.lower()
+                    
+                    # {query} 플레이스홀더가 포함된 쿼리 완전 제외
+                    if "{query}" in q_str or "{query}" in q_lower:
+                        logger.warning(f"[{self.name}] Filtered out query with placeholder: '{q_str[:50]}...'")
+                        continue
+                    
                     is_invalid = any(keyword in q_lower for keyword in invalid_keywords)
-                    is_too_generic = len(q.strip()) < 10 or q == "{query}" or q.startswith("{")
+                    is_too_generic = len(q_str) < 10
                     
                     if not is_invalid and not is_too_generic:
-                        search_queries.append(q)
+                        search_queries.append(q_str)
                     else:
-                        logger.warning(f"[{self.name}] Filtered out invalid query: '{q[:50]}...'")
+                        logger.warning(f"[{self.name}] Filtered out invalid query: '{q_str[:50]}...' (invalid={is_invalid}, generic={is_too_generic})")
                 
                 # 유효한 쿼리가 없으면 사용자 쿼리 사용
                 if not search_queries:
@@ -575,10 +594,12 @@ class ExecutorAgent:
             
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
+            logger.info(f"[{self.name}] Search queries: {search_queries}")
             
             async def execute_single_search(search_query: str, query_index: int) -> Dict[str, Any]:
                 """단일 검색 실행."""
                 try:
+                    # 실제 검색 쿼리 값 로그 출력
                     logger.info(f"[{self.name}] Search {query_index + 1}/{len(search_queries)}: '{search_query}'")
                     search_result = await execute_tool(
                         "g-search",
@@ -727,7 +748,9 @@ class ExecutorAgent:
                     filtered_count = 0
                     filtered_reasons = []
                     
-                    logger.info(f"[{self.name}] Processing {len(search_results)} results for query: '{query[:100]}...'")
+                    # 실제 검색 쿼리 값 로그 출력 (query 변수는 실제 검색 쿼리)
+                    actual_query = query if isinstance(query, str) else str(query)
+                    logger.info(f"[{self.name}] Processing {len(search_results)} results for query: '{actual_query}'")
                     
                     for i, result in enumerate(search_results, 1):
                         # 다양한 형식 지원
@@ -1187,29 +1210,36 @@ class VerifierAgent:
                     continue
                 
                 # LLM으로 검증
+                user_query = state.get('user_query', '')
                 verification_prompt = f"""다음 검색 결과를 검증하세요:
 
 제목: {title}
-내용: {snippet[:300] if snippet else '내용 없음'}
+내용: {snippet[:500] if snippet else '내용 없음'}
 URL: {url if url else 'URL 없음'}
 
-원래 쿼리: {state['user_query']}
+원래 쿼리: {user_query}
 
 이 결과가 쿼리와 관련이 있고 신뢰할 수 있는지 검증하세요.
+- 관련성이 있고 신뢰할 수 있으면 "VERIFIED"로 응답
+- 관련성이 없거나 신뢰할 수 없으면 "REJECTED"로 응답
+
 응답 형식: "VERIFIED" 또는 "REJECTED"와 간단한 이유를 한 줄로 작성하세요."""
                 
                 try:
+                    logger.debug(f"[{self.name}] Verifying result {i}/{len(results)}: '{title[:60]}...' (query: '{user_query[:60]}...')")
                     verification_result = await execute_llm_task(
                         prompt=verification_prompt,
                         task_type=TaskType.VERIFICATION,
                         model_name=None,
-                        system_message=None
+                        system_message="You are a verification agent. Verify if search results are relevant and reliable."
                     )
                     
                     verification_text = verification_result.content or "UNKNOWN"
                     # 검증 로직 개선: 명시적으로 VERIFIED가 있거나 REJECTED가 없으면 검증됨
-                    verification_upper = verification_text.upper()
+                    verification_upper = verification_text.upper().strip()
                     is_verified = "VERIFIED" in verification_upper and "REJECTED" not in verification_upper
+                    
+                    logger.debug(f"[{self.name}] Verification result {i}: '{verification_text[:100]}' -> is_verified={is_verified}")
                     
                     if is_verified:
                         verified.append({
@@ -1220,9 +1250,9 @@ URL: {url if url else 'URL 없음'}
                             "status": "verified",
                             "verification_note": verification_text[:200]
                         })
-                        logger.info(f"[{self.name}] ✅ Result {i} verified: {title[:50]}...")
+                        logger.info(f"[{self.name}] ✅ Result {i} verified: '{title[:50]}...' (reason: {verification_text[:80]})")
                     else:
-                        logger.debug(f"[{self.name}] ⚠️ Result {i} rejected: {title[:50]}... (reason: {verification_text[:100]})")
+                        logger.info(f"[{self.name}] ⚠️ Result {i} rejected: '{title[:50]}...' (reason: {verification_text[:100]})")
                         continue
                 except Exception as e:
                     error_str = str(e).lower()
