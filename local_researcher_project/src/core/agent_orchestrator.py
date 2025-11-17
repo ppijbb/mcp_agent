@@ -326,14 +326,46 @@ class PlannerAgent:
                     "dependencies": []
                 }]
             
-            # 각 작업에 메타데이터 추가
+            # 각 작업에 메타데이터 추가 및 검색 쿼리 검증
+            user_query_lower = state['user_query'].lower()
+            # 잘못된 검색 쿼리 키워드 (메타 정보 관련)
+            invalid_keywords = [
+                '작업 분할', '태스크 분할', '병렬화', '병렬 실행', 'task decomposition',
+                'task split', 'parallel', 'parallelization', '연구 방법론', '연구 전략',
+                '연구 계획', 'research methodology', 'research strategy', 'research plan',
+                '하위 연구 주제 분해', '독립적 연구 태스크', '연구 작업 병렬화'
+            ]
+            
             for i, task in enumerate(tasks):
                 if 'task_id' not in task:
                     task['task_id'] = f"task_{i + 1}"
                 if 'description' not in task:
                     task['description'] = state['user_query']
-                if 'search_queries' not in task or not task['search_queries']:
+                
+                # 검색 쿼리 검증 및 필터링
+                if 'search_queries' in task and task['search_queries']:
+                    # 잘못된 검색 쿼리 필터링
+                    valid_queries = []
+                    for query in task['search_queries']:
+                        query_lower = query.lower()
+                        # 메타 정보 관련 키워드가 포함된 쿼리 제외
+                        is_invalid = any(keyword in query_lower for keyword in invalid_keywords)
+                        # 사용자 쿼리와 관련이 없는 쿼리 제외 (너무 짧거나 일반적인 경우)
+                        is_too_generic = len(query.strip()) < 10 or query == "{query}"
+                        
+                        if not is_invalid and not is_too_generic:
+                            valid_queries.append(query)
+                    
+                    # 유효한 쿼리가 없으면 사용자 쿼리 사용
+                    if not valid_queries:
+                        logger.warning(f"[{self.name}] Task {task.get('task_id')} has no valid search queries, using user query")
+                        valid_queries = [state['user_query']]
+                    
+                    task['search_queries'] = valid_queries
+                else:
+                    # search_queries가 없으면 사용자 쿼리 사용
                     task['search_queries'] = [state['user_query']]
+                
                 if 'priority' not in task:
                     task['priority'] = i + 1
                 if 'estimated_time' not in task:
@@ -479,8 +511,32 @@ class ExecutorAgent:
             # 작업 할당이 있으면 해당 작업의 검색 쿼리 사용
             search_queries = []
             if assigned_task:
-                search_queries = assigned_task.get('search_queries', [])
-                logger.info(f"[{self.name}] Using assigned task queries: {len(search_queries)} queries from task {assigned_task.get('task_id', 'unknown')}")
+                raw_queries = assigned_task.get('search_queries', [])
+                
+                # 잘못된 검색 쿼리 필터링 (메타 정보 관련)
+                invalid_keywords = [
+                    '작업 분할', '태스크 분할', '병렬화', '병렬 실행', 'task decomposition',
+                    'task split', 'parallel', 'parallelization', '연구 방법론', '연구 전략',
+                    '연구 계획', 'research methodology', 'research strategy', 'research plan',
+                    '하위 연구 주제 분해', '독립적 연구 태스크', '연구 작업 병렬화'
+                ]
+                
+                for q in raw_queries:
+                    q_lower = q.lower()
+                    is_invalid = any(keyword in q_lower for keyword in invalid_keywords)
+                    is_too_generic = len(q.strip()) < 10 or q == "{query}" or q.startswith("{")
+                    
+                    if not is_invalid and not is_too_generic:
+                        search_queries.append(q)
+                    else:
+                        logger.warning(f"[{self.name}] Filtered out invalid query: '{q[:50]}...'")
+                
+                # 유효한 쿼리가 없으면 사용자 쿼리 사용
+                if not search_queries:
+                    logger.warning(f"[{self.name}] No valid queries in assigned task, using user query")
+                    search_queries = [query]
+                else:
+                    logger.info(f"[{self.name}] Using {len(search_queries)} valid queries from task {assigned_task.get('task_id', 'unknown')}")
             
             # 작업 할당이 없거나 쿼리가 없으면 기존 로직 사용
             if not search_queries:

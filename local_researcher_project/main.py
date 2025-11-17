@@ -748,6 +748,10 @@ class AutonomousResearchSystem:
                 def default(self, obj):
                     if isinstance(obj, datetime):
                         return obj.isoformat()
+                    elif hasattr(obj, 'value'):  # Enum 처리
+                        return obj.value
+                    elif hasattr(obj, '__dict__'):  # 객체의 경우
+                        return str(obj)
                     return super().default(obj)
             
             with open(temp_file, 'w', encoding='utf-8') as f:
