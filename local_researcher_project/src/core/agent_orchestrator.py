@@ -592,6 +592,32 @@ class ExecutorAgent:
                     except Exception as e:
                         logger.warning(f"[{self.name}] Failed to generate search queries from plan: {e}, using original query only")
             
+            # 최소 3-5개의 다양한 검색 쿼리 보장
+            MIN_QUERIES = 3
+            MAX_QUERIES = 8
+            if len(search_queries) < MIN_QUERIES:
+                logger.info(f"[{self.name}] Only {len(search_queries)} queries available, generating additional queries to ensure diversity...")
+                # 사용자 쿼리를 기반으로 다양한 관점의 검색 쿼리 생성
+                base_query = query
+                additional_queries = []
+                
+                # 다양한 관점의 쿼리 생성
+                query_variations = [
+                    f"{base_query} 분석",
+                    f"{base_query} 전망",
+                    f"{base_query} 동향",
+                    f"{base_query} 현황",
+                    f"{base_query} 전문가 의견"
+                ]
+                
+                for variation in query_variations:
+                    if variation not in search_queries and len(search_queries) < MAX_QUERIES:
+                        search_queries.append(variation)
+                        additional_queries.append(variation)
+                
+                if additional_queries:
+                    logger.info(f"[{self.name}] Added {len(additional_queries)} additional query variations: {additional_queries}")
+            
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
             logger.info(f"[{self.name}] Search queries: {search_queries}")
@@ -601,9 +627,10 @@ class ExecutorAgent:
                 try:
                     # 실제 검색 쿼리 값 로그 출력
                     logger.info(f"[{self.name}] Search {query_index + 1}/{len(search_queries)}: '{search_query}'")
+                    # 각 검색마다 더 많은 결과 수집 (최소 5개 출처 보장을 위해)
                     search_result = await execute_tool(
                         "g-search",
-                        {"query": search_query, "max_results": 10}
+                        {"query": search_query, "max_results": 15}  # 10 -> 15로 증가
                     )
                     return {
                         "query": search_query,
@@ -956,6 +983,123 @@ class ExecutorAgent:
                     if unique_results:
                         results = unique_results
                         logger.info(f"[{self.name}] ✅ Collected {len(results)} unique results")
+                        
+                        # 최소 5개 이상의 고유한 출처 보장
+                        MIN_UNIQUE_SOURCES = 5
+                        unique_urls = set()
+                        for result in results:
+                            url = result.get('url', '')
+                            if url:
+                                # URL에서 도메인 추출
+                                try:
+                                    from urllib.parse import urlparse
+                                    parsed = urlparse(url)
+                                    domain = f"{parsed.scheme}://{parsed.netloc}"
+                                    unique_urls.add(domain)
+                                except:
+                                    unique_urls.add(url)
+                        
+                        logger.info(f"[{self.name}] 📊 Unique sources found: {len(unique_urls)} (minimum required: {MIN_UNIQUE_SOURCES})")
+                        
+                        # 출처가 부족하면 추가 검색 수행
+                        if len(unique_urls) < MIN_UNIQUE_SOURCES:
+                            logger.warning(f"[{self.name}] ⚠️ Only {len(unique_urls)} unique sources found, need at least {MIN_UNIQUE_SOURCES}. Performing additional searches...")
+                            
+                            # 추가 검색 쿼리 생성 (다양한 관점)
+                            additional_queries = []
+                            base_query = query
+                            
+                            # 다양한 검색어 패턴 시도
+                            additional_patterns = [
+                                f"{base_query} 뉴스",
+                                f"{base_query} 리포트",
+                                f"{base_query} 조사",
+                                f"{base_query} 통계",
+                                f"{base_query} 자료"
+                            ]
+                            
+                            # 이미 사용한 쿼리 제외
+                            used_queries = set(search_queries)
+                            for pattern in additional_patterns:
+                                if pattern not in used_queries and len(additional_queries) < 3:
+                                    additional_queries.append(pattern)
+                            
+                            if additional_queries:
+                                logger.info(f"[{self.name}] 🔍 Executing {len(additional_queries)} additional searches for more sources...")
+                                
+                                # 추가 검색 실행
+                                additional_search_tasks = [execute_single_search(q, len(search_queries) + i) for i, q in enumerate(additional_queries)]
+                                additional_results_list = await asyncio.gather(*additional_search_tasks)
+                                
+                                # 추가 검색 결과 통합
+                                additional_unique_results = []
+                                additional_seen_urls = seen_urls.copy()
+                                
+                                for sr in additional_results_list:
+                                    if sr.get('success') and sr.get('result', {}).get('data'):
+                                        result_data = sr['result'].get('data', {})
+                                        if isinstance(result_data, dict):
+                                            items = result_data.get('results', result_data.get('items', []))
+                                            if isinstance(items, list):
+                                                for item in items:
+                                                    if isinstance(item, dict):
+                                                        url = item.get('url', item.get('link', ''))
+                                                        if url and url not in additional_seen_urls:
+                                                            title = item.get('title', item.get('name', ''))
+                                                            snippet = item.get('snippet', item.get('content', ''))
+                                                            if title and len(title.strip()) >= 3:
+                                                                additional_unique_results.append({
+                                                                    "index": len(results) + len(additional_unique_results) + 1,
+                                                                    "title": title,
+                                                                    "snippet": snippet[:500] if snippet else '',
+                                                                    "url": url,
+                                                                    "source": "additional_search"
+                                                                })
+                                                                additional_seen_urls.add(url)
+                                        
+                                        # 도메인 추출하여 고유 출처 확인
+                                        for item in additional_unique_results:
+                                            url = item.get('url', '')
+                                            if url:
+                                                try:
+                                                    from urllib.parse import urlparse
+                                                    parsed = urlparse(url)
+                                                    domain = f"{parsed.scheme}://{parsed.netloc}"
+                                                    unique_urls.add(domain)
+                                                except:
+                                                    unique_urls.add(url)
+                                        
+                                        # 충분한 출처를 얻으면 중단
+                                        if len(unique_urls) >= MIN_UNIQUE_SOURCES:
+                                            break
+                                
+                                if additional_unique_results:
+                                    results.extend(additional_unique_results)
+                                    logger.info(f"[{self.name}] ✅ Added {len(additional_unique_results)} additional results from {len(additional_queries)} searches")
+                                    logger.info(f"[{self.name}] 📊 Total unique sources: {len(unique_urls)} (target: {MIN_UNIQUE_SOURCES})")
+                                else:
+                                    logger.warning(f"[{self.name}] ⚠️ Additional searches did not yield new unique sources")
+                            else:
+                                logger.warning(f"[{self.name}] ⚠️ No additional query patterns available")
+                        else:
+                            logger.info(f"[{self.name}] ✅ Sufficient unique sources found: {len(unique_urls)} >= {MIN_UNIQUE_SOURCES}")
+                        
+                        # 최종 결과 요약
+                        final_unique_sources = set()
+                        for result in results:
+                            url = result.get('url', '')
+                            if url:
+                                try:
+                                    from urllib.parse import urlparse
+                                    parsed = urlparse(url)
+                                    domain = f"{parsed.scheme}://{parsed.netloc}"
+                                    final_unique_sources.add(domain)
+                                except:
+                                    final_unique_sources.add(url)
+                        
+                        logger.info(f"[{self.name}] 📊 Final collection: {len(results)} results from {len(final_unique_sources)} unique sources")
+                        if len(final_unique_sources) < MIN_UNIQUE_SOURCES:
+                            logger.warning(f"[{self.name}] ⚠️ Warning: Only {len(final_unique_sources)} unique sources collected (target: {MIN_UNIQUE_SOURCES})")
                     else:
                         # 모든 결과가 필터링된 경우 상세한 에러 메시지
                         error_details = []
