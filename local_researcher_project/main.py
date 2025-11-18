@@ -261,13 +261,24 @@ class AutonomousResearchSystem:
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
         import sys
-        # Reentrant call 방지를 위해 print 사용
-        print(f"Received signal {signum}, initiating graceful shutdown...", file=sys.stderr)
+        import os
+        
+        # Reentrant call 방지를 위해 os.write 사용 (print 대신)
+        try:
+            msg = f"Received signal {signum}, initiating graceful shutdown...\n"
+            os.write(sys.stderr.fileno(), msg.encode('utf-8'))
+        except (OSError, AttributeError):
+            # stderr에 쓸 수 없으면 무시 (이미 종료 중일 수 있음)
+            pass
         
         # Shutdown 플래그 설정 (중복 방지)
         if hasattr(self, '_shutdown_requested') and self._shutdown_requested:
             # 이미 종료 중이면 재진입 방지만 수행
-            print("Shutdown already in progress; ignoring additional signal", file=sys.stderr)
+            try:
+                msg = "Shutdown already in progress; ignoring additional signal\n"
+                os.write(sys.stderr.fileno(), msg.encode('utf-8'))
+            except (OSError, AttributeError):
+                pass
             return
         
         self._shutdown_requested = True
@@ -281,11 +292,16 @@ class AutonomousResearchSystem:
                     self._shutdown_task = asyncio.create_task(self._graceful_shutdown())
                 loop.call_soon_threadsafe(_schedule)
             else:
-                logger.debug("Shutdown task already scheduled")
+                # logger는 시그널 핸들러에서 사용하지 않음 (reentrant call 위험)
+                pass
         except RuntimeError:
             # 이벤트 루프가 없으면 강제 종료
-            logger.warning("No event loop available, forcing exit")
-            sys.exit(1)
+            try:
+                msg = "No event loop available, forcing exit\n"
+                os.write(sys.stderr.fileno(), msg.encode('utf-8'))
+            except (OSError, AttributeError):
+                pass
+            os._exit(1)  # sys.exit 대신 os._exit 사용 (더 안전)
     
     async def _graceful_shutdown(self):
         """Graceful shutdown with state persistence."""

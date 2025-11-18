@@ -1175,6 +1175,13 @@ class VerifierAgent:
         from src.core.llm_manager import execute_llm_task, TaskType
         
         verified = []
+        rejected_reasons = []  # 검증 실패 원인 추적
+        skipped_count = 0
+        verification_errors = []
+        
+        user_query = state.get('user_query', '')
+        logger.info(f"[{self.name}] 🔍 Starting verification of {len(results)} results for query: '{user_query}'")
+        
         for i, result in enumerate(results, 1):
             if isinstance(result, dict):
                 # 다양한 키에서 title, snippet, url 추출 시도
@@ -1184,18 +1191,21 @@ class VerifierAgent:
                 
                 # title이 비어있거나 "Search Results" 같은 메타데이터인 경우 스킵
                 if not title or len(title.strip()) < 3:
-                    logger.debug(f"[{self.name}] Skipping result {i}: empty or invalid title")
+                    skipped_count += 1
+                    logger.debug(f"[{self.name}] ⏭️ Skipping result {i}: empty or invalid title")
                     continue
                 
                 # "Search Results", "Results", "Error" 같은 메타데이터 제외
                 title_lower = title.lower().strip()
                 if title_lower in ['search results', 'results', 'error', 'no results', 'no title']:
-                    logger.debug(f"[{self.name}] Skipping result {i}: metadata title '{title}'")
+                    skipped_count += 1
+                    logger.debug(f"[{self.name}] ⏭️ Skipping result {i}: metadata title '{title}'")
                     continue
                 
                 # snippet이 비어있고 url도 없는 경우 스킵
                 if not snippet and not url:
-                    logger.debug(f"[{self.name}] Skipping result {i}: no content or URL")
+                    skipped_count += 1
+                    logger.debug(f"[{self.name}] ⏭️ Skipping result {i}: no content or URL")
                     continue
 
                 # snippet 내용으로 유효하지 않은 검색 결과 필터링
@@ -1206,32 +1216,35 @@ class VerifierAgent:
                 ]
                 snippet_lower = snippet.lower() if snippet else ""
                 if any(indicator in snippet_lower for indicator in invalid_indicators):
-                    logger.debug(f"[{self.name}] Skipping result {i}: invalid snippet content (contains error message)")
+                    skipped_count += 1
+                    logger.debug(f"[{self.name}] ⏭️ Skipping result {i}: invalid snippet content (contains error message)")
                     continue
                 
                 # LLM으로 검증
-                user_query = state.get('user_query', '')
                 verification_prompt = f"""다음 검색 결과를 검증하세요:
 
 제목: {title}
-내용: {snippet[:500] if snippet else '내용 없음'}
+내용: {snippet[:800] if snippet else '내용 없음'}
 URL: {url if url else 'URL 없음'}
 
 원래 쿼리: {user_query}
 
 이 결과가 쿼리와 관련이 있고 신뢰할 수 있는지 검증하세요.
-- 관련성이 있고 신뢰할 수 있으면 "VERIFIED"로 응답
-- 관련성이 없거나 신뢰할 수 없으면 "REJECTED"로 응답
+- 쿼리의 주제와 관련이 있고 신뢰할 수 있는 정보를 제공하면 "VERIFIED"로 응답
+- 쿼리와 전혀 무관하거나 신뢰할 수 없으면 "REJECTED"로 응답
+- 부분적으로 관련이 있거나 간접적으로 관련이 있어도 "VERIFIED"로 응답 가능
+
+⚠️ 중요: 너무 엄격하게 판단하지 말고, 쿼리와 관련이 있다고 판단되면 "VERIFIED"로 응답하세요.
 
 응답 형식: "VERIFIED" 또는 "REJECTED"와 간단한 이유를 한 줄로 작성하세요."""
                 
                 try:
-                    logger.debug(f"[{self.name}] Verifying result {i}/{len(results)}: '{title[:60]}...' (query: '{user_query[:60]}...')")
+                    logger.info(f"[{self.name}] 🔍 Verifying result {i}/{len(results)}: '{title[:60]}...'")
                     verification_result = await execute_llm_task(
                         prompt=verification_prompt,
                         task_type=TaskType.VERIFICATION,
                         model_name=None,
-                        system_message="You are a verification agent. Verify if search results are relevant and reliable."
+                        system_message="You are a verification agent. Verify if search results are relevant and reliable. Be reasonable - if the result is even partially related to the query, verify it."
                     )
                     
                     verification_text = verification_result.content or "UNKNOWN"
@@ -1239,7 +1252,7 @@ URL: {url if url else 'URL 없음'}
                     verification_upper = verification_text.upper().strip()
                     is_verified = "VERIFIED" in verification_upper and "REJECTED" not in verification_upper
                     
-                    logger.debug(f"[{self.name}] Verification result {i}: '{verification_text[:100]}' -> is_verified={is_verified}")
+                    logger.info(f"[{self.name}] 📋 Verification result {i}: '{verification_text[:150]}' -> is_verified={is_verified}")
                     
                     if is_verified:
                         verified.append({
@@ -1252,16 +1265,27 @@ URL: {url if url else 'URL 없음'}
                         })
                         logger.info(f"[{self.name}] ✅ Result {i} verified: '{title[:50]}...' (reason: {verification_text[:80]})")
                     else:
+                        rejected_reasons.append({
+                            "index": i,
+                            "title": title[:80],
+                            "reason": verification_text[:200],
+                            "url": url[:100] if url else "N/A"
+                        })
                         logger.info(f"[{self.name}] ⚠️ Result {i} rejected: '{title[:50]}...' (reason: {verification_text[:100]})")
                         continue
                 except Exception as e:
                     error_str = str(e).lower()
+                    verification_errors.append({
+                        "index": i,
+                        "title": title[:80],
+                        "error": str(e)[:200]
+                    })
                     # Rate limit이나 모든 모델 실패 시에는 포함하지 않음 (품질 저하 방지)
                     if "rate limit" in error_str or "429" in error_str or "all fallback models failed" in error_str or "no available models" in error_str:
-                        logger.warning(f"[{self.name}] Verification failed for result {i}: {e} (rate limit/all models failed), excluding from results")
+                        logger.warning(f"[{self.name}] ⚠️ Verification failed for result {i}: {e} (rate limit/all models failed), excluding from results")
                         continue  # 품질 저하 방지를 위해 제외
                     else:
-                        logger.warning(f"[{self.name}] Verification failed for result {i}: {e}, including anyway")
+                        logger.warning(f"[{self.name}] ⚠️ Verification failed for result {i}: {e}, including anyway")
                         # 검증 실패해도 기본 정보가 있으면 포함 (단, rate limit이 아닌 경우만)
                         if title and (snippet or url):
                             verified.append({
@@ -1273,10 +1297,60 @@ URL: {url if url else 'URL 없음'}
                                 "verification_note": f"Verification failed: {str(e)[:100]}"
                             })
             else:
-                logger.warning(f"[{self.name}] Unknown result format: {type(result)}, value: {str(result)[:100]}")
+                skipped_count += 1
+                logger.warning(f"[{self.name}] ⚠️ Unknown result format: {type(result)}, value: {str(result)[:100]}")
                 continue
         
-        logger.info(f"[{self.name}] ✅ Verification completed: {len(verified)}/{len(results)} results verified")
+        # 검증 통계 및 디버깅 정보 출력
+        logger.info(f"[{self.name}] 📊 Verification Statistics:")
+        logger.info(f"[{self.name}]   - Total results: {len(results)}")
+        logger.info(f"[{self.name}]   - Verified: {len(verified)}")
+        logger.info(f"[{self.name}]   - Rejected: {len(rejected_reasons)}")
+        logger.info(f"[{self.name}]   - Skipped: {skipped_count}")
+        logger.info(f"[{self.name}]   - Verification errors: {len(verification_errors)}")
+        
+        if rejected_reasons:
+            logger.warning(f"[{self.name}] 🔍 Rejected Results Analysis:")
+            for rejected in rejected_reasons[:5]:  # 최대 5개만 표시
+                logger.warning(f"[{self.name}]   - Result {rejected['index']}: '{rejected['title']}'")
+                logger.warning(f"[{self.name}]     Reason: {rejected['reason']}")
+                logger.warning(f"[{self.name}]     URL: {rejected['url']}")
+        
+        if verification_errors:
+            logger.error(f"[{self.name}] ❌ Verification Errors:")
+            for error_info in verification_errors[:3]:  # 최대 3개만 표시
+                logger.error(f"[{self.name}]   - Result {error_info['index']}: '{error_info['title']}'")
+                logger.error(f"[{self.name}]     Error: {error_info['error']}")
+        
+        # 검증된 결과가 없을 때 원본 결과를 사용하는 fallback
+        if not verified and len(results) > 0:
+            logger.warning(f"[{self.name}] ⚠️ No results verified! Using original results as fallback...")
+            logger.warning(f"[{self.name}] 🔍 This may indicate:")
+            logger.warning(f"[{self.name}]   1. Search queries are not matching the user query")
+            logger.warning(f"[{self.name}]   2. Verification criteria are too strict")
+            logger.warning(f"[{self.name}]   3. Search results are genuinely irrelevant")
+            
+            # 원본 결과를 검증된 결과로 사용 (신뢰도 낮게)
+            for i, result in enumerate(results[:5], 1):  # 최대 5개만
+                if isinstance(result, dict):
+                    title = result.get('title') or result.get('name') or ''
+                    snippet = result.get('snippet') or result.get('content') or ''
+                    url = result.get('url') or result.get('link') or ''
+                    
+                    if title and len(title.strip()) >= 3:
+                        verified.append({
+                            "index": i,
+                            "title": title,
+                            "snippet": snippet[:500] if snippet else '',
+                            "url": url,
+                            "status": "fallback",
+                            "verification_note": "No verified results found, using original search results as fallback"
+                        })
+                        logger.warning(f"[{self.name}] ⚠️ Added fallback result {i}: '{title[:50]}...'")
+            
+            logger.warning(f"[{self.name}] ⚠️ Using {len(verified)} fallback results (low confidence)")
+        
+        logger.info(f"[{self.name}] ✅ Verification completed: {len(verified)}/{len(results)} results verified (including fallback)")
         
         # 검증 결과를 SharedResultsManager에 공유
         if self.context.shared_results_manager:
@@ -1383,7 +1457,46 @@ class GeneratorAgent:
                 else:
                     error_msg = "알 수 없는 오류"
 
+            # 상세 디버깅 정보 출력
             logger.error(f"[{self.name}] ❌ Research or verification failed: {error_msg}")
+            logger.error(f"[{self.name}] 🔍 Debugging Information:")
+            logger.error(f"[{self.name}]   - Research failed: {state.get('research_failed', False)}")
+            logger.error(f"[{self.name}]   - Verification failed: {state.get('verification_failed', False)}")
+            logger.error(f"[{self.name}]   - User query: '{state.get('user_query', 'N/A')}'")
+            
+            # 검증 결과 확인
+            verified_results = state.get('verified_results', [])
+            research_results = state.get('research_results', [])
+            logger.error(f"[{self.name}]   - Verified results count: {len(verified_results) if verified_results else 0}")
+            logger.error(f"[{self.name}]   - Research results count: {len(research_results) if research_results else 0}")
+            
+            # SharedResultsManager에서 결과 확인
+            if self.context.shared_results_manager:
+                try:
+                    shared_results = await self.context.shared_results_manager.get_shared_results(
+                        agent_id=None
+                    )
+                    logger.error(f"[{self.name}]   - Shared results count: {len(shared_results) if shared_results else 0}")
+                except Exception as e:
+                    logger.error(f"[{self.name}]   - Failed to get shared results: {e}")
+            
+            # 검증 실패 원인 분석
+            if state.get('verification_failed'):
+                logger.error(f"[{self.name}] 🔍 Verification Failure Analysis:")
+                logger.error(f"[{self.name}]   - Possible causes:")
+                logger.error(f"[{self.name}]     1. Search queries did not match user query")
+                logger.error(f"[{self.name}]     2. Verification criteria were too strict")
+                logger.error(f"[{self.name}]     3. Search results were genuinely irrelevant")
+                logger.error(f"[{self.name}]     4. LLM verification service issues")
+                
+                # 원본 검색 결과가 있으면 일부 표시
+                if research_results and len(research_results) > 0:
+                    logger.error(f"[{self.name}]   - Sample research results (first 3):")
+                    for i, result in enumerate(research_results[:3], 1):
+                        if isinstance(result, dict):
+                            title = result.get('title', result.get('name', 'N/A'))[:60]
+                            logger.error(f"[{self.name}]     {i}. {title}")
+            
             state['final_report'] = None
             state['current_agent'] = self.name
             state['report_failed'] = True
