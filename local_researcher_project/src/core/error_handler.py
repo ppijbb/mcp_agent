@@ -166,7 +166,7 @@ class ErrorHandler:
 
     에러 분류, 로깅, 복구 제안, 재시도 로직을 제공.
     """
-
+    
     def __init__(self, log_errors: bool = True, enable_recovery: bool = True):
         """초기화."""
         self.log_errors = log_errors
@@ -248,14 +248,14 @@ class ErrorHandler:
     ) -> ErrorInfo:
         """
         에러 처리 및 구조화.
-
+        
         Args:
             error: 발생한 예외
             category: 에러 카테고리
             severity: 에러 심각도
             context: 에러 발생 컨텍스트
             custom_message: 사용자 정의 메시지
-
+        
         Returns:
             구조화된 에러 정보
         """
@@ -347,11 +347,11 @@ class ErrorHandler:
     ) -> bool:
         """
         에러 복구 시도.
-
+        
         Args:
             error_info: 에러 정보
             recovery_func: 사용자 정의 복구 함수
-
+        
         Returns:
             복구 성공 여부
         """
@@ -382,7 +382,7 @@ class ErrorHandler:
         except Exception as e:
             self.logger.error(f"Recovery attempt failed: {e}")
             return False
-
+    
     async def retry_operation(
         self,
         operation: Callable,
@@ -394,14 +394,14 @@ class ErrorHandler:
     ):
         """
         재시도 로직이 포함된 작업 실행.
-
+        
         Args:
             operation: 실행할 작업 함수
             max_retries: 최대 재시도 횟수
             backoff_factor: 백오프 계수
             error_category: 에러 카테고리
             *args, **kwargs: 작업 함수에 전달할 인자
-
+        
         Returns:
             작업 결과 또는 마지막 에러
         """

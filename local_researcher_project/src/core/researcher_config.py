@@ -499,7 +499,7 @@ def load_config_from_env() -> ResearcherSystemConfig:
         enable_cross_agent_tools=get_required_env("AGENT_TOOL_ENABLE_CROSS_AGENT", bool) if os.getenv("AGENT_TOOL_ENABLE_CROSS_AGENT") else True,
         cross_agent_timeout=get_required_env("AGENT_TOOL_CROSS_AGENT_TIMEOUT", float) if os.getenv("AGENT_TOOL_CROSS_AGENT_TIMEOUT") else 30.0
     )
-
+    
     # Load Output configuration
     output_config = OutputConfig(
         output_dir=get_required_env("OUTPUT_DIR"),

@@ -1100,6 +1100,196 @@ class ExecutorAgent:
                         logger.info(f"[{self.name}] 📊 Final collection: {len(results)} results from {len(final_unique_sources)} unique sources")
                         if len(final_unique_sources) < MIN_UNIQUE_SOURCES:
                             logger.warning(f"[{self.name}] ⚠️ Warning: Only {len(final_unique_sources)} unique sources collected (target: {MIN_UNIQUE_SOURCES})")
+                        
+                        # 검색 결과 검토 및 실제 웹 페이지 내용 크롤링
+                        logger.info(f"[{self.name}] 🔍 Reviewing search results and fetching full web content...")
+                        
+                        # 검색 결과 검토 및 실제 웹 페이지 크롤링
+                        enriched_results = []
+                        for result in results:
+                            url = result.get('url', '')
+                            if not url:
+                                enriched_results.append(result)
+                                continue
+                            
+                            try:
+                                # 실제 웹 페이지 내용 가져오기
+                                logger.info(f"[{self.name}] 📥 Fetching full content from: {url[:80]}...")
+                                fetch_result = await execute_tool("fetch", {"url": url})
+                                
+                                if fetch_result.get('success') and fetch_result.get('data'):
+                                    content = fetch_result.get('data', {}).get('content', '')
+                                    if content:
+                                        # HTML 태그 제거 및 텍스트 정리
+                                        import re
+                                        from bs4 import BeautifulSoup
+                                        
+                                        try:
+                                            soup = BeautifulSoup(content, 'html.parser')
+                                            # 스크립트, 스타일, 헤더, 푸터 제거
+                                            for element in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']):
+                                                element.decompose()
+                                            
+                                            # 메인 콘텐츠 추출
+                                            main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile(r'content|article|post|main', re.I))
+                                            if main_content:
+                                                full_text = main_content.get_text(separator='\n', strip=True)
+                                            else:
+                                                full_text = soup.get_text(separator='\n', strip=True)
+                                            
+                                            # 텍스트 정리 (너무 긴 공백 제거)
+                                            full_text = re.sub(r'\n{3,}', '\n\n', full_text)
+                                            full_text = re.sub(r' {3,}', ' ', full_text)
+                                            
+                                            # 최대 길이 제한 (50000자)
+                                            if len(full_text) > 50000:
+                                                full_text = full_text[:50000] + "... [truncated]"
+                                            
+                                            result['full_content'] = full_text
+                                            result['content_length'] = len(full_text)
+                                            
+                                            # 날짜 정보 추출 시도
+                                            date_patterns = [
+                                                r'(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})',  # YYYY-MM-DD
+                                                r'(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})',  # MM-DD-YYYY
+                                                r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일',  # 한국어 형식
+                                            ]
+                                            
+                                            date_found = None
+                                            for pattern in date_patterns:
+                                                matches = re.findall(pattern, full_text[:5000])  # 처음 5000자만 검색
+                                                if matches:
+                                                    try:
+                                                        from datetime import datetime
+                                                        match = matches[-1]  # 가장 최근 날짜
+                                                        if len(match) == 3:
+                                                            if '년' in full_text[:5000]:
+                                                                # 한국어 형식
+                                                                date_str = f"{match[0]}-{match[1].zfill(2)}-{match[2].zfill(2)}"
+                                                            elif len(match[0]) == 4:
+                                                                # YYYY-MM-DD
+                                                                date_str = f"{match[0]}-{match[1].zfill(2)}-{match[2].zfill(2)}"
+                                                            else:
+                                                                # MM-DD-YYYY
+                                                                date_str = f"{match[2]}-{match[0].zfill(2)}-{match[1].zfill(2)}"
+                                                            date_found = datetime.strptime(date_str, "%Y-%m-%d")
+                                                            break
+                                                    except:
+                                                        continue
+                                            
+                                            if date_found:
+                                                result['published_date'] = date_found.isoformat()
+                                                logger.info(f"[{self.name}] 📅 Found date: {date_found.strftime('%Y-%m-%d')} for {url[:50]}...")
+                                            else:
+                                                # 날짜를 찾지 못한 경우 현재 시간으로 설정 (최신 정보 우선)
+                                                from datetime import datetime
+                                                result['published_date'] = datetime.now().isoformat()
+                                                logger.info(f"[{self.name}] ⚠️ No date found, using current time for {url[:50]}...")
+                                            
+                                            logger.info(f"[{self.name}] ✅ Fetched {len(full_text)} characters from {url[:50]}...")
+                                        except Exception as e:
+                                            logger.warning(f"[{self.name}] ⚠️ Failed to parse HTML from {url[:50]}...: {e}")
+                                            # 파싱 실패해도 원본 결과는 유지
+                                            result['full_content'] = content[:50000] if len(content) > 50000 else content
+                                            result['content_length'] = len(result['full_content'])
+                                    else:
+                                        logger.warning(f"[{self.name}] ⚠️ No content fetched from {url[:50]}...")
+                                else:
+                                    logger.warning(f"[{self.name}] ⚠️ Failed to fetch content from {url[:50]}...: {fetch_result.get('error', 'Unknown error')}")
+                            except Exception as e:
+                                logger.error(f"[{self.name}] ❌ Error fetching content from {url[:50]}...: {e}")
+                            
+                            enriched_results.append(result)
+                        
+                        # 최신 정보 우선순위로 정렬
+                        from datetime import datetime
+                        enriched_results.sort(key=lambda x: (
+                            datetime.fromisoformat(x.get('published_date', datetime.now().isoformat())) if x.get('published_date') else datetime.min,
+                            x.get('content_length', 0)
+                        ), reverse=True)
+                        
+                        logger.info(f"[{self.name}] ✅ Enriched {len(enriched_results)} results with full web content")
+                        results = enriched_results
+                        
+                        # 검색 결과 검토 (LLM으로 검색 결과 평가)
+                        logger.info(f"[{self.name}] 🔍 Reviewing search results for relevance and recency...")
+                        try:
+                            from src.core.llm_manager import execute_llm_task, TaskType
+                            
+                            # 검색 결과 요약 및 평가
+                            review_prompt = f"""다음은 '{query}'에 대한 검색 결과입니다. 각 결과를 검토하여:
+1. 사용자 쿼리와의 관련성 평가
+2. 정보의 최신성 확인 (날짜 정보 포함)
+3. 신뢰할 수 있는 출처인지 확인
+4. 실제 웹 페이지 내용이 쿼리와 관련이 있는지 확인
+
+검색 결과:
+{chr(10).join([f"{i+1}. {r.get('title', 'N/A')} - {r.get('url', 'N/A')} - 날짜: {r.get('published_date', 'N/A')} - 내용 길이: {r.get('content_length', 0)}자" for i, r in enumerate(results[:10])])}
+
+각 결과에 대해:
+- 관련성 점수 (0-10)
+- 최신성 평가 (최신/보통/오래됨)
+- 신뢰도 평가 (높음/보통/낮음)
+- 추천 여부 (추천/보통/비추천)
+
+형식: JSON 배열로 반환
+[
+  {{
+    "index": 1,
+    "relevance_score": 8,
+    "recency": "최신",
+    "reliability": "높음",
+    "recommend": "추천",
+    "reason": "최신 정보이며 쿼리와 직접 관련"
+  }},
+  ...
+]
+"""
+                            
+                            review_result = await execute_llm_task(
+                                prompt=review_prompt,
+                                task_type=TaskType.ANALYSIS,
+                                model_name=None,
+                                system_message="You are an expert information analyst who evaluates search results for relevance, recency, and reliability."
+                            )
+                            
+                            # LLM 결과 파싱
+                            import json
+                            review_text = review_result.content or ""
+                            try:
+                                # JSON 추출
+                                json_match = re.search(r'\[.*\]', review_text, re.DOTALL)
+                                if json_match:
+                                    review_data = json.loads(json_match.group())
+                                    
+                                    # 검토 결과를 결과에 추가
+                                    for review_item in review_data:
+                                        idx = review_item.get('index', 0) - 1
+                                        if 0 <= idx < len(results):
+                                            results[idx]['review'] = {
+                                                'relevance_score': review_item.get('relevance_score', 5),
+                                                'recency': review_item.get('recency', '보통'),
+                                                'reliability': review_item.get('reliability', '보통'),
+                                                'recommend': review_item.get('recommend', '보통'),
+                                                'reason': review_item.get('reason', '')
+                                            }
+                                    
+                                    # 추천 결과만 필터링 (선택적)
+                                    recommended_results = [r for r in results if r.get('review', {}).get('recommend') == '추천']
+                                    if recommended_results:
+                                        logger.info(f"[{self.name}] ✅ Found {len(recommended_results)} highly recommended results")
+                                        # 추천 결과를 우선적으로 사용하되, 최소 5개는 유지
+                                        if len(recommended_results) >= 5:
+                                            results = recommended_results
+                                        else:
+                                            # 추천 결과 + 일반 결과 혼합
+                                            results = recommended_results + [r for r in results if r not in recommended_results][:5-len(recommended_results)]
+                                    
+                                    logger.info(f"[{self.name}] ✅ Reviewed {len(review_data)} search results")
+                            except Exception as e:
+                                logger.warning(f"[{self.name}] ⚠️ Failed to parse review result: {e}")
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] ⚠️ Failed to review search results: {e}")
                     else:
                         # 모든 결과가 필터링된 경우 상세한 에러 메시지
                         error_details = []
@@ -1364,19 +1554,35 @@ class VerifierAgent:
                     logger.debug(f"[{self.name}] ⏭️ Skipping result {i}: invalid snippet content (contains error message)")
                     continue
                 
+                # full_content 우선 사용, 없으면 snippet 사용
+                full_content = result.get('full_content', '')
+                verification_content = full_content[:2000] if full_content else (snippet[:800] if snippet else '내용 없음')
+                
+                # 날짜 정보 추가
+                published_date = result.get('published_date', '')
+                date_info = ""
+                if published_date:
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
+                        date_info = f"\n- 발행일: {date_obj.strftime('%Y-%m-%d')}"
+                    except:
+                        date_info = f"\n- 발행일: {published_date[:10]}"
+                
                 # LLM으로 검증
-                verification_prompt = f"""다음 검색 결과를 검증하세요:
+                verification_prompt = f"""다음 검색 결과를 검증하세요 (최신 정보 우선):
 
 제목: {title}
-내용: {snippet[:800] if snippet else '내용 없음'}
-URL: {url if url else 'URL 없음'}
+내용: {verification_content}
+URL: {url if url else 'URL 없음'}{date_info}
 
 원래 쿼리: {user_query}
 
-이 결과가 쿼리와 관련이 있고 신뢰할 수 있는지 검증하세요.
+이 결과가 쿼리와 관련이 있고 신뢰할 수 있으며 최신 정보인지 검증하세요.
 - 쿼리의 주제와 관련이 있고 신뢰할 수 있는 정보를 제공하면 "VERIFIED"로 응답
 - 쿼리와 전혀 무관하거나 신뢰할 수 없으면 "REJECTED"로 응답
 - 부분적으로 관련이 있거나 간접적으로 관련이 있어도 "VERIFIED"로 응답 가능
+- **최신 정보를 우선적으로 고려하세요** (날짜가 최근이면 더 높은 점수)
 
 ⚠️ 중요: 너무 엄격하게 판단하지 말고, 쿼리와 관련이 있다고 판단되면 "VERIFIED"로 응답하세요.
 
@@ -1399,14 +1605,20 @@ URL: {url if url else 'URL 없음'}
                     logger.info(f"[{self.name}] 📋 Verification result {i}: '{verification_text[:150]}' -> is_verified={is_verified}")
                     
                     if is_verified:
-                        verified.append({
+                        verified_result = {
                             "index": i,
                             "title": title,
                             "snippet": snippet,
                             "url": url,
                             "status": "verified",
                             "verification_note": verification_text[:200]
-                        })
+                        }
+                        # full_content와 published_date 포함
+                        if full_content:
+                            verified_result['full_content'] = full_content
+                        if published_date:
+                            verified_result['published_date'] = published_date
+                        verified.append(verified_result)
                         logger.info(f"[{self.name}] ✅ Result {i} verified: '{title[:50]}...' (reason: {verification_text[:80]})")
                     else:
                         rejected_reasons.append({
@@ -1701,13 +1913,49 @@ class GeneratorAgent:
         # 실제 결과가 있는 경우 LLM으로 보고서 생성
         logger.info(f"[{self.name}] Generating report with LLM from {len(verified_results)} verified results...")
         
-        # 검증된 결과를 텍스트로 변환
+        # 검증된 결과를 텍스트로 변환 (full_content 우선 사용)
         verified_text = ""
-        for result in verified_results:
+        for i, result in enumerate(verified_results, 1):
             if isinstance(result, dict):
-                verified_text += f"\n- {result.get('title', '')}: {result.get('snippet', '')[:200]}... (Source: {result.get('url', '')})\n"
+                title = result.get('title', '')
+                url = result.get('url', '')
+                
+                # full_content가 있으면 우선 사용, 없으면 snippet 사용
+                content = result.get('full_content', '')
+                if not content:
+                    content = result.get('snippet', '')
+                
+                # 날짜 정보 추가
+                published_date = result.get('published_date', '')
+                date_str = ""
+                if published_date:
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
+                        date_str = f" (발행일: {date_obj.strftime('%Y-%m-%d')})"
+                    except:
+                        date_str = f" (발행일: {published_date[:10]})"
+                
+                # 검토 정보 추가
+                review = result.get('review', {})
+                review_str = ""
+                if review:
+                    relevance = review.get('relevance_score', 'N/A')
+                    recency = review.get('recency', 'N/A')
+                    reliability = review.get('reliability', 'N/A')
+                    review_str = f" [관련성: {relevance}/10, 최신성: {recency}, 신뢰도: {reliability}]"
+                
+                verified_text += f"\n--- 출처 {i}: {title}{date_str}{review_str} ---\n"
+                verified_text += f"URL: {url}\n"
+                verified_text += f"내용:\n{content[:10000] if len(content) > 10000 else content}\n"  # 최대 10000자
             else:
-                verified_text += f"\n- {str(result)}\n"
+                verified_text += f"\n--- 출처 {i} ---\n{str(result)}\n"
+        
+        # 현재 시간 가져오기
+        from datetime import datetime
+        current_time = datetime.now()
+        current_date_str = current_time.strftime('%Y년 %m월 %d일')
+        current_datetime_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
         
         # LLM으로 사용자 요청에 맞는 형식으로 생성
         from src.core.llm_manager import execute_llm_task, TaskType
@@ -1715,11 +1963,18 @@ class GeneratorAgent:
         # 사용자 요청을 그대로 전달 - LLM이 형식을 결정하도록
         generation_prompt = f"""사용자 요청: {state['user_query']}
 
-검증된 연구 결과:
+검증된 연구 결과 (실제 웹 페이지 전체 내용 포함):
 {verified_text}
 
+⚠️ 중요 지침:
+1. **최신 정보 우선**: 날짜가 표시된 출처 중 가장 최신 정보를 우선적으로 사용하세요.
+2. **전체 내용 활용**: 각 출처의 전체 내용(full_content)을 참고하여 정확하고 상세한 정보를 제공하세요.
+3. **다양한 출처 종합**: 여러 출처의 정보를 종합하여 균형 잡힌 분석을 제공하세요.
+4. **현재 시간 기준**: 보고서 작성일은 {current_date_str} ({current_datetime_str})로 설정하세요.
+5. **최신 동향 반영**: 최신 뉴스나 동향이 있다면 반드시 포함하세요.
+
 사용자의 요청을 정확히 이해하고, 요청한 형식에 맞게 결과를 생성하세요.
-- 보고서를 요청했다면 보고서 형식으로
+- 보고서를 요청했다면 보고서 형식으로 (작성일: {current_date_str} 포함)
 - 코드를 요청했다면 실행 가능한 코드로
 - 문서를 요청했다면 문서 형식으로
 

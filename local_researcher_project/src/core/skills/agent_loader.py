@@ -43,21 +43,21 @@ class AgentLoader:
             raise FileNotFoundError(f"Agent config file not found: {yaml_file}")
 
         with open(yaml_file, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+                data = yaml.safe_load(f)
 
-        config = AgentConfig(
-            name=data['agent']['name'],
-            display_name=data['agent']['display_name'],
-            description=data['agent']['description'],
-            capabilities=data.get('capabilities', []),
-            instructions=data.get('instructions', ''),
-            prompts=data.get('prompts', {}),
-            configuration=data.get('configuration', {}),
-            tools=data.get('tools', {'required': [], 'optional': []})
-        )
+            config = AgentConfig(
+                name=data['agent']['name'],
+                display_name=data['agent']['display_name'],
+                description=data['agent']['description'],
+                capabilities=data.get('capabilities', []),
+                instructions=data.get('instructions', ''),
+                prompts=data.get('prompts', {}),
+                configuration=data.get('configuration', {}),
+                tools=data.get('tools', {'required': [], 'optional': []})
+            )
 
         self._configs[agent_name] = config
-        return config
+            return config
 
     def get_prompt(self, agent_name: str, prompt_name: str, **kwargs) -> str:
         """프롬프트 템플릿 렌더링"""

@@ -403,7 +403,7 @@ class AutonomousResearchSystem:
             # Initialize MCP client if enabled
             if self.config.mcp.enabled:
                 try:
-                    await self.mcp_hub.initialize_mcp()
+                await self.mcp_hub.initialize_mcp()
                 except asyncio.CancelledError:
                     # 초기화 중 취소된 경우 - 상위로 전파하여 종료
                     logger.warning("MCP initialization was cancelled")
@@ -1099,7 +1099,7 @@ Examples:
             logger.warning(f"Progress callback failed: {e}")
 
     progress_tracker.add_progress_callback(progress_callback)
-
+    
     # Initialize system
     system = AutonomousResearchSystem()
     
@@ -1123,8 +1123,8 @@ Examples:
 
             # 연구 실행
             await system.run_research(
-                args.request,
-                args.output,
+                args.request, 
+                args.output, 
                 streaming=args.streaming,
                 output_format=args.format
             )
@@ -1181,8 +1181,8 @@ Examples:
         logger.info("Operation cancelled by user (KeyboardInterrupt)")
         system._shutdown_requested = True
         try:
-            await system._graceful_shutdown()
-        except Exception as e:
+        await system._graceful_shutdown()
+    except Exception as e:
             logger.error(f"Error during shutdown: {e}")
         # sys.exit(0) 제거 - asyncio.run()이 자동으로 처리
     except asyncio.CancelledError:
@@ -1190,7 +1190,7 @@ Examples:
         logger.info("Operation cancelled")
         system._shutdown_requested = True
         try:
-            await system._graceful_shutdown()
+        await system._graceful_shutdown()
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
         # asyncio.CancelledError는 다시 raise하여 정상적인 취소 흐름 유지

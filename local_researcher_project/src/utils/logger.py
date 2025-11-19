@@ -424,11 +424,11 @@ def setup_default_logging(
 # Convenience function for quick logging setup
 def quick_logger(name: str, use_colors: bool = True) -> logging.Logger:
     """Quick setup for a logger with default settings.
-
+    
     Args:
         name: Logger name
         use_colors: Whether to use colors in console output
-
+        
     Returns:
         Logger instance
     """
