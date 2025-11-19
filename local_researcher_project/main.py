@@ -1110,6 +1110,10 @@ Examples:
 
             # 진행 상황 추적 시작
             await progress_tracker.start_tracking()
+            
+            # 초기화 단계 명시적으로 설정
+            from src.core.progress_tracker import WorkflowStage
+            progress_tracker.set_workflow_stage(WorkflowStage.INITIALIZING, {"message": "시스템 초기화 중..."})
 
             # 워크플로우 시작 알림
             await output_manager.output(

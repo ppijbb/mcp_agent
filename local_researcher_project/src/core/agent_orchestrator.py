@@ -2244,6 +2244,16 @@ class AgentOrchestrator:
         logger.info("=" * 80)
         logger.info("🔵 [WORKFLOW] → Planner Node")
         logger.info("=" * 80)
+        
+        # Progress tracker 업데이트
+        try:
+            from src.core.progress_tracker import get_progress_tracker, WorkflowStage
+            progress_tracker = get_progress_tracker()
+            if progress_tracker:
+                progress_tracker.set_workflow_stage(WorkflowStage.PLANNING, {"message": "연구 계획 수립 중..."})
+        except Exception as e:
+            logger.debug(f"Failed to update progress tracker: {e}")
+        
         result = await self.planner.execute(state)
         logger.info(f"🔵 [WORKFLOW] ✓ Planner completed: {result.get('current_agent')}")
         return result
@@ -2262,6 +2272,15 @@ class AgentOrchestrator:
         logger.info("=" * 80)
         logger.info("🟢 [WORKFLOW] → Parallel Executor Node")
         logger.info("=" * 80)
+        
+        # Progress tracker 업데이트
+        try:
+            from src.core.progress_tracker import get_progress_tracker, WorkflowStage
+            progress_tracker = get_progress_tracker()
+            if progress_tracker:
+                progress_tracker.set_workflow_stage(WorkflowStage.EXECUTING, {"message": "연구 실행 중..."})
+        except Exception as e:
+            logger.debug(f"Failed to update progress tracker: {e}")
         
         # 작업 목록 가져오기
         tasks = state.get('research_tasks', [])
@@ -2415,6 +2434,15 @@ class AgentOrchestrator:
         logger.info("=" * 80)
         logger.info("🟡 [WORKFLOW] → Parallel Verifier Node")
         logger.info("=" * 80)
+        
+        # Progress tracker 업데이트
+        try:
+            from src.core.progress_tracker import get_progress_tracker, WorkflowStage
+            progress_tracker = get_progress_tracker()
+            if progress_tracker:
+                progress_tracker.set_workflow_stage(WorkflowStage.VERIFYING, {"message": "결과 검증 중..."})
+        except Exception as e:
+            logger.debug(f"Failed to update progress tracker: {e}")
         
         # 연구 실패 확인
         if state.get('research_failed'):
@@ -2592,6 +2620,16 @@ class AgentOrchestrator:
         logger.info("=" * 80)
         logger.info("🟣 [WORKFLOW] → Generator Node")
         logger.info("=" * 80)
+        
+        # Progress tracker 업데이트
+        try:
+            from src.core.progress_tracker import get_progress_tracker, WorkflowStage
+            progress_tracker = get_progress_tracker()
+            if progress_tracker:
+                progress_tracker.set_workflow_stage(WorkflowStage.GENERATING, {"message": "보고서 생성 중..."})
+        except Exception as e:
+            logger.debug(f"Failed to update progress tracker: {e}")
+        
         result = await self.generator.execute(state)
         final_report = result.get('final_report') or ''
         report_length = len(final_report) if final_report else 0

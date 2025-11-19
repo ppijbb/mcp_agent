@@ -196,9 +196,6 @@ class ProgressTracker:
 
     def _calculate_overall_progress(self) -> float:
         """전체 진행률 계산."""
-        if not self.workflow_progress.agents:
-            return 0.0
-
         # 단계별 가중치
         stage_weights = {
             WorkflowStage.INITIALIZING: 0.05,
@@ -211,6 +208,17 @@ class ProgressTracker:
         }
 
         base_progress = stage_weights.get(self.workflow_progress.current_stage, 0.0)
+        
+        # 에이전트가 없어도 단계별 기본 진행률은 반환
+        if not self.workflow_progress.agents:
+            # 초기화 단계에서는 시간 기반으로 약간의 진행률 표시
+            if self.workflow_progress.current_stage == WorkflowStage.INITIALIZING:
+                if self.workflow_progress.start_time:
+                    elapsed = time.time() - self.workflow_progress.start_time
+                    # 초기화는 최대 5초로 가정하고, 그 동안 1-5% 진행률 표시
+                    init_progress = min(0.05, 0.01 + (elapsed / 5.0) * 0.04)
+                    return init_progress
+            return base_progress
 
         # 현재 단계 내 세부 진행률
         if self.workflow_progress.current_stage in [WorkflowStage.EXECUTING, WorkflowStage.VERIFYING]:
@@ -225,6 +233,24 @@ class ProgressTracker:
                 stage_weight = stage_weights[self.workflow_progress.current_stage]
                 additional_progress = stage_progress * stage_weight
                 base_progress += additional_progress
+        elif self.workflow_progress.current_stage == WorkflowStage.PLANNING:
+            # Planning 단계에서는 에이전트 진행률 반영
+            planning_agents = [
+                agent for agent in self.workflow_progress.agents.values()
+                if 'planner' in agent.agent_type.lower()
+            ]
+            if planning_agents:
+                stage_progress = sum(agent.progress for agent in planning_agents) / len(planning_agents)
+                base_progress += stage_progress * 0.15
+        elif self.workflow_progress.current_stage == WorkflowStage.GENERATING:
+            # Generating 단계에서는 에이전트 진행률 반영
+            generating_agents = [
+                agent for agent in self.workflow_progress.agents.values()
+                if 'generator' in agent.agent_type.lower()
+            ]
+            if generating_agents:
+                stage_progress = sum(agent.progress for agent in generating_agents) / len(generating_agents)
+                base_progress += stage_progress * 0.10
 
         return min(base_progress, 1.0)
 
