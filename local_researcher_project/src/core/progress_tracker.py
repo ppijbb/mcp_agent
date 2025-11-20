@@ -114,7 +114,7 @@ class ProgressTracker:
         """초기화."""
         self.session_id = session_id
         self.enable_real_time_updates = enable_real_time_updates
-        self.update_interval = update_interval
+        self.update_interval = max(0.5, update_interval)  # 최소 0.5초 간격으로 제한
 
         # 진행 상황 데이터
         self.workflow_progress = WorkflowProgress(session_id=session_id)

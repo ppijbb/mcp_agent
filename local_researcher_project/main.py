@@ -403,7 +403,7 @@ class AutonomousResearchSystem:
             # Initialize MCP client if enabled
             if self.config.mcp.enabled:
                 try:
-                await self.mcp_hub.initialize_mcp()
+                    await self.mcp_hub.initialize_mcp()
                 except asyncio.CancelledError:
                     # 초기화 중 취소된 경우 - 상위로 전파하여 종료
                     logger.warning("MCP initialization was cancelled")
@@ -1073,27 +1073,35 @@ Examples:
     set_progress_tracker(progress_tracker)
 
     # 진행 상황 추적기 콜백 설정 (출력 매니저와 연동)
+    last_stage = [None]  # 클로저를 위한 리스트 (nonlocal 대신)
+    last_progress = [0]
+    
     async def progress_callback(workflow_progress):
         """진행 상황 업데이트 시 출력 매니저에 표시."""
         try:
             progress_pct = int(workflow_progress.overall_progress * 100)
             stage_name = workflow_progress.current_stage.value
 
-            eta_str = ""
-            if workflow_progress.estimated_completion:
-                eta_seconds = max(0, int(workflow_progress.estimated_completion - time.time()))
-                eta_str = f" (예상 {eta_seconds}초 남음)"
+            # 단계가 변경되었을 때만 start_progress 호출
+            if last_stage[0] != stage_name:
+                last_stage[0] = stage_name
+                eta_str = ""
+                if workflow_progress.estimated_completion:
+                    eta_seconds = max(0, int(workflow_progress.estimated_completion - time.time()))
+                    eta_str = f" (예상 {eta_seconds}초 남음)"
 
-            message = f"📊 진행률: {progress_pct}% - {stage_name.upper()}{eta_str}"
-
-            # 진행률 바 스타일로 표시
-            await output_manager.start_progress(
-                stage_name,
-                100,
-                f"{progress_pct}% 완료",
-                workflow_progress.estimated_completion
-            )
-            await output_manager.update_progress(progress_pct)
+                # 진행률 바 스타일로 표시 (단계 변경 시에만)
+                await output_manager.start_progress(
+                    stage_name,
+                    100,
+                    f"{progress_pct}% 완료",
+                    workflow_progress.estimated_completion
+                )
+            
+            # 진행률이 실제로 변경되었을 때만 업데이트 (1% 이상 차이)
+            if abs(progress_pct - last_progress[0]) >= 1 or progress_pct == 100:
+                last_progress[0] = progress_pct
+                await output_manager.update_progress(progress_pct)
 
         except Exception as e:
             logger.warning(f"Progress callback failed: {e}")
@@ -1185,8 +1193,8 @@ Examples:
         logger.info("Operation cancelled by user (KeyboardInterrupt)")
         system._shutdown_requested = True
         try:
-        await system._graceful_shutdown()
-    except Exception as e:
+            await system._graceful_shutdown()
+        except Exception as e:
             logger.error(f"Error during shutdown: {e}")
         # sys.exit(0) 제거 - asyncio.run()이 자동으로 처리
     except asyncio.CancelledError:
@@ -1194,7 +1202,7 @@ Examples:
         logger.info("Operation cancelled")
         system._shutdown_requested = True
         try:
-        await system._graceful_shutdown()
+            await system._graceful_shutdown()
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
         # asyncio.CancelledError는 다시 raise하여 정상적인 취소 흐름 유지

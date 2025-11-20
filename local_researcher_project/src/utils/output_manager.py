@@ -378,7 +378,7 @@ class UserCenteredOutputManager:
 
         # 예상 시간
         eta = ""
-        if progress.estimated_time_remaining:
+        if progress.estimated_time_remaining and progress.estimated_time_remaining > 0:
             eta = f" (예상 {progress.estimated_time_remaining:.0f}초 남음)"
 
         message = f"📊 {progress.stage}: [{bar}] {percentage:.1f}% ({progress.current}/{progress.total}){eta}"
@@ -386,11 +386,16 @@ class UserCenteredOutputManager:
         if progress.message:
             message += f" - {progress.message}"
 
-        # 이전 라인 지우고 새로 쓰기
+        # 이전 라인 지우고 새로 쓰기 (같은 줄에 업데이트)
         if self.stream_output:
-            print(f"\r{message}", end="", flush=True)
+            # ANSI escape code로 줄 끝까지 지우기
+            import sys
+            sys.stdout.write(f"\r\033[K{message}")
+            sys.stdout.flush()
+            
             if progress.current >= progress.total:
-                print()  # 줄바꿈
+                sys.stdout.write("\n")  # 완료 시에만 줄바꿈
+                sys.stdout.flush()
 
     async def output_workflow_summary(self):
         """워크플로우 요약 출력."""
