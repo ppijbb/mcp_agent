@@ -21,6 +21,22 @@ class AgentState(TypedDict):
     date: str
     risk_profile: str  # e.g., "conservative", "moderate", "aggressive"
     target_tickers: List[str]
+    user_id: Optional[str]  # 사용자 ID (재무 분석용)
+    
+    # 재무 분석 단계 결과
+    financial_analysis: Optional[Dict[str, Any]]  # 소비 패턴, 예산, 저축 목표, 건강 점수
+    budget_status: Optional[Dict[str, Any]]  # 예산 상태
+    savings_progress: Optional[Dict[str, Any]]  # 저축 목표 진행률
+    
+    # 세금 최적화 단계 결과
+    tax_optimization: Optional[Dict[str, Any]]  # 공제 항목, 세금 최적화 전략
+    
+    # 부채 관리 단계 결과
+    debt_management: Optional[Dict[str, Any]]  # 대출 상환 전략, 이자 최소화 계획
+    
+    # 재무 목표 달성 단계 결과
+    financial_goals: Optional[List[Dict[str, Any]]]  # 장기 재무 목표 목록
+    goal_progress: Optional[Dict[str, Any]]  # 목표별 진행률
     
     # 데이터 수집 단계 결과 (기본값을 빈 dict로 변경)
     technical_analysis: dict
@@ -34,6 +50,11 @@ class AgentState(TypedDict):
     # 실행 및 감사 단계 결과
     trade_results: Optional[List[Dict[str, any]]]
     daily_pnl: Optional[float]
+    
+    # 구조적 상업성 요소
+    commission_rate: Optional[float]  # 거래 수수료율
+    total_commission: Optional[float]  # 총 수수료
+    affiliate_commission: Optional[float]  # 제휴 수수료
     
     # 에러 및 메타 정보
     error_message: Optional[str]

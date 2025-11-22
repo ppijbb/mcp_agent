@@ -4,16 +4,37 @@ Financial Agent Configuration Management
 """
 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from enum import Enum
+
+
+class ModelProvider(Enum):
+    """LLM Provider Enum"""
+    GROQ = "groq"
+    OPENROUTER = "openrouter"
+    GEMINI = "gemini"
+    OPENAI = "openai"
+    CLAUDE = "claude"
 
 
 @dataclass
 class LLMConfig:
-    """LLM 관련 설정"""
+    """LLM 관련 설정 (기존 Gemini 전용)"""
     api_key: str
     model: str
     temperature: float
+
+
+@dataclass
+class MultiModelLLMConfig:
+    """Multi-Model LLM 관련 설정"""
+    preferred_provider: Optional[ModelProvider]
+    groq_api_key: Optional[str]
+    openrouter_api_key: Optional[str]
+    google_api_key: Optional[str]
+    openai_api_key: Optional[str]
+    anthropic_api_key: Optional[str]
 
 
 @dataclass
@@ -21,6 +42,15 @@ class MCPConfig:
     """MCP 서버 관련 설정"""
     timeout: int
     data_period: str
+
+
+@dataclass
+class TradingConfig:
+    """거래 관련 설정"""
+    default_shares: int
+    max_trade_amount: float
+    commission_rate: float
+    affiliate_commission_rate: float
 
 
 @dataclass
@@ -33,8 +63,10 @@ class WorkflowConfig:
 @dataclass
 class FinancialAgentConfig:
     """전체 설정 통합"""
-    llm: LLMConfig
+    llm: LLMConfig  # 기존 Gemini 전용 (하위 호환성)
+    multi_model_llm: MultiModelLLMConfig  # Multi-Model LLM 설정
     mcp: MCPConfig
+    trading: TradingConfig
     workflow: WorkflowConfig
 
 
@@ -79,13 +111,44 @@ def _validate_risk_profiles(profiles: List[str]) -> None:
         raise ValueError(f"유효하지 않은 리스크 프로필: {invalid_profiles}. 유효한 값: {valid_values}")
 
 
+def _get_optional_env(key: str, var_type: type = str) -> Optional[Any]:
+    """선택적 환경 변수를 가져오고 타입 변환"""
+    value = os.getenv(key)
+    if value is None:
+        return None
+    
+    try:
+        if var_type == str:
+            return value
+        elif var_type == int:
+            return int(value)
+        elif var_type == float:
+            return float(value)
+        else:
+            return var_type(value)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"환경 변수 {key}의 값 '{value}'을 {var_type.__name__}로 변환할 수 없습니다: {e}")
+
+
+def _validate_shares(shares: int) -> None:
+    """거래 수량 값 검증"""
+    if shares <= 0:
+        raise ValueError(f"DEFAULT_SHARES는 양수여야 합니다. 현재 값: {shares}")
+
+
+def _validate_commission_rate(rate: float) -> None:
+    """수수료율 값 검증"""
+    if not 0.0 <= rate <= 1.0:
+        raise ValueError(f"COMMISSION_RATE는 0.0-1.0 범위여야 합니다. 현재 값: {rate}")
+
+
 def load_config() -> FinancialAgentConfig:
     """
     환경 변수에서 모든 설정을 로드합니다.
     모든 환경 변수는 필수이며, 누락 시 ValueError 발생
     """
     try:
-        # LLM 설정
+        # LLM 설정 (기존 Gemini 전용 - 하위 호환성)
         llm_config = LLMConfig(
             api_key=_get_required_env("GEMINI_API_KEY", str),
             model=_get_required_env("GEMINI_MODEL", str),
@@ -93,12 +156,41 @@ def load_config() -> FinancialAgentConfig:
         )
         _validate_temperature(llm_config.temperature)
         
+        # Multi-Model LLM 설정
+        preferred_provider_str = _get_optional_env("PREFERRED_LLM_PROVIDER", str)
+        preferred_provider = None
+        if preferred_provider_str:
+            try:
+                preferred_provider = ModelProvider(preferred_provider_str.lower())
+            except ValueError:
+                raise ValueError(f"유효하지 않은 PREFERRED_LLM_PROVIDER: {preferred_provider_str}")
+        
+        multi_model_llm_config = MultiModelLLMConfig(
+            preferred_provider=preferred_provider,
+            groq_api_key=_get_optional_env("GROQ_API_KEY", str),
+            openrouter_api_key=_get_optional_env("OPENROUTER_API_KEY", str),
+            google_api_key=_get_optional_env("GOOGLE_API_KEY", str),
+            openai_api_key=_get_optional_env("OPENAI_API_KEY", str),
+            anthropic_api_key=_get_optional_env("ANTHROPIC_API_KEY", str),
+        )
+        
         # MCP 설정
         mcp_config = MCPConfig(
             timeout=_get_required_env("MCP_TIMEOUT", int),
             data_period=_get_required_env("MCP_DATA_PERIOD", str)
         )
         _validate_timeout(mcp_config.timeout)
+        
+        # 거래 설정
+        trading_config = TradingConfig(
+            default_shares=_get_required_env("DEFAULT_SHARES", int),
+            max_trade_amount=_get_required_env("MAX_TRADE_AMOUNT", float),
+            commission_rate=_get_required_env("COMMISSION_RATE", float),
+            affiliate_commission_rate=_get_required_env("AFFILIATE_COMMISSION_RATE", float),
+        )
+        _validate_shares(trading_config.default_shares)
+        _validate_commission_rate(trading_config.commission_rate)
+        _validate_commission_rate(trading_config.affiliate_commission_rate)
         
         # 워크플로우 설정
         workflow_config = WorkflowConfig(
@@ -109,7 +201,9 @@ def load_config() -> FinancialAgentConfig:
         
         return FinancialAgentConfig(
             llm=llm_config,
+            multi_model_llm=multi_model_llm_config,
             mcp=mcp_config,
+            trading=trading_config,
             workflow=workflow_config
         )
         
@@ -149,3 +243,13 @@ def get_mcp_config() -> MCPConfig:
 def get_workflow_config() -> WorkflowConfig:
     """워크플로우 설정 반환"""
     return get_config().workflow
+
+
+def get_multi_model_llm_config() -> MultiModelLLMConfig:
+    """Multi-Model LLM 설정 반환"""
+    return get_config().multi_model_llm
+
+
+def get_trading_config() -> TradingConfig:
+    """거래 설정 반환"""
+    return get_config().trading

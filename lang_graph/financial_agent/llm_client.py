@@ -1,26 +1,32 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from .config import get_llm_config
+from langchain_core.language_models import BaseChatModel
+from .config import get_multi_model_llm_config
+from .llm.model_manager import ModelManager, ModelProvider
 
 # LLM 클라이언트 인스턴스 - 초기화 시 생성됨
-llm: ChatGoogleGenerativeAI = None
+llm: BaseChatModel = None
+model_manager: ModelManager = None  # 전역 ModelManager 인스턴스
 
 
 def initialize_llm_client() -> None:
     """LLM 클라이언트 초기화 - 설정 로드 후 호출"""
-    global llm
+    global llm, model_manager
     
     try:
-        config = get_llm_config()
+        multi_model_config = get_multi_model_llm_config()
         
-        # LangChain을 통해 Gemini 모델 초기화
-        llm = ChatGoogleGenerativeAI(
-            model=config.model,
-            google_api_key=config.api_key,
-            temperature=config.temperature,
-            convert_system_message_to_human=True
-        )
-        print(f"✅ Gemini LLM 클라이언트가 성공적으로 초기화되었습니다. (모델: {config.model})")
+        # ModelManager 초기화
+        model_manager = ModelManager()
+        
+        # 선호하는 Provider가 있으면 해당 Provider 사용, 없으면 우선순위에 따라 자동 선택
+        preferred_provider = multi_model_config.preferred_provider
+        llm = model_manager.get_llm(preferred_provider)
+        
+        if llm is None:
+            raise RuntimeError("사용 가능한 LLM 모델을 찾을 수 없습니다. API 키를 확인하세요.")
+        
+        provider_name = preferred_provider.value if preferred_provider else "auto"
+        print(f"✅ LLM 클라이언트가 성공적으로 초기화되었습니다. (Provider: {provider_name})")
         
     except Exception as e:
         error_msg = f"LLM 클라이언트 초기화 실패: {e}"
@@ -29,7 +35,7 @@ def initialize_llm_client() -> None:
 
 def call_llm(prompt: str) -> str:
     """
-    지정된 프롬프트로 Gemini LLM을 호출하고 응답을 문자열로 반환합니다.
+    지정된 프롬프트로 LLM을 호출하고 응답을 문자열로 반환합니다.
     초기화되지 않은 경우 RuntimeError 발생 (NO FALLBACK)
     """
     if llm is None:

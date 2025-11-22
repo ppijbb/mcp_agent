@@ -1,6 +1,7 @@
 from typing import Dict
 from ..state import AgentState
 from ..mcp_client import call_technical_indicators_tool
+from ..config import get_trading_config
 
 def trader_node(state: AgentState) -> Dict:
     """
@@ -43,15 +44,29 @@ def trader_node(state: AgentState) -> Dict:
         state["log"].append(error_message)
         raise ValueError(error_message)
     
+    # 거래 설정 가져오기
+    trading_config = get_trading_config()
+    default_shares = trading_config.default_shares
+    max_trade_amount = trading_config.max_trade_amount
+    
     # 매수 거래 실행
     for ticker in plan.get("buy", []):
         if ticker in current_prices and "price" in current_prices[ticker]:
             price = current_prices[ticker]["price"]
             if price is not None:
-                shares = 10  # 고정 수량
+                # 최대 거래 금액을 고려하여 수량 계산
+                shares = min(default_shares, int(max_trade_amount / price)) if price > 0 else default_shares
+                trade_amount = price * shares
+                
+                if trade_amount > max_trade_amount:
+                    error_message = f"{ticker} 거래 금액이 최대 거래 금액을 초과합니다. (${trade_amount:.2f} > ${max_trade_amount:.2f})"
+                    print(error_message)
+                    state["log"].append(error_message)
+                    continue
+                
                 trade_results.append({"ticker": ticker, "action": "buy", "price": price, "shares": shares})
-                total_pnl -= price * shares
-                print(f"BUY: {ticker} at ${price:.2f} (수량: {shares})")
+                total_pnl -= trade_amount
+                print(f"BUY: {ticker} at ${price:.2f} (수량: {shares}, 금액: ${trade_amount:.2f})")
             else:
                 error_message = f"{ticker}의 가격 데이터를 가져올 수 없습니다."
                 print(error_message)
@@ -66,10 +81,19 @@ def trader_node(state: AgentState) -> Dict:
         if ticker in current_prices and "price" in current_prices[ticker]:
             price = current_prices[ticker]["price"]
             if price is not None:
-                shares = 10  # 고정 수량
+                # 최대 거래 금액을 고려하여 수량 계산
+                shares = min(default_shares, int(max_trade_amount / price)) if price > 0 else default_shares
+                trade_amount = price * shares
+                
+                if trade_amount > max_trade_amount:
+                    error_message = f"{ticker} 거래 금액이 최대 거래 금액을 초과합니다. (${trade_amount:.2f} > ${max_trade_amount:.2f})"
+                    print(error_message)
+                    state["log"].append(error_message)
+                    continue
+                
                 trade_results.append({"ticker": ticker, "action": "sell", "price": price, "shares": shares})
-                total_pnl += price * shares
-                print(f"SELL: {ticker} at ${price:.2f} (수량: {shares})")
+                total_pnl += trade_amount
+                print(f"SELL: {ticker} at ${price:.2f} (수량: {shares}, 금액: ${trade_amount:.2f})")
             else:
                 error_message = f"{ticker}의 가격 데이터를 가져올 수 없습니다."
                 print(error_message)

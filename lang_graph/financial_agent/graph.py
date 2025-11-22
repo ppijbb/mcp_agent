@@ -12,6 +12,11 @@ from .agents import (
     portfolio_manager_node,
     trader_node,
     auditor_node,
+    financial_analyzer_node,
+    tax_optimizer_node,
+    debt_manager_node,
+    goal_tracker_node,
+    commission_calculator_node,
 )
 
 class FinancialAgentWorkflow:
@@ -30,11 +35,17 @@ class FinancialAgentWorkflow:
     def _build_graph(self):
         """
         에이전트 워크플로우를 정의하고 그래프를 빌드합니다.
-        데이터 동기화 노드를 추가하여 병렬 실행 동기화를 보장합니다.
+        재무 분석 → 세금 최적화 → 부채 관리 → 재무 목표 추적 → 투자 워크플로우 → 수수료 계산 → 감사
         """
         workflow = StateGraph(AgentState)
 
-        # 1. 노드 추가
+        # 1. 노드 추가 (재무 관리 단계)
+        workflow.add_node("financial_analyzer", financial_analyzer_node)
+        workflow.add_node("tax_optimizer", tax_optimizer_node)
+        workflow.add_node("debt_manager", debt_manager_node)
+        workflow.add_node("goal_tracker", goal_tracker_node)
+        
+        # 기존 투자 워크플로우 노드
         workflow.add_node("market_data_collector", market_data_collector_node)
         workflow.add_node("news_collector", news_collector_node)
         workflow.add_node("sync_data", sync_node)
@@ -42,12 +53,22 @@ class FinancialAgentWorkflow:
         workflow.add_node("chief_strategist", chief_strategist_node)
         workflow.add_node("portfolio_manager", portfolio_manager_node)
         workflow.add_node("trader", trader_node)
+        
+        # 수수료 계산 및 감사 노드
+        workflow.add_node("commission_calculator", commission_calculator_node)
         workflow.add_node("auditor", auditor_node)
 
         # 2. 엣지 연결
-        workflow.add_edge(START, "market_data_collector")
-        workflow.add_edge(START, "news_collector")
-
+        # 재무 관리 단계
+        workflow.add_edge(START, "financial_analyzer")
+        workflow.add_edge("financial_analyzer", "tax_optimizer")
+        workflow.add_edge("tax_optimizer", "debt_manager")
+        workflow.add_edge("debt_manager", "goal_tracker")
+        
+        # 투자 워크플로우 단계
+        workflow.add_edge("goal_tracker", "market_data_collector")
+        workflow.add_edge("goal_tracker", "news_collector")
+        
         # 데이터 수집 노드 -> 동기화 노드
         workflow.add_edge("market_data_collector", "sync_data")
         workflow.add_edge("news_collector", "sync_data")
@@ -59,8 +80,9 @@ class FinancialAgentWorkflow:
         workflow.add_edge("chief_strategist", "portfolio_manager")
         workflow.add_edge("portfolio_manager", "trader")
         
-        # Trader -> Auditor -> END
-        workflow.add_edge("trader", "auditor")
+        # 수수료 계산 및 감사
+        workflow.add_edge("trader", "commission_calculator")
+        workflow.add_edge("commission_calculator", "auditor")
         workflow.add_edge("auditor", END)
 
         # 3. 그래프 컴파일
@@ -107,7 +129,17 @@ if __name__ == "__main__":
         "date": datetime.now().strftime("%Y-%m-%d"),
         "risk_profile": risk_profile,
         "target_tickers": target_tickers,
+        "user_id": "default_user",  # 재무 분석용 사용자 ID
         "log": [],
+        # 재무 관리 단계 필드
+        "financial_analysis": None,
+        "budget_status": None,
+        "savings_progress": None,
+        "tax_optimization": None,
+        "debt_management": None,
+        "financial_goals": None,
+        "goal_progress": None,
+        # 투자 워크플로우 필드
         "technical_analysis": {},
         "news_data": {},
         "sentiment_analysis": None,
@@ -115,6 +147,11 @@ if __name__ == "__main__":
         "investment_plan": None,
         "trade_results": None,
         "daily_pnl": None,
+        # 구조적 상업성 필드
+        "commission_rate": None,
+        "total_commission": None,
+        "affiliate_commission": None,
+        # 에러 필드
         "error_message": None,
     }
 

@@ -9,4 +9,11 @@ from .sync_node import sync_node
 from .chief_strategist import chief_strategist_node
 from .portfolio_manager import portfolio_manager_node
 from .trader import trader_node
-from .auditor import auditor_node 
+from .auditor import auditor_node
+
+# 새로운 재무 관리 에이전트들
+from .financial_analyzer import financial_analyzer_node
+from .tax_optimizer import tax_optimizer_node
+from .debt_manager import debt_manager_node
+from .goal_tracker import goal_tracker_node
+from .commission_calculator import commission_calculator_node 
