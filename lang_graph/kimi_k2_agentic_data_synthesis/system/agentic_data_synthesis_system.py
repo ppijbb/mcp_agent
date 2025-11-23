@@ -79,11 +79,13 @@ class AgenticDataSynthesisSystem:
         self.environment_manager = EnvironmentManager()
         self.user_agent_manager = UserAgentManager()
         # Pass dependencies to simulation_engine
+        # Note: data_collector will be set by AgenticTrainerSystem if training is enabled
         self.simulation_engine = SimulationEngine(
             domain_manager=self.domain_manager,
             tool_registry=self.tool_registry,
             agent_factory=self.agent_factory,
-            llm_config=self.llm_config # Pass llm_config to simulation engine as well
+            llm_config=self.llm_config, # Pass llm_config to simulation engine as well
+            data_collector=None  # Will be set by trainer system
         )
         self.llm_judge = LLMJudgeSystem()
         self.quality_filter = QualityFilter()

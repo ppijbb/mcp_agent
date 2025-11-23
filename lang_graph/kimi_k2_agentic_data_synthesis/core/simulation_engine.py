@@ -33,11 +33,12 @@ class SimulationEngine:
     - Logging and monitoring simulation progress
     """
     
-    def __init__(self, domain_manager: Any = None, tool_registry: Any = None, agent_factory: Any = None, llm_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, domain_manager: Any = None, tool_registry: Any = None, agent_factory: Any = None, llm_config: Optional[Dict[str, Any]] = None, data_collector: Optional[Any] = None):
         self.domain_manager = domain_manager
         self.tool_registry = tool_registry
         self.agent_factory = agent_factory
         self.llm_config = llm_config
+        self.data_collector = data_collector  # Optional data collector for training
         
         # LangGraph workflow setup
         self.workflow = StateGraph(SimulationState)
@@ -224,6 +225,23 @@ class SimulationEngine:
             agent_thought = response_dict.get("thought", "No thought recorded.")
             ai_response = response_dict.get("action", "No action recorded.")
 
+            # Collect planning step if thought contains planning information
+            if self.data_collector and agent_thought:
+                try:
+                    sim_id = state["simulation_id"]
+                    # Check if thought contains planning keywords
+                    planning_keywords = ["plan", "strategy", "approach", "step", "goal"]
+                    if any(keyword in agent_thought.lower() for keyword in planning_keywords):
+                        self.data_collector.collect_planning_step(
+                            simulation_id=sim_id,
+                            plan_description=agent_thought,
+                            reasoning=agent_thought,
+                            confidence=0.7,  # Default confidence
+                            metadata={"agent_id": acting_agent.name}
+                        )
+                except Exception as e:
+                    logger.warning(f"Error collecting planning data: {e}")
+
             # Attach tool call if decided by the agent
             tool_block = None
             tool_call = response_dict.get("tool_call")
@@ -374,6 +392,24 @@ class SimulationEngine:
             result = {"tool_name": tool_name, "output": simulated_output, "status": result_status}
             tool_results.append(result)
             logger.info(f"Node: simulate_tool_usage for {sim_id}. Tool '{tool_name}' executed with status: {result_status}.")
+            
+            # Collect tool call data for training
+            if self.data_collector:
+                try:
+                    # Get agent ID from current agents
+                    agent_id = state.get("current_agents", ["unknown"])[0] if state.get("current_agents") else "unknown"
+                    self.data_collector.collect_tool_call(
+                        simulation_id=sim_id,
+                        tool_name=tool_name,
+                        tool_parameters=parameters,
+                        tool_result={"output": simulated_output} if result_status == "success" else None,
+                        success=(result_status == "success"),
+                        error_message=simulated_output if result_status == "failed" else None,
+                        execution_time=0.0,  # Could track actual execution time
+                        metadata={"step_number": current_step_number}
+                    )
+                except Exception as e:
+                    logger.warning(f"Error collecting tool call data: {e}")
 
             # Add tool output back to messages for the agent to see
             messages.append(HumanMessage(content=f"Tool {tool_name} output: {simulated_output}").model_dump())
@@ -528,6 +564,30 @@ class SimulationEngine:
         # self.data_generator.generate_data(simulation_session, ...)
 
         state["status"] = simulation_session.status.value
+        
+        # Collect result synthesis and complete episode for training
+        if self.data_collector:
+            try:
+                agent_id = state.get("current_agents", ["unknown"])[0] if state.get("current_agents") else "unknown"
+                # Collect result synthesis
+                final_summary = state.get("final_outcome", {}).get("summary", f"Simulation {sim_id} completed")
+                self.data_collector.collect_result_synthesis(
+                    simulation_id=sim_id,
+                    synthesized_result=final_summary,
+                    source_tool_results=state.get("tool_results", []),
+                    completeness=0.8,
+                    accuracy=0.8,
+                    metadata=state.get("final_outcome", {})
+                )
+                # Complete episode
+                self.data_collector.complete_episode(
+                    simulation_id=sim_id,
+                    final_outcome=state.get("final_outcome", {}),
+                    episode_duration=simulation_session.duration
+                )
+            except Exception as e:
+                logger.warning(f"Error completing episode data collection: {e}")
+        
         logger.info(f"Simulation {sim_id} finalized.")
         return state
 
