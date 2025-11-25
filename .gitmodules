@@ -31,3 +31,6 @@
 [submodule "open_researcher/llm-council"]
 	path = open_researcher/llm-council
 	url = https://github.com/karpathy/llm-council.git
+[submodule "open_researcher/skyvern"]
+	path = open_researcher/skyvern
+	url = https://github.com/Skyvern-AI/skyvern.git

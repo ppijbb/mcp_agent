@@ -246,6 +246,65 @@ Provide a review with:
                 logger.warning(f"🔬 Council review failed: {e}. Using original evaluation results.")
                 # Council 실패 시 원본 평가 결과 사용 (fallback 제거 - 명확한 로깅만)
         
+        # Executor 결과에 대한 논박 (Debate) 수행
+        evaluation_debates = []
+        # context에서 shared_results_manager와 discussion_manager 가져오기 시도
+        shared_results_manager = None
+        discussion_manager = None
+        agent_id = 'evaluator'
+        
+        if context:
+            # 직접 전달된 경우
+            if hasattr(context, 'shared_results_manager'):
+                shared_results_manager = context.shared_results_manager
+            elif isinstance(context, dict):
+                shared_results_manager = context.get('shared_results_manager')
+            
+            if hasattr(context, 'discussion_manager'):
+                discussion_manager = context.discussion_manager
+            elif isinstance(context, dict):
+                discussion_manager = context.get('discussion_manager')
+            
+            if isinstance(context, dict):
+                agent_id = context.get('agent_id', 'evaluator')
+        
+        # 논박 수행 (manager가 있는 경우)
+        if shared_results_manager and discussion_manager:
+            try:
+                # Executor 결과 가져오기
+                executor_results = await shared_results_manager.get_shared_results(
+                    task_id=None  # 모든 Executor 결과
+                )
+                
+                # Executor 결과 필터링
+                executor_shared_results = [r for r in executor_results if r.agent_id.startswith('executor')]
+                
+                if executor_shared_results:
+                    logger.info(f"🔬 💬 Found {len(executor_shared_results)} executor results to debate")
+                    
+                    # 각 Executor 결과에 대해 논박 수행
+                    for executor_result in executor_shared_results[:5]:  # 최대 5개 결과에 대해 논박
+                        # 다른 Evaluator들의 평가 결과도 가져오기
+                        other_evaluators = await shared_results_manager.get_shared_results(
+                            agent_id=None,
+                            exclude_agent_id=agent_id
+                        )
+                        other_evaluator_results = [r for r in other_evaluators if r.agent_id.startswith('evaluator')]
+                        
+                        # 논박 수행
+                        debate_result = await discussion_manager.agent_discuss_result(
+                            result_id=executor_result.task_id,
+                            agent_id=agent_id,
+                            other_agent_results=other_evaluator_results[:3] + [executor_result],
+                            discussion_type="evaluation"
+                        )
+                        
+                        if debate_result:
+                            evaluation_debates.append(debate_result)
+                            logger.info(f"🔬 💬 Debate completed: consistency={debate_result.get('consistency_check', 'unknown')}, validity={debate_result.get('logical_validity', 'unknown')}")
+            except Exception as e:
+                logger.warning(f"🔬 Debate failed: {e}. Continuing without debate.")
+        
         evaluation_result = {
             'verification_results': verification_results,
                 'individual_evaluations': individual_evaluations,
@@ -268,7 +327,8 @@ Provide a review with:
                 'models_used': list(set(eval.get('model_used', 'unknown') for eval in individual_evaluations)),
                 'compression_ratio': compressed_evaluation.get('compression_ratio', 1.0),
                 'overall_confidence': overall_quality.get('overall_score', 0.8)
-            }
+            },
+            'evaluation_debates': evaluation_debates  # 논박 결과 추가
         }
         
         logger.info(f"✅ Evaluation completed with 8 core innovations: {recursion_decision.get('needs_recursion', False)}")

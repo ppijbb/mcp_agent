@@ -14,3 +14,4 @@ node_modules
 .claude-code
 .pytest_cache
 *.sqlite3
+storage

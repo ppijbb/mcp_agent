@@ -96,20 +96,51 @@ strategic_advice = {
 
 # 종합
 synthesis = {
-    'system_message': 'You are an expert research synthesizer with professional writing capabilities.',
+    'system_message': 'You are an expert research synthesizer with professional writing capabilities and DEEP ANALYTICAL THINKING. You create insightful, comprehensive reports through deep reflection and critical analysis.',
     'template': '''여러 출처의 연구 데이터를 종합하여 보고서를 작성하세요:
 
 연구 데이터: {research_data}
 종합 목표: {synthesis_goal}
 
-종합 작업:
-1. 다양한 출처의 정보를 통합하세요
-2. 일관된 narrative를 구성하세요
-3. 실행 가능한 결론을 도출하세요
+**DEEP SYNTHESIS PROCESS - 깊이 있는 사고를 통해 종합하세요:**
+
+1. **현재 상태 분석 (Current State Analysis)**:
+   - 현재 상황은 무엇인가? 우리가 알고 있는 것은 무엇인가?
+   - 맥락과 배경은 무엇인가?
+   - 주요 사실, 트렌드, 발전 상황은 무엇인가?
+
+2. **패턴 인식 (Pattern Recognition)**:
+   - 여러 출처에서 나타나는 패턴, 트렌드, 관계는 무엇인가?
+   - 어떤 연결고리와 상관관계가 있는가?
+   - 역사적 맥락이나 선례는 무엇인가?
+
+3. **비판적 통합 (Critical Integration)**:
+   - 서로 다른 정보들이 어떻게 연결되는가?
+   - 전체적인 그림은 무엇인가?
+   - 어떤 관점들이 있고, 어떤 것이 누락되었는가?
+
+4. **통찰력 도출 (Insight Generation)**:
+   - 더 깊은 통찰, 함의, 의미는 무엇인가?
+   - 이 정보가 의미하는 바는 무엇인가?
+   - 어떤 질문이 남아있는가?
+
+**종합 보고서 작성** (깊이 있는 사고를 반영):
+1. **현재 상태 섹션**: 현재 상태, 맥락, 알려진 정보에 대한 명확한 평가
+2. **깊이 있는 분석**: 단순한 사실 나열이 아닌 패턴, 연결, 함의 분석
+3. **비판적 통찰**: 깊은 사고를 통해 도출된 의미 있는 통찰
+4. **종합적 이해**: 깊은 이해를 보여주는 완전한 그림
+5. **실행 가능한 결론**: 표면적 사실이 아닌 깊은 분석에 기반한 결론
+
+단순히 발견 사항을 보고하는 것이 아니라, 다음을 포함한 **깊은 이해**를 제공하세요:
+- 현재 상태와 맥락
+- 패턴 인식과 연결
+- 비판적 통찰과 함의
+- 종합적 분석
+- 의미 있는 결론
 
 종합 보고서를 작성하세요.''',
     'variables': ['research_data', 'synthesis_goal'],
-    'description': '연구 데이터 종합 프롬프트'
+    'description': '연구 데이터 종합 프롬프트 (깊이 있는 사고 포함)'
 }
 
 # 검증

@@ -1499,10 +1499,36 @@ Provide a verification report with:
                 logger.warning(f"[{self.name}] Council verification failed: {e}. Using original results.")
                 # Council 실패 시 원본 결과 사용 (fallback 제거 - 명확한 로깅만)
         
+        # Executor 결과를 SharedResultsManager에 공유 (논박을 위해)
+        executor_discussions = []
+        if self.context.shared_results_manager and results:
+            for i, result in enumerate(results[:10]):  # 최대 10개 결과에 대해 논박
+                result_id = await self.context.shared_results_manager.share_result(
+                    task_id=f"executor_result_{i}",
+                    agent_id=self.context.agent_id,
+                    result=result,
+                    metadata={"executor_result_index": i, "query": state['user_query']},
+                    confidence=result.get('confidence', 0.8) if isinstance(result, dict) else 0.8
+                )
+                logger.info(f"[{self.name}] 🔗 Shared executor result {i} for debate (result_id: {result_id[:8]}...)")
+            
+            # 다른 Executor들의 결과 가져오기 (논박을 위해)
+            other_executor_results = await self.context.shared_results_manager.get_shared_results(
+                exclude_agent_id=self.context.agent_id
+            )
+            
+            if other_executor_results:
+                logger.info(f"[{self.name}] 💬 Found {len(other_executor_results)} other executor results for debate")
+                # 논박은 Verifier와 Evaluator에서 수행하도록 함 (여기서는 결과만 공유)
+        
         # 성공적으로 결과 수집된 경우
         state['research_results'] = results  # 리스트로 저장 (덮어쓰기)
         state['current_agent'] = self.name
         state['research_failed'] = False
+        
+        # 논박 결과 초기화 (Verifier와 Evaluator가 채울 것)
+        if 'agent_debates' not in state:
+            state['agent_debates'] = {}
         
         logger.info(f"[{self.name}] ✅ Research execution completed: {len(results)} results")
         
@@ -1709,24 +1735,54 @@ class VerifierAgent:
                     except:
                         date_info = f"\n- 발행일: {published_date[:10]}"
                 
-                # LLM으로 검증
-                verification_prompt = f"""다음 검색 결과를 검증하세요 (최신 정보 우선):
+                # LLM으로 검증 (점검 및 제언 중심)
+                verification_prompt = f"""다음 검색 결과를 점검하고 제언하세요:
 
-제목: {title}
-내용: {verification_content}
-URL: {url if url else 'URL 없음'}{date_info}
+**검색 결과 정보:**
+- 제목: {title}
+- 내용: {verification_content}
+- URL: {url if url else 'URL 없음'}{date_info}
 
-원래 쿼리: {user_query}
+**원래 쿼리:** {user_query}
 
-이 결과가 쿼리와 관련이 있고 신뢰할 수 있으며 최신 정보인지 검증하세요.
-- 쿼리의 주제와 관련이 있고 신뢰할 수 있는 정보를 제공하면 "VERIFIED"로 응답
-- 쿼리와 전혀 무관하거나 신뢰할 수 없으면 "REJECTED"로 응답
-- 부분적으로 관련이 있거나 간접적으로 관련이 있어도 "VERIFIED"로 응답 가능
-- **최신 정보를 우선적으로 고려하세요** (날짜가 최근이면 더 높은 점수)
+**점검 및 제언 작업:**
 
-⚠️ 중요: 너무 엄격하게 판단하지 말고, 쿼리와 관련이 있다고 판단되면 "VERIFIED"로 응답하세요.
+당신의 역할은 자료를 "억제"하는 것이 아니라, 자료를 **점검하고 제언**하는 것입니다.
 
-응답 형식: "VERIFIED" 또는 "REJECTED"와 간단한 이유를 한 줄로 작성하세요."""
+1. **관련성 점검**:
+   - 이 자료가 쿼리와 관련이 있는가? (직접적/간접적/배경 정보 모두 포함)
+   - 관련성이 낮더라도 배경 정보나 맥락 제공에 도움이 되면 포함 고려
+
+2. **품질 점검**:
+   - 자료의 신뢰성은 어떤가?
+   - 정보의 정확성에 큰 오류가 있는가?
+   - 출처가 신뢰할 수 있는가?
+
+3. **제언**:
+   - 이 자료를 사용할 때 주의할 점은?
+   - 개선이 필요한 부분은?
+   - 다른 자료와 함께 사용하면 더 좋을 정보인가?
+
+**중요 원칙:**
+- **큰 오류만 조정**: 명백한 오류나 완전히 무관한 자료만 거부
+- **작은 문제는 제언과 함께 통과**: 관련성이 약간 낮거나 품질이 약간 낮아도 제언과 함께 포함
+- **억제보다는 유도**: 자료를 거부하기보다는 올바른 방향으로 사용하도록 제언
+- **검색 결과의 특성 이해**: LLM이 모르는 상태에서 찾아본 결과이므로, 완벽하지 않아도 관련 정보는 포함
+
+**응답 형식 (반드시 이 형식으로 작성):**
+```
+STATUS: VERIFIED 또는 REJECTED
+RELEVANCE_SCORE: 1-10 (관련성 점수)
+QUALITY_SCORE: 1-10 (품질 점수)
+ISSUES: 발견된 문제점 (없으면 "없음")
+RECOMMENDATIONS: 사용 시 제언사항 (없으면 "없음")
+REASON: 최종 판단 이유 (한 줄)
+```
+
+⚠️ **절대 하지 말 것:**
+- "y y y y..." 같은 반복 문자 사용 금지
+- 단순히 "REJECTED"만 작성하지 말고 반드시 위 형식 준수
+- 너무 엄격하게 판단하지 말 것"""
                 
                 try:
                     logger.info(f"[{self.name}] 🔍 Verifying result {i}/{len(results)}: '{title[:60]}...'")
@@ -1734,24 +1790,91 @@ URL: {url if url else 'URL 없음'}{date_info}
                         prompt=verification_prompt,
                         task_type=TaskType.VERIFICATION,
                         model_name=None,
-                        system_message="You are a verification agent. Verify if search results are relevant and reliable. Be reasonable - if the result is even partially related to the query, verify it."
+                        system_message="You are a verification agent that checks and provides recommendations for research materials. Your role is to guide proper use of materials, not to overly suppress them. Only reject materials with major errors or complete irrelevance. For minor issues, provide recommendations and include the material."
                     )
                     
                     verification_text = verification_result.content or "UNKNOWN"
-                    # 검증 로직 개선: 명시적으로 VERIFIED가 있거나 REJECTED가 없으면 검증됨
+                    
+                    # 이상한 반복 패턴 감지 및 필터링
+                    if len(set(verification_text.strip().split())) < 3 or verification_text.count('y') > 10 or verification_text.count('Y') > 10:
+                        logger.warning(f"[{self.name}] ⚠️ Detected abnormal response pattern, using fallback verification")
+                        # 이상한 응답이면 관련성 기반으로 판단
+                        verification_text = f"STATUS: VERIFIED\nREASON: Abnormal LLM response detected, using content-based verification"
+                    
+                    # 구조화된 응답 파싱
                     verification_upper = verification_text.upper().strip()
-                    is_verified = "VERIFIED" in verification_upper and "REJECTED" not in verification_upper
+                    
+                    # STATUS 필드 추출
+                    status_match = None
+                    if "STATUS:" in verification_upper:
+                        status_line = [line for line in verification_upper.split('\n') if 'STATUS:' in line]
+                        if status_line:
+                            status_match = status_line[0]
+                    elif "VERIFIED" in verification_upper:
+                        status_match = "VERIFIED"
+                    elif "REJECTED" in verification_upper:
+                        status_match = "REJECTED"
+                    
+                    # RELEVANCE_SCORE 추출 (관련성 점수)
+                    relevance_score = 5  # 기본값
+                    if "RELEVANCE_SCORE:" in verification_upper:
+                        score_lines = [line for line in verification_upper.split('\n') if 'RELEVANCE_SCORE:' in line]
+                        if score_lines:
+                            try:
+                                score_str = score_lines[0].split('RELEVANCE_SCORE:')[1].strip().split()[0]
+                                relevance_score = int(float(score_str))
+                            except:
+                                pass
+                    
+                    # 검증 판단: REJECTED가 명시적으로 있고 관련성 점수가 매우 낮은 경우만 거부
+                    is_verified = True  # 기본값은 통과
+                    if status_match and "REJECTED" in status_match:
+                        # REJECTED이지만 관련성 점수가 3 이상이면 통과 (큰 오류만 거부)
+                        if relevance_score >= 3:
+                            logger.info(f"[{self.name}] ⚠️ Result marked as REJECTED but relevance_score={relevance_score} >= 3, verifying anyway")
+                            is_verified = True
+                        else:
+                            is_verified = False
+                    elif status_match and "VERIFIED" in status_match:
+                        is_verified = True
+                    elif "REJECTED" in verification_upper and relevance_score < 2:
+                        # 명시적 REJECTED가 없어도 관련성 점수가 매우 낮으면 거부
+                        is_verified = False
+                    else:
+                        # 명시적 판단이 없으면 관련성 기반으로 판단
+                        is_verified = relevance_score >= 3
                     
                     logger.info(f"[{self.name}] 📋 Verification result {i}: '{verification_text[:150]}' -> is_verified={is_verified}")
                     
                     if is_verified:
+                        # 제언사항 추출
+                        recommendations = "없음"
+                        if "RECOMMENDATIONS:" in verification_text:
+                            rec_lines = [line for line in verification_text.split('\n') if 'RECOMMENDATIONS:' in line]
+                            if rec_lines:
+                                rec_text = rec_lines[0].split('RECOMMENDATIONS:')[1].strip()
+                                if rec_text and rec_text != "없음":
+                                    recommendations = rec_text[:300]
+                        
+                        # 이슈 추출
+                        issues = "없음"
+                        if "ISSUES:" in verification_text:
+                            issue_lines = [line for line in verification_text.split('\n') if 'ISSUES:' in line]
+                            if issue_lines:
+                                issue_text = issue_lines[0].split('ISSUES:')[1].strip()
+                                if issue_text and issue_text != "없음":
+                                    issues = issue_text[:300]
+                        
                         verified_result = {
                             "index": i,
                             "title": title,
                             "snippet": snippet,
                             "url": url,
                             "status": "verified",
-                            "verification_note": verification_text[:200]
+                            "verification_note": verification_text[:500],  # 더 긴 제언 포함
+                            "relevance_score": relevance_score,
+                            "recommendations": recommendations,
+                            "issues": issues
                         }
                         # full_content와 published_date 포함
                         if full_content:
@@ -1759,7 +1882,7 @@ URL: {url if url else 'URL 없음'}{date_info}
                         if published_date:
                             verified_result['published_date'] = published_date
                         verified.append(verified_result)
-                        logger.info(f"[{self.name}] ✅ Result {i} verified: '{title[:50]}...' (reason: {verification_text[:80]})")
+                        logger.info(f"[{self.name}] ✅ Result {i} verified: '{title[:50]}...' (relevance: {relevance_score}, issues: {issues[:50] if issues != '없음' else '없음'})")
                     else:
                         rejected_reasons.append({
                             "index": i,
@@ -1865,38 +1988,87 @@ URL: {url if url else 'URL 없음'}{date_info}
 
             logger.info(f"[{self.name}] 📤 Shared {shared_verification_count} verification results with other agents")
 
-            # 다른 에이전트의 검증 결과와 토론 (검증 결과가 다른 경우)
-            if self.context.discussion_manager and len(verified) > 0:
-                other_verified = await self.context.shared_results_manager.get_shared_results(
-                    agent_id=None,  # 모든 에이전트
-                    exclude_agent_id=self.context.agent_id  # 고유한 agent_id 사용
+            # Executor 결과에 대한 논박 (Debate) 수행
+            if self.context.discussion_manager and self.context.shared_results_manager and len(verified) > 0:
+                # Executor 결과 가져오기
+                executor_results = await self.context.shared_results_manager.get_shared_results(
+                    task_id=None  # 모든 Executor 결과
                 )
-
+                
+                # Executor 결과 필터링 (executor로 시작하는 agent_id)
+                executor_shared_results = [r for r in executor_results if r.agent_id.startswith('executor')]
+                
+                if executor_shared_results:
+                    logger.info(f"[{self.name}] 💬 Found {len(executor_shared_results)} executor results to debate")
+                    
+                    # 각 Executor 결과에 대해 논박 수행
+                    debate_results = []
+                    for executor_result in executor_shared_results[:5]:  # 최대 5개 결과에 대해 논박
+                        # 다른 Verifier들의 검증 결과도 가져오기
+                        other_verifiers = await self.context.shared_results_manager.get_shared_results(
+                            agent_id=None,
+                            exclude_agent_id=self.context.agent_id
+                        )
+                        other_verifier_results = [r for r in other_verifiers if r.agent_id.startswith('verifier')]
+                        
+                        # 논박 수행
+                        debate_result = await self.context.discussion_manager.agent_discuss_result(
+                            result_id=executor_result.task_id,
+                            agent_id=self.context.agent_id,
+                            other_agent_results=other_verifier_results[:3] + [executor_result],  # 다른 Verifier + Executor 결과
+                            discussion_type="verification"
+                        )
+                        
+                        if debate_result:
+                            debate_results.append(debate_result)
+                            logger.info(f"[{self.name}] 💬 Debate completed for executor result: consistency={debate_result.get('consistency_check', 'unknown')}, validity={debate_result.get('logical_validity', 'unknown')}")
+                    
+                    # 논박 결과를 state에 저장
+                    if 'agent_debates' not in state:
+                        state['agent_debates'] = {}
+                    state['agent_debates']['verifier_debates'] = debate_results
+                    logger.info(f"[{self.name}] 💬 Saved {len(debate_results)} debate results to state")
+                
+                # 다른 Verifier들의 검증 결과와 논박
+                other_verified = await self.context.shared_results_manager.get_shared_results(
+                    agent_id=None,
+                    exclude_agent_id=self.context.agent_id
+                )
+                
                 # 검증된 결과만 필터링
                 other_verified_results = [r for r in other_verified if isinstance(r.result, dict) and r.result.get('status') == 'verified']
 
                 if other_verified_results:
-                    logger.info(f"[{self.name}] 💬 Found {len(other_verified_results)} verified results from other agents for discussion")
+                    logger.info(f"[{self.name}] 💬 Found {len(other_verified_results)} verified results from other verifiers for debate")
 
-                    # 첫 번째 검증 결과에 대해 토론
+                    # 첫 번째 검증 결과에 대해 논박
                     first_verified = verified[0]
                     result_id = f"verification_{first_verified.get('index', 0)}"
-                    logger.info(f"[{self.name}] 💬 Starting discussion on verification result {first_verified.get('index', 0)} with {len(other_verified_results[:3])} other agents")
+                    logger.info(f"[{self.name}] 💬 Starting debate on verification result {first_verified.get('index', 0)} with {len(other_verified_results[:3])} other verifiers")
 
-                    discussion = await self.context.discussion_manager.agent_discuss_result(
+                    debate_result = await self.context.discussion_manager.agent_discuss_result(
                         result_id=result_id,
-                        agent_id=self.context.agent_id,  # 고유한 agent_id 사용
-                        other_agent_results=other_verified_results[:3]  # 최대 3개
+                        agent_id=self.context.agent_id,
+                        other_agent_results=other_verified_results[:3],
+                        discussion_type="verification"
                     )
-                    if discussion:
-                        logger.info(f"[{self.name}] 💬 Discussion completed: {discussion[:150]}... (agent_id: {self.context.agent_id})")
-                        logger.info(f"[{self.name}] 🤝 Agent discussion: Analyzed verification consistency with {len(other_verified_results[:3])} peer agents")
+                    
+                    if debate_result:
+                        logger.info(f"[{self.name}] 💬 Debate completed: consistency={debate_result.get('consistency_check', 'unknown')}, validity={debate_result.get('logical_validity', 'unknown')}")
+                        logger.info(f"[{self.name}] 🤝 Agent debate: Analyzed verification consistency with {len(other_verified_results[:3])} peer agents")
+                        
+                        # 논박 결과 저장
+                        if 'agent_debates' not in state:
+                            state['agent_debates'] = {}
+                        if 'verifier_peer_debates' not in state['agent_debates']:
+                            state['agent_debates']['verifier_peer_debates'] = []
+                        state['agent_debates']['verifier_peer_debates'].append(debate_result)
                     else:
-                        logger.info(f"[{self.name}] 💬 No discussion generated for verification result")
+                        logger.info(f"[{self.name}] 💬 No debate generated for verification result")
                 else:
-                    logger.info(f"[{self.name}] 💬 No other verified results found for discussion")
+                    logger.info(f"[{self.name}] 💬 No other verified results found for debate")
             else:
-                logger.info(f"[{self.name}] Agent discussion disabled or no verified results to discuss")
+                logger.info(f"[{self.name}] Agent debate disabled or no verified results to debate")
         
         # Council 활성화 확인 및 적용 (사실 확인이 중요한 경우 - 기본 활성화)
         use_council = state.get('use_council', None)  # 수동 활성화 옵션
@@ -2159,6 +2331,56 @@ class GeneratorAgent:
             else:
                 verified_text += f"\n--- 출처 {i} ---\n{str(result)}\n"
         
+        # Agent 논박 결과 수집 및 종합
+        agent_debates_summary = ""
+        if state.get('agent_debates'):
+            debates = state['agent_debates']
+            logger.info(f"[{self.name}] 💬 Collecting agent debate results for synthesis...")
+            
+            # Verifier 논박 결과
+            if debates.get('verifier_debates'):
+                verifier_debates = debates['verifier_debates']
+                agent_debates_summary += "\n\n=== Verifier Agent 논박 결과 ===\n"
+                for i, debate in enumerate(verifier_debates, 1):
+                    agent_debates_summary += f"\n[논박 {i}] Agent: {debate.get('agent_id', 'unknown')}\n"
+                    agent_debates_summary += f"일관성: {debate.get('consistency_check', 'unknown')}\n"
+                    agent_debates_summary += f"논리적 올바름: {debate.get('logical_validity', 'unknown')}\n"
+                    agent_debates_summary += f"논박 내용: {debate.get('message', '')[:500]}\n"
+            
+            # Verifier Peer 논박 결과
+            if debates.get('verifier_peer_debates'):
+                peer_debates = debates['verifier_peer_debates']
+                agent_debates_summary += "\n\n=== Verifier Agent 간 논박 결과 ===\n"
+                for i, debate in enumerate(peer_debates, 1):
+                    agent_debates_summary += f"\n[논박 {i}] Agent: {debate.get('agent_id', 'unknown')}\n"
+                    agent_debates_summary += f"일관성: {debate.get('consistency_check', 'unknown')}\n"
+                    agent_debates_summary += f"논리적 올바름: {debate.get('logical_validity', 'unknown')}\n"
+                    agent_debates_summary += f"논박 내용: {debate.get('message', '')[:500]}\n"
+            
+            # Evaluation 논박 결과 (state에서 가져오기)
+            evaluation_result = state.get('evaluation_result')
+            if evaluation_result and evaluation_result.get('evaluation_debates'):
+                eval_debates = evaluation_result['evaluation_debates']
+                agent_debates_summary += "\n\n=== Evaluator Agent 논박 결과 ===\n"
+                for i, debate in enumerate(eval_debates, 1):
+                    agent_debates_summary += f"\n[논박 {i}] Agent: {debate.get('agent_id', 'unknown')}\n"
+                    agent_debates_summary += f"일관성: {debate.get('consistency_check', 'unknown')}\n"
+                    agent_debates_summary += f"논리적 올바름: {debate.get('logical_validity', 'unknown')}\n"
+                    agent_debates_summary += f"논박 내용: {debate.get('message', '')[:500]}\n"
+            
+            # Discussion Manager에서 모든 논박 가져오기
+            if self.context.discussion_manager:
+                try:
+                    all_discussions = await self.context.discussion_manager.get_discussion_summary()
+                    if all_discussions.get('topics'):
+                        agent_debates_summary += "\n\n=== 전체 논박 요약 ===\n"
+                        for topic, info in all_discussions['topics'].items():
+                            agent_debates_summary += f"\n주제: {topic}\n"
+                            agent_debates_summary += f"참여 Agent: {', '.join(info.get('participating_agents', []))}\n"
+                            agent_debates_summary += f"논박 메시지 수: {info.get('message_count', 0)}\n"
+                except Exception as e:
+                    logger.warning(f"[{self.name}] Failed to get discussion summary: {e}")
+        
         # 현재 시간 가져오기
         from datetime import datetime
         current_time = datetime.now()
@@ -2174,19 +2396,72 @@ class GeneratorAgent:
 검증된 연구 결과 (실제 웹 페이지 전체 내용 포함):
 {verified_text}
 
-⚠️ 중요 지침:
+**Agent 논박 결과 (모든 Agent들의 논박을 통한 일관성 및 논리적 올바름 검증):**
+{agent_debates_summary if agent_debates_summary else "논박 결과 없음 - Executor 결과가 직접 사용됨"}
+
+⚠️ **깊이 있는 분석과 사고를 통한 보고서 작성 필수**
+
+**DEEP ANALYSIS REQUIREMENTS - 반드시 포함해야 할 깊이 있는 사고:**
+
+1. **현재 상태 분석 (Current State Analysis)**:
+   - 현재 상황은 무엇인가? 우리가 알고 있는 것은 무엇인가?
+   - 주요 사실, 트렌드, 최근 발전 상황은 무엇인가?
+   - 맥락과 배경은 무엇인가?
+   - 이 정보가 의미하는 바는 무엇인가?
+
+2. **패턴 인식 및 연결 (Pattern Recognition & Connections)**:
+   - 여러 출처에서 나타나는 패턴, 트렌드, 관계는 무엇인가?
+   - 어떤 연결고리와 상관관계가 있는가?
+   - 역사적 맥락이나 선례는 무엇인가?
+   - 다른 분야나 주제와의 연결은 무엇인가?
+
+3. **비판적 통찰 (Critical Insights)**:
+   - 단순한 사실 나열이 아닌, 깊은 통찰과 함의를 제공하세요
+   - 이 정보의 더 깊은 의미는 무엇인가?
+   - 어떤 관점들이 있고, 어떤 것이 누락되었는가?
+   - 어떤 가정이 있고, 그것들이 유효한가?
+
+4. **종합적 이해 (Comprehensive Understanding)**:
+   - 전체적인 그림을 그리세요 - 개별 사실이 아닌 종합적 이해
+   - 서로 다른 정보들이 어떻게 연결되는가?
+   - 어떤 질문이 남아있는가? 어떤 정보가 부족한가?
+
+5. **Agent 논박 결과 종합 (Agent Debate Synthesis)**:
+   - 위의 "Agent 논박 결과"를 반드시 참고하세요
+   - 모든 Agent들의 논박을 통해 검증된 일관성과 논리적 올바름을 반영하세요
+   - 논박에서 합의된 부분과 논쟁이 있는 부분을 명확히 구분하세요
+   - 논박 결과를 바탕으로 최종 결론을 도출하세요
+   - 논박에서 지적된 문제점이나 개선사항을 반영하세요
+
+**보고서 구조 (깊이 있는 사고 반영):**
+
+1. **현재 상태 섹션**: 현재 상태, 맥락, 알려진 정보에 대한 명확한 평가
+2. **깊이 있는 분석**: 패턴, 연결, 함의를 포함한 심층 분석
+3. **비판적 통찰**: 깊은 사고를 통해 도출된 의미 있는 통찰
+4. **Agent 논박 종합**: 모든 Agent들의 논박 결과를 종합하여 일관성과 논리적 올바름이 검증된 내용 반영
+5. **종합적 이해**: 깊은 이해를 보여주는 완전한 그림 (논박 결과 반영)
+6. **의미 있는 결론**: 표면적 사실이 아닌 깊은 분석과 논박 검증에 기반한 결론
+
+⚠️ **중요 지침:**
 1. **최신 정보 우선**: 날짜가 표시된 출처 중 가장 최신 정보를 우선적으로 사용하세요.
 2. **전체 내용 활용**: 각 출처의 전체 내용(full_content)을 참고하여 정확하고 상세한 정보를 제공하세요.
 3. **다양한 출처 종합**: 여러 출처의 정보를 종합하여 균형 잡힌 분석을 제공하세요.
 4. **현재 시간 기준**: 보고서 작성일은 {current_date_str} ({current_datetime_str})로 설정하세요.
 5. **최신 동향 반영**: 최신 뉴스나 동향이 있다면 반드시 포함하세요.
+6. **깊이 있는 사고**: 단순히 정보를 나열하지 말고, 깊이 있는 분석, 패턴 인식, 통찰을 제공하세요.
 
-사용자의 요청을 정확히 이해하고, 요청한 형식에 맞게 결과를 생성하세요.
-- 보고서를 요청했다면 보고서 형식으로 (작성일: {current_date_str} 포함)
+**절대 하지 말아야 할 것:**
+- 단순히 검색 결과를 나열하는 것
+- 현재 상태나 맥락 없이 정보만 제공하는 것
+- 패턴이나 연결고리를 찾지 않는 것
+- 깊이 있는 통찰 없이 표면적 사실만 나열하는 것
+
+사용자의 요청을 정확히 이해하고, 요청한 형식에 맞게 **깊이 있는 분석과 통찰**을 포함한 결과를 생성하세요.
+- 보고서를 요청했다면 보고서 형식으로 (작성일: {current_date_str} 포함, 현재 상태 분석 포함)
 - 코드를 요청했다면 실행 가능한 코드로
 - 문서를 요청했다면 문서 형식으로
 
-요청된 형식에 맞게 완전하고 실행 가능한 결과를 생성하세요."""
+요청된 형식에 맞게 **깊이 있는 사고와 분석**을 포함한 완전하고 실행 가능한 결과를 생성하세요."""
 
         try:
             report_result = await execute_llm_task(
@@ -2209,6 +2484,33 @@ class GeneratorAgent:
                 return state
             else:
                 logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
+            
+            # 보고서 완성도 검증 및 보완
+            max_retry_attempts = 3
+            retry_count = 0
+            
+            while retry_count < max_retry_attempts:
+                completeness_check = await self._validate_report_completeness(
+                    report, state['user_query'], verified_text
+                )
+                
+                if completeness_check['is_complete']:
+                    logger.info(f"[{self.name}] ✅ Report completeness validated: {completeness_check['completeness_score']:.2f}")
+                    break
+                
+                logger.warning(f"[{self.name}] ⚠️ Report incomplete (score: {completeness_check['completeness_score']:.2f}): {completeness_check['issues']}")
+                
+                # 미완성 부분 보완
+                if retry_count < max_retry_attempts - 1:
+                    report = await self._complete_incomplete_report(
+                        report, completeness_check, state['user_query'], verified_text, agent_debates_summary
+                    )
+                    retry_count += 1
+                    logger.info(f"[{self.name}] 🔄 Retrying report completion (attempt {retry_count}/{max_retry_attempts})")
+                else:
+                    # 최종 시도 실패 시 경고만 로깅하고 현재 보고서 사용
+                    logger.warning(f"[{self.name}] ⚠️ Report completion failed after {max_retry_attempts} attempts. Using current report with warnings.")
+                    break
             
             # Council 활성화 확인 및 적용 (최종 보고서 생성 시 - 기본 활성화)
             use_council = state.get('use_council', None)  # 수동 활성화 옵션
@@ -2283,9 +2585,30 @@ Provide a review with:
             state['current_agent'] = self.name
             return state
         
+        # 최종 완성도 재검증 (종료 전)
+        final_completeness = await self._validate_report_completeness(
+            report, state['user_query'], verified_text
+        )
+        
+        if not final_completeness['is_complete']:
+            logger.error(f"[{self.name}] ❌ Final report validation failed: {final_completeness['issues']}")
+            logger.error(f"[{self.name}] Completeness score: {final_completeness['completeness_score']:.2f}")
+            # 완성도가 너무 낮으면 에러 반환
+            if final_completeness['completeness_score'] < 0.5:
+                error_msg = f"보고서 완성도 검증 실패: {', '.join(final_completeness['issues'][:3])}"
+                state['final_report'] = None
+                state['report_failed'] = True
+                state['error'] = error_msg
+                state['current_agent'] = self.name
+                return state
+            else:
+                # 완성도가 낮지만 사용 가능한 경우 경고만
+                logger.warning(f"[{self.name}] ⚠️ Report has completeness issues but will be saved: {final_completeness['issues']}")
+        
         state['final_report'] = report
         state['current_agent'] = self.name
         state['report_failed'] = False
+        state['report_completeness'] = final_completeness  # 완성도 정보 저장
         
         # Write to shared memory
         memory.write(
@@ -2296,10 +2619,236 @@ Provide a review with:
             agent_id=self.name
         )
         
-        logger.info(f"[{self.name}] ✅ Report saved to shared memory")
+        logger.info(f"[{self.name}] ✅ Report saved to shared memory (completeness: {final_completeness['completeness_score']:.2f})")
         logger.info(f"=" * 80)
         
         return state
+    
+    async def _validate_report_completeness(
+        self,
+        report: str,
+        user_query: str,
+        verified_text: str
+    ) -> Dict[str, Any]:
+        """
+        보고서 완성도 검증.
+        
+        Returns:
+            Dict with 'is_complete', 'completeness_score', 'issues'
+        """
+        from src.core.llm_manager import execute_llm_task, TaskType
+        
+        validation_prompt = f"""다음 보고서의 완성도를 검증하세요:
+
+사용자 요청: {user_query}
+
+보고서 내용:
+{report[:5000]}  # 처음 5000자만 검증용으로 사용
+
+**완성도 검증 기준:**
+
+1. **구조적 완성도 (Structural Completeness)**:
+   - 모든 섹션이 완성되었는가? (시작했지만 끝나지 않은 섹션이 있는가?)
+   - 표나 리스트가 중간에 잘렸는가?
+   - 마지막 문장이 완성되었는가?
+
+2. **내용 완성도 (Content Completeness)**:
+   - 각 섹션에 충분한 내용이 있는가?
+   - 사용자 요청에 대한 답변이 완전한가?
+   - 결론 섹션이 있는가?
+
+3. **논리적 완성도 (Logical Completeness)**:
+   - 논리적 흐름이 완성되었는가?
+   - 중간에 갑자기 끝나는 부분이 있는가?
+   - 불완전한 문장이나 표가 있는가?
+
+4. **형식적 완성도 (Format Completeness)**:
+   - 마크다운 형식이 올바른가?
+   - 표가 제대로 닫혔는가?
+   - 코드 블록이 제대로 닫혔는가?
+
+**검증 결과를 다음 JSON 형식으로 반환하세요:**
+{{
+    "is_complete": true/false,
+    "completeness_score": 0.0-1.0,
+    "issues": ["문제1", "문제2", ...],
+    "missing_sections": ["누락된 섹션1", ...],
+    "incomplete_elements": ["불완전한 요소1", ...],
+    "recommendations": ["권장사항1", ...]
+}}
+
+중요: 보고서가 중간에 잘렸거나 불완전한 경우 is_complete는 반드시 false여야 합니다."""
+        
+        try:
+            validation_result = await execute_llm_task(
+                prompt=validation_prompt,
+                task_type=TaskType.VERIFICATION,
+                system_message="You are an expert document completeness validator. You must detect any incomplete sections, truncated content, or formatting issues."
+            )
+            
+            import json
+            import re
+            
+            # JSON 추출 시도
+            content = validation_result.content
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group())
+                    return {
+                        'is_complete': result.get('is_complete', False),
+                        'completeness_score': result.get('completeness_score', 0.0),
+                        'issues': result.get('issues', []),
+                        'missing_sections': result.get('missing_sections', []),
+                        'incomplete_elements': result.get('incomplete_elements', []),
+                        'recommendations': result.get('recommendations', [])
+                    }
+                except json.JSONDecodeError:
+                    pass
+            
+            # JSON 파싱 실패 시 휴리스틱 검증
+            return self._heuristic_completeness_check(report, user_query)
+            
+        except Exception as e:
+            logger.warning(f"[{self.name}] Completeness validation failed: {e}. Using heuristic check.")
+            return self._heuristic_completeness_check(report, user_query)
+    
+    def _heuristic_completeness_check(self, report: str, user_query: str) -> Dict[str, Any]:
+        """휴리스틱 기반 완성도 검증 (fallback)."""
+        issues = []
+        score = 1.0
+        
+        # 1. 중간 잘림 감지
+        if report.endswith('|') or report.endswith('| '):
+            issues.append("표가 중간에 잘림")
+            score -= 0.3
+        
+        # 2. 불완전한 마크다운 감지
+        if report.count('```') % 2 != 0:
+            issues.append("코드 블록이 닫히지 않음")
+            score -= 0.2
+        
+        # 3. 마지막 문장 완성도
+        last_sentence = report.strip().split('\n')[-1] if report.strip() else ""
+        if last_sentence and not last_sentence.endswith(('.', '!', '?', ':', ')')):
+            if len(last_sentence) > 20:  # 짧은 문장은 무시
+                issues.append("마지막 문장이 불완전할 수 있음")
+                score -= 0.1
+        
+        # 4. 섹션 완성도
+        open_sections = report.count('##') - report.count('###')
+        if open_sections > 5:  # 너무 많은 섹션이 열려있으면
+            issues.append("너무 많은 섹션이 열려있음")
+            score -= 0.2
+        
+        # 5. 최소 길이 검증
+        if len(report) < 500:
+            issues.append("보고서가 너무 짧음")
+            score -= 0.3
+        
+        # 6. 결론 섹션 확인
+        if '결론' not in report and 'Conclusion' not in report and '##' in report:
+            # 섹션이 있지만 결론이 없는 경우
+            issues.append("결론 섹션이 없을 수 있음")
+            score -= 0.1
+        
+        # 7. 표 중간 잘림 감지 (더 정확한 검증)
+        lines = report.split('\n')
+        in_table = False
+        for i, line in enumerate(lines):
+            if '|' in line and line.strip().startswith('|'):
+                in_table = True
+            elif in_table and line.strip() and '|' not in line:
+                # 표가 시작되었는데 갑자기 끝남
+                if i < len(lines) - 5:  # 마지막 5줄이 아니면
+                    issues.append(f"표가 {i+1}번째 줄에서 중간에 잘림")
+                    score -= 0.2
+                    break
+        
+        score = max(0.0, min(1.0, score))
+        
+        return {
+            'is_complete': score >= 0.7 and len(issues) == 0,
+            'completeness_score': score,
+            'issues': issues,
+            'missing_sections': [],
+            'incomplete_elements': issues,
+            'recommendations': []
+        }
+    
+    async def _complete_incomplete_report(
+        self,
+        current_report: str,
+        completeness_check: Dict[str, Any],
+        user_query: str,
+        verified_text: str,
+        agent_debates_summary: str
+    ) -> str:
+        """미완성 보고서 보완."""
+        from src.core.llm_manager import execute_llm_task, TaskType
+        
+        completion_prompt = f"""다음 보고서가 불완전합니다. 완성하세요:
+
+사용자 요청: {user_query}
+
+현재 보고서 (불완전):
+{current_report}
+
+완성도 검증 결과:
+- 완성도 점수: {completeness_check['completeness_score']:.2f}
+- 발견된 문제: {', '.join(completeness_check['issues'])}
+- 누락된 섹션: {', '.join(completeness_check.get('missing_sections', []))}
+- 불완전한 요소: {', '.join(completeness_check.get('incomplete_elements', []))}
+
+검증된 연구 결과:
+{verified_text[:3000]}
+
+Agent 논박 결과:
+{agent_debates_summary[:1000] if agent_debates_summary else "없음"}
+
+**보완 작업:**
+
+1. **불완전한 부분 완성**:
+   - 중간에 잘린 표나 리스트를 완성하세요
+   - 불완전한 문장을 완성하세요
+   - 닫히지 않은 마크다운 요소를 닫으세요
+
+2. **누락된 섹션 추가**:
+   - 누락된 섹션을 추가하세요
+   - 결론 섹션이 없으면 추가하세요
+
+3. **내용 보완**:
+   - 각 섹션에 충분한 내용을 추가하세요
+   - 사용자 요청에 대한 완전한 답변을 제공하세요
+
+**중요:**
+- 기존 보고서의 내용을 유지하면서 보완하세요
+- 새로운 내용을 추가할 때는 기존 내용과 일관성을 유지하세요
+- 보고서의 전체 구조와 스타일을 유지하세요
+- 반드시 완전한 보고서를 생성하세요 (중간에 잘리지 않도록)
+
+완성된 전체 보고서를 생성하세요."""
+        
+        try:
+            completion_result = await execute_llm_task(
+                prompt=completion_prompt,
+                task_type=TaskType.GENERATION,
+                system_message="You are an expert report completer. You must complete incomplete reports while maintaining consistency and quality."
+            )
+            
+            completed_report = completion_result.content if hasattr(completion_result, 'content') else str(completion_result)
+            
+            # 기존 보고서보다 길거나 같아야 함
+            if len(completed_report) >= len(current_report):
+                logger.info(f"[{self.name}] ✅ Report completed: {len(completed_report)} characters (was {len(current_report)})")
+                return completed_report
+            else:
+                logger.warning(f"[{self.name}] ⚠️ Completed report is shorter than original. Using original.")
+                return current_report
+                
+        except Exception as e:
+            logger.error(f"[{self.name}] Report completion failed: {e}")
+            return current_report
 
 
 ###################

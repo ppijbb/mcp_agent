@@ -211,16 +211,22 @@ class AgentDiscussionManager:
         self,
         result_id: str,
         agent_id: str,
-        other_agent_results: List[SharedResult]
-    ) -> str:
-        """Agent가 다른 agent의 결과에 대해 토론."""
+        other_agent_results: List[SharedResult],
+        discussion_type: str = "general"
+    ) -> Dict[str, Any]:
+        """
+        Agent가 다른 agent의 결과에 대해 논박 (debate).
+        
+        Returns:
+            Dict with 'message', 'consistency_check', 'logical_validity', 'consensus'
+        """
         if not self.agent_config.enable_agent_communication:
             logger.debug("Agent communication is disabled")
-            return ""
+            return {}
         
         if not other_agent_results:
             logger.debug("No other agent results to discuss")
-            return ""
+            return {}
         
         # 공유된 결과 가져오기
         shared_result = None
@@ -231,38 +237,169 @@ class AgentDiscussionManager:
         
         if not shared_result:
             logger.warning(f"Result {result_id} not found for discussion")
-            return ""
+            return {}
         
-        # LLM을 사용하여 토론 메시지 생성
-        discussion_prompt = f"""
-You are an AI research agent participating in a collaborative discussion about research results.
+        # 논박 타입에 따른 프롬프트 선택
+        if discussion_type == "verification":
+            system_message = "You are a verification agent that critically evaluates research results for accuracy, consistency, and logical validity."
+            discussion_prompt = f"""
+You are a verification agent participating in a critical debate about research results.
 
 Your agent ID: {agent_id}
-Your result: {json.dumps(shared_result.result, ensure_ascii=False, indent=2)[:500]}
+Result to verify: {json.dumps(shared_result.result, ensure_ascii=False, indent=2)[:1000]}
+Your confidence: {shared_result.confidence}
+
+Other agents' results and perspectives:
+{json.dumps([{"agent_id": r.agent_id, "result": r.result, "confidence": r.confidence} for r in other_agent_results[:5]], ensure_ascii=False, indent=2)[:2000]}
+
+**CRITICAL DEBATE REQUIREMENTS:**
+
+1. **Consistency Check (일관성 검증)**:
+   - Are the results consistent across different agents?
+   - Are there contradictions or conflicts?
+   - What are the points of agreement and disagreement?
+
+2. **Logical Validity (논리적 올바름 검증)**:
+   - Is the logic sound? Are there logical fallacies?
+   - Do the conclusions follow from the evidence?
+   - Are the arguments valid and well-reasoned?
+
+3. **Critical Analysis (비판적 분석)**:
+   - What are the strengths and weaknesses of each perspective?
+   - What assumptions underlie each result?
+   - What evidence supports or contradicts each view?
+
+4. **Consensus Building (합의 도출)**:
+   - Based on the debate, what is the consensus?
+   - What points are agreed upon?
+   - What points remain in dispute?
+
+Provide a structured response:
+1. Consistency assessment (consistent/inconsistent/partially_consistent)
+2. Logical validity assessment (valid/invalid/partially_valid)
+3. Critical analysis of each perspective
+4. Consensus summary
+5. Remaining disagreements (if any)
+
+Be thorough and critical - this is a debate, not just a comparison.
+"""
+        elif discussion_type == "evaluation":
+            system_message = "You are an evaluation agent that assesses research quality, completeness, and value through critical debate."
+            discussion_prompt = f"""
+You are an evaluation agent participating in a critical debate about research results quality.
+
+Your agent ID: {agent_id}
+Result to evaluate: {json.dumps(shared_result.result, ensure_ascii=False, indent=2)[:1000]}
+Your confidence: {shared_result.confidence}
+
+Other agents' evaluations:
+{json.dumps([{"agent_id": r.agent_id, "result": r.result, "confidence": r.confidence} for r in other_agent_results[:5]], ensure_ascii=False, indent=2)[:2000]}
+
+**CRITICAL EVALUATION DEBATE:**
+
+1. **Quality Assessment (품질 평가)**:
+   - How does the quality compare across different evaluations?
+   - Are there quality gaps or inconsistencies?
+   - What are the quality strengths and weaknesses?
+
+2. **Completeness Check (완전성 검증)**:
+   - Is the evaluation complete? What's missing?
+   - Are all important aspects covered?
+   - What additional perspectives are needed?
+
+3. **Value Assessment (가치 평가)**:
+   - What is the value of each evaluation?
+   - Which insights are most valuable?
+   - What recommendations are most actionable?
+
+4. **Consensus on Quality (품질 합의)**:
+   - What is the consensus on overall quality?
+   - What are the agreed-upon strengths?
+   - What are the agreed-upon weaknesses?
+
+Provide a structured response with quality assessment, completeness check, value assessment, and consensus.
+"""
+        else:
+            system_message = "You are a collaborative research agent that provides constructive feedback through critical debate."
+            discussion_prompt = f"""
+You are an AI research agent participating in a collaborative debate about research results.
+
+Your agent ID: {agent_id}
+Your result: {json.dumps(shared_result.result, ensure_ascii=False, indent=2)[:1000]}
 Your confidence: {shared_result.confidence}
 
 Other agents' results:
-{json.dumps([{"agent_id": r.agent_id, "result": r.result, "confidence": r.confidence} for r in other_agent_results[:3]], ensure_ascii=False, indent=2)[:1000]}
+{json.dumps([{"agent_id": r.agent_id, "result": r.result, "confidence": r.confidence} for r in other_agent_results[:5]], ensure_ascii=False, indent=2)[:2000]}
 
-Please provide:
-1. A brief analysis of how your result compares to other agents' results
-2. Any insights or observations you have
-3. Questions or suggestions for improvement
+**DEBATE REQUIREMENTS:**
 
-Keep your response concise and focused (2-3 sentences).
+1. **Critical Comparison (비판적 비교)**:
+   - How does your result compare to other agents' results?
+   - What are the key differences and similarities?
+   - What are the strengths and weaknesses of each perspective?
+
+2. **Consistency Analysis (일관성 분석)**:
+   - Are the results consistent? Where do they agree/disagree?
+   - What explains the differences?
+
+3. **Logical Validity (논리적 올바름)**:
+   - Are the arguments logically sound?
+   - Do conclusions follow from evidence?
+
+4. **Insights and Recommendations (통찰 및 권장사항)**:
+   - What insights emerge from the debate?
+   - What improvements or clarifications are needed?
+
+Provide a structured response with comparison, consistency analysis, logical validity check, and insights.
 """
         
         try:
             llm_result = await execute_llm_task(
                 prompt=discussion_prompt,
                 task_type=TaskType.ANALYSIS,
-                system_message="You are a collaborative research agent that provides constructive feedback."
+                system_message=system_message
             )
             
             discussion_message = llm_result.content if hasattr(llm_result, 'content') else str(llm_result)
             
+            # 논박 결과 파싱 (구조화된 응답 추출 시도)
+            discussion_result = {
+                'message': discussion_message,
+                'agent_id': agent_id,
+                'result_id': result_id,
+                'discussion_type': discussion_type,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # 일관성 및 논리적 올바름 추출 시도
+            consistency_keywords = ['consistent', 'inconsistent', 'contradiction', 'agreement', 'disagreement']
+            logical_keywords = ['logical', 'valid', 'invalid', 'fallacy', 'sound', 'reasoning']
+            
+            discussion_lower = discussion_message.lower()
+            consistency_check = 'unknown'
+            logical_validity = 'unknown'
+            
+            if any(kw in discussion_lower for kw in ['consistent', 'agreement', 'agree']):
+                if any(kw in discussion_lower for kw in ['inconsistent', 'contradiction', 'disagreement']):
+                    consistency_check = 'partially_consistent'
+                else:
+                    consistency_check = 'consistent'
+            elif any(kw in discussion_lower for kw in ['inconsistent', 'contradiction', 'disagreement']):
+                consistency_check = 'inconsistent'
+            
+            if any(kw in discussion_lower for kw in ['logical', 'valid', 'sound', 'reasoning']):
+                if any(kw in discussion_lower for kw in ['invalid', 'fallacy', 'illogical']):
+                    logical_validity = 'partially_valid'
+                else:
+                    logical_validity = 'valid'
+            elif any(kw in discussion_lower for kw in ['invalid', 'fallacy', 'illogical']):
+                logical_validity = 'invalid'
+            
+            discussion_result['consistency_check'] = consistency_check
+            discussion_result['logical_validity'] = logical_validity
+            
             # 토론에 메시지 추가
-            topic = f"result_discussion_{result_id}"
+            topic = f"result_debate_{result_id}_{discussion_type}"
             await self.add_message(
                 topic=topic,
                 agent_id=agent_id,
@@ -270,13 +407,28 @@ Keep your response concise and focused (2-3 sentences).
                 related_result_id=result_id
             )
             
-            logger.info(f"Agent {agent_id} discussed result {result_id}")
+            logger.info(f"Agent {agent_id} debated result {result_id} (type: {discussion_type}, consistency: {consistency_check}, validity: {logical_validity})")
             
-            return discussion_message
+            return discussion_result
             
         except Exception as e:
             logger.error(f"Failed to generate discussion message: {e}")
-            return ""
+            return {}
+    
+    async def get_all_discussions_for_result(self, result_id: str) -> List[Dict[str, Any]]:
+        """특정 결과에 대한 모든 논박 내용 조회."""
+        async with self._lock:
+            all_discussions = []
+            for topic, messages in self.discussions.items():
+                if result_id in topic:
+                    for msg in messages:
+                        all_discussions.append({
+                            'agent_id': msg.agent_id,
+                            'message': msg.message,
+                            'timestamp': msg.timestamp.isoformat(),
+                            'topic': topic
+                        })
+            return all_discussions
     
     async def get_discussion_summary(self, topic: Optional[str] = None) -> Dict[str, Any]:
         """토론 요약."""
