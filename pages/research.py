@@ -31,27 +31,26 @@ except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
 
-# Local Researcher Project 임포트 시도
+# SparkleForge Project 임포트 시도
 try:
-    # Local Researcher 프로젝트 경로 추가
-    local_researcher_path = Path(__file__).parent.parent / "local_researcher_project"
-    sys.path.insert(0, str(local_researcher_path))
+    # SparkleForge 프로젝트 경로 추가
+    sparkleforge_path = Path(__file__).parent.parent / "sparkleforge"
+    sys.path.insert(0, str(sparkleforge_path))
     
-    from local_researcher_project.src.core.autonomous_orchestrator import LangGraphOrchestrator
-    from local_researcher_project.src.agents.task_analyzer import TaskAnalyzerAgent
-    from local_researcher_project.src.agents.task_decomposer import TaskDecomposerAgent
-    from local_researcher_project.src.agents.research_agent import ResearchAgent
-    from local_researcher_project.src.agents.evaluation_agent import EvaluationAgent
-    from local_researcher_project.src.agents.validation_agent import ValidationAgent
-    from local_researcher_project.src.agents.synthesis_agent import SynthesisAgent
-    from local_researcher_project.src.core.mcp_integration import MCPIntegrationManager
-    from local_researcher_project.src.utils.config_manager import ConfigManager
+    from src.core.agent_orchestrator import AgentOrchestrator
+    from src.core.autonomous_orchestrator import AutonomousOrchestrator
+    from src.agents.research_agent import ResearchAgent
+    from src.agents.evaluation_agent import EvaluationAgent
+    from src.agents.validation_agent import ValidationAgent
+    from src.agents.synthesis_agent import SynthesisAgent
+    from src.core.mcp_integration import UniversalMCPHub
+    from src.core.researcher_config import load_config_from_env
     
-    LOCAL_RESEARCHER_AVAILABLE = True
+    SPARKLEFORGE_AVAILABLE = True
 except ImportError as e:
-    st.error(f"⚠️ Local Researcher를 불러올 수 없습니다: {e}")
-    st.info("Local Researcher 프로젝트를 확인하고 필요한 의존성을 설치해주세요.")
-    LOCAL_RESEARCHER_AVAILABLE = False
+    st.error(f"⚠️ SparkleForge를 불러올 수 없습니다: {e}")
+    st.info("SparkleForge 프로젝트를 확인하고 필요한 의존성을 설치해주세요.")
+    SPARKLEFORGE_AVAILABLE = False
 
 # 기존 Research Agent 임포트 (fallback)
 if not LOCAL_RESEARCHER_AVAILABLE:
@@ -74,17 +73,17 @@ def main():
     st.title("🔍 Research Agent - Local Researcher Integration")
     st.markdown("AI 기반 자율 연구 시스템")
     
-    # Local Researcher 사용 가능 여부 확인
-    if LOCAL_RESEARCHER_AVAILABLE:
-        st.success("✅ Local Researcher 프로젝트가 연결되었습니다!")
-        run_local_researcher_interface()
+    # SparkleForge 사용 가능 여부 확인
+    if SPARKLEFORGE_AVAILABLE:
+        st.success("✅ SparkleForge 프로젝트가 연결되었습니다!")
+        run_sparkleforge_interface()
     else:
-        st.warning("⚠️ Local Researcher를 사용할 수 없습니다. 기본 Research Agent를 사용합니다.")
+        st.warning("⚠️ SparkleForge를 사용할 수 없습니다. 기본 Research Agent를 사용합니다.")
         run_fallback_interface()
 
 
-def run_local_researcher_interface():
-    """Local Researcher 통합 인터페이스 실행"""
+def run_sparkleforge_interface():
+    """SparkleForge 통합 인터페이스 실행"""
     try:
         # 탭으로 기능 분리
         tab1, tab2, tab3 = st.tabs(["연구 실행", "데이터 시각화", "시스템 모니터"])
@@ -99,7 +98,7 @@ def run_local_researcher_interface():
             run_monitoring_interface()
     
     except Exception as e:
-        st.error(f"❌ Local Researcher 초기화 실패: {e}")
+        st.error(f"❌ SparkleForge 초기화 실패: {e}")
         st.info("기본 Research Agent로 전환합니다.")
         run_fallback_interface()
 
@@ -168,42 +167,31 @@ def run_research_interface():
         # 연구 실행
         with st.spinner("연구를 진행하는 중입니다..."):
             try:
-                # Local Researcher 컴포넌트 초기화
-                config_manager = ConfigManager()
-                mcp_manager = MCPIntegrationManager()
-                
-                agents = {
-                    'analyzer': TaskAnalyzerAgent(),
-                    'decomposer': TaskDecomposerAgent(),
-                    'researcher': ResearchAgent(),
-                    'evaluator': EvaluationAgent(),
-                    'validator': ValidationAgent(),
-                    'synthesizer': SynthesisAgent()
-                }
-                
-                orchestrator = LangGraphOrchestrator(
-                    config_path=None,
-                    agents=agents,
-                    mcp_manager=mcp_manager
-                )
+                # SparkleForge 컴포넌트 초기화
+                config = load_config_from_env()
+                orchestrator = AgentOrchestrator(config=config)
                 
                 # 비동기 함수 실행
                 import asyncio
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                objective_id = loop.run_until_complete(
-                    orchestrator.start_autonomous_research(research_query, context)
+                
+                # SparkleForge 실행
+                result = loop.run_until_complete(
+                    orchestrator.execute(research_query, context)
                 )
                 loop.close()
                 
+                objective_id = result.get('objective_id', f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
                 st.success(f"✅ 연구가 완료되었습니다! Objective ID: {objective_id}")
                 
                 # 결과를 세션 상태에 저장
                 st.session_state['last_research_id'] = objective_id
                 st.session_state['last_orchestrator'] = orchestrator
+                st.session_state['last_research_result'] = result
                 
                 # 결과 표시
-                display_local_researcher_results(objective_id, orchestrator)
+                display_sparkleforge_results(objective_id, result)
                 
             except Exception as e:
                 st.error(f"❌ 연구 실행 실패: {e}")
@@ -351,59 +339,49 @@ def run_fallback_interface():
                 st.error(f"❌ 연구 실행 실패: {e}")
 
 
-def display_local_researcher_results(objective_id: str, orchestrator: LangGraphOrchestrator):
-    """Local Researcher 결과 표시"""
+def display_sparkleforge_results(objective_id: str, result: dict):
+    """SparkleForge 결과 표시"""
     try:
-        # 연구 상태 가져오기
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        status = loop.run_until_complete(orchestrator.get_research_status(objective_id))
-        loop.close()
+        st.subheader("📊 연구 결과")
         
-        if status:
-            st.subheader("📊 연구 결과")
+        # 기본 정보
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("상태", result.get('status', 'completed'))
+        with col2:
+            st.metric("품질 점수", f"{result.get('quality_score', 0):.2f}")
+        with col3:
+            st.metric("소스 수", len(result.get('sources', [])))
+        
+        # 상세 결과
+        if result.get('final_report'):
+            st.subheader("📝 최종 보고서")
+            report = result['final_report']
             
-            # 기본 정보
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("상태", status.get('status', 'Unknown'))
-            with col2:
-                st.metric("목표 수", len(status.get('analyzed_objectives', [])))
-            with col3:
-                st.metric("작업 수", len(status.get('decomposed_tasks', [])))
-            
-            # 상세 결과
-            if status.get('final_synthesis'):
-                st.subheader("📝 최종 보고서")
-                synthesis = status['final_synthesis']
-                
-                if synthesis.get('summary'):
+            if isinstance(report, str):
+                st.write(report)
+            elif isinstance(report, dict):
+                if report.get('summary'):
                     st.write("**요약:**")
-                    st.write(synthesis['summary'])
+                    st.write(report['summary'])
                 
-                if synthesis.get('key_findings'):
+                if report.get('key_findings'):
                     st.write("**주요 발견사항:**")
-                    for finding in synthesis['key_findings']:
+                    for finding in report['key_findings']:
                         st.write(f"• {finding}")
                 
-                if synthesis.get('recommendations'):
+                if report.get('recommendations'):
                     st.write("**권장사항:**")
-                    for rec in synthesis['recommendations']:
+                    for rec in report['recommendations']:
                         st.write(f"• {rec}")
-            
-            # 보고서 다운로드
-            if status.get('final_synthesis', {}).get('deliverable_path'):
-                st.subheader("📄 보고서 다운로드")
-                report_path = status['final_synthesis']['deliverable_path']
-                if os.path.exists(report_path):
-                    with open(report_path, 'rb') as f:
-                        st.download_button(
-                            label="보고서 다운로드",
-                            data=f.read(),
-                            file_name=os.path.basename(report_path),
-                            mime="application/octet-stream"
-                        )
+        
+        # 소스 표시
+        sources = result.get('sources', [])
+        if sources:
+            st.subheader("📚 참고 소스")
+            with st.expander("소스 목록", expanded=False):
+                for i, source in enumerate(sources, 1):
+                    st.write(f"{i}. {source}")
         
     except Exception as e:
         st.error(f"결과 표시 실패: {e}")

@@ -169,6 +169,14 @@ def display_lifestyle_agents():
         if st.button("Urban Hive 도시 분석", key="urban_hive", use_container_width=True):
             st.switch_page("pages/urban_hive.py")
 
+    with st.container(border=True):
+        st.markdown("""
+            <h3>🛸 Drone Scout Agent</h3>
+            <p>자연어 임무를 입력하여 자율 드론 정찰</p>
+        """, unsafe_allow_html=True)
+        if st.button("Drone Scout 미션 실행", key="drone_scout", use_container_width=True):
+            st.switch_page("pages/drone_scout.py")
+
 def display_advanced_ai_agents():
     """고급 AI 에이전트 표시"""
     st.markdown("""
@@ -200,6 +208,14 @@ def display_advanced_ai_agents():
         """, unsafe_allow_html=True)
         if st.button("Workflow Orchestrator 실행", key="workflow", use_container_width=True):
             st.switch_page("pages/workflow.py")
+
+    with st.container(border=True):
+        st.markdown("""
+            <h3>🎲 Boardgame UI Generator</h3>
+            <p>LangGraph 기반 보드게임 UI 분석 및 생성</p>
+        """, unsafe_allow_html=True)
+        if st.button("Boardgame UI 생성", key="boardgame_ui", use_container_width=True):
+            st.switch_page("pages/boardgame_ui_generator.py")
 
 def display_basic_agents():
     """기본 에이전트 표시"""
