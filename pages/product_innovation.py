@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -61,23 +61,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"innovation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.product_innovation_accelerator_agent",
-                "--class-name", "ProductInnovationAcceleratorAgent",
-                "--method-name", "analyze_innovation",
-                "--config-json", json.dumps({
+            agent_metadata = {
+                "agent_id": "product_innovation_agent",
+                "agent_name": "Product Innovation Accelerator Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["product_innovation", "market_analysis", "technology_trend_analysis"],
+                "description": "제품 혁신 아이디어 생성 및 개발 가속화"
+            }
+
+            input_data = {
+                "module_path": "srcs.enterprise_agents.product_innovation_accelerator_agent",
+                "class_name": "ProductInnovationAcceleratorAgent",
+                "method_name": "analyze_innovation",
+                "config": {
                     "product_domain": product_domain,
                     "innovation_focus": innovation_focus
-                }, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+                },
+                "result_json_path": str(result_json_path)
+            }
 
-            result = run_agent_process(
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/innovation"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

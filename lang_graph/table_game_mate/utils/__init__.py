@@ -8,7 +8,10 @@ Utils 패키지 - 테이블게임 메이트 유틸리티
 """
 
 from .game_factory import GameFactory
+from .mcp_client import MCPClient, MCPClientError
 
 __all__ = [
     "GameFactory",
+    "MCPClient",
+    "MCPClientError",
 ] 

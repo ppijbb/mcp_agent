@@ -17,7 +17,7 @@ from srcs.advanced_agents.decision_agent import (
     InteractionType,
 )
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # Result Reader 임포트
 try:
@@ -108,19 +108,28 @@ def main():
             # Get the enum key from its value for the command line
             interaction_enum_key = InteractionType(interaction_type).name
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.advanced_agents.run_decision_agent",
-                "--user-id", user_id,
-                "--interaction-type", interaction_enum_key,
-                "--context-json", context_text,
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "decision_agent",
+                "agent_name": "Decision Agent",
+                "entry_point": "srcs.advanced_agents.run_decision_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["decision_making", "scenario_analysis", "risk_assessment"],
+                "description": "복잡한 상황을 분석하고 최적의 결정을 내리는 AI 에이전트"
+            }
 
-            result = run_agent_process(
-                placeholder=result_placeholder, 
-                command=command, 
-                process_key_prefix="logs/decision"
+            input_data = {
+                "user_id": user_id,
+                "interaction_type": interaction_enum_key,
+                "context_json": context_text,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

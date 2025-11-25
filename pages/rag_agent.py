@@ -16,7 +16,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 from srcs.basic_agents.rag_agent import get_qdrant_status
 
@@ -73,21 +73,27 @@ def main():
                     # 이전 대화 기록 (마지막 응답 제외)
                     history = [msg for msg in st.session_state.rag_messages if msg['role'] != 'assistant']
 
-                    py_executable = sys.executable
-                    command = [
-                        py_executable, "-m", "srcs.basic_agents.run_rag_agent",
-                        "--query", prompt,
-                        "--history", json.dumps(history),
-                        "--result-json-path", str(result_json_path)
-                    ]
-                    
-                    # run_agent_process는 자체적으로 spinner를 표시하지만, 
-                    # 여기서는 chat_message 컨텍스트 내에서 결과를 바로 표시하기 위해
-                    # placeholder를 사용합니다.
-                    result = run_agent_process(
-                        placeholder=st.empty(), # ui_utils의 spinner를 숨기기 위해 빈 컨테이너 전달
-                        command=command,
-                        process_key_prefix="logs/rag_agent"
+                    agent_metadata = {
+                        "agent_id": "rag_agent",
+                        "agent_name": "RAG Agent",
+                        "entry_point": "srcs.basic_agents.run_rag_agent",
+                        "agent_type": "mcp_agent",
+                        "capabilities": ["document_qa", "information_retrieval", "context_aware_answering"],
+                        "description": "문서 기반 질의응답 및 정보 추출"
+                    }
+
+                    input_data = {
+                        "query": prompt,
+                        "history": history,
+                        "result_json_path": str(result_json_path)
+                    }
+
+                    result = run_agent_via_a2a(
+                        placeholder=st.empty(),
+                        agent_metadata=agent_metadata,
+                        input_data=input_data,
+                        result_json_path=result_json_path,
+                        use_a2a=True
                     )
             
             response_text = "죄송합니다, 답변을 생성하는 데 실패했습니다."

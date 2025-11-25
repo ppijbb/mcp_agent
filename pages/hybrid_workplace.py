@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -56,23 +56,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"workplace_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.hybrid_workplace_optimizer_agent",
-                "--class-name", "HybridWorkplaceOptimizerAgent",
-                "--method-name", "analyze_workplace",
-                "--config-json", json.dumps({
+            agent_metadata = {
+                "agent_id": "hybrid_workplace_agent",
+                "agent_name": "Hybrid Workplace Optimizer Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["workplace_optimization", "space_utilization", "productivity_analysis"],
+                "description": "하이브리드 근무 환경 최적화 및 생산성 향상"
+            }
+
+            input_data = {
+                "module_path": "srcs.enterprise_agents.hybrid_workplace_optimizer_agent",
+                "class_name": "HybridWorkplaceOptimizerAgent",
+                "method_name": "analyze_workplace",
+                "config": {
                     "company_name": company_name,
                     "analysis_focus": analysis_focus
-                }, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+                },
+                "result_json_path": str(result_json_path)
+            }
 
-            result = run_agent_process(
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/workplace"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

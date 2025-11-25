@@ -16,7 +16,7 @@ import base64
 from pathlib import Path
 from datetime import datetime, timedelta
 import streamlit_process_manager as spm
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # --- 1. 프로젝트 경로 설정 ---
 project_root = Path(__file__).parent.parent
@@ -118,40 +118,50 @@ if task_to_run:
     run_output_dir.mkdir(parents=True, exist_ok=True)
     result_txt_path = run_output_dir / "results.txt"
     
-    py_executable = sys.executable
-    command = [py_executable, "-u", "-m", "srcs.travel_scout.run_travel_scout_agent",
-               "--task", task_to_run,
-               "--result-txt-path", str(result_txt_path)]
-    
+    agent_metadata = {
+        "agent_id": "travel_scout_agent",
+        "agent_name": "Travel Scout Agent",
+        "entry_point": "srcs.travel_scout.run_travel_scout_agent",
+        "agent_type": "mcp_agent",
+        "capabilities": ["hotel_search", "flight_search", "travel_planning"],
+        "description": "호텔 및 항공편 검색 및 여행 계획"
+    }
+
+    input_data = {
+        "task": task_to_run,
+        "result_txt_path": str(result_txt_path)
+    }
+
     # 작업에 따른 인자 추가
     if task_to_run == 'search_hotels':
         check_in = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
         check_out = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
-        command.extend([
-            "--destination", destination,
-            "--check-in", check_in,
-            "--check-out", check_out,
-            "--guests", str(guests)
-        ])
+        input_data.update({
+            "destination": destination,
+            "check_in": check_in,
+            "check_out": check_out,
+            "guests": guests
+        })
         st.info(f"🏨 {destination} 호텔 검색을 시작합니다...")
 
     elif task_to_run == 'search_flights':
         departure = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
         ret_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
-        command.extend([
-            "--origin", origin,
-            "--destination", destination,
-            "--departure-date", departure,
-            "--return-date", ret_date
-        ])
+        input_data.update({
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure,
+            "return_date": ret_date
+        })
         st.info(f"✈️ {origin} -> {destination} 항공편 검색을 시작합니다...")
 
     placeholder = st.empty()
-    result = run_agent_process(
+    result = run_agent_via_a2a(
         placeholder=placeholder,
-        command=command,
-        process_key_prefix="logs/travel_scout",
-        log_expander_title="실시간 실행 로그"
+        agent_metadata=agent_metadata,
+        input_data=input_data,
+        result_json_path=None,
+        use_a2a=True
     )
     
     if result:

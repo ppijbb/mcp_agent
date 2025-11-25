@@ -15,7 +15,7 @@ import streamlit_process_manager as spm
 
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # Result Reader 임포트
 try:
@@ -109,20 +109,29 @@ def main():
                 'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
             }
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.hr_recruitment_agent",
-                "--class-name", "HRRecruitmentAgent",
-                "--method-name", "run_recruitment_workflow",
-                "--config-json", json.dumps(config, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "hr_recruitment_agent",
+                "agent_name": "HR Recruitment Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["job_description", "resume_screening", "interview_questions", "reference_check"],
+                "description": "인재 채용 및 관리 최적화"
+            }
 
-            result = run_agent_process(
-                placeholder=result_placeholder, 
-                command=command, 
-                process_key_prefix="logs/hr_recruitment"
+            input_data = {
+                "module_path": "srcs.enterprise_agents.hr_recruitment_agent",
+                "class_name": "HRRecruitmentAgent",
+                "method_name": "run_recruitment_workflow",
+                "config": config,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -56,19 +56,27 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"graph_react_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.advanced_agents.graph_react_agent",
-                "--query", query,
-                "--result-json-path", str(result_json_path)
-            ]
-            if graph_path.strip():
-                command.extend(["--graph-path", graph_path])
+            agent_metadata = {
+                "agent_id": "graph_react_agent",
+                "agent_name": "Graph ReAct Agent",
+                "entry_point": "srcs.advanced_agents.graph_react_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["graph_reasoning", "code_analysis", "refactoring"],
+                "description": "Graph 데이터베이스 기반 추론 및 행동 Agent"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "query": query,
+                "graph_path": graph_path if graph_path.strip() else None,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/graph_react"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

@@ -10,7 +10,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from srcs.core.config.loader import settings
 from srcs.enterprise_agents.cybersecurity_infrastructure_agent import (
     CybersecurityAgent,
@@ -89,20 +89,29 @@ def main():
                 'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
             }
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.cybersecurity_infrastructure_agent",
-                "--class-name", "CybersecurityAgent",
-                "--method-name", "run_cybersecurity_workflow",
-                "--config-json", json.dumps(config, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "cybersecurity_agent",
+                "agent_name": "Cybersecurity Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["security_assessment", "threat_analysis", "compliance_check", "vulnerability_scanning"],
+                "description": "사이버 위협으로부터 조직을 보호하기 위한 AI 기반 보안 솔루션"
+            }
 
-            result = run_agent_process(
-                placeholder=result_placeholder, 
-                command=command, 
-                process_key_prefix="logs/cybersecurity"
+            input_data = {
+                "module_path": "srcs.enterprise_agents.cybersecurity_infrastructure_agent",
+                "class_name": "CybersecurityAgent",
+                "method_name": "run_cybersecurity_workflow",
+                "config": config,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

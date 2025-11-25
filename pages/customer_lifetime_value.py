@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -60,17 +60,26 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"clv_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.enterprise_agents.customer_lifetime_value_agent",
-                "--customer-data", customer_data,
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "customer_lifetime_value_agent",
+                "agent_name": "Customer Lifetime Value Agent",
+                "entry_point": "srcs.enterprise_agents.customer_lifetime_value_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["customer_analysis", "lifetime_value_prediction", "customer_segmentation"],
+                "description": "고객 생애 가치 분석 및 예측"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "customer_data": json.loads(customer_data),
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/clv"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

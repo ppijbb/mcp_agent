@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import streamlit_process_manager as spm
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -108,21 +108,27 @@ def main():
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 result_json_path = reports_path / f"urban_hive_result_{timestamp}.json"
                 
-                py_executable = sys.executable
-                command = [
-                    py_executable, "-u", "-m", "srcs.urban_hive.run_urban_hive_agent",
-                    "--prompt", prompt,
-                    "--result-json-path", str(result_json_path)
-                ]
-                
-                process_key = f"urban_hive_{timestamp}"
+                agent_metadata = {
+                    "agent_id": "urban_hive_agent",
+                    "agent_name": "Urban Hive Agent",
+                    "entry_point": "srcs.urban_hive.run_urban_hive_agent",
+                    "agent_type": "mcp_agent",
+                    "capabilities": ["urban_data_analysis", "traffic_analysis", "safety_analysis", "real_estate_analysis"],
+                    "description": "AI 기반 도시 데이터 분석 플랫폼"
+                }
+
+                input_data = {
+                    "prompt": prompt,
+                    "result_json_path": str(result_json_path)
+                }
 
                 placeholder = st.empty()
-                result = run_agent_process(
+                result = run_agent_via_a2a(
                     placeholder=placeholder,
-                    command=command,
-                    process_key_prefix="logs/urban_hive",
-                    log_expander_title="실시간 실행 로그"
+                    agent_metadata=agent_metadata,
+                    input_data=input_data,
+                    result_json_path=result_json_path,
+                    use_a2a=True
                 )
                 
                 if result:

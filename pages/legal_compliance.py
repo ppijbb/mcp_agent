@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -56,18 +56,27 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"legal_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.enterprise_agents.legal_compliance_agent",
-                "--company-name", company_name,
-                "--compliance-areas", json.dumps(compliance_areas, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "legal_compliance_agent",
+                "agent_name": "Legal Compliance Agent",
+                "entry_point": "srcs.enterprise_agents.legal_compliance_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["legal_compliance", "gdpr_compliance", "ccpa_compliance", "regulatory_analysis"],
+                "description": "법률 준수 검토, 규정 관리 및 리스크 분석"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "company_name": company_name,
+                "compliance_areas": compliance_areas,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/legal"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

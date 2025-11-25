@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -56,23 +56,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"ultra_agentic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.advanced_agents.ultra_agentic_llm_agent",
-                "--class-name", "UltraAgenticLLMAgent",
-                "--method-name", "run",
-                "--config-json", json.dumps({
+            agent_metadata = {
+                "agent_id": "ultra_agentic_llm_agent",
+                "agent_name": "Ultra Agentic LLM Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["autonomous_planning", "self_reflection", "goal_driven_execution", "multi_agent_collaboration"],
+                "description": "LLM 중심의 초 Agentic 시스템 - 자율 의사결정, 계획, 학습"
+            }
+
+            input_data = {
+                "module_path": "srcs.advanced_agents.ultra_agentic_llm_agent",
+                "class_name": "UltraAgenticLLMAgent",
+                "method_name": "run",
+                "config": {
                     "agent_id": agent_id,
                     "goal": goal
-                }, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+                },
+                "result_json_path": str(result_json_path)
+            }
 
-            result = run_agent_process(
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/ultra_agentic"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

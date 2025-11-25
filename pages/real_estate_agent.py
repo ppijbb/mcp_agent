@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -65,18 +65,28 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"real_estate_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "lang_graph.real_estate_agent.main",
-                "--query", property_query,
-                "--analysis-type", analysis_type,
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "real_estate_agent",
+                "agent_name": "Real Estate Agent",
+                "entry_point": "lang_graph.real_estate_agent",
+                "agent_type": "langgraph_agent",
+                "capabilities": ["real_estate_analysis", "property_search", "market_analysis", "investment_analysis"],
+                "description": "LangGraph 기반 부동산 분석 및 추천 시스템"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "query": property_query,
+                "analysis_type": analysis_type,
+                "messages": [{"role": "user", "content": property_query}],
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/real_estate"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

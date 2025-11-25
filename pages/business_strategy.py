@@ -28,7 +28,7 @@ except ImportError:
 # 공통 스타일 및 유틸리티 임포트
 from srcs.common.styles import get_common_styles, get_page_header
 from srcs.common.page_utils import setup_page, render_home_button, create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from srcs.business_strategy_agents.run_business_strategy_agents import BusinessStrategyRunner
 
 # Result Reader 임포트
@@ -125,18 +125,30 @@ def main():
                 'mode': analysis_mode
             }
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.business_strategy_agents.run_business_strategy_agents",
-                "--class-name", "BusinessStrategyRunner",
-                "--method-name", "run_full_suite",
-                "--config-json", json.dumps(config, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "business_strategy_agent",
+                "agent_name": "Business Strategy Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["market_analysis", "competitive_analysis", "strategy_planning"],
+                "description": "시장, 경쟁사 분석 및 비즈니스 모델 설계"
+            }
 
-            result = run_agent_process(
-                placeholder=result_placeholder, 
+            input_data = {
+                "module_path": "srcs.business_strategy_agents.run_business_strategy_agents",
+                "class_name": "BusinessStrategyRunner",
+                "method_name": "run_full_suite",
+                "config": config,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            ) 
                 command=command, 
                 process_key_prefix="logs/business_strategy"
             )

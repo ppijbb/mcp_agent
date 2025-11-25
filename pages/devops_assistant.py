@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 # Result Reader 임포트
@@ -74,6 +74,16 @@ def main():
         reports_path.mkdir(parents=True, exist_ok=True)
         result_json_path = reports_path / f"devops_{task_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
+        # A2A를 통한 agent 실행
+        agent_metadata = {
+            "agent_id": "devops_assistant_agent",
+            "agent_name": "DevOps Assistant Agent",
+            "entry_point": "srcs.common.generic_agent_runner",
+            "agent_type": "mcp_agent",
+            "capabilities": ["code_review", "deployment_check", "issue_analysis", "team_standup", "performance_analysis"],
+            "description": "GitHub 코드 리뷰, CI/CD 모니터링, 이슈 분석 등 개발자 생산성 자동화"
+        }
+
         config = {
             "task_type": task_type,
             "owner": owner,
@@ -82,23 +92,23 @@ def main():
         if task_type == "code_review":
             config["pull_number"] = int(pull_number)
 
-        py_executable = sys.executable
-        command = [
-            py_executable, "-m", "srcs.common.generic_agent_runner",
-            "--module-path", "srcs.enterprise_agents.devops_assistant_agent",
-            "--class-name", "DevOpsAssistantMCPAgent",
-            "--method-name", f"run_{task_type}",
-            "--config-json", json.dumps(config, ensure_ascii=False),
-            "--result-json-path", str(result_json_path)
-        ]
+        input_data = {
+            "module_path": "srcs.enterprise_agents.devops_assistant_agent",
+            "class_name": "DevOpsAssistantMCPAgent",
+            "method_name": f"run_{task_type}",
+            "config": config,
+            "result_json_path": str(result_json_path)
+        }
 
-        result = run_agent_process(
+        result = run_agent_via_a2a(
             placeholder=result_placeholder,
-            command=command,
-            process_key_prefix="logs/devops_assistant"
+            agent_metadata=agent_metadata,
+            input_data=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
         )
 
-        if result and "data" in result:
+        if result and result.get("success") and result.get("data"):
             display_results(result["data"])
 
     # 최신 DevOps Assistant 결과 확인

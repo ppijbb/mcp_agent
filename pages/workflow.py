@@ -13,7 +13,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 import streamlit_process_manager as spm
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # Result Reader 임포트
 try:
@@ -281,19 +281,29 @@ def execute_workflow_process(task: str, model_name: str, plan_type: str):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result_json_path = reports_path / f"workflow_result_{timestamp}.json"
     
-    py_executable = sys.executable
-    command = [py_executable, "-u", "-m", "srcs.basic_agents.run_workflow_agent",
-               "--task", task,
-               "--model", model_name,
-               "--plan-type", plan_type,
-               "--result-json-path", str(result_json_path)]
-    
+    agent_metadata = {
+        "agent_id": "workflow_orchestrator_agent",
+        "agent_name": "Workflow Orchestrator Agent",
+        "entry_point": "srcs.basic_agents.run_workflow_agent",
+        "agent_type": "mcp_agent",
+        "capabilities": ["workflow_automation", "multi_agent_coordination", "task_orchestration"],
+        "description": "복잡한 워크플로우 자동화 및 다중 에이전트 협업 시스템"
+    }
+
+    input_data = {
+        "task": task,
+        "model": model_name,
+        "plan_type": plan_type,
+        "result_json_path": str(result_json_path)
+    }
+
     placeholder = st.empty()
-    result = run_agent_process(
+    result = run_agent_via_a2a(
         placeholder=placeholder,
-        command=command,
-        process_key_prefix="logs/workflow",
-        log_expander_title="실시간 실행 로그"
+        agent_metadata=agent_metadata,
+        input_data=input_data,
+        result_json_path=result_json_path,
+        use_a2a=True
     )
     
     if result:

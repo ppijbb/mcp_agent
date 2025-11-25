@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -61,18 +61,27 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"evolving_swarm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.advanced_agents.self_evolving_swarm",
-                "--task", task_description,
-                "--evolution-steps", str(evolution_steps),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "self_evolving_swarm_agent",
+                "agent_name": "Self Evolving Swarm Agent",
+                "entry_point": "srcs.advanced_agents.self_evolving_swarm",
+                "agent_type": "mcp_agent",
+                "capabilities": ["self_evolution", "multi_agent_collaboration", "adaptive_learning"],
+                "description": "자기 진화형 multi-agent 시스템"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "task": task_description,
+                "evolution_steps": evolution_steps,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/evolving_swarm"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

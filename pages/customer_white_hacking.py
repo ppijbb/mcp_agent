@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -56,23 +56,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"white_hacking_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.customer_white_hacking_agent",
-                "--class-name", "CustomerWhiteHackingAgent",
-                "--method-name", "run_security_test",
-                "--config-json", json.dumps({
+            agent_metadata = {
+                "agent_id": "customer_white_hacking_agent",
+                "agent_name": "Customer White Hacking Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["security_testing", "vulnerability_analysis", "penetration_testing"],
+                "description": "고객 관점에서의 보안 취약점 테스트 및 분석"
+            }
+
+            input_data = {
+                "module_path": "srcs.enterprise_agents.customer_white_hacking_agent",
+                "class_name": "CustomerWhiteHackingAgent",
+                "method_name": "run_security_test",
+                "config": {
                     "target_url": target_url,
                     "test_scenarios": test_scenarios
-                }, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+                },
+                "result_json_path": str(result_json_path)
+            }
 
-            result = run_agent_process(
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/white_hacking"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 # Result Reader 임포트
@@ -63,23 +63,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"mental_care_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.common.generic_agent_runner",
-                "--module-path", "srcs.enterprise_agents.mental",
-                "--class-name", "MentalCareOrchestrator",
-                "--method-name", "start_conversation_session",
-                "--config-json", json.dumps({
+            agent_metadata = {
+                "agent_id": "mental_care_agent",
+                "agent_name": "Mental Care Agent",
+                "entry_point": "srcs.common.generic_agent_runner",
+                "agent_type": "mcp_agent",
+                "capabilities": ["mental_health_analysis", "emotion_analysis", "psychological_schema_analysis"],
+                "description": "심리도식치료 기반 심리 건강 관리 및 분석 시스템"
+            }
+
+            input_data = {
+                "module_path": "srcs.enterprise_agents.mental",
+                "class_name": "MentalCareOrchestrator",
+                "method_name": "start_conversation_session",
+                "config": {
                     "user_message": user_message,
                     "session_type": session_type
-                }, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+                },
+                "result_json_path": str(result_json_path)
+            }
 
-            result = run_agent_process(
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/mental_care"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

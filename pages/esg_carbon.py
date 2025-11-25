@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -61,21 +61,31 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"esg_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.enterprise_agents.esg_carbon_neutral_agent",
-                "--company-name", company_name,
-                "--analysis-type", analysis_type,
-                "--result-json-path", str(result_json_path)
-            ]
+            # A2A를 통한 agent 실행
+            agent_metadata = {
+                "agent_id": "esg_agent",
+                "agent_name": "ESG Carbon Neutral Agent",
+                "entry_point": "srcs.enterprise_agents.esg_carbon_neutral_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["esg_analysis", "carbon_footprint", "sustainability_planning", "esg_reporting"],
+                "description": "ESG 보고서 작성, 탄소 발자국 측정 및 중립 전략 수립"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "company_name": company_name,
+                "analysis_type": analysis_type,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/esg"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
-            if result and "data" in result:
+            if result and result.get("success") and result.get("data"):
                 display_results(result["data"])
 
     st.markdown("---")

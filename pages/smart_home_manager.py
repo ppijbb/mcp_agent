@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -60,18 +60,28 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"smart_home_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "lang_graph.smart_home_manager.main",
-                "--command", home_command,
-                "--devices", json.dumps(device_type, ensure_ascii=False),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "smart_home_manager_agent",
+                "agent_name": "Smart Home Manager Agent",
+                "entry_point": "lang_graph.smart_home_manager",
+                "agent_type": "langgraph_agent",
+                "capabilities": ["home_automation", "device_control", "smart_home_management"],
+                "description": "LangGraph 기반 스마트 홈 자동화 및 관리 시스템"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "command": home_command,
+                "devices": device_type,
+                "messages": [{"role": "user", "content": home_command}],
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/smart_home"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

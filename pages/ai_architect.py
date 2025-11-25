@@ -18,7 +18,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from srcs.core.config.loader import settings
 
 # Result Reader 임포트
@@ -97,19 +97,28 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"architecture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.evolutionary_ai_architect.run_ai_architect_agent",
-                "--problem-description", problem_description,
-                "--max-generations", str(max_generations),
-                "--population-size", str(population_size),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "ai_architect_agent",
+                "agent_name": "AI Architect Agent",
+                "entry_point": "srcs.evolutionary_ai_architect.run_ai_architect_agent",
+                "agent_type": "mcp_agent",
+                "capabilities": ["architecture_design", "evolutionary_optimization", "ai_system_planning"],
+                "description": "진화형 AI 아키텍처 설계 및 자동 최적화"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "problem_description": problem_description,
+                "max_generations": max_generations,
+                "population_size": population_size,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/ai_architect"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result:

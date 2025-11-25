@@ -44,7 +44,9 @@ class RealLangGraphUI:
                     st.session_state.ui_analyzer = None
 
         if "mcp_client" not in st.session_state:
-            st.session_state.mcp_client = MCPClient()
+            # MCPClient는 비동기 초기화가 필요하므로 지연 초기화
+            st.session_state.mcp_client = None
+            st.session_state.mcp_client_initialized = False
         
         # 세션 상태 초기화
         for key, default in {
@@ -62,13 +64,20 @@ class RealLangGraphUI:
 
 
 
+    async def _ensure_mcp_client(self):
+        """MCP 클라이언트 초기화 확인"""
+        if st.session_state.mcp_client is None or not st.session_state.mcp_client_initialized:
+            st.session_state.mcp_client = MCPClient()
+            st.session_state.mcp_client_initialized = True
+        return st.session_state.mcp_client
+    
     async def handle_game_search(self, game_description: str):
         st.session_state.analysis_in_progress = True
         st.session_state.game_selection_needed = False
         st.session_state.bgg_search_results = None
         st.session_state.current_game_id = None
         
-        mcp_client: MCPClient = st.session_state.mcp_client
+        mcp_client: MCPClient = await self._ensure_mcp_client()
         
         try:
             with st.spinner(f"'{game_description}' 게임을 BoardGameGeek에서 검색 중..."):
@@ -111,7 +120,7 @@ class RealLangGraphUI:
 
         # 상세 정보 및 웹 규칙 가져오기
         try:
-            mcp_client: MCPClient = st.session_state.mcp_client
+            mcp_client: MCPClient = await self._ensure_mcp_client()
             game_name_for_search = selected_game.get('name', 'board game')
 
             with st.spinner(f"'{selected_game['name']}' 상세 정보 조회 중..."):
@@ -219,9 +228,15 @@ class RealLangGraphUI:
             else:
                 input_description = game_info["description"]
 
-            input_data = {"game_description": input_description, "detailed_rules": game_info.get("rules", ""), "messages": []}
+            # GameUIAnalysisState 객체 생성
+            from lang_graph.table_game_mate.agents.game_ui_analyzer import GameUIAnalysisState
+            input_state = GameUIAnalysisState(
+                game_description=input_description,
+                detailed_rules=game_info.get("rules", ""),
+                messages=[]
+            )
             
-            async for chunk in agent_app.astream(input_data):
+            async for chunk in agent_app.astream(input_state):
                 node_name = list(chunk.keys())[0]
                 node_output = list(chunk.values())[0]
                 

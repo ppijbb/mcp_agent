@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
@@ -63,21 +63,31 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"graphrag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command_list = [
-                py_executable, "-m", "lang_graph.graphrag_agent.main",
-                "--standalone",
-                "--command", command,
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "graphrag_agent",
+                "agent_name": "GraphRAG Agent",
+                "entry_point": "lang_graph.graphrag_agent",
+                "agent_type": "langgraph_agent",
+                "capabilities": ["graph_creation", "graph_query", "graph_visualization", "knowledge_management"],
+                "description": "LangGraph 기반 지식 그래프 생성 및 질의응답 시스템"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "command": command,
+                "mode": "standalone",
+                "messages": [{"role": "user", "content": command}],
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command_list,
-                process_key_prefix="logs/graphrag_agent"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
-            if result and "data" in result:
+            if result and result.get("success") and result.get("data"):
                 display_results(result["data"])
 
     st.markdown("---")

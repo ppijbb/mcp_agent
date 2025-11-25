@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 # Result Reader 임포트
@@ -67,18 +67,27 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"parallel_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.basic_agents.parallel",
-                "--tasks", json.dumps(tasks, ensure_ascii=False),
-                "--max-workers", str(max_workers),
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "parallel_agent",
+                "agent_name": "Parallel Agent",
+                "entry_point": "srcs.basic_agents.parallel",
+                "agent_type": "mcp_agent",
+                "capabilities": ["parallel_execution", "task_distribution", "concurrent_processing"],
+                "description": "병렬 처리로 여러 작업을 동시에 실행"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "tasks": tasks,
+                "max_workers": max_workers,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/parallel"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:

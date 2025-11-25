@@ -11,7 +11,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 
 # Result Reader 임포트
 try:
@@ -130,17 +130,26 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"drone_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            py_executable = sys.executable
-            command = [
-                py_executable, "-m", "srcs.drone_scout.run_drone_scout",
-                "--mission", mission_text,
-                "--result-json-path", str(result_json_path)
-            ]
+            agent_metadata = {
+                "agent_id": "drone_scout_agent",
+                "agent_name": "Drone Scout Agent",
+                "entry_point": "srcs.drone_scout.run_drone_scout",
+                "agent_type": "mcp_agent",
+                "capabilities": ["drone_mission", "aerial_survey", "autonomous_flight"],
+                "description": "자연어 임무를 입력하여 자율 드론 정찰"
+            }
 
-            result = run_agent_process(
+            input_data = {
+                "mission": mission_text,
+                "result_json_path": str(result_json_path)
+            }
+
+            result = run_agent_via_a2a(
                 placeholder=result_placeholder,
-                command=command,
-                process_key_prefix="logs/drone_scout"
+                agent_metadata=agent_metadata,
+                input_data=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
             )
 
             if result and "data" in result:
