@@ -6,8 +6,11 @@ __pycache__
 .env
 .venv
 node_modules
-*outputs*
+*outputs
+*output
 .vscode
 .cursor
+.gemini
+.claude-code
 .pytest_cache
 *.sqlite3
