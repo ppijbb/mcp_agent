@@ -242,18 +242,18 @@ The Streamlit web interface provides:
 
 ```
 ┌─────────────────────────────────────────┐
-│           Forge Interface               │
-│        (Streamlit + WebSocket)          │
+│             Forge Interface             │
+│          (Streamlit + WebSocket)        │
 ├─────────────────────────────────────────┤
-│         Forge Master                    │
-│           (LangGraph Workflow)          │
+│               Forge Master              │
+│            (LangGraph Workflow)         │
 ├─────────────────────────────────────────┤
-│  Research Craftsman │  Verification     │
-│  Planning Craftsman │  Synthesis        │
-│  Creative Forge     │  Memory Keeper    │
+│  Research Craftsman │   Verification    │
+│  Planning Craftsman │   Synthesis       │
+│  Creative Forge     │   Memory Keeper   │
 ├─────────────────────────────────────────┤
-│         Universal Tool Forge            │
-│    (OpenRouter + 100+ Tools)            │
+│           Universal Tool Forge          │
+│        (OpenRouter + 100+ Tools)        │
 └─────────────────────────────────────────┘
 ```
 

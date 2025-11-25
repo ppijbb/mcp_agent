@@ -248,6 +248,61 @@ class PlannerAgent:
         logger.info(f"[{self.name}] ✅ Plan generated: {len(plan)} characters")
         logger.info(f"[{self.name}] Plan preview: {plan[:200]}...")
         
+        # Council 활성화 확인 및 적용
+        use_council = state.get('use_council', None)  # 수동 활성화 옵션
+        if use_council is None:
+            # 자동 활성화 판단
+            from src.core.council_activator import get_council_activator
+            activator = get_council_activator()
+            activation_decision = activator.should_activate(
+                process_type='planning',
+                query=state['user_query'],
+                context={'domains': [], 'steps': []}  # 컨텍스트는 향후 확장 가능
+            )
+            use_council = activation_decision.should_activate
+            if use_council:
+                logger.info(f"[{self.name}] 🏛️ Council auto-activated: {activation_decision.reason}")
+        
+        # Council 적용 (활성화된 경우)
+        if use_council:
+            try:
+                from src.core.llm_council import run_full_council
+                logger.info(f"[{self.name}] 🏛️ Running Council review for research plan...")
+                
+                # Council에 계획 검토 요청
+                council_query = f"""Review and improve the following research plan. Provide feedback on completeness, feasibility, and quality.
+
+Research Query: {state['user_query']}
+
+Research Plan:
+{plan}
+
+Provide an improved version of the plan that addresses any gaps or issues you identify."""
+                
+                stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                    council_query
+                )
+                
+                # Council 결과를 계획에 반영
+                council_improved_plan = stage3_result.get('response', plan)
+                plan = council_improved_plan
+                
+                logger.info(f"[{self.name}] ✅ Council review completed. Plan improved with consensus.")
+                logger.info(f"[{self.name}] Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                
+                # Council 메타데이터를 state에 저장
+                state['council_metadata'] = {
+                    'planning': {
+                        'stage1_results': stage1_results,
+                        'stage2_results': stage2_results,
+                        'stage3_result': stage3_result,
+                        'metadata': metadata
+                    }
+                }
+            except Exception as e:
+                logger.warning(f"[{self.name}] Council review failed: {e}. Using original plan.")
+                # Council 실패 시 원본 계획 사용 (fallback 제거 - 명확한 로깅만)
+        
         state['research_plan'] = plan
         
         # 작업 분할: 연구 계획을 여러 독립적인 작업으로 분할
@@ -1359,6 +1414,91 @@ class ExecutorAgent:
             # 실패 상태 반환 (더미 데이터 없이)
             return state
         
+        # Council 활성화 확인 및 적용 (중요한 정보 수집 시)
+        use_council = state.get('use_council', None)  # 수동 활성화 옵션
+        if use_council is None:
+            # 자동 활성화 판단
+            from src.core.council_activator import get_council_activator
+            activator = get_council_activator()
+            
+            # 중요한 사실 확인이 필요한지 판단
+            context = {
+                'results_count': len(results),
+                'has_controversial_topic': any(
+                    keyword in state['user_query'].lower() 
+                    for keyword in ['debate', 'controversy', 'disagreement', '논쟁', '의견']
+                ),
+                'high_stakes': any(
+                    keyword in state['user_query'].lower()
+                    for keyword in ['critical', 'important', 'decision', '중요한', '결정']
+                )
+            }
+            
+            activation_decision = activator.should_activate(
+                process_type='execution',
+                query=state['user_query'],
+                context=context
+            )
+            use_council = activation_decision.should_activate
+            if use_council:
+                logger.info(f"[{self.name}] 🏛️ Council auto-activated: {activation_decision.reason}")
+        
+        # Council 적용 (활성화된 경우)
+        if use_council and results:
+            try:
+                from src.core.llm_council import run_full_council
+                logger.info(f"[{self.name}] 🏛️ Running Council verification for research results...")
+                
+                # 결과 요약 생성
+                results_summary = "\n\n".join([
+                    f"Result {i+1}:\nTitle: {r.get('title', 'N/A')}\nURL: {r.get('url', 'N/A')}\nSnippet: {r.get('snippet', 'N/A')[:200]}"
+                    for i, r in enumerate(results[:10])  # 최대 10개만 검토
+                ])
+                
+                council_query = f"""Verify the accuracy and reliability of the following research results. Identify any inconsistencies, missing information, or potential issues.
+
+Research Query: {state['user_query']}
+
+Research Results:
+{results_summary}
+
+Provide a verification report with:
+1. Accuracy assessment
+2. Missing information
+3. Recommendations for improvement"""
+                
+                stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                    council_query
+                )
+                
+                # Council 검증 결과를 결과에 추가
+                verification_report = stage3_result.get('response', '')
+                logger.info(f"[{self.name}] ✅ Council verification completed.")
+                logger.info(f"[{self.name}] Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                
+                # Council 메타데이터를 state에 저장
+                if 'council_metadata' not in state:
+                    state['council_metadata'] = {}
+                state['council_metadata']['execution'] = {
+                    'stage1_results': stage1_results,
+                    'stage2_results': stage2_results,
+                    'stage3_result': stage3_result,
+                    'metadata': metadata,
+                    'verification_report': verification_report
+                }
+                
+                # 검증 리포트를 결과에 추가
+                results.append({
+                    'title': 'Council Verification Report',
+                    'url': '',
+                    'snippet': verification_report,
+                    'source': 'council',
+                    'council_verified': True
+                })
+            except Exception as e:
+                logger.warning(f"[{self.name}] Council verification failed: {e}. Using original results.")
+                # Council 실패 시 원본 결과 사용 (fallback 제거 - 명확한 로깅만)
+        
         # 성공적으로 결과 수집된 경우
         state['research_results'] = results  # 리스트로 저장 (덮어쓰기)
         state['current_agent'] = self.name
@@ -1758,6 +1898,74 @@ URL: {url if url else 'URL 없음'}{date_info}
             else:
                 logger.info(f"[{self.name}] Agent discussion disabled or no verified results to discuss")
         
+        # Council 활성화 확인 및 적용 (사실 확인이 중요한 경우 - 기본 활성화)
+        use_council = state.get('use_council', None)  # 수동 활성화 옵션
+        if use_council is None:
+            # 자동 활성화 판단 (기본 활성화)
+            from src.core.council_activator import get_council_activator
+            activator = get_council_activator()
+            
+            context = {
+                'low_confidence_sources': len([r for r in verified if r.get('confidence', 1.0) < 0.7]),
+                'verification_count': len(verified)
+            }
+            
+            activation_decision = activator.should_activate(
+                process_type='verification',
+                query=state['user_query'],
+                context=context
+            )
+            use_council = activation_decision.should_activate
+            if use_council:
+                logger.info(f"[{self.name}] 🏛️ Council auto-activated: {activation_decision.reason}")
+        
+        # Council 적용 (활성화된 경우)
+        if use_council and verified:
+            try:
+                from src.core.llm_council import run_full_council
+                logger.info(f"[{self.name}] 🏛️ Running Council review for verification results...")
+                
+                # 검증 결과 요약 생성
+                verification_summary = "\n\n".join([
+                    f"Result {i+1}:\nTitle: {r.get('title', 'N/A')}\nStatus: {r.get('status', 'N/A')}\nConfidence: {r.get('confidence', 0.0):.2f}\nNote: {r.get('verification_note', 'N/A')[:100]}"
+                    for i, r in enumerate(verified[:10])  # 최대 10개만 검토
+                ])
+                
+                council_query = f"""Review the verification results and assess their reliability. Check for consistency and identify any potential issues.
+
+Research Query: {state['user_query']}
+
+Verification Results:
+{verification_summary}
+
+Provide a review with:
+1. Overall verification quality assessment
+2. Consistency check across results
+3. Recommendations for improvement"""
+                
+                stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                    council_query
+                )
+                
+                # Council 검토 결과
+                review_report = stage3_result.get('response', '')
+                logger.info(f"[{self.name}] ✅ Council review completed.")
+                logger.info(f"[{self.name}] Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                
+                # Council 메타데이터를 state에 저장
+                if 'council_metadata' not in state:
+                    state['council_metadata'] = {}
+                state['council_metadata']['verification'] = {
+                    'stage1_results': stage1_results,
+                    'stage2_results': stage2_results,
+                    'stage3_result': stage3_result,
+                    'metadata': metadata,
+                    'review_report': review_report
+                }
+            except Exception as e:
+                logger.warning(f"[{self.name}] Council review failed: {e}. Using original verification results.")
+                # Council 실패 시 원본 검증 결과 사용 (fallback 제거 - 명확한 로깅만)
+        
         state['verified_results'] = verified
         state['current_agent'] = self.name
         state['verification_failed'] = False if verified else True
@@ -2001,6 +2209,70 @@ class GeneratorAgent:
                 return state
             else:
                 logger.info(f"[{self.name}] ✅ Report generated: {len(report)} characters")
+            
+            # Council 활성화 확인 및 적용 (최종 보고서 생성 시 - 기본 활성화)
+            use_council = state.get('use_council', None)  # 수동 활성화 옵션
+            if use_council is None:
+                # 자동 활성화 판단 (기본 활성화)
+                from src.core.council_activator import get_council_activator
+                activator = get_council_activator()
+                
+                activation_decision = activator.should_activate(
+                    process_type='synthesis',
+                    query=state['user_query'],
+                    context={'important_conclusion': True}  # 최종 보고서는 항상 중요한 결론
+                )
+                use_council = activation_decision.should_activate
+                if use_council:
+                    logger.info(f"[{self.name}] 🏛️ Council auto-activated: {activation_decision.reason}")
+            
+            # Council 적용 (활성화된 경우)
+            if use_council:
+                try:
+                    from src.core.llm_council import run_full_council
+                    logger.info(f"[{self.name}] 🏛️ Running Council review for final report...")
+                    
+                    # 보고서 샘플 (최대 2000자)
+                    report_sample = report[:2000]
+                    
+                    council_query = f"""Review the final report and assess its completeness and accuracy. Check for any missing information or potential improvements.
+
+Research Query: {state['user_query']}
+
+Final Report Sample:
+{report_sample}
+
+Provide a review with:
+1. Completeness assessment
+2. Accuracy check
+3. Recommendations for improvement"""
+                    
+                    stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                        council_query
+                    )
+                    
+                    # Council 검토 결과
+                    review_report = stage3_result.get('response', '')
+                    logger.info(f"[{self.name}] ✅ Council review completed.")
+                    logger.info(f"[{self.name}] Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                    
+                    # Council 메타데이터를 state에 저장
+                    if 'council_metadata' not in state:
+                        state['council_metadata'] = {}
+                    state['council_metadata']['synthesis'] = {
+                        'stage1_results': stage1_results,
+                        'stage2_results': stage2_results,
+                        'stage3_result': stage3_result,
+                        'metadata': metadata,
+                        'review_report': review_report
+                    }
+                    
+                    # Council 검토 결과를 보고서에 추가 (선택적)
+                    if review_report:
+                        report += f"\n\n--- Council Review ---\n{review_report}"
+                except Exception as e:
+                    logger.warning(f"[{self.name}] Council review failed: {e}. Using original report.")
+                    # Council 실패 시 원본 보고서 사용 (fallback 제거 - 명확한 로깅만)
         except Exception as e:
             logger.error(f"[{self.name}] ❌ Report generation failed: {e}")
             # Fallback 제거 - 명확한 오류 반환

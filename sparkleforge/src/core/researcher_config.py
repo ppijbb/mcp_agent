@@ -11,7 +11,7 @@ import os
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, field_validator
 
 
 class TaskType(Enum):
@@ -225,6 +225,82 @@ class OutputConfig:
     enable_latex_export: bool
 
 
+class CouncilConfig(BaseModel):
+    """LLM Council configuration for multi-model consensus - Optional with defaults."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
+    # Basic settings - Optional with defaults (상시 활성화 기본값)
+    enabled: bool = True  # 기본 활성화
+    auto_activate: bool = True  # 자동 활성화 기본값
+    
+    # Council models - Optional with defaults (gemini-2.5-flash 계열 우선)
+    council_models: List[str] = Field(default_factory=lambda: [
+        "google/gemini-2.5-flash-lite",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3-haiku"
+    ])
+    chairman_model: str = "google/gemini-2.5-flash-lite"
+    
+    # Auto-activation thresholds - Optional with defaults
+    min_complexity_for_auto: float = 0.6
+    
+    # Process-specific activation - Optional with defaults (모두 기본 활성화)
+    enable_for_planning: bool = True
+    enable_for_execution: bool = True
+    enable_for_evaluation: bool = True
+    enable_for_verification: bool = True
+    enable_for_synthesis: bool = True
+    
+    # OpenRouter settings - Optional (없으면 Council 비활성화)
+    openrouter_api_key: Optional[str] = None
+    openrouter_api_url: str = "https://openrouter.ai/api/v1/chat/completions"
+    request_timeout: float = 120.0
+    
+    @field_validator('council_models')
+    def validate_council_models(cls, v):
+        """Validate council models - must use gemini-2.5-flash 계열."""
+        if not v:
+            raise ValueError("council_models cannot be empty")
+        # gpt-4 사용 금지 검증
+        for model in v:
+            if 'gpt-4' in model.lower() and 'gpt-4o-mini' not in model.lower():
+                raise ValueError(f"gpt-4 models are not allowed. Use gemini-2.5-flash 계열 instead. Found: {model}")
+        return v
+    
+    @field_validator('chairman_model')
+    def validate_chairman_model(cls, v):
+        """Validate chairman model - must use gemini-2.5-flash 계열."""
+        if 'gpt-4' in v.lower() and 'gpt-4o-mini' not in v.lower():
+            raise ValueError(f"gpt-4 models are not allowed. Use gemini-2.5-flash 계열 instead. Found: {v}")
+        return v
+
+
+class AgentToolConfig(BaseModel):
+    """에이전트별 MCP 도구 할당 설정."""
+
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+
+    # 에이전트별 서버 할당
+    planner_servers: List[str] = Field(default_factory=list, description="PlannerAgent용 MCP 서버 목록")
+    executor_servers: List[str] = Field(default_factory=list, description="ExecutorAgent용 MCP 서버 목록")
+    verifier_servers: List[str] = Field(default_factory=list, description="VerifierAgent용 MCP 서버 목록")
+    generator_servers: List[str] = Field(default_factory=list, description="GeneratorAgent용 MCP 서버 목록")
+
+    # 도구 카테고리 필터링
+    planner_categories: List[str] = Field(default_factory=lambda: ["planning", "search", "utility"], description="PlannerAgent용 도구 카테고리")
+    executor_categories: List[str] = Field(default_factory=lambda: ["search", "data", "academic", "business", "code"], description="ExecutorAgent용 도구 카테고리")
+    verifier_categories: List[str] = Field(default_factory=lambda: ["verification", "search", "data", "academic"], description="VerifierAgent용 도구 카테고리")
+    generator_categories: List[str] = Field(default_factory=lambda: ["generation", "utility", "search"], description="GeneratorAgent용 도구 카테고리")
+
+    # 도구 할당 제한
+    max_tools_per_agent: int = Field(default=5, ge=1, le=20, description="에이전트당 최대 도구 수")
+    enable_auto_discovery: bool = Field(default=True, description="자동 도구 발견 활성화")
+
+    # Cross-Agent 통신 설정
+    enable_cross_agent_tools: bool = Field(default=True, description="Cross-Agent 도구 활성화")
+    cross_agent_timeout: float = Field(default=30.0, ge=5.0, le=300.0, description="Cross-Agent 호출 타임아웃(초)")
+
+
 class ResearcherSystemConfig(BaseModel):
     """Overall system configuration with 8 core innovations."""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
@@ -241,6 +317,8 @@ class ResearcherSystemConfig(BaseModel):
     verification: VerificationConfig = Field(description="Verification configuration")
     context_window: ContextWindowConfig = Field(description="Context window configuration")
     reliability: ReliabilityConfig = Field(description="Reliability configuration")
+    council: CouncilConfig = Field(description="Council configuration")
+    agent_tools: AgentToolConfig = Field(description="Agent tools configuration")
     
     def model_post_init(self, __context):
         # Ensure output directory exists
@@ -334,6 +412,20 @@ def get_reliability_config() -> ReliabilityConfig:
     return config.reliability
 
 
+def get_council_config() -> CouncilConfig:
+    """Get council configuration."""
+    if config is None:
+        raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
+    return config.council
+
+
+def get_council_config() -> CouncilConfig:
+    """Get council configuration."""
+    if config is None:
+        raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
+    return config.council
+
+
 def load_config_from_env() -> ResearcherSystemConfig:
     """Load configuration from environment variables - ALL REQUIRED, NO DEFAULTS."""
     
@@ -369,6 +461,35 @@ def load_config_from_env() -> ResearcherSystemConfig:
     def get_required_list_env(key: str, separator: str = ","):
         """Get required environment variable as list."""
         value = get_required_env(key)
+        return [item.strip() for item in value.split(separator) if item.strip()]
+    
+    def get_optional_env(key: str, default_value: Any = None, var_type: type = str):
+        """Get optional environment variable with default value."""
+        value = os.getenv(key)
+        if value is None:
+            return default_value
+        
+        if var_type == bool:
+            return value.lower() in ("true", "1", "yes", "on")
+        elif var_type == int:
+            try:
+                return int(value)
+            except ValueError:
+                return default_value
+        elif var_type == float:
+            try:
+                return float(value)
+            except ValueError:
+                return default_value
+        return value
+    
+    def get_optional_list_env(key: str, default_value: List[str] = None, separator: str = ","):
+        """Get optional environment variable as list with default."""
+        if default_value is None:
+            default_value = []
+        value = os.getenv(key)
+        if value is None:
+            return default_value
         return [item.strip() for item in value.split(separator) if item.strip()]
     
     # Load LLM configuration
@@ -511,6 +632,30 @@ def load_config_from_env() -> ResearcherSystemConfig:
         enable_latex_export=get_required_env("ENABLE_LATEX", bool)
     )
     
+    # Load Council configuration (Optional with defaults)
+    # OpenRouter API 키가 없으면 Council 비활성화
+    openrouter_api_key = get_optional_env("OPENROUTER_API_KEY")
+    council_enabled = get_optional_env("COUNCIL_ENABLED", True, bool) if openrouter_api_key else False
+    
+    council_config = CouncilConfig(
+        enabled=council_enabled,
+        auto_activate=get_optional_env("COUNCIL_AUTO_ACTIVATE", True, bool),
+        council_models=get_optional_list_env(
+            "COUNCIL_MODELS",
+            ["google/gemini-2.5-flash-lite", "openai/gpt-4o-mini", "anthropic/claude-3-haiku"]
+        ),
+        chairman_model=get_optional_env("COUNCIL_CHAIRMAN_MODEL", "google/gemini-2.5-flash-lite"),
+        min_complexity_for_auto=get_optional_env("COUNCIL_MIN_COMPLEXITY", 0.6, float),
+        enable_for_planning=get_optional_env("COUNCIL_ENABLE_FOR_PLANNING", True, bool),
+        enable_for_execution=get_optional_env("COUNCIL_ENABLE_FOR_EXECUTION", True, bool),
+        enable_for_evaluation=get_optional_env("COUNCIL_ENABLE_FOR_EVALUATION", True, bool),
+        enable_for_verification=get_optional_env("COUNCIL_ENABLE_FOR_VERIFICATION", True, bool),
+        enable_for_synthesis=get_optional_env("COUNCIL_ENABLE_FOR_SYNTHESIS", True, bool),
+        openrouter_api_key=openrouter_api_key,
+        openrouter_api_url=get_optional_env("OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions"),
+        request_timeout=get_optional_env("COUNCIL_REQUEST_TIMEOUT", 120.0, float)
+    )
+    
     # Create and store global config instance
     global config
     config = ResearcherSystemConfig(
@@ -523,57 +668,15 @@ def load_config_from_env() -> ResearcherSystemConfig:
         verification=verification_config,
         context_window=context_window_config,
         reliability=reliability_config,
+        council=council_config,
         agent_tools=agent_tool_config
     )
     
     return config
 
 
-class AgentToolConfig(BaseModel):
-    """에이전트별 MCP 도구 할당 설정."""
-
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
-
-    # 에이전트별 서버 할당
-    planner_servers: List[str] = Field(default_factory=list, description="PlannerAgent용 MCP 서버 목록")
-    executor_servers: List[str] = Field(default_factory=list, description="ExecutorAgent용 MCP 서버 목록")
-    verifier_servers: List[str] = Field(default_factory=list, description="VerifierAgent용 MCP 서버 목록")
-    generator_servers: List[str] = Field(default_factory=list, description="GeneratorAgent용 MCP 서버 목록")
-
-    # 도구 카테고리 필터링
-    planner_categories: List[str] = Field(default_factory=lambda: ["planning", "search", "utility"], description="PlannerAgent용 도구 카테고리")
-    executor_categories: List[str] = Field(default_factory=lambda: ["search", "data", "academic", "business", "code"], description="ExecutorAgent용 도구 카테고리")
-    verifier_categories: List[str] = Field(default_factory=lambda: ["verification", "search", "data", "academic"], description="VerifierAgent용 도구 카테고리")
-    generator_categories: List[str] = Field(default_factory=lambda: ["generation", "utility", "search"], description="GeneratorAgent용 도구 카테고리")
-
-    # 도구 할당 제한
-    max_tools_per_agent: int = Field(default=5, ge=1, le=20, description="에이전트당 최대 도구 수")
-    enable_auto_discovery: bool = Field(default=True, description="자동 도구 발견 활성화")
-
-    # Cross-Agent 통신 설정
-    enable_cross_agent_tools: bool = Field(default=True, description="Cross-Agent 도구 활성화")
-    cross_agent_timeout: float = Field(default=30.0, ge=5.0, le=300.0, description="Cross-Agent 호출 타임아웃(초)")
-
-
-# ResearcherSystemConfig에 agent_tools 필드 추가
-class ResearcherSystemConfig(BaseModel):
-    """통합 연구 시스템 설정."""
-
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
-
-    # 기존 필드들
-    llm: LLMConfig
-    agent: AgentConfig
-    research: ResearchConfig
-    mcp: MCPConfig
-    output: OutputConfig
-    compression: CompressionConfig
-    verification: VerificationConfig
-    context_window: ContextWindowConfig
-    reliability: ReliabilityConfig
-
-    # 신규: 에이전트별 도구 설정
-    agent_tools: AgentToolConfig = Field(default_factory=AgentToolConfig)
+# Note: AgentToolConfig is already defined above (line 278)
+# This duplicate definition has been removed to avoid conflicts
 
 
 def get_required_list_env(key: str) -> List[str]:

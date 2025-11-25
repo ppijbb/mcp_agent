@@ -185,6 +185,75 @@ class SynthesisAgent:
         logger.info("7. ✅ Validating synthesis quality")
         validation_results = await self._validate_synthesis(compressed_content, deliverables)
             
+        # Council 활성화 확인 및 적용 (최종 보고서 생성 시 - 기본 활성화)
+        use_council = context.get('use_council', None) if context else None  # 수동 활성화 옵션
+        if use_council is None:
+            # 자동 활성화 판단 (기본 활성화)
+            from src.core.council_activator import get_council_activator
+            activator = get_council_activator()
+            
+            activation_decision = activator.should_activate(
+                process_type='synthesis',
+                query=str(original_objectives[0].get('description', '')) if original_objectives else '',
+                context={'important_conclusion': True}  # 종합은 항상 중요한 결론 도출
+            )
+            use_council = activation_decision.should_activate
+            if use_council:
+                logger.info(f"📝 Council auto-activated for synthesis: {activation_decision.reason}")
+        
+        # Council 적용 (활성화된 경우)
+        if use_council:
+            try:
+                from src.core.llm_council import run_full_council
+                logger.info(f"📝 🏛️ Running Council review for synthesis results...")
+                
+                # 종합 결과 요약 생성
+                synthesis_summary = f"""Deliverable Type: {deliverable_type}
+Compression Ratio: {compressed_content.get('compression_ratio', 1.0):.2f}
+Overall Quality: {validation_results.get('overall_quality', 0.8):.2f}
+Insights Generated: {len(insights)}
+Formats Generated: {len(deliverables)}"""
+                
+                # 종합 내용 샘플 (최대 2000자)
+                content_sample = str(synthesized_content.get('content', ''))[:2000] if isinstance(synthesized_content, dict) else str(synthesized_content)[:2000]
+                
+                council_query = f"""Review the synthesis results and assess their completeness and accuracy. Check for any missing information or potential improvements.
+
+Original Objectives: {str(original_objectives)}
+
+Synthesis Summary:
+{synthesis_summary}
+
+Content Sample:
+{content_sample}
+
+Provide a review with:
+1. Completeness assessment
+2. Accuracy check
+3. Recommendations for improvement"""
+                
+                stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                    council_query
+                )
+                
+                # Council 검토 결과
+                review_report = stage3_result.get('response', '')
+                logger.info(f"📝 ✅ Council review completed.")
+                logger.info(f"📝 Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                
+                # Council 검토 결과를 종합 결과에 추가
+                if isinstance(synthesized_content, dict):
+                    synthesized_content['council_review'] = {
+                        'stage1_results': stage1_results,
+                        'stage2_results': stage2_results,
+                        'stage3_result': stage3_result,
+                        'metadata': metadata,
+                        'review_report': review_report
+                    }
+            except Exception as e:
+                logger.warning(f"📝 Council review failed: {e}. Using original synthesis results.")
+                # Council 실패 시 원본 종합 결과 사용 (fallback 제거 - 명확한 로깅만)
+        
         synthesis_result = {
             'synthesized_content': synthesized_content,
             'compressed_content': compressed_content,

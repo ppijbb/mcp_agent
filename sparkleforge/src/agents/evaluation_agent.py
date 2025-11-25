@@ -184,6 +184,68 @@ class EvaluationAgent:
             'recursion_decision': recursion_decision
         })
             
+        # Council 활성화 확인 및 적용 (품질 평가가 중요한 경우 - 기본 활성화)
+        use_council = context.get('use_council', None) if context else None  # 수동 활성화 옵션
+        if use_council is None:
+            # 자동 활성화 판단 (기본 활성화)
+            from src.core.council_activator import get_council_activator
+            activator = get_council_activator()
+            
+            activation_decision = activator.should_activate(
+                process_type='evaluation',
+                query=str(original_objectives[0].get('description', '')) if original_objectives else '',
+                context={'requires_multi_perspective': True}  # 평가는 항상 다방면 검토 필요
+            )
+            use_council = activation_decision.should_activate
+            if use_council:
+                logger.info(f"🔬 Council auto-activated for evaluation: {activation_decision.reason}")
+        
+        # Council 적용 (활성화된 경우)
+        if use_council:
+            try:
+                from src.core.llm_council import run_full_council
+                logger.info(f"🔬 🏛️ Running Council review for evaluation results...")
+                
+                # 평가 결과 요약 생성
+                evaluation_summary = f"""Overall Quality: {overall_quality.get('overall_score', 0.0):.2f}
+Alignment Score: {alignment_assessment.get('alignment_score', 0.0):.2f}
+Gaps Identified: {len(gap_analysis.get('gaps', []))}
+Refinement Recommendations: {len(refinement_recommendations.get('recommendations', []))}
+Needs Recursion: {recursion_decision.get('needs_recursion', False)}"""
+                
+                council_query = f"""Review the evaluation results and assess their fairness and accuracy. Check for consistency and identify any potential biases.
+
+Original Objectives: {str(original_objectives)}
+
+Evaluation Results:
+{evaluation_summary}
+
+Provide a review with:
+1. Fairness assessment
+2. Accuracy check
+3. Recommendations for improvement"""
+                
+                stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+                    council_query
+                )
+                
+                # Council 검토 결과
+                review_report = stage3_result.get('response', '')
+                logger.info(f"🔬 ✅ Council review completed.")
+                logger.info(f"🔬 Council aggregate rankings: {metadata.get('aggregate_rankings', [])}")
+                
+                # Council 검토 결과를 평가 결과에 추가
+                evaluation_result['council_review'] = {
+                    'stage1_results': stage1_results,
+                    'stage2_results': stage2_results,
+                    'stage3_result': stage3_result,
+                    'metadata': metadata,
+                    'review_report': review_report
+                }
+            except Exception as e:
+                logger.warning(f"🔬 Council review failed: {e}. Using original evaluation results.")
+                # Council 실패 시 원본 평가 결과 사용 (fallback 제거 - 명확한 로깅만)
+        
         evaluation_result = {
             'verification_results': verification_results,
                 'individual_evaluations': individual_evaluations,
