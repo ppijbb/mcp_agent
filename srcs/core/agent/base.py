@@ -51,8 +51,9 @@ class BaseAgent(ABC):
         self.logger = self.app.logger # MCPApp이 생성한 로거를 사용
         self._session = None
         
-        failure_threshold = self.settings.get("resilience.circuit_breaker.failure_threshold", 5)
-        recovery_timeout = self.settings.get("resilience.circuit_breaker.recovery_timeout", 30)
+        # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
+        failure_threshold = 5
+        recovery_timeout = 30
         self.circuit_breaker = CircuitBreaker(
             fail_max=failure_threshold,
             reset_timeout=recovery_timeout,
@@ -72,21 +73,24 @@ class BaseAgent(ABC):
 
     def _setup_app(self) -> MCPApp:
         """
-        새로운 설정 시스템을 사용하여 MCPApp을 설정합니다.
+        MCPApp을 설정합니다. mcp_agent 라이브러리의 get_settings를 사용합니다.
         """
-        # 설정에서 MCP 서버 설정을 가져와 MCPAppConfig 형식으로 변환
-        mcp_servers_config = {
-            name: server.model_dump() 
-            for name, server in self.settings.mcp_servers.items()
-            if server.enabled and (not self.server_names or name in self.server_names)
-        }
+        from mcp_agent.config import get_settings
+        from pathlib import Path
         
-        app_config = {
-            "name": self.name,
-            "mcp": mcp_servers_config
-        }
+        # 프로젝트 루트에서 설정 파일 경로 찾기
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        config_path = project_root / "mcp_agent.config.yaml"
         
-        return MCPApp(settings=app_config, human_input_callback=None)
+        # mcp_agent 라이브러리의 표준 설정 사용
+        # set_global=False로 설정하여 멀티스레드 환경에서 안전하게 사용
+        settings = get_settings(str(config_path), set_global=False)
+        
+        return MCPApp(
+            name=self.name,
+            settings=settings,
+            human_input_callback=None
+        )
 
     @abstractmethod
     async def run_workflow(self, *args, **kwargs) -> Any:
@@ -100,8 +104,15 @@ class BaseAgent(ABC):
         """
         주어진 에이전트들로 오케스트레이터를 생성합니다.
         """
+        from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+        
+        # LLM factory 직접 정의 (app.llm_factory가 없으므로)
+        # Orchestrator가 agent 인자를 전달할 수 있으므로 **kwargs로 받음
+        def llm_factory(**kwargs):
+            return OpenAIAugmentedLLM(model="gemini-2.5-flash")
+        
         return Orchestrator(
-            llm_factory=self.app.llm_factory,
+            llm_factory=llm_factory,
             available_agents=agents,
             plan_type="full"
         )
@@ -113,8 +124,9 @@ class BaseAgent(ABC):
         """
         self.logger.info(f"'{self.name}' 에이전트 워크플로우를 시작합니다.")
         try:
-            max_retries = self.settings.get("resilience.retry_attempts", 3)
-            retry_delay = self.settings.get("resilience.retry_delay_seconds", 5)
+            # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
+            max_retries = 3
+            retry_delay = 5
             
             for attempt in range(max_retries):
                 try:

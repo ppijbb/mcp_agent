@@ -125,11 +125,13 @@ def main():
                 'mode': analysis_mode
             }
 
+            from srcs.common.agent_interface import AgentType
+            
             agent_metadata = {
                 "agent_id": "business_strategy_agent",
                 "agent_name": "Business Strategy Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
+                "entry_point": "srcs.business_strategy_agents.run_business_strategy_agents",
+                "agent_type": AgentType.MCP_AGENT,
                 "capabilities": ["market_analysis", "competitive_analysis", "strategy_planning"],
                 "description": "시장, 경쟁사 분석 및 비즈니스 모델 설계"
             }
@@ -137,8 +139,11 @@ def main():
             input_data = {
                 "module_path": "srcs.business_strategy_agents.run_business_strategy_agents",
                 "class_name": "BusinessStrategyRunner",
-                "method_name": "run_full_suite",
-                "config": config,
+                "method_name": "run_agents",
+                "industry": config.get("keywords", [""])[0] if config.get("keywords") else "General",
+                "company_profile": config.get("business_context", {}).get("description", "Business analysis") if config.get("business_context") else "Business analysis",
+                "competitors": config.get("keywords", [])[1:] if len(config.get("keywords", [])) > 1 else [],
+                "tech_trends": config.get("keywords", []),
                 "result_json_path": str(result_json_path)
             }
 
@@ -148,9 +153,6 @@ def main():
                 input_data=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
-            ) 
-                command=command, 
-                process_key_prefix="logs/business_strategy"
             )
 
             if result and "data" in result:

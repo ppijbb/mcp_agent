@@ -16,8 +16,8 @@ import json
 import yfinance as yf
 from typing import Dict, List, Any, Optional
 import os
-import streamlit_process_manager as spm
-from srcs.common.ui_utils import run_agent_process
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -476,45 +476,56 @@ def render_real_finance_agent(save_to_file=False):
                     }
                     with open(input_json_path, 'w', encoding='utf-8') as f:
                         json.dump(user_input, f, ensure_ascii=False, indent=2)
-                    command = [
-                        "python", "-u",
-                        "srcs/enterprise_agents/run_finance_health_agent.py",
-                        "--input-json-path", input_json_path,
-                        "--result-json-path", result_json_path
-                    ]
-                    st.session_state['finance_command'] = command
+                    st.session_state['finance_input_data'] = user_input
                     st.session_state['finance_result_json_path'] = result_json_path
             else:
                 st.warning("모든 필수 정보를 입력해주세요.")
         with col2:
-            if 'finance_command' in st.session_state:
+            if 'finance_input_data' in st.session_state:
                 placeholder = st.empty()
-                result = run_agent_process(
+                result_json_path = Path(st.session_state['finance_result_json_path'])
+                
+                agent_metadata = {
+                    "agent_id": "finance_health_agent",
+                    "agent_name": "Finance Health Agent",
+                    "agent_type": AgentType.MCP_AGENT,
+                    "entry_point": "srcs.enterprise_agents.run_finance_health_agent",
+                    "capabilities": ["financial_analysis", "health_scoring", "retirement_planning"],
+                    "description": "개인 및 기업 재무 건강도 진단 및 최적화"
+                }
+                
+                input_data = {
+                    "input_data": st.session_state['finance_input_data'],
+                    "result_json_path": str(result_json_path)
+                }
+                
+                result = run_agent_via_a2a(
                     placeholder=placeholder,
-                    command=st.session_state['finance_command'],
-                    process_key_prefix="finance_health",
-                    log_expander_title="재무 건강 분석 실시간 로그",
-                    display_callback=display_financial_report
+                    agent_metadata=agent_metadata,
+                    input_data=input_data,
+                    result_json_path=result_json_path,
+                    use_a2a=True,
+                    log_expander_title="재무 건강 분석 실시간 로그"
                 )
                 
-                if result:
-                    if result.get('status') == 'success':
-                        # 분석 결과 표시
-                        st.success("✅ 재무 건강 분석이 완료되었습니다!")
+                if result and result.get("success"):
+                    # 분석 결과 표시
+                    st.success("✅ 재무 건강 분석이 완료되었습니다!")
+                    
+                    # 결과 데이터 표시
+                    result_data = result.get("data", {})
+                    if result_data:
+                        st.subheader("📊 분석 결과")
+                        display_financial_report(result_data)
                         
-                        # 결과 데이터 표시
-                        if 'data' in result:
-                            st.subheader("📊 분석 결과")
-                            st.json(result['data'])
-                            
-                            # 파일 저장 옵션
-                            if save_to_file:
-                                save_analysis_to_file(result.get('input_data', {}), result['data'])
-                        else:
-                            st.info("분석이 완료되었지만 결과 데이터가 없습니다.")
+                        # 파일 저장 옵션
+                        if save_to_file:
+                            save_analysis_to_file(st.session_state['finance_input_data'], result_data)
                     else:
-                        st.error("❌ 실행 중 오류 발생")
-                        st.error(f"**오류**: {result.get('error', 'Unknown error')}")
+                        st.info("분석이 완료되었지만 결과 데이터가 없습니다.")
+                elif result and result.get("error"):
+                    st.error("❌ 실행 중 오류 발생")
+                    st.error(f"**오류**: {result.get('error', 'Unknown error')}")
                 
                 # 실행 후 상태 초기화
                 del st.session_state['finance_command']

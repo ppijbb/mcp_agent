@@ -7,12 +7,12 @@ AI 기반 자율 연구 시스템과 통합된 연구 에이전트
 import streamlit as st
 import sys
 from pathlib import Path
-import streamlit_process_manager as spm
-from srcs.common.ui_utils import run_agent_process
 import tempfile
 import json
 import os
 from datetime import datetime
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -53,6 +53,7 @@ except ImportError as e:
     SPARKLEFORGE_AVAILABLE = False
 
 # 기존 Research Agent 임포트 (fallback)
+LOCAL_RESEARCHER_AVAILABLE = SPARKLEFORGE_AVAILABLE
 if not LOCAL_RESEARCHER_AVAILABLE:
     try:
         from srcs.advanced_agents.researcher_v2 import (
@@ -164,38 +165,43 @@ def run_research_interface():
             "timestamp": datetime.now().isoformat()
         }
         
-        # 연구 실행
-        with st.spinner("연구를 진행하는 중입니다..."):
-            try:
-                # SparkleForge 컴포넌트 초기화
-                config = load_config_from_env()
-                orchestrator = AgentOrchestrator(config=config)
-                
-                # 비동기 함수 실행
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # SparkleForge 실행
-                result = loop.run_until_complete(
-                    orchestrator.execute(research_query, context)
-                )
-                loop.close()
-                
-                objective_id = result.get('objective_id', f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-                st.success(f"✅ 연구가 완료되었습니다! Objective ID: {objective_id}")
-                
-                # 결과를 세션 상태에 저장
-                st.session_state['last_research_id'] = objective_id
-                st.session_state['last_orchestrator'] = orchestrator
-                st.session_state['last_research_result'] = result
-                
-                # 결과 표시
-                display_sparkleforge_results(objective_id, result)
-                
-            except Exception as e:
-                st.error(f"❌ 연구 실행 실패: {e}")
-                st.exception(e)
+        # 연구 실행 (A2A를 통해)
+        placeholder = st.empty()
+        result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        result_json_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        agent_metadata = {
+            "agent_id": "sparkleforge_research_agent",
+            "agent_name": "SparkleForge Research Agent",
+            "agent_type": AgentType.SPARKLEFORGE_AGENT,
+            "entry_point": "sparkleforge.src.core.agent_orchestrator",
+            "capabilities": ["research", "autonomous_research", "multi_agent_orchestration"],
+            "description": "SparkleForge 기반 자율 연구 시스템"
+        }
+        
+        input_data = {
+            "query": research_query,
+            "context": context
+        }
+        
+        result = run_agent_via_a2a(
+            placeholder=placeholder,
+            agent_metadata=agent_metadata,
+            input_data=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
+        
+        if result and result.get("success"):
+            objective_id = result.get("data", {}).get('objective_id', f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            st.success(f"✅ 연구가 완료되었습니다! Objective ID: {objective_id}")
+            
+            # 결과를 세션 상태에 저장
+            st.session_state['last_research_id'] = objective_id
+            st.session_state['last_research_result'] = result.get("data", {})
+            
+            # 결과 표시
+            display_sparkleforge_results(objective_id, result.get("data", {}))
 
 
 def run_visualization_interface():
@@ -319,24 +325,38 @@ def run_fallback_interface():
             st.warning("⚠️ 연구 주제를 입력해주세요.")
             return
         
-        research_config = {
+        placeholder = st.empty()
+        result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        result_json_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        agent_metadata = {
+            "agent_id": "researcher_v2",
+            "agent_name": "Research Agent V2",
+            "agent_type": AgentType.MCP_AGENT,
+            "entry_point": "srcs.advanced_agents.researcher_v2",
+            "capabilities": ["research", "analysis", "report_generation"],
+            "description": "AI 기반 연구 에이전트"
+        }
+        
+        input_data = {
             "query": research_query,
             "focus": research_focus,
             "depth": research_depth
         }
         
-        with st.spinner("연구를 진행하는 중입니다..."):
-            try:
-                result = run_agent_process("researcher_v2", research_config, timeout=300)
-                
-                if result and result.get("success"):
-                    st.success("✅ 연구가 완료되었습니다!")
-                    display_research_results(result)
-                else:
-                    st.error("❌ 연구 실행 중 오류가 발생했습니다.")
-            
-            except Exception as e:
-                st.error(f"❌ 연구 실행 실패: {e}")
+        result = run_agent_via_a2a(
+            placeholder=placeholder,
+            agent_metadata=agent_metadata,
+            input_data=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
+        
+        if result and result.get("success"):
+            st.success("✅ 연구가 완료되었습니다!")
+            display_research_results(result.get("data", {}))
+        elif result and result.get("error"):
+            st.error(f"❌ 연구 실행 실패: {result.get('error')}")
 
 
 def display_sparkleforge_results(objective_id: str, result: dict):

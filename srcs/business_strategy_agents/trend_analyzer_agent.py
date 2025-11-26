@@ -12,8 +12,9 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
-from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityRating
+from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from srcs.common.utils import setup_agent_app
 from srcs.core.agent.base import BaseAgent
@@ -49,17 +50,33 @@ class TrendAnalyzerAgent(BaseAgent):
             output_path = os.path.join(self.output_dir, output_file)
 
             try:
-                # 1. Define specialized sub-agents with independent judgment
-                agents = self._create_trend_agents(focus_areas, time_horizon, output_path, app_context.llm_factory)
+                # LLM factory: Gemini 모델을 사용하므로 GoogleAugmentedLLM 사용
+                from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
                 
-                # 2. Get a quality-controlled orchestrator with independent decision making
-                orchestrator = self.get_orchestrator(agents)
+                # 1. Define specialized sub-agents with independent judgment
+                # Agent 생성 시 llm_factory는 람다로 전달
+                def llm_factory_for_agents(**kwargs):
+                    return GoogleAugmentedLLM(model="gemini-2.5-flash")
+                
+                agents = self._create_trend_agents(focus_areas, time_horizon, output_path, llm_factory_for_agents)
+                
+                # 2. Create orchestrator - 공식 예제처럼 클래스 자체를 전달
+                from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+                orchestrator = Orchestrator(
+                    llm_factory=GoogleAugmentedLLM,
+                    available_agents=agents,
+                    plan_type="full"
+                )
 
                 # 3. Define the main task with independent agent requirements
                 task = self._create_analysis_task(focus_areas, time_horizon, output_path)
 
-                # 4. Run the orchestrator with independent agent execution
-                final_report = await orchestrator.run(task)
+                # 4. Run the orchestrator - 공식 예제처럼 RequestParams는 model만 전달
+                from mcp_agent.workflows.llm.augmented_llm import RequestParams
+                final_report = await orchestrator.generate_str(
+                    message=task,
+                    request_params=RequestParams(model="gemini-2.5-flash")
+                )
                 
                 self.logger.info(f"Independent trend analysis complete. Report saved to {output_path}")
                 return {"report_path": output_path, "content": final_report}

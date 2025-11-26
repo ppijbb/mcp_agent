@@ -1,49 +1,63 @@
 mcp:
   servers:
+    # Basic MCP Servers (required for business strategy agents)
+    g-search:
+      command: "npx"
+      args: ["-y", "g-search-mcp"]
+      env:
+        GOOGLE_SEARCH_API_KEY: "${GOOGLE_SEARCH_API_KEY}"
+        GOOGLE_SEARCH_ENGINE_ID: "${GOOGLE_SEARCH_ENGINE_ID}"
+      enabled: true
+    
+    fetch:
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-fetch"]
+      enabled: true
+    
+    filesystem:
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-filesystem"]
+      enabled: true
+    
     # DevOps Productivity Agent MCP Servers
     aws-kb:
-      url: "npx -y @modelcontextprotocol/server-aws-kb"
-      description: "AWS Knowledge Base MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-aws-kb"]
       enabled: true
     github:
-      url: "npx -y @modelcontextprotocol/server-github"
-      description: "GitHub Operations MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
       enabled: true
     prometheus:
-      url: "npx -y @modelcontextprotocol/server-prometheus"
-      description: "Prometheus Metrics MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-prometheus"]
       enabled: true
     kubernetes:
-      url: "npx -y @modelcontextprotocol/server-kubernetes"
-      description: "Kubernetes Cluster Management MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-kubernetes"]
       enabled: true
     gcp-admin:
-      url: "npx -y @modelcontextprotocol/server-gcp"
-      description: "Google Cloud Platform Admin MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-gcp"]
       enabled: true
     azure-admin:
-      url: "npx -y @modelcontextprotocol/server-azure"
-      description: "Azure Cloud Admin MCP Server"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-azure"]
       enabled: true
     
     # Legacy MCP Servers (for other agents)
     gdrive:
       url: "http://localhost:3001"
-      description: "Google Drive MCP"
       enabled: false
     figma:
       url: "http://localhost:3003"
-      description: "Figma Context MCP"
       enabled: false
     notion:
       url: "http://localhost:3004"
-      description: "Notion Context MCP"
       enabled: false
     ethereum_trading:
       url: "http://localhost:3005"
-      description: "Ethereum Trading MCP"
       enabled: false
     market_data:
       url: "http://localhost:3006"
-      description: "Market Data Collection MCP"
       enabled: false 

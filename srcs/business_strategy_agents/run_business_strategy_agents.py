@@ -14,10 +14,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import time
 
-from .strategy_planner_agent import StrategyPlanner
-from .unified_business_strategy_agent import UnifiedBusinessStrategy
-
- 
+from .business_data_scout_agent import BusinessDataScoutAgent
+from .trend_analyzer_agent import TrendAnalyzerAgent
 
 
 class BusinessStrategyRunner:
@@ -32,15 +30,9 @@ class BusinessStrategyRunner:
         self.google_drive_mcp_url = google_drive_mcp_url
         self.data_sourcing_mcp_url = data_sourcing_mcp_url
         
-        # Initialize dependency-light agents
-        self.planner = StrategyPlanner(
-            google_drive_mcp_url=self.google_drive_mcp_url,
-            data_sourcing_mcp_url=self.data_sourcing_mcp_url
-        )
-        self.unifier = UnifiedBusinessStrategy(
-            google_drive_mcp_url=self.google_drive_mcp_url,
-            data_sourcing_mcp_url=self.data_sourcing_mcp_url
-        )
+        # Initialize actual MCP agents (no fallback)
+        self.data_scout = BusinessDataScoutAgent()
+        self.trend_analyzer = TrendAnalyzerAgent()
 
     async def run_agents(self, 
                        industry: str,
@@ -48,33 +40,57 @@ class BusinessStrategyRunner:
                        competitors: List[str],
                        tech_trends: List[str]) -> Dict[str, Any]:
         """
-        Runs the sequence of business strategy agents.
+        Runs the sequence of business strategy agents using actual MCP agents.
         """
-        print("Running Strategy Planner Agent...")
-        planner_result = await self.planner.analyze_market_and_business(
-            industry=industry,
-            company_info=company_profile,
-            competitors=competitors
+        print("Running Business Data Scout Agent...")
+        
+        # 키워드 구성 (industry + competitors + tech_trends)
+        keywords = [industry] + competitors + tech_trends
+        keywords = list(set(keywords))  # 중복 제거
+        
+        # Business Data Scout 실행 (실제 MCP agent)
+        scout_result = await self.data_scout.run_workflow(
+            keywords=keywords,
+            regions=None
         )
+        print(f"✅ Business Data Scout completed: {scout_result.get('report_path', 'N/A')}")
         
-        # In a real scenario, you might have more complex logic to pass
-        # results from one agent to the next.
+        print("\nRunning Trend Analyzer Agent...")
         
-        print("\nRunning Unified Business Strategy Agent...")
-        unifier_result = await self.unifier.develop_strategy(
-            industry=industry,
-            company_profile=company_profile,
-            competitors=competitors,
-            tech_trends=tech_trends
+        # Trend Analyzer 실행 (실제 MCP agent)
+        trend_result = await self.trend_analyzer.run_workflow(
+            focus_areas=keywords,
+            time_horizon="12_months"
         )
+        print(f"✅ Trend Analyzer completed: {trend_result.get('report_path', 'N/A')}")
         
-        # Save individual reports
-        await self.planner.save_report(planner_result, f"strategy_plan_{industry}.json")
-        await self.unifier.save_report(unifier_result, f"unified_strategy_{industry}.json")
+        # 결과 데이터 로드
+        scout_data = None
+        if scout_result.get("report_path"):
+            with open(scout_result["report_path"], "r", encoding="utf-8") as f:
+                scout_data = f.read()
+        
+        trend_data = None
+        if trend_result.get("report_path"):
+            with open(trend_result["report_path"], "r", encoding="utf-8") as f:
+                trend_data = f.read()
 
+        # 실제 분석 데이터를 포함한 최종 결과 구성
         final_summary = {
-            "planner_output": planner_result,
-            "unifier_output": unifier_result
+            "data_scout_output": {
+                "success": True,
+                "report_path": scout_result.get("report_path"),
+                "data": scout_data
+            },
+            "trend_analyzer_output": {
+                "success": True,
+                "report_path": trend_result.get("report_path"),
+                "data": trend_data
+            },
+            "industry": industry,
+            "company_profile": company_profile,
+            "competitors": competitors,
+            "tech_trends": tech_trends
         }
         
         # Save the final summary report

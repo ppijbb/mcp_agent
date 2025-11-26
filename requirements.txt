@@ -1,27 +1,179 @@
+# Core LangChain and LangGraph
 langgraph
+langgraph-cli
 langchain
 langchain-community
 langchain-core
 langchain-openai
 langchain-google-genai
+langchain-google-vertexai
 langchain-groq
 langchain-anthropic
-pydantic
-pytest
-pytest-asyncio
-pybreaker
+langchain-mcp-adapters
+langchain-deepseek
+langchain-tavily
+langchain-aws
+langsmith
+
+# LLM Providers
 google-genai
 groq
 openai
 anthropic
-web3
-requests
-python-dotenv
-sqlite3
-asyncio
-aiohttp
-pandas
-numpy
-PyYAML
+openrouter
+
+# MCP (Model Context Protocol)
 mcp
 fastmcp
+mcp_agent
+
+# Web Framework
+streamlit
+streamlit-process-manager
+streamlit-aggrid
+streamlit-autorefresh
+
+# Data Processing and Analysis
+pandas
+numpy
+scipy
+scikit-learn
+
+# HTTP Clients
+requests
+aiohttp
+httpx
+
+# Configuration and Utilities
+python-dotenv
+PyYAML
+pydantic
+pydantic-settings
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+
+# Circuit Breaker and Caching
+pybreaker
+cachetools
+
+# Blockchain
+web3
+
+# Visualization
+plotly
+
+# Financial Data
+yfinance
+
+# PDF and Document Processing
+fpdf2
+openpyxl
+PyPDF2
+PyMuPDF
+python-docx
+reportlab
+weasyprint
+
+# Web Scraping
+beautifulsoup4
+markdownify
+selenium
+playwright
+scrapy
+
+# Database and Vector Stores
+chromadb
+qdrant-client
+sqlalchemy
+redis
+aioredis
+alembic
+sentence-transformers
+
+# Search and Research
+duckduckgo-search
+tavily-python
+exa-py
+arxiv
+scholarly
+azure-search-documents
+supabase
+
+# Browser Automation
+browser-use
+
+# CLI and Interface
+click
+rich
+typer
+
+# System Monitoring
+psutil
+structlog
+prometheus-client
+
+# Retry and Resilience
+tenacity
+
+# Security
+cryptography
+passlib
+PyJWT
+
+# Message Queues and Async
+asyncio-mqtt
+websockets
+uvloop
+
+# API Frameworks
+fastapi
+uvicorn
+starlette
+
+# Performance Optimization
+orjson
+ujson
+msgpack
+
+# Machine Learning (if needed)
+torch
+transformers
+tensorflow
+
+# Additional Visualization
+matplotlib
+seaborn
+bokeh
+
+# Cron and Scheduling
+apscheduler
+celery
+kombu
+pika
+
+# Cloud and Deployment
+docker
+kubernetes
+
+# Documentation
+sphinx
+sphinx-rtd-theme
+
+# Development Tools
+black
+isort
+flake8
+mypy
+
+# Additional Utilities
+jinja2
+markdown
+pdfkit
+ipykernel
+xmltodict
+linkup-sdk
+azure-identity
+newspaper3k

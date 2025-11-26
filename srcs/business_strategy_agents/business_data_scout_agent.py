@@ -17,9 +17,12 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
-from mcp_agent.workflows.llm.evaluator_optimizer_llm import EvaluatorOptimizerLLM
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityRating
+from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.config import get_settings
 from srcs.common.utils import setup_agent_app, save_report
 from srcs.core.agent.base import BaseAgent
 from mcp_agent.agents.agent import Agent as MCP_Agent
@@ -70,17 +73,36 @@ class BusinessDataScoutAgent(BaseAgent):
             output_path = os.path.join(self.output_dir, output_file)
 
             try:
-                # 1. Define specialized sub-agents with independent judgment
-                agents = self._create_specialized_agents(keywords, regions, output_path, app_context.llm_factory)
+                # app_context에서 context 가져오기
+                context = app_context.context
                 
-                # 2. Get an orchestrator to manage them with independent decision making
-                orchestrator = self.get_orchestrator(agents)
+                # LLM factory: Gemini 모델을 사용하므로 GoogleAugmentedLLM 사용
+                def llm_factory(**kwargs):
+                    return GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
+                
+                # 1. Define specialized sub-agents with independent judgment
+                # Agent 생성 시 llm_factory는 람다로 전달
+                def llm_factory_for_agents(**kwargs):
+                    return GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
+                
+                agents = self._create_specialized_agents(keywords, regions, output_path, llm_factory_for_agents)
+                
+                # 2. Create orchestrator - 공식 예제처럼 클래스 자체를 전달
+                orchestrator = Orchestrator(
+                    llm_factory=GoogleAugmentedLLM,
+                    available_agents=agents,
+                    plan_type="full"
+                )
 
                 # 3. Define the main task with independent agent requirements
                 task = self._create_data_collection_task(keywords, regions, output_path)
 
-                # 4. Run the orchestrator with independent agent execution
-                final_report = await orchestrator.run(task)
+                # 4. Run the orchestrator - 공식 예제처럼 RequestParams는 model만 전달
+                from mcp_agent.workflows.llm.augmented_llm import RequestParams
+                final_report = await orchestrator.generate_str(
+                    message=task,
+                    request_params=RequestParams(model="gemini-2.5-flash-lite")
+                )
                 
                 self.logger.info(f"Independent data scouting complete. Report saved to {output_path}")
                 return {"report_path": output_path, "content": final_report}
@@ -305,7 +327,7 @@ async def run_business_data_scout(
     """Asynchronously run the Business Data Scout MCPAgent."""
     os.makedirs(output_dir, exist_ok=True)
 
-    llm_factory = lambda: OpenAIAugmentedLLM(model="gemini-2.5-flash")
+    llm_factory = lambda: GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
 
     async with MCPApp(settings=get_settings("configs/mcp_agent.config.yaml")).run() as app:
         # Create agents
@@ -343,7 +365,7 @@ async def run_business_data_scout(
             # Run orchestrator
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.5-flash"),
+                request_params=RequestParams(model="gemini-2.5-flash-lite"),
             )
 
             # Save result
@@ -356,6 +378,8 @@ async def run_business_data_scout(
                 "success": True,
                 "output_file": output_file,
                 "analysis_summary": "Business data scout completed successfully.",
+                "keywords": keywords,
+                "regions": regions if regions else ["Global"]
             }
 
         except Exception as e:
