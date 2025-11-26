@@ -99,16 +99,24 @@ class BusinessDataScoutAgent(BaseAgent):
 
                 # 4. Run the orchestrator - 공식 예제처럼 RequestParams는 model만 전달
                 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-                final_report = await orchestrator.generate_str(
-                    message=task,
-                    request_params=RequestParams(model="gemini-2.5-flash-lite")
-                )
+                try:
+                    final_report = await orchestrator.generate_str(
+                        message=task,
+                        request_params=RequestParams(model="gemini-2.5-flash-lite")
+                    )
+                except (BrokenPipeError, OSError) as pipe_error:
+                    # EPIPE 또는 파이프 관련 에러 처리
+                    error_code = getattr(pipe_error, 'errno', None)
+                    if error_code == 32 or 'EPIPE' in str(pipe_error):
+                        self.logger.error(f"MCP server process terminated unexpectedly (EPIPE). This may indicate the server crashed or was closed.")
+                        raise RuntimeError(f"MCP server connection lost: {pipe_error}") from pipe_error
+                    raise
                 
                 self.logger.info(f"Independent data scouting complete. Report saved to {output_path}")
                 return {"report_path": output_path, "content": final_report}
                 
             except Exception as e:
-                self.logger.error(f"Independent data scouting failed: {e}")
+                self.logger.error(f"Independent data scouting failed: {e}", exc_info=True)
                 raise
 
     def _create_specialized_agents(self, keywords, regions, output_path, llm_factory):

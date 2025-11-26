@@ -1,5 +1,7 @@
 import asyncio
 import functools
+import atexit
+import threading
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from mcp_agent.app import MCPApp
@@ -11,6 +13,45 @@ from cachetools import LRUCache
 from cachetools.keys import hashkey
 from pybreaker import CircuitBreaker, CircuitBreakerError
 import aiohttp
+
+# Apply schema fix for fetch-mcp and other servers with non-standard type formats
+from srcs.core.agent.schema_fix import patch_transform_mcp_tool_schema
+
+# Patch the schema transformer on module import
+patch_transform_mcp_tool_schema()
+
+# 전역 MCPApp 인스턴스 추적 (cleanup용)
+_active_mcp_apps: List[MCPApp] = []
+_cleanup_registered = False
+_cleanup_lock = threading.Lock()
+
+def _cleanup_mcp_apps():
+    """모든 활성 MCPApp 인스턴스 정리"""
+    import logging
+    logger = logging.getLogger(__name__)
+    for app in _active_mcp_apps[:]:  # 복사본으로 순회 (리스트 변경 가능)
+        try:
+            # MCPApp이 cleanup 메서드를 가지고 있는지 확인
+            if hasattr(app, 'cleanup'):
+                # 동기 cleanup이면 직접 호출, 비동기면 무시 (atexit에서는 async 불가)
+                if not asyncio.iscoroutinefunction(app.cleanup):
+                    app.cleanup()
+        except Exception as e:
+            logger.warning(f"Error cleaning up MCPApp: {e}")
+
+# 프로세스 종료 시 cleanup 등록 (한 번만)
+def _register_cleanup():
+    """cleanup 핸들러 등록 (메인 스레드에서만)"""
+    global _cleanup_registered
+    with _cleanup_lock:
+        if not _cleanup_registered:
+            # 메인 스레드인지 확인
+            if threading.current_thread() is threading.main_thread():
+                try:
+                    atexit.register(_cleanup_mcp_apps)
+                    _cleanup_registered = True
+                except Exception:
+                    pass  # 등록 실패해도 계속 진행
 
 
 def async_memoize(func):
@@ -86,11 +127,16 @@ class BaseAgent(ABC):
         # set_global=False로 설정하여 멀티스레드 환경에서 안전하게 사용
         settings = get_settings(str(config_path), set_global=False)
         
-        return MCPApp(
+        app = MCPApp(
             name=self.name,
             settings=settings,
             human_input_callback=None
         )
+        # 전역 리스트에 추가 (cleanup용)
+        _active_mcp_apps.append(app)
+        # cleanup 핸들러 등록 시도 (메인 스레드에서만)
+        _register_cleanup()
+        return app
 
     @abstractmethod
     async def run_workflow(self, *args, **kwargs) -> Any:

@@ -48,7 +48,8 @@ from models.drone_data import (
 )
 from models.task_types import (
     TaskType, TaskPriority, SensorType, DroneOperationalStatus,
-    KOREAN_TASK_KEYWORDS, TASK_SENSOR_REQUIREMENTS, TASK_DURATION_ESTIMATES
+    KOREAN_TASK_KEYWORDS, TASK_SENSOR_REQUIREMENTS, TASK_DURATION_ESTIMATES,
+    WeatherCondition
 )
 
 # Configuration
@@ -167,8 +168,9 @@ Always prioritize safety, regulatory compliance, and mission success."""
             assigned_drones = await self._assign_drones_to_mission(parsed_mission)
             
             # Execute autonomous mission
+            simulation_mode = context.get("simulation_mode", True)
             mission_result = await self._execute_autonomous_mission(
-                mission, flight_plan, assigned_drones
+                mission, flight_plan, assigned_drones, simulation_mode=simulation_mode
             )
             
             # Generate comprehensive report
@@ -375,12 +377,13 @@ Always prioritize safety, regulatory compliance, and mission success."""
     async def _execute_autonomous_mission(self, 
                                         mission: str, 
                                         flight_plan: FlightPlan, 
-                                        assigned_drones: List[DroneStatus]) -> Dict[str, Any]:
+                                        assigned_drones: List[DroneStatus],
+                                        simulation_mode: bool = True) -> Dict[str, Any]:
         """Execute the autonomous mission with real-time monitoring."""
         mission_id = str(uuid.uuid4())
         start_time = datetime.now()
         
-        self.logger.info(f"Executing mission {mission_id} with {len(assigned_drones)} drones")
+        self.logger.info(f"Executing mission {mission_id} with {len(assigned_drones)} drones (simulation_mode={simulation_mode})")
         
         # Simulate mission execution
         mission_result = {
@@ -397,29 +400,106 @@ Always prioritize safety, regulatory compliance, and mission success."""
             "alerts": []
         }
         
-        # Simulate waypoint navigation
-        for i, waypoint in enumerate(flight_plan.waypoints):
-            self.logger.info(f"Navigating to waypoint {i+1}/{len(flight_plan.waypoints)}: {waypoint}")
-            
-            # Simulate flight time
-            await asyncio.sleep(0.1)  # Simulated delay
-            
-            # Update progress
-            mission_result["progress"] = (i + 1) / len(flight_plan.waypoints) * 100
-            mission_result["waypoints_completed"] = i + 1
-            
-            # Simulate data collection
-            if i % 2 == 0:  # Collect data at every other waypoint
-                data_point = {
-                    "timestamp": datetime.now().isoformat(),
-                    "waypoint": waypoint,
-                    "sensor_data": {
-                        "temperature": 20.0 + (i * 0.5),
-                        "humidity": 60.0 - (i * 0.2),
-                        "wind_speed": 5.0 + (i * 0.1)
-                    }
-                }
-                mission_result["data_collected"].append(data_point)
+        if simulation_mode:
+            # Use physics-based simulator
+            try:
+                from simulators.drone_physics_simulator import DronePhysicsSimulator
+                from models.drone_data import WeatherData
+                from models.task_types import WeatherCondition
+                
+                simulator = DronePhysicsSimulator(seed=None)
+                
+                # Generate weather data
+                weather = WeatherData(
+                    temperature=self.rng.uniform(15, 25),
+                    humidity=self.rng.uniform(40, 80),
+                    wind_speed=self.rng.uniform(2, 10),
+                    wind_direction=self.rng.uniform(0, 360),
+                    visibility=self.rng.uniform(5, 20),
+                    precipitation=False,
+                    condition=WeatherCondition.CLEAR,
+                    flight_safe=True
+                )
+                
+                # Generate flight trajectory using physics simulator
+                if len(flight_plan.waypoints) > 0:
+                    start_pos = flight_plan.waypoints[0]
+                    trajectory = simulator.generate_flight_trajectory(
+                        start_pos=start_pos,
+                        waypoints=flight_plan.waypoints[1:] if len(flight_plan.waypoints) > 1 else [],
+                        cruise_speed=10.0,
+                        max_acceleration=2.0,
+                        update_interval=0.5
+                    )
+                    
+                    # Simulate waypoint navigation with physics-based trajectory
+                    for i, traj_point in enumerate(trajectory):
+                        self.logger.info(f"Navigating to waypoint {i+1}/{len(trajectory)}")
+                        
+                        # Update progress
+                        mission_result["progress"] = (i + 1) / len(trajectory) * 100
+                        mission_result["waypoints_completed"] = i + 1
+                        
+                        # Generate sensor readings using simulator
+                        if i % 2 == 0:
+                            current_pos = DronePosition(
+                                latitude=traj_point["lat"],
+                                longitude=traj_point["lon"],
+                                altitude=traj_point["alt"],
+                                heading=traj_point.get("heading"),
+                                speed=traj_point.get("speed")
+                            )
+                            
+                            sensor_readings = simulator.simulate_sensor_readings(
+                                position=current_pos,
+                                weather=weather,
+                                sensor_types=[SensorType.TEMPERATURE, SensorType.HUMIDITY, SensorType.WIND_SPEED, SensorType.PRESSURE],
+                                duration_seconds=1.0,
+                                interval=0.1
+                            )
+                            
+                            # Convert sensor readings to data point format
+                            if sensor_readings:
+                                latest_reading = sensor_readings[-1]
+                                data_point = {
+                                    "timestamp": traj_point["timestamp"],
+                                    "waypoint": {
+                                        "lon": traj_point["lon"],
+                                        "lat": traj_point["lat"],
+                                        "alt": traj_point["alt"]
+                                    },
+                                    "sensor_data": {
+                                        "temperature": next((r.value for r in sensor_readings if r.sensor_type == SensorType.TEMPERATURE), 20.0),
+                                        "humidity": next((r.value for r in sensor_readings if r.sensor_type == SensorType.HUMIDITY), 60.0),
+                                        "wind_speed": next((r.value for r in sensor_readings if r.sensor_type == SensorType.WIND_SPEED), 5.0),
+                                        "pressure": next((r.value for r in sensor_readings if r.sensor_type == SensorType.PRESSURE), 1013.25)
+                                    }
+                                }
+                                mission_result["data_collected"].append(data_point)
+                        
+                        await asyncio.sleep(0.05)  # Small delay for simulation
+                else:
+                    # Fallback if no waypoints
+                    self.logger.warning("No waypoints in flight plan, using basic simulation")
+                    for i in range(len(flight_plan.waypoints)):
+                        await asyncio.sleep(0.1)
+                        mission_result["progress"] = (i + 1) / max(1, len(flight_plan.waypoints)) * 100
+                        mission_result["waypoints_completed"] = i + 1
+            except ImportError as e:
+                self.logger.warning(f"Simulator not available, using basic simulation: {e}")
+                # Fallback to basic simulation
+                for i, waypoint in enumerate(flight_plan.waypoints):
+                    await asyncio.sleep(0.1)
+                    mission_result["progress"] = (i + 1) / len(flight_plan.waypoints) * 100
+                    mission_result["waypoints_completed"] = i + 1
+        else:
+            # Real execution (would use actual drone APIs)
+            self.logger.info("Real execution mode - would connect to actual drone hardware")
+            for i, waypoint in enumerate(flight_plan.waypoints):
+                self.logger.info(f"Navigating to waypoint {i+1}/{len(flight_plan.waypoints)}: {waypoint}")
+                await asyncio.sleep(0.1)
+                mission_result["progress"] = (i + 1) / len(flight_plan.waypoints) * 100
+                mission_result["waypoints_completed"] = i + 1
         
         # Complete mission
         mission_result["status"] = "completed"

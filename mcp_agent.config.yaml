@@ -11,7 +11,7 @@ mcp:
     
     fetch:
       command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-fetch"]
+      args: ["-y", "fetch-mcp"]
       enabled: true
     
     filesystem:

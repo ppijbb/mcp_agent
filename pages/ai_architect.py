@@ -87,6 +87,16 @@ def main():
         max_generations = col1.slider("최대 세대 수", 1, 20, 5)
         population_size = col2.slider("인구 크기", 5, 50, 10)
         
+        # 시뮬레이션 모드 토글
+        simulation_mode = st.checkbox(
+            "시뮬레이션 모드 활성화",
+            value=True,
+            help="시뮬레이션 모드가 활성화되면 성능 모델링 시뮬레이터를 사용하여 아키텍처 성능을 추정합니다."
+        )
+        
+        if simulation_mode:
+            st.info("🔬 시뮬레이션 모드: 아키텍처 성능 모델링 시뮬레이터를 사용합니다.")
+        
         submitted = st.form_submit_button("🚀 아키텍처 진화 시작", use_container_width=True)
 
     if submitted:
@@ -110,6 +120,7 @@ def main():
                 "problem_description": problem_description,
                 "max_generations": max_generations,
                 "population_size": population_size,
+                "simulation_mode": simulation_mode,
                 "result_json_path": str(result_json_path)
             }
 

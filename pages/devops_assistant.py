@@ -67,6 +67,16 @@ def main():
         if task_type == "code_review":
             pull_number = st.number_input("PR 번호", min_value=1, value=42)
         
+        # 시뮬레이션 모드 토글
+        simulation_mode = st.checkbox(
+            "시뮬레이션 모드 활성화",
+            value=True,
+            help="시뮬레이션 모드가 활성화되면 클라우드 리소스 시뮬레이터를 사용하여 GitHub/AWS/K8s 데이터를 생성합니다."
+        )
+        
+        if simulation_mode:
+            st.info("🔬 시뮬레이션 모드: 클라우드 리소스 시뮬레이터를 사용합니다.")
+        
         submitted = st.form_submit_button("🚀 DevOps 작업 실행", use_container_width=True)
 
     if submitted:
@@ -88,6 +98,7 @@ def main():
             "task_type": task_type,
             "owner": owner,
             "repo": repo,
+            "simulation_mode": simulation_mode,
         }
         if task_type == "code_review":
             config["pull_number"] = int(pull_number)

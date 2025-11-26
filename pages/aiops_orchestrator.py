@@ -44,6 +44,16 @@ def main():
             height=100
         )
         
+        # 시뮬레이션 모드 토글
+        simulation_mode = st.checkbox(
+            "시뮬레이션 모드 활성화",
+            value=True,
+            help="시뮬레이션 모드가 활성화되면 인프라 메트릭 시뮬레이터를 사용하여 시스템 메트릭을 생성합니다."
+        )
+        
+        if simulation_mode:
+            st.info("🔬 시뮬레이션 모드: 인프라 메트릭 시뮬레이터를 사용합니다.")
+        
         submitted = st.form_submit_button("🚀 AIOps 작업 실행", use_container_width=True)
 
     if submitted:
@@ -67,7 +77,7 @@ def main():
                 "module_path": "srcs.enterprise_agents.aiops_orchestrator_agent",
                 "class_name": "AIOpsOrchestratorAgent",
                 "method_name": "execute_task",
-                "config": {"task": task_description},
+                "config": {"task": task_description, "simulation_mode": simulation_mode},
                 "result_json_path": str(result_json_path)
             }
 

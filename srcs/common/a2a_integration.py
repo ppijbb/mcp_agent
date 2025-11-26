@@ -124,12 +124,15 @@ class A2AAdapter(ABC):
         handler = self.message_handlers.get(message.message_type)
         if handler:
             try:
-                return await handler(message) if asyncio.iscoroutinefunction(handler) else handler(message)
+                logger.info(f"Calling handler for message type {message.message_type} in agent {self.agent_id}")
+                result = await handler(message) if asyncio.iscoroutinefunction(handler) else handler(message)
+                logger.debug(f"Handler for {message.message_type} returned result: {result is not None}")
+                return result
             except Exception as e:
-                logger.error(f"Error handling message {message.message_id}: {e}")
+                logger.error(f"Error handling message {message.message_id} in agent {self.agent_id}: {e}", exc_info=True)
                 return None
         else:
-            logger.warning(f"No handler for message type: {message.message_type}")
+            logger.warning(f"No handler for message type: {message.message_type} in agent {self.agent_id}")
             return None
 
 
@@ -237,7 +240,9 @@ class A2AMessageBroker:
             return False
         
         # 메시지 큐에 추가 (비동기 처리)
+        logger.info(f"Routing message {message.message_id} ({message.message_type}) from {message.source_agent} to {message.target_agent}")
         await a2a_adapter._message_queue.put(message)
+        logger.debug(f"Message {message.message_id} added to queue for agent {message.target_agent}")
         return True
     
     async def _broadcast_message(self, message: A2AMessage) -> bool:

@@ -120,6 +120,17 @@ def main():
             placeholder="예: 서울숲 공원 상공을 비행하며 주요 시설물의 현재 상태를 촬영하고 보고서를 작성해줘. 비행 고도는 50m로 유지해.",
             height=150
         )
+        
+        # 시뮬레이션 모드 토글
+        simulation_mode = st.checkbox(
+            "시뮬레이션 모드 활성화",
+            value=True,
+            help="시뮬레이션 모드가 활성화되면 물리 기반 시뮬레이터를 사용하여 실제 드론 비행을 모방합니다."
+        )
+        
+        if simulation_mode:
+            st.info("🔬 시뮬레이션 모드: 물리 엔진 기반 비행 시뮬레이션을 사용합니다.")
+        
         submitted = st.form_submit_button("🚀 Launch Mission", use_container_width=True)
 
     if submitted:
@@ -141,6 +152,7 @@ def main():
 
             input_data = {
                 "mission": mission_text,
+                "simulation_mode": simulation_mode,
                 "result_json_path": str(result_json_path)
             }
 

@@ -72,6 +72,16 @@ def main():
             default=["ISO 27001 (Information Security Management)", "GDPR (General Data Protection Regulation)"]
         )
         
+        # 시뮬레이션 모드 토글
+        simulation_mode = st.checkbox(
+            "시뮬레이션 모드 활성화",
+            value=True,
+            help="시뮬레이션 모드가 활성화되면 보안 이벤트 시뮬레이터를 사용하여 보안 이벤트 및 스캔 데이터를 생성합니다."
+        )
+        
+        if simulation_mode:
+            st.info("🔬 시뮬레이션 모드: 보안 이벤트 시뮬레이터를 사용합니다.")
+        
         submitted = st.form_submit_button("🚀 보안 평가 시작", use_container_width=True)
 
     if submitted:
@@ -86,6 +96,7 @@ def main():
                 'company_name': company_name,
                 'assessment_type': assessment_type,
                 'frameworks': frameworks,
+                'simulation_mode': simulation_mode,
                 'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
             }
 

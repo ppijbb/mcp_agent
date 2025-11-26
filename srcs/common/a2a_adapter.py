@@ -95,11 +95,13 @@ class CommonAgentA2AWrapper(A2AAdapter):
         while self.is_listening:
             try:
                 message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
-                await self.handle_message(message)
+                logger.info(f"Agent {self.agent_id} received message: {message.message_type} (id: {message.message_id})")
+                result = await self.handle_message(message)
+                logger.debug(f"Agent {self.agent_id} handled message {message.message_id}, result: {result is not None}")
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                logger.error(f"Error processing message in agent {self.agent_id}: {e}", exc_info=True)
     
     async def register_capabilities(self, capabilities: List[str]) -> None:
         """Agent 능력 등록"""

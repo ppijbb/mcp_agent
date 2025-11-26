@@ -144,22 +144,30 @@ def run_agent_via_a2a(
             st.session_state.a2a_log_sidebar_initialized = True
         
         def update_log_ui():
-            """로그 UI 업데이트 (사이드바)"""
-            # 스크롤 가능한 컨테이너 생성
+            """로그 UI 업데이트 (사이드바) - 스크롤 가능"""
+            # 로그 텍스트 생성
             log_text = ""
             for log_entry in st.session_state[log_key][-100:]:  # 최근 100개만 표시
                 timestamp, icon, message = log_entry
                 log_text += f"[{timestamp}] {icon} {message}\n"
             
-            # 사이드바 placeholder 업데이트
-            with st.sidebar:
-                st.session_state.a2a_log_sidebar_placeholder.code(log_text, language="text")
+            # placeholder를 직접 업데이트 (container() 사용하지 않음 - 중복 생성 방지)
+            # st.code()는 스크롤 가능하고 읽기 전용이며 key가 필요 없음
+            st.session_state.a2a_log_sidebar_placeholder.code(
+                log_text if log_text else "로그가 없습니다.",
+                language="text"
+            )
         
         def log_a2a_message(message: str, level: str = "info"):
             """A2A 메시지 로그를 세션 상태에 저장"""
             timestamp = datetime.now().strftime("%H:%M:%S")
             icon = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌"}.get(level, "ℹ️")
             st.session_state[log_key].append((timestamp, icon, message))
+            
+            # 로그가 너무 길어지면 오래된 것 제거 (최대 200개 유지)
+            if len(st.session_state[log_key]) > 200:
+                st.session_state[log_key] = st.session_state[log_key][-200:]
+            
             logger.info(f"A2A [{level}]: {message}")
             # UI 업데이트 시도 (비동기에서는 제한적)
             try:
@@ -469,6 +477,24 @@ def run_agent_via_a2a(
                     while not response_received and elapsed < timeout:
                         await asyncio.sleep(check_interval)
                         elapsed += check_interval
+                        
+                        # UI wrapper의 메시지 큐에서 응답 확인
+                        try:
+                            message = await asyncio.wait_for(ui_wrapper._message_queue.get(), timeout=0.1)
+                            if message.message_type == "task_response" and message.correlation_id == correlation_id:
+                                response_data = message.payload
+                                response_received = True
+                                update_log(f"✅ task_response 수신: {message.message_id} (correlation_id: {correlation_id})", "success")
+                                logger.info(f"Streamlit UI received task response: {message.message_id}")
+                            else:
+                                # 다른 메시지는 다시 큐에 넣기
+                                await ui_wrapper._message_queue.put(message)
+                        except asyncio.TimeoutError:
+                            pass
+                        except AttributeError:
+                            # _message_queue가 없는 경우 (이전 버전 호환)
+                            pass
+                        
                         if int(elapsed) % 5 == 0:  # 5초마다 상태 업데이트
                             update_log(f"⏳ 응답 대기 중... ({int(elapsed)}초 경과)", "info")
                     
