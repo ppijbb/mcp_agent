@@ -52,7 +52,6 @@ def display_results(result_data):
     
     with st.expander("세부 진단 내용 보기", expanded=True):
         st.markdown("#### 주요 웹 지표 (Core Web Vitals)")
-        st.json(result_data.get('core_web_vitals', {}))
         
         st.markdown("#### 🚨 치명적인 문제")
         st.table(pd.DataFrame(result_data.get('critical_issues', []), columns=["문제점"]))
@@ -171,7 +170,6 @@ def main():
                 if 'timestamp' in latest_seo_result:
                     st.caption(f"⏰ 진단 시간: {latest_seo_result['timestamp']}")
             else:
-                st.json(latest_seo_result)
     else:
         st.info("💡 아직 SEO Doctor Agent의 결과가 없습니다. 위에서 SEO 진단을 실행해보세요.")
 

@@ -185,7 +185,7 @@ def main():
                     for framework in frameworks:
                         st.write(f"• {framework}")
             else:
-                st.json(latest_cybersecurity_result)
+                
     else:
         st.info("💡 아직 Cybersecurity Agent의 결과가 없습니다. 위에서 보안 평가를 실행해보세요.")
 

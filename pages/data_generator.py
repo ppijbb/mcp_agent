@@ -372,7 +372,6 @@ def display_detailed_data_results(result: dict, config: dict):
         st.toast("다운로드가 시작되었습니다!")
 
     with st.expander("🔍 품질 측정 항목 보기"):
-        st.json(result.get('quality_metrics', {}))
 
 
 # 아래 함수들은 기존 로직을 그대로 사용하거나, 더미 데이터를 반환합니다.
@@ -520,10 +519,8 @@ def render_results_viewer():
             # 설정 정보 표시
             if 'config' in latest_result:
                 with st.expander("⚙️ 생성 설정", expanded=False):
-                    st.json(latest_result['config'])
         
         else:
-            st.json(latest_result)
     
     else:
         st.warning("📭 아직 생성된 데이터가 없습니다.")

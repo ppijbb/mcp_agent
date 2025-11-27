@@ -122,9 +122,7 @@ def main():
                 
                 if latest_mental_result.get('analysis_results'):
                     st.subheader("📋 분석 결과")
-                    st.json(latest_mental_result['analysis_results'])
             else:
-                st.json(latest_mental_result)
     else:
         st.info("💡 아직 Mental Care Agent의 결과가 없습니다. 위에서 상담을 시작해보세요.")
 
@@ -160,7 +158,6 @@ def display_results(result_data):
     
     if result_data.get('analysis_results'):
         st.subheader("📋 종합 분석 결과")
-        st.json(result_data['analysis_results'])
 
 if __name__ == "__main__":
     main()

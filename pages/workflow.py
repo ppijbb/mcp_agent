@@ -385,6 +385,5 @@ if latest_workflow_result:
             if 'timestamp' in latest_workflow_result:
                 st.caption(f"⏰ 실행 시간: {latest_workflow_result['timestamp']}")
         else:
-            st.json(latest_workflow_result)
 else:
     st.info("💡 아직 Workflow Orchestrator의 결과가 없습니다. 위에서 워크플로우를 실행해보세요.") 

@@ -221,11 +221,9 @@ def run_visualization_interface():
                 if viz_type == "연구 타임라인":
                     sample_data = generate_sample_timeline_data()
                     st.write("연구 타임라인 데이터:")
-                    st.json(sample_data)
                 elif viz_type == "에이전트 성능":
                     sample_data = generate_sample_performance_data()
                     st.write("에이전트 성능 데이터:")
-                    st.json(sample_data)
                 elif viz_type == "품질 분포":
                     sample_data = generate_sample_quality_data()
                     st.write("품질 분포 데이터:")
@@ -233,15 +231,12 @@ def run_visualization_interface():
                 elif viz_type == "연구 트렌드":
                     sample_data = generate_sample_trends_data()
                     st.write("연구 트렌드 데이터:")
-                    st.json(sample_data)
                 elif viz_type == "도메인 분석":
                     sample_data = generate_sample_domain_data()
                     st.write("도메인 분석 데이터:")
-                    st.json(sample_data)
                 elif viz_type == "시스템 상태":
                     sample_data = generate_sample_system_data()
                     st.write("시스템 상태 데이터:")
-                    st.json(sample_data)
     
     except Exception as e:
         st.error(f"시각화 생성 실패: {e}")

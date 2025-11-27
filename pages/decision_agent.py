@@ -52,13 +52,10 @@ def display_results(result_data):
         st.write(decision.get('reasoning', ''))
 
         st.markdown("#### 대안")
-        st.json(decision.get('alternatives', []))
         
         st.markdown("#### 데이터 소스")
-        st.json(result_data.get('data_sources_consulted', []))
         
         st.markdown("#### 전체 결과 (JSON)")
-        st.json(result_data)
 
 def main():
     create_agent_page(
@@ -184,7 +181,6 @@ def main():
                 if 'timestamp' in latest_decision_result:
                     st.caption(f"⏰ 분석 시간: {latest_decision_result['timestamp']}")
             else:
-                st.json(latest_decision_result)
     else:
         st.info("💡 아직 Decision Agent의 결과가 없습니다. 위에서 의사결정 분석을 실행해보세요.")
 

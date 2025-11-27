@@ -92,13 +92,11 @@ def main():
     latest_result = result_reader.get_latest_result("ultra_agentic_agent", "ultra_agentic_execution")
     if latest_result:
         with st.expander("🚀 최신 Ultra Agentic 실행 결과", expanded=False):
-            st.json(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 Ultra Agentic 실행 결과")
     if result_data:
-        st.json(result_data)
 
 if __name__ == "__main__":
     main()

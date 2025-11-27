@@ -195,7 +195,13 @@ class AIOpsOrchestratorAgent:
                     f.write(final_result)
                 
                 logger.info(f"Report saved to {report_path}")
-                return final_result
+                # 리포트 파일 내용도 읽어서 반환
+                try:
+                    with open(report_path, "r", encoding="utf-8") as f:
+                        report_content = f.read()
+                    return report_content
+                except Exception:
+                    return final_result
 
             except Exception as e:
                 error_message = f"AIOps orchestration failed for alert {alert['id']}: {e}"

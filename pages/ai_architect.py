@@ -209,9 +209,9 @@ def main():
                     if 'timestamp' in latest_architect_result:
                         st.caption(f"⏰ 설계 시간: {latest_architect_result['timestamp']}")
                 else:
-                    st.json(latest_architect_result)
+                    
             else:
-                st.json(latest_architect_result)
+                
     else:
         st.info("💡 아직 AI Architect Agent의 결과가 없습니다. 위에서 아키텍처 설계를 실행해보세요.")
 

@@ -228,6 +228,5 @@ if latest_urban_result:
             if 'analysis_timestamp' in latest_urban_result:
                 st.caption(f"⏰ 분석 시간: {latest_urban_result['analysis_timestamp']}")
         else:
-            st.json(latest_urban_result)
 else:
     st.info("💡 아직 Urban Hive Agent의 결과가 없습니다. 위에서 도시 데이터 분석을 실행해보세요.")

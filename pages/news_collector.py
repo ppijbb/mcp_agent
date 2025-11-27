@@ -121,7 +121,6 @@ def main():
                     for news in latest_news_result['international_news'][:5]:
                         st.write(f"• {news.get('title', 'N/A')}")
             else:
-                st.json(latest_news_result)
     else:
         st.info("💡 아직 News Collector Agent의 결과가 없습니다. 위에서 뉴스 수집을 실행해보세요.")
 

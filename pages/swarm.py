@@ -114,7 +114,6 @@ def main():
                     st.subheader("📋 실행 결과")
                     st.write(latest_swarm_result['result'])
             else:
-                st.json(latest_swarm_result)
     else:
         st.info("💡 아직 Swarm Agent의 결과가 없습니다. 위에서 Swarm 작업을 실행해보세요.")
 

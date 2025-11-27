@@ -134,7 +134,6 @@ def main():
                 if 'timestamp' in latest_rag_result:
                     st.caption(f"⏰ 생성 시간: {latest_rag_result['timestamp']}")
             else:
-                st.json(latest_rag_result)
 
 if __name__ == "__main__":
     main() 

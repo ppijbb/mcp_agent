@@ -96,14 +96,34 @@ def main():
     st.markdown("## 📊 최신 AIOps 결과")
     latest_result = result_reader.get_latest_result("aiops_orchestrator_agent", "aiops_task")
     if latest_result:
-        with st.expander("🤖 최신 AIOps 작업 결과", expanded=False):
-            st.json(latest_result)
+        display_results(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 AIOps 작업 결과")
     if result_data:
-        st.json(result_data)
+        # JSON이 아닌 실제 결과 내용 표시
+        if isinstance(result_data, dict):
+            # result 필드가 있으면 그것을 표시
+            if "result" in result_data:
+                result_text = result_data["result"]
+                if isinstance(result_text, str):
+                    st.markdown(result_text)
+                else:
+                    st.write(result_text)
+            # success 필드 표시
+            if "success" in result_data:
+                if result_data["success"]:
+                    st.success("✅ 작업이 성공적으로 완료되었습니다.")
+                else:
+                    st.error(f"❌ 작업 실패: {result_data.get('error', '알 수 없는 오류')}")
+            # alert 정보 표시
+            if "alert_id" in result_data:
+                st.info(f"**Alert ID**: {result_data.get('alert_id', 'N/A')} | **Node**: {result_data.get('node', 'N/A')}")
+        elif isinstance(result_data, str):
+            st.markdown(result_data)
+        else:
+            st.write(result_data)
 
 if __name__ == "__main__":
     main()

@@ -1000,6 +1000,5 @@ if latest_finance_result:
             if 'timestamp' in latest_finance_result:
                 st.caption(f"⏰ 분석 시간: {latest_finance_result['timestamp']}")
         else:
-            st.json(latest_finance_result)
 else:
     st.info("💡 아직 Finance Health Agent의 결과가 없습니다. 위에서 재무 건강 분석을 실행해보세요.") 

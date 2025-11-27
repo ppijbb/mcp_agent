@@ -268,6 +268,5 @@ if latest_travel_result:
             if 'screenshots' in latest_travel_result:
                 st.info(f"📸 스크린샷 {len(latest_travel_result['screenshots'])}개 생성됨")
         else:
-            st.json(latest_travel_result)
 else:
     st.info("💡 아직 Travel Scout Agent의 결과가 없습니다. 위에서 여행 검색을 실행해보세요.")

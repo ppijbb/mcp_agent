@@ -47,7 +47,6 @@ def display_results(result_data):
             st.markdown(final_report.get('content', '내용 없음'))
 
     with st.expander("상세 분석 결과 보기 (JSON)"):
-        st.json(result_data)
 
 def get_step_progress(step_name):
     """단계별 진행률 계산"""
@@ -256,7 +255,6 @@ async def main():
     # 상태 정보 표시
     if "agent_state" in st.session_state:
         with st.expander("🔍 현재 에이전트 상태"):
-            st.json(st.session_state.agent_state)
 
 # Streamlit 1.25+ async 지원, 구버전 fallback
 try:
@@ -303,6 +301,5 @@ if latest_product_result:
             if 'timestamp' in latest_product_result:
                 st.caption(f"⏰ 기획 시간: {latest_product_result['timestamp']}")
         else:
-            st.json(latest_product_result)
 else:
     st.info("💡 아직 Product Planner Agent의 결과가 없습니다. 위에서 제품 기획을 실행해보세요.") 

@@ -87,13 +87,11 @@ def main():
     latest_result = result_reader.get_latest_result("graph_react_agent", "graph_react_execution")
     if latest_result:
         with st.expander("🕸️ 최신 Graph ReAct 실행 결과", expanded=False):
-            st.json(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 Graph ReAct 실행 결과")
     if result_data:
-        st.json(result_data)
 
 if __name__ == "__main__":
     main()

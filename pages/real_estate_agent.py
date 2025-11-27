@@ -97,13 +97,11 @@ def main():
     latest_result = result_reader.get_latest_result("real_estate_agent", "real_estate_analysis")
     if latest_result:
         with st.expander("🏠 최신 부동산 분석 결과", expanded=False):
-            st.json(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 부동산 분석 결과")
     if result_data:
-        st.json(result_data)
 
 if __name__ == "__main__":
     main()

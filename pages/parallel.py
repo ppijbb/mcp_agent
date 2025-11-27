@@ -120,7 +120,6 @@ def main():
                             if task_result.get('result'):
                                 st.write(f"**결과**: {task_result['result']}")
             else:
-                st.json(latest_parallel_result)
     else:
         st.info("💡 아직 Parallel Agent의 결과가 없습니다. 위에서 병렬 작업을 실행해보세요.")
 

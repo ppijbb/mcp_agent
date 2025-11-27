@@ -243,7 +243,6 @@ class RealLangGraphUI:
                 status_placeholder.info(f"⏳ 현재 단계: **{node_name}**")
                 with steps_container:
                     with st.expander(f"단계: **{node_name}** - 출력 확인", expanded=True):
-                        st.json(node_output)
                 
                 final_result = node_output
 
@@ -289,10 +288,8 @@ class RealLangGraphUI:
         col3.metric("복잡도", game_info.get('analysis_summary', {}).get('게임_복잡도', "N/A"))
 
         with st.expander("📜 AI가 생성한 전체 UI 명세서 (JSON)", expanded=True):
-            st.json(game_info.get("full_spec", {}))
         
         with st.expander("🔬 AI의 핵심 분석 내용 (JSON)", expanded=False):
-            st.json(game_info.get("analysis_summary", {}))
 
     def render_main_content(self):
         st.title("🤖 LangGraph AI Game Mate")
@@ -347,19 +344,16 @@ if latest_boardgame_result:
             if ui_spec:
                 st.subheader("📋 UI 명세서")
                 with st.expander("상세 UI 명세서", expanded=False):
-                    st.json(ui_spec)
             
             # 분석 결과 표시
             analysis_result = latest_boardgame_result.get('analysis_result', {})
             if analysis_result:
                 st.subheader("🔬 분석 결과")
                 with st.expander("상세 분석 결과", expanded=False):
-                    st.json(analysis_result)
             
             # 메타데이터 표시
             if 'timestamp' in latest_boardgame_result:
                 st.caption(f"⏰ 분석 시간: {latest_boardgame_result['timestamp']}")
         else:
-            st.json(latest_boardgame_result)
 else:
     st.info("💡 아직 Boardgame UI Generator Agent의 결과가 없습니다. 위에서 게임 UI 분석을 실행해보세요.")

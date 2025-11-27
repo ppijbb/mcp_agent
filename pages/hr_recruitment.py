@@ -188,7 +188,6 @@ def main():
                 if 'timestamp' in latest_recruitment_result:
                     st.caption(f"⏰ 분석 시간: {latest_recruitment_result['timestamp']}")
             else:
-                st.json(latest_recruitment_result)
     else:
         st.info("💡 아직 HR Recruitment Agent의 결과가 없습니다. 위에서 채용 분석을 실행해보세요.")
 

@@ -142,14 +142,14 @@ def main():
                 
                 if latest_devops_result.get('result_data'):
                     st.subheader("📋 작업 결과")
-                    st.json(latest_devops_result['result_data'])
+                    
                 
                 if latest_devops_result.get('recommendations'):
                     st.subheader("💡 권장사항")
                     for rec in latest_devops_result['recommendations']:
                         st.write(f"• {rec}")
             else:
-                st.json(latest_devops_result)
+                
     else:
         st.info("💡 아직 DevOps Assistant Agent의 결과가 없습니다. 위에서 DevOps 작업을 실행해보세요.")
 
@@ -171,7 +171,7 @@ def display_results(result_data):
     
     if result_data.get('result_data'):
         st.subheader("📋 작업 결과")
-        st.json(result_data['result_data'])
+        
     
     if result_data.get('recommendations'):
         st.subheader("💡 권장사항")

@@ -98,7 +98,6 @@ def display_results(result_data):
         st.warning("No trajectory data available for visualization.")
 
     with st.expander("Full Mission Log"):
-        st.json(result_data)
 
 
 def main():
@@ -219,7 +218,6 @@ def main():
                 if 'timestamp' in latest_drone_result:
                     st.caption(f"⏰ 미션 시간: {latest_drone_result['timestamp']}")
             else:
-                st.json(latest_drone_result)
     else:
         st.info("💡 아직 Drone Scout Agent의 결과가 없습니다. 위에서 드론 미션을 실행해보세요.")
 

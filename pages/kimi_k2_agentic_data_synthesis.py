@@ -97,13 +97,11 @@ def main():
     latest_result = result_reader.get_latest_result("kimi_k2_agent", "data_synthesis")
     if latest_result:
         with st.expander("🧪 최신 데이터 합성 결과", expanded=False):
-            st.json(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 데이터 합성 결과")
     if result_data:
-        st.json(result_data)
 
 if __name__ == "__main__":
     main()

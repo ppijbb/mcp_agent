@@ -142,22 +142,16 @@ def display_results(result_data):
                         else:
                             st.warning("보고서 내용을 찾을 수 없습니다.")
         
-        # 최종 요약 JSON 파일도 표시
-        industry = result_data.get("industry", "General")
-        json_path = Path("business_strategy_reports") / f"final_summary_{industry}.json"
-        if json_path.exists():
-            with st.expander("📋 최종 요약 JSON", expanded=False):
-                try:
-                    with open(json_path, 'r', encoding='utf-8') as f:
-                        json_data = json.load(f)
-                    st.json(json_data)
-                except Exception as e:
-                    st.warning(f"JSON 파일 읽기 실패: {e}")
+        # 최종 요약 JSON 파일은 표시하지 않음 (실제 결과만 표시)
     
     # 구조 3: 알 수 없는 구조
     else:
         st.warning("분석 결과 구조를 인식할 수 없습니다.")
-        st.json(result_data)  # 디버깅을 위해 전체 데이터 표시
+        # JSON 출력 제거 - 실제 결과만 표시
+        if isinstance(result_data, dict):
+            for key, value in result_data.items():
+                if key not in ["success", "error"]:
+                    st.write(f"**{key}**: {value}")
 
 def main():
     create_agent_page(
@@ -389,7 +383,7 @@ def main():
                     except:
                         pass
             else:
-                st.json(latest_strategy_result)
+                
     else:
         st.info("💡 아직 Business Strategy Agent의 결과가 없습니다. 위에서 비즈니스 전략 분석을 실행해보세요.")
 

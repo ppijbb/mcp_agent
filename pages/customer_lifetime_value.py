@@ -90,13 +90,11 @@ def main():
     latest_result = result_reader.get_latest_result("clv_agent", "clv_analysis")
     if latest_result:
         with st.expander("💰 최신 고객 생애 가치 분석", expanded=False):
-            st.json(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 CLV 분석 결과")
     if result_data:
-        st.json(result_data)
 
 if __name__ == "__main__":
     main()
