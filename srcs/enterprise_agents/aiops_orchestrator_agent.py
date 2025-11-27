@@ -9,9 +9,9 @@ from typing import Dict, Any
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.utils import setup_agent_app
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 
 class AIOpsOrchestratorAgent:
     """
@@ -151,9 +151,13 @@ class AIOpsOrchestratorAgent:
                 server_names=[]  # MCP 서버 validation 에러 방지
             )
 
-            # 2. Create an Orchestrator to manage the agents
+            # 2. Create an Orchestrator to manage the agents (with fallback LLM)
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
             orchestrator = Orchestrator(
-                llm_factory=GoogleAugmentedLLM,
+                llm_factory=orchestrator_llm_factory,
                 available_agents=[monitoring_agent, rca_agent],
                 plan_type="full" # Let the LLM create a full plan
             )

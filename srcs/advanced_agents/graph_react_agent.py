@@ -11,6 +11,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from srcs.common.utils import setup_agent_app
 import graphviz
 import os
@@ -354,8 +355,12 @@ async def main():
 
             # The orchestrator is the main entry point
             # Pass the agent instance to the orchestrator upon creation
-            orchestrator = Orchestrator(
-                llm_factory=GoogleAugmentedLLM,
+            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=logger
+)
+Orchestrator(
+                llm_factory=orchestrator_llm_factory,
                 available_agents=[graph_agent]
             )
             

@@ -9,6 +9,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -415,18 +416,26 @@ async def main():
         )
         
         # Create quality controller for ESG optimization
-        esg_quality_controller = EvaluatorOptimizerLLM(
+        esg_quality_controller =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
+        EvaluatorOptimizerLLM(
             optimizer=carbon_footprint_agent,
             evaluator=esg_evaluator,
-            llm_factory=GoogleAugmentedLLM,
+            llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing ESG and carbon neutrality workflow for {COMPANY_NAME}")
         
-        orchestrator = Orchestrator(
-            llm_factory=GoogleAugmentedLLM,
+        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=logger
+)
+Orchestrator(
+            llm_factory=orchestrator_llm_factory,
             available_agents=[
                 esg_quality_controller,
                 esg_reporting_agent,

@@ -9,6 +9,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -399,18 +400,26 @@ async def main():
         )
         
         # Create quality controller for supply chain optimization
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
         supply_chain_quality_controller = EvaluatorOptimizerLLM(
             optimizer=supply_chain_monitor_agent,
             evaluator=supply_chain_evaluator,
-            llm_factory=GoogleAugmentedLLM,
+            llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing supply chain orchestrator workflow for {COMPANY_NAME}")
         
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
         orchestrator = Orchestrator(
-            llm_factory=GoogleAugmentedLLM,
+            llm_factory=orchestrator_llm_factory,
             available_agents=[
                 supply_chain_quality_controller,
                 demand_planning_agent,

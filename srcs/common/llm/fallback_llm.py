@@ -216,8 +216,9 @@ def create_fallback_llm_factory(
             return GoogleAugmentedLLM(model=primary_model)
         except Exception as e:
             error_str = str(e).lower()
-            # 503 오류나 overloaded 오류인 경우 fallback 시도
-            if "503" in error_str or "overloaded" in error_str or "unavailable" in error_str:
+            # 503, 429, overloaded, unavailable 등 모든 에러에 대해 fallback 시도
+            if ("503" in error_str or "429" in error_str or "overloaded" in error_str or 
+                "unavailable" in error_str or "quota" in error_str or "resource_exhausted" in error_str):
                 log.warning(f"Gemini API 오류 발생, fallback 모델로 전환: {e}")
                 fallback_llm = _try_fallback_llm(primary_model, log)
                 if fallback_llm:
@@ -225,7 +226,7 @@ def create_fallback_llm_factory(
                 # 모든 fallback 실패 시 원래 오류 발생
                 raise e
             else:
-                # 503이 아닌 다른 오류는 그대로 발생
+                # 다른 오류는 그대로 발생
                 raise
     
     return llm_factory_with_fallback
@@ -252,7 +253,9 @@ def create_fallback_llm_for_agents(
             return GoogleAugmentedLLM(model=primary_model)
         except Exception as e:
             error_str = str(e).lower()
-            if "503" in error_str or "overloaded" in error_str or "unavailable" in error_str:
+            # 503, 429, overloaded, unavailable 등 모든 에러에 대해 fallback 시도
+            if ("503" in error_str or "429" in error_str or "overloaded" in error_str or 
+                "unavailable" in error_str or "quota" in error_str or "resource_exhausted" in error_str):
                 # Fallback 모델 시도 (동적으로 최고 성능 모델 선택)
                 log.warning(f"Agent LLM: Gemini API 오류, fallback 모델로 전환: {e}")
                 fallback_llm = _try_fallback_llm(primary_model, log)
@@ -285,7 +288,9 @@ def create_fallback_orchestrator_llm_factory(
             return GoogleAugmentedLLM(model=primary_model)
         except Exception as e:
             error_str = str(e).lower()
-            if "503" in error_str or "overloaded" in error_str or "unavailable" in error_str:
+            # 503, 429, overloaded, unavailable 등 모든 에러에 대해 fallback 시도
+            if ("503" in error_str or "429" in error_str or "overloaded" in error_str or 
+                "unavailable" in error_str or "quota" in error_str or "resource_exhausted" in error_str):
                 log.warning(f"Orchestrator LLM: Gemini API 오류, fallback 모델로 전환: {e}")
                 # Fallback 모델 시도 (동적으로 최고 성능 모델 선택)
                 fallback_llm = _try_fallback_llm(primary_model, log)

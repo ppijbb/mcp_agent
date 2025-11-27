@@ -8,6 +8,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -376,15 +377,23 @@ async def main():
         contract_quality_controller = EvaluatorOptimizerLLM(
             optimizer=contract_analyzer_agent,
             evaluator=legal_evaluator,
-            llm_factory=GoogleAugmentedLLM,
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
+                llm_factory=orchestrator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing legal compliance workflow for {COMPANY_NAME}")
         
-        orchestrator = Orchestrator(
-            llm_factory=GoogleAugmentedLLM,
+        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
+            Orchestrator(
+                llm_factory=orchestrator_llm_factory,
             available_agents=[
                 contract_quality_controller,
                 compliance_monitor_agent,

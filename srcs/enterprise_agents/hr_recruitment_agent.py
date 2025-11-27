@@ -10,6 +10,7 @@ from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -89,8 +90,12 @@ class HRRecruitmentAgent:
             agents = self._create_hr_agents()
             
             # Create orchestrator
-            orchestrator = Orchestrator(
-                llm_factory=GoogleAugmentedLLM,
+            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=logger
+)
+Orchestrator(
+                llm_factory=orchestrator_llm_factory,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
@@ -356,10 +361,14 @@ class HRRecruitmentAgent:
         )
         
         # Create quality controller
-        agents['quality_controller'] = EvaluatorOptimizerLLM(
+        agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
+        EvaluatorOptimizerLLM(
             optimizer=agents['job_creator'],
             evaluator=agents['hr_evaluator'],
-            llm_factory=GoogleAugmentedLLM,
+            llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         
@@ -470,8 +479,12 @@ async def main():
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing HR recruitment workflow for {POSITION_NAME}")
         
-        orchestrator = Orchestrator(
-            llm_factory=GoogleAugmentedLLM,
+        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=logger
+)
+Orchestrator(
+            llm_factory=orchestrator_llm_factory,
             available_agents=list(agents.values()),
             plan_type="full",
         )

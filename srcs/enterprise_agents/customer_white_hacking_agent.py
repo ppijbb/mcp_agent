@@ -22,6 +22,7 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
@@ -144,8 +145,12 @@ class CustomerWhiteHackingAgent:
             agents = self._create_white_hacking_agents(validated_product)
             
             # Create orchestrator
-            orchestrator = Orchestrator(
-                llm_factory=GoogleAugmentedLLM,
+            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=logger
+)
+Orchestrator(
+                llm_factory=orchestrator_llm_factory,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
@@ -259,10 +264,14 @@ class CustomerWhiteHackingAgent:
         )
         
         # 6. Quality Controller (EvaluatorOptimizerLLM)
-        agents['quality_controller'] = EvaluatorOptimizerLLM(
+        agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
+        EvaluatorOptimizerLLM(
             optimizer=agents['persona_generator'],
             evaluator=agents['quality_evaluator'],
-            llm_factory=GoogleAugmentedLLM,
+            llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         

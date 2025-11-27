@@ -10,6 +10,7 @@ import os
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from srcs.common.llm import create_fallback_llm_factory
 
 # Correcting the relative import path.
@@ -160,8 +161,12 @@ class WorkflowOrchestrator:
     
     def __init__(self, agents: List[Agent]):
         self.agents = agents
-        self.orchestrator = Orchestrator(
-            llm_factory=GoogleAugmentedLLM,
+        self.orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+    primary_model="gemini-2.5-flash-lite",
+    logger_instance=None
+)
+Orchestrator(
+            llm_factory=orchestrator_llm_factory,
             available_agents=agents,
             plan_type="full"
         )
