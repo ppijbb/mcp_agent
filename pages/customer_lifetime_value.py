@@ -90,11 +90,26 @@ def main():
     latest_result = result_reader.get_latest_result("clv_agent", "clv_analysis")
     if latest_result:
         with st.expander("💰 최신 고객 생애 가치 분석", expanded=False):
+            display_results(latest_result)
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 CLV 분석 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            # 결과가 딕셔너리인 경우
+            if "clv" in result_data:
+                st.metric("고객 생애 가치 (CLV)", f"${result_data['clv']:,.2f}")
+            if "segments" in result_data:
+                st.write("고객 세그먼트:", result_data["segments"])
+            if "recommendations" in result_data:
+                st.write("추천 사항:", result_data["recommendations"])
+            # 전체 결과 표시
+            st.json(result_data)
+        else:
+            st.write(result_data)
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

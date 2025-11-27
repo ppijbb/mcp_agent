@@ -8,18 +8,29 @@ import streamlit as st
 import asyncio
 import sys
 import os
+import logging
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from lang_graph.table_game_mate.utils.mcp_client import MCPClient, MCPClientError
+# A2A 실행을 위한 import
+from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from configs.settings import get_reports_path
 
-# 실제 LangGraph 에이전트 import
-from lang_graph.table_game_mate.agents.game_ui_analyzer import get_game_ui_analyzer
+# LLM import (게임 이름 추출용)
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+
+# BGG 접근용 - 웹 스크래핑
+import aiohttp
+import xml.etree.ElementTree as ET
+from urllib.parse import quote_plus
+import re
 
 # Result Reader 임포트
 try:
@@ -32,21 +43,19 @@ except ImportError as e:
 st.set_page_config(page_title="🤖 Agent-driven UI", page_icon="🤖", layout="wide")
 
 class RealLangGraphUI:
-    """실제 LangGraph 에이전트 기반 UI 시스템"""
+    """실제 LangGraph 에이전트 기반 UI 시스템 (A2A 통합)"""
     
     def __init__(self):
-        if "ui_analyzer" not in st.session_state:
-            with st.spinner("LangGraph 에이전트 초기화 중..."):
-                try:
-                    st.session_state.ui_analyzer = get_game_ui_analyzer()
-                except Exception as e:
-                    st.error(f"❌ 에이전트 초기화 실패: {str(e)}")
-                    st.session_state.ui_analyzer = None
+        # A2A를 사용하므로 직접 에이전트 초기화 불필요
+        # if "ui_analyzer" not in st.session_state:
+        #     with st.spinner("LangGraph 에이전트 초기화 중..."):
+        #         try:
+        #             st.session_state.ui_analyzer = get_game_ui_analyzer()
+        #         except Exception as e:
+        #             st.error(f"❌ 에이전트 초기화 실패: {str(e)}")
+        #             st.session_state.ui_analyzer = None
 
-        if "mcp_client" not in st.session_state:
-            # MCPClient는 비동기 초기화가 필요하므로 지연 초기화
-            st.session_state.mcp_client = None
-            st.session_state.mcp_client_initialized = False
+        # MCP 클라이언트 제거됨 - BGG API 직접 호출 사용
         
         # 세션 상태 초기화
         for key, default in {
@@ -62,14 +71,329 @@ class RealLangGraphUI:
             if key not in st.session_state:
                 st.session_state[key] = default
 
-
-
-    async def _ensure_mcp_client(self):
-        """MCP 클라이언트 초기화 확인"""
-        if st.session_state.mcp_client is None or not st.session_state.mcp_client_initialized:
-            st.session_state.mcp_client = MCPClient()
-            st.session_state.mcp_client_initialized = True
-        return st.session_state.mcp_client
+    async def _search_bgg_direct(self, name: str) -> Dict[str, Any]:
+        """BGG 검색 - 웹 페이지 스크래핑 (API가 401 반환하므로)"""
+        encoded_name = quote_plus(name)
+        
+        # BGG 웹 검색 페이지 사용
+        search_url = f"https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q={encoded_name}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Referer": "https://boardgamegeek.com/",
+            "Upgrade-Insecure-Requests": "1",
+        }
+        
+        logger.info(f"BGG 웹 검색 시도: {name} -> {search_url}")
+        
+        try:
+            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+            timeout = aiohttp.ClientTimeout(total=20, connect=10)
+            
+            async with aiohttp.ClientSession(headers=headers, connector=connector, timeout=timeout) as session:
+                async with session.get(search_url, allow_redirects=True) as response:
+                    logger.info(f"BGG 웹 검색 응답 상태: {response.status}, URL: {response.url}")
+                    
+                    if response.status == 200:
+                        html_content = await response.text()
+                        
+                        if not html_content or len(html_content.strip()) == 0:
+                            logger.warning("빈 HTML 응답")
+                            return {"success": False, "error": "빈 응답", "games": []}
+                        
+                        # HTML에서 게임 정보 추출 (정규식 사용)
+                        games = []
+                        seen_ids = set()
+                        
+                        # 패턴 1: /boardgame/{id}/ 형태의 링크 찾기
+                        game_link_pattern = r'/boardgame/(\d+)/([^"\'<>/]+)'
+                        matches = re.finditer(game_link_pattern, html_content)
+                        
+                        for match in matches:
+                            try:
+                                game_id = int(match.group(1))
+                                if game_id in seen_ids:
+                                    continue
+                                seen_ids.add(game_id)
+                                
+                                # 게임 이름 찾기 - 링크 텍스트에서
+                                # <a href="/boardgame/12345/...">Game Name</a> 형식
+                                link_start = match.start()
+                                # 링크 태그 찾기
+                                link_tag_pattern = rf'<a[^>]*href="/boardgame/{game_id}/[^"]*"[^>]*>([^<]+)</a>'
+                                name_match = re.search(link_tag_pattern, html_content[max(0, link_start-500):link_start+500], re.IGNORECASE)
+                                
+                                if name_match:
+                                    game_name = name_match.group(1).strip()
+                                    # HTML 엔티티 디코딩
+                                    game_name = game_name.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+                                else:
+                                    # URL에서 이름 추출
+                                    game_name_url = match.group(2).replace('-', ' ').strip()
+                                    game_name = game_name_url
+                                
+                                # 년도 찾기 (게임 이름 근처에서)
+                                context_start = max(0, match.start() - 200)
+                                context_end = min(len(html_content), match.end() + 200)
+                                context = html_content[context_start:context_end]
+                                
+                                year = None
+                                year_patterns = [
+                                    rf'\((\d{{4}})\)',
+                                    rf'<span[^>]*>(\d{{4}})</span>',
+                                    rf'year[^>]*>(\d{{4}})<',
+                                ]
+                                
+                                for pattern in year_patterns:
+                                    year_match = re.search(pattern, context, re.IGNORECASE)
+                                    if year_match:
+                                        try:
+                                            year_val = int(year_match.group(1))
+                                            if 1900 <= year_val <= 2100:  # 합리적인 범위
+                                                year = year_val
+                                                break
+                                        except ValueError:
+                                            continue
+                                
+                                games.append({
+                                    "id": game_id,
+                                    "name": game_name,
+                                    "year": year
+                                })
+                                
+                                # 최대 20개까지만
+                                if len(games) >= 20:
+                                    break
+                                    
+                            except (ValueError, AttributeError) as e:
+                                logger.warning(f"게임 정보 파싱 실패: {e}")
+                                continue
+                        
+                        if games:
+                            logger.info(f"✅ BGG 웹 검색 성공: {len(games)}개 게임 발견")
+                            return {
+                                "success": True,
+                                "games": games,
+                                "total": len(games)
+                            }
+                        else:
+                            # 방법 2: 다른 패턴 시도 - 검색 결과 테이블에서
+                            logger.warning("방법 1 실패, 방법 2 시도...")
+                            
+                            # 모든 게임 ID 찾기
+                            all_game_ids = re.findall(r'/boardgame/(\d+)/', html_content)
+                            unique_ids = list(set([int(gid) for gid in all_game_ids[:20]]))
+                            
+                            for game_id in unique_ids:
+                                # 게임 이름 찾기 (다양한 패턴 시도)
+                                name_patterns = [
+                                    rf'<a[^>]*href="/boardgame/{game_id}/[^"]*"[^>]*>([^<]+)</a>',
+                                    rf'/boardgame/{game_id}/([^"\'<>/]+)',
+                                    rf'boardgame/{game_id}[^>]*>([^<]+)</a>',
+                                ]
+                                
+                                game_name = None
+                                for pattern in name_patterns:
+                                    name_match = re.search(pattern, html_content, re.IGNORECASE)
+                                    if name_match:
+                                        game_name = name_match.group(1).strip().replace('-', ' ').replace('&amp;', '&')
+                                        break
+                                
+                                if not game_name:
+                                    game_name = f"Game {game_id}"
+                                
+                                games.append({
+                                    "id": game_id,
+                                    "name": game_name,
+                                    "year": None
+                                })
+                            
+                            if games:
+                                logger.info(f"✅ BGG 웹 검색 성공 (방법 2): {len(games)}개 게임 발견")
+                                return {
+                                    "success": True,
+                                    "games": games,
+                                    "total": len(games)
+                                }
+                            
+                            logger.warning("BGG 웹 검색: 게임을 찾을 수 없음")
+                            return {
+                                "success": False,
+                                "error": "검색 결과를 찾을 수 없습니다",
+                                "games": []
+                            }
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"BGG 웹 검색 오류 {response.status}: {error_text[:500]}")
+                        return {
+                            "success": False,
+                            "error": f"BGG 웹 검색 오류: {response.status}",
+                            "games": []
+                        }
+                        
+        except Exception as e:
+            logger.error(f"BGG 웹 검색 실패: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "games": []
+            }
+        finally:
+            try:
+                await connector.close()
+            except:
+                pass
+    
+    async def _get_bgg_game_details_direct(self, bgg_id: int) -> Dict[str, Any]:
+        """BGG 게임 상세 정보 - 웹 페이지 스크래핑"""
+        game_url = f"https://boardgamegeek.com/boardgame/{bgg_id}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://boardgamegeek.com/",
+        }
+        
+        logger.info(f"BGG 게임 상세 정보 시도: game_id={bgg_id}")
+        
+        try:
+            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+            timeout = aiohttp.ClientTimeout(total=20, connect=10)
+            
+            async with aiohttp.ClientSession(headers=headers, connector=connector, timeout=timeout) as session:
+                async with session.get(game_url, allow_redirects=True) as response:
+                    logger.info(f"BGG 게임 페이지 응답 상태: {response.status}")
+                    
+                    if response.status == 200:
+                        html_content = await response.text()
+                        
+                        if not html_content or len(html_content.strip()) == 0:
+                            logger.warning("빈 HTML 응답")
+                            return {"success": False, "error": "빈 응답", "game": None}
+                        
+                        # HTML에서 게임 정보 추출
+                        game_info = {
+                            "id": bgg_id,
+                            "name": "Unknown",
+                            "description": "",
+                            "year_published": None,
+                            "min_players": None,
+                            "max_players": None,
+                            "playing_time": None,
+                            "min_age": None,
+                            "categories": [],
+                            "mechanics": [],
+                            "rating": {}
+                        }
+                        
+                        # 게임 이름 추출
+                        name_patterns = [
+                            r'<h1[^>]*class="game-header-title"[^>]*>([^<]+)</h1>',
+                            r'<h1[^>]*>([^<]+)</h1>',
+                            r'<title>([^<]+)</title>',
+                        ]
+                        
+                        for pattern in name_patterns:
+                            name_match = re.search(pattern, html_content, re.IGNORECASE)
+                            if name_match:
+                                game_info["name"] = name_match.group(1).strip().replace('&amp;', '&')
+                                break
+                        
+                        # 설명 추출
+                        desc_patterns = [
+                            r'<div[^>]*class="game-description"[^>]*>([^<]+)</div>',
+                            r'<meta[^>]*name="description"[^>]*content="([^"]+)"',
+                        ]
+                        
+                        for pattern in desc_patterns:
+                            desc_match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
+                            if desc_match:
+                                game_info["description"] = desc_match.group(1).strip()[:1000]  # 최대 1000자
+                                break
+                        
+                        # 게임 통계 추출
+                        stats_patterns = {
+                            "year_published": [
+                                r'Year Published[^>]*>(\d{4})',
+                                r'Published[^>]*>(\d{4})',
+                            ],
+                            "min_players": [
+                                r'Min Players[^>]*>(\d+)',
+                                r'Players[^>]*>(\d+)[^<]*-\s*(\d+)',
+                            ],
+                            "max_players": [
+                                r'Max Players[^>]*>(\d+)',
+                                r'Players[^>]*>(\d+)[^<]*-\s*(\d+)',
+                            ],
+                            "playing_time": [
+                                r'Playing Time[^>]*>(\d+)',
+                                r'Play Time[^>]*>(\d+)',
+                            ],
+                            "min_age": [
+                                r'Min Age[^>]*>(\d+)',
+                                r'Age[^>]*>(\d+)',
+                            ],
+                        }
+                        
+                        for key, patterns in stats_patterns.items():
+                            for pattern in patterns:
+                                match = re.search(pattern, html_content, re.IGNORECASE)
+                                if match:
+                                    try:
+                                        if key == "max_players" and len(match.groups()) > 1:
+                                            game_info[key] = int(match.group(2))
+                                        else:
+                                            game_info[key] = int(match.group(1))
+                                        break
+                                    except (ValueError, IndexError):
+                                        continue
+                        
+                        # 평점 추출
+                        rating_patterns = [
+                            r'Geek Rating[^>]*>([\d.]+)',
+                            r'Average[^>]*>([\d.]+)',
+                        ]
+                        
+                        for pattern in rating_patterns:
+                            rating_match = re.search(pattern, html_content, re.IGNORECASE)
+                            if rating_match:
+                                try:
+                                    game_info["rating"]["average"] = float(rating_match.group(1))
+                                    break
+                                except ValueError:
+                                    continue
+                        
+                        logger.info(f"✅ BGG 게임 상세 정보 성공: {game_info['name']}")
+                        return {
+                            "success": True,
+                            "game": game_info
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"BGG 게임 페이지 오류 {response.status}: {error_text[:200]}")
+                        return {
+                            "success": False,
+                            "error": f"BGG 게임 페이지 오류: {response.status}",
+                            "game": None
+                        }
+                        
+        except Exception as e:
+            logger.error(f"BGG 게임 상세 정보 실패: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "game": None
+            }
+        finally:
+            try:
+                await connector.close()
+            except:
+                pass
     
     async def handle_game_search(self, game_description: str):
         st.session_state.analysis_in_progress = True
@@ -77,16 +401,43 @@ class RealLangGraphUI:
         st.session_state.bgg_search_results = None
         st.session_state.current_game_id = None
         
-        mcp_client: MCPClient = await self._ensure_mcp_client()
-        
         try:
-            with st.spinner(f"'{game_description}' 게임을 BoardGameGeek에서 검색 중..."):
-                # bgg_mcp_server.py의 search_boardgame tool을 호출
-                search_result = await mcp_client.call(
-                    server_name="bgg-api",
-                    method="search_boardgame",
-                    params={"name": game_description, "exact": False}
-                )
+            # 1단계: LLM으로 사용자 설명에서 게임 이름 추출
+            with st.spinner("게임 설명을 분석하여 검색어를 생성 중..."):
+                try:
+                    from srcs.common.llm.fallback_llm import create_fallback_llm_factory
+                    llm_factory = create_fallback_llm_factory("gemini-2.5-flash-lite", logger)
+                    llm = llm_factory()
+                    
+                    extraction_prompt = f"""사용자가 원하는 보드게임을 찾기 위해, 다음 설명에서 실제 보드게임 이름이나 검색에 적합한 키워드를 추출해주세요.
+
+사용자 설명: {game_description}
+
+요구사항:
+1. 설명에 실제 게임 이름이 언급되어 있으면 그 이름을 그대로 사용
+2. 게임 이름이 없으면, 설명의 핵심 키워드 2-3개를 추출 (예: "마피아", "심리게임", "협상")
+3. 검색에 적합한 간단한 키워드로 변환 (최대 5단어)
+4. 영어 게임 이름이 있으면 영어로, 한국어 게임이면 한국어로
+
+응답 형식: 추출된 게임 이름이나 키워드만 출력 (설명 없이)"""
+                    
+                    extracted_name = await llm.generate_str(extraction_prompt)
+                    # LLM 응답 정리 (불필요한 설명 제거)
+                    extracted_name = extracted_name.strip().split('\n')[0].strip()
+                    if not extracted_name or len(extracted_name) > 100:
+                        # 추출 실패 시 원본 설명 사용
+                        extracted_name = game_description
+                        logger.warning(f"LLM 추출 실패, 원본 설명 사용: {game_description}")
+                except Exception as e:
+                    logger.error(f"LLM 호출 실패: {e}", exc_info=True)
+                    st.warning(f"게임 이름 추출 실패, 원본 설명으로 검색합니다: {e}")
+                    extracted_name = game_description
+            
+            # 2단계: 추출된 이름으로 BGG 웹 검색
+            with st.spinner(f"'{extracted_name}' 게임을 BoardGameGeek에서 검색 중..."):
+                logger.info(f"BGG 검색 시작: {extracted_name}")
+                search_result = await self._search_bgg_direct(extracted_name)
+                logger.info(f"BGG 검색 결과: success={search_result.get('success')}, total={search_result.get('total', 0)}, error={search_result.get('error', 'None')}")
 
             if search_result.get("success") and search_result.get("total", 0) > 0:
                 games = search_result.get("games", [])
@@ -99,14 +450,13 @@ class RealLangGraphUI:
                     st.session_state.bgg_search_results = games
                     st.session_state.game_selection_needed = True
             else:
-                st.error(f"'{game_description}'에 대한 게임을 BGG에서 찾을 수 없습니다. 더 일반적인 이름으로 시도해보세요.")
+                error_msg = search_result.get("error", "알 수 없는 오류")
+                st.error(f"'{game_description}'에 대한 게임을 BGG에서 찾을 수 없습니다. ({error_msg}) 더 일반적인 이름으로 시도해보세요.")
                 st.session_state.analysis_in_progress = False
 
-        except MCPClientError as e:
-            st.error(f"BGG 서버 통신 오류: {e}. MCP 서버가 실행 중인지 확인하세요.")
-            st.session_state.analysis_in_progress = False
         except Exception as e:
             st.error(f"게임 검색 중 오류 발생: {e}")
+            logger.error(f"게임 검색 오류: {e}", exc_info=True)
             st.session_state.analysis_in_progress = False
         
         st.rerun()
@@ -120,36 +470,19 @@ class RealLangGraphUI:
 
         # 상세 정보 및 웹 규칙 가져오기
         try:
-            mcp_client: MCPClient = await self._ensure_mcp_client()
             game_name_for_search = selected_game.get('name', 'board game')
 
             with st.spinner(f"'{selected_game['name']}' 상세 정보 조회 중..."):
-                details_result = await mcp_client.call(
-                    server_name="bgg-api",
-                    method="get_game_details",
-                    params={"bgg_id": selected_game['id']}
-                )
+                # BGG 웹 페이지에서 상세 정보 가져오기
+                details_result = await self._get_bgg_game_details_direct(selected_game['id'])
             
             if not details_result.get("success"):
                 raise Exception(f"BGG 상세 정보 조회 실패: {details_result.get('error')}")
             
             st.session_state.bgg_game_details = details_result["game"]
-
-            # 웹에서 추가 규칙 검색
+            
+            # 웹 검색 제거 - BGG 정보만으로 충분
             web_rules_content = ""
-            with st.spinner(f"'{game_name_for_search}' 공식 규칙 웹 검색 중..."):
-                web_search_results = await mcp_client.search_web(
-                    query=f'"{game_name_for_search}" official rules',
-                    max_results=3
-                )
-
-                if web_search_results and web_search_results.get('results'):
-                    # 첫 번째 검색 결과의 콘텐츠만 가져오기
-                    top_result_url = web_search_results['results'][0]['url']
-                    with st.spinner(f"'{top_result_url}'에서 규칙 내용 추출 중..."):
-                        fetched_content = await mcp_client.fetch_content(url=top_result_url)
-                        if fetched_content and fetched_content.get('content'):
-                            web_rules_content = fetched_content['content'][:4000] # 토큰 제한
 
             # 이제 LangGraph 분석 시작
             game_name = st.session_state.bgg_game_details.get('name', '분석 중...')
@@ -161,6 +494,7 @@ class RealLangGraphUI:
 
         except Exception as e:
             st.error(f"게임 상세 정보 및 규칙 조회 중 오류 발생: {e}")
+            logger.error(f"게임 상세 정보 오류: {e}", exc_info=True)
             st.session_state.analysis_in_progress = False
         
         st.rerun()
@@ -173,9 +507,22 @@ class RealLangGraphUI:
             height=150
         )
         
-        if st.button("🧠 이 설명으로 UI 생성 분석 요청", type="primary", width='stretch', disabled=st.session_state.analysis_in_progress or not st.session_state.ui_analyzer):
+        if st.button("🧠 이 설명으로 UI 생성 분석 요청", type="primary", width='stretch', disabled=st.session_state.analysis_in_progress):
             if game_description.strip():
-                asyncio.run(self.handle_game_search(game_description))
+                # Streamlit에서 비동기 함수 실행
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                try:
+                    loop.run_until_complete(self.handle_game_search(game_description))
+                except Exception as e:
+                    logger.error(f"게임 검색 실행 오류: {e}", exc_info=True)
+                    st.error(f"게임 검색 중 오류 발생: {e}")
+                    st.session_state.analysis_in_progress = False
             else:
                 st.error("게임 설명을 입력해주세요!")
 
@@ -192,7 +539,20 @@ class RealLangGraphUI:
                 st.info(f"**{game.get('name')}** {year}")
             with col2:
                 if st.button("이 게임으로 분석", key=f"select_{game.get('id')}", width='stretch'):
-                    asyncio.run(self.handle_game_selection(game))
+                    # Streamlit에서 비동기 함수 실행
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    try:
+                        loop.run_until_complete(self.handle_game_selection(game))
+                    except Exception as e:
+                        logger.error(f"게임 선택 실행 오류: {e}", exc_info=True)
+                        st.error(f"게임 선택 중 오류 발생: {e}")
+                        st.session_state.analysis_in_progress = False
 
     def render_generated_games_list(self):
         st.subheader("2. 분석된 게임 목록")
@@ -209,47 +569,65 @@ class RealLangGraphUI:
                 st.session_state.analysis_in_progress = False
                 st.rerun()
 
-    async def run_analysis_and_stream_results(self):
+    def run_analysis_via_a2a(self):
+        """A2A를 통해 게임 UI 분석 실행"""
         game_id = st.session_state.current_game_id
         game_info = st.session_state.generated_games[game_id]
         
-        st.subheader(f"🧠 '{game_info['name']}' 분석 진행 중...")
-        status_placeholder = st.empty()
-        steps_container = st.container(border=True)
-        final_result = {}
-
-        try:
-            agent_app = st.session_state.ui_analyzer.app
-            
-            # 입력 데이터 구성 시 BGG 상세 정보 사용
-            if st.session_state.bgg_game_details:
-                input_description = (f"게임명: {st.session_state.bgg_game_details.get('name')}\n\n"
-                                     f"설명: {st.session_state.bgg_game_details.get('description')}")
-            else:
-                input_description = game_info["description"]
-
-            # GameUIAnalysisState 객체 생성
-            from lang_graph.table_game_mate.agents.game_ui_analyzer import GameUIAnalysisState
-            input_state = GameUIAnalysisState(
-                game_description=input_description,
-                detailed_rules=game_info.get("rules", ""),
-                messages=[]
-            )
-            
-            async for chunk in agent_app.astream(input_state):
-                node_name = list(chunk.keys())[0]
-                node_output = list(chunk.values())[0]
-                
-                status_placeholder.info(f"⏳ 현재 단계: **{node_name}**")
-                with steps_container:
-                    with st.expander(f"단계: **{node_name}** - 출력 확인", expanded=True):
-                
-                final_result = node_output
-
+        # 리포트 경로 설정
+        reports_path = Path(get_reports_path('boardgame_ui_generator'))
+        reports_path.mkdir(parents=True, exist_ok=True)
+        result_json_path = reports_path / f"game_ui_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        # 입력 데이터 구성 시 BGG 상세 정보 사용
+        if st.session_state.bgg_game_details:
+            input_description = (f"게임명: {st.session_state.bgg_game_details.get('name')}\n\n"
+                                 f"설명: {st.session_state.bgg_game_details.get('description')}")
+        else:
+            input_description = game_info["description"]
+        
+        # GameUIAnalysisState 데이터 구성
+        from lang_graph.table_game_mate.agents.game_ui_analyzer import GameUIAnalysisState
+        input_state_data = {
+            "game_description": input_description,
+            "detailed_rules": game_info.get("rules", ""),
+            "messages": []
+        }
+        
+        # A2A를 통한 agent 실행
+        agent_metadata = {
+            "agent_id": "game_ui_analyzer",
+            "agent_name": "Game UI Analyzer",
+            "entry_point": "lang_graph.table_game_mate.agents.game_ui_analyzer",
+            "agent_type": "langgraph_agent",
+            "capabilities": ["game_analysis", "ui_spec_generation", "board_game_analysis"],
+            "description": "LangGraph 기반 보드게임 UI 분석 및 명세서 생성 시스템"
+        }
+        
+        input_data = {
+            "game_description": input_state_data["game_description"],
+            "detailed_rules": input_state_data["detailed_rules"],
+            "messages": input_state_data["messages"],
+            "result_json_path": str(result_json_path)
+        }
+        
+        result_placeholder = st.empty()
+        
+        result = run_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_metadata=agent_metadata,
+            input_data=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
+        
+        if result and result.get("success") and result.get("data"):
+            # 결과 처리
+            final_result = result["data"]
             ui_spec = final_result.get("ui_spec", {})
             analysis_result = {
                 "id": game_id,
-                "success": "error_message" not in final_result or not final_result["error_message"],
+                "success": "error_message" not in final_result or not final_result.get("error_message"),
                 "name": ui_spec.get("game_name", "분석 완료"),
                 "board_type": ui_spec.get("board_type", "unknown"),
                 "confidence": final_result.get("confidence_score", 0.0),
@@ -259,14 +637,15 @@ class RealLangGraphUI:
             }
             st.session_state.generated_games[game_id].update(analysis_result)
             st.session_state.analysis_log.append(analysis_result)
-
-        except Exception as e:
-            st.error(f"❌ 분석 중 심각한 오류 발생: {e}")
-            st.session_state.generated_games[game_id].update({"success": False, "error_message": str(e)})
+        else:
+            error_msg = result.get("error", "알 수 없는 오류") if result else "결과를 받지 못했습니다"
+            st.session_state.generated_games[game_id].update({
+                "success": False, 
+                "error_message": error_msg
+            })
         
-        finally:
-            st.session_state.analysis_in_progress = False
-            st.rerun()
+        st.session_state.analysis_in_progress = False
+        st.rerun()
 
     def render_text_based_interface(self):
         game_id = st.session_state.current_game_id
@@ -288,8 +667,9 @@ class RealLangGraphUI:
         col3.metric("복잡도", game_info.get('analysis_summary', {}).get('게임_복잡도', "N/A"))
 
         with st.expander("📜 AI가 생성한 전체 UI 명세서 (JSON)", expanded=True):
-        
+            st.json(game_info.get('full_spec', {}))
         with st.expander("🔬 AI의 핵심 분석 내용 (JSON)", expanded=False):
+            st.json(game_info.get('analysis_summary', {}))
 
     def render_main_content(self):
         st.title("🤖 LangGraph AI Game Mate")
@@ -300,60 +680,23 @@ class RealLangGraphUI:
                 self.render_game_creator()
             with st.container(border=True):
                 self.render_generated_games_list()
-
-        with col2:
-            with st.container(border=True):
-                if st.session_state.analysis_in_progress:
-                    # 만약 BGG 검색 결과가 있고 선택이 필요하다면, 선택 UI를 렌더링
-                    if st.session_state.game_selection_needed:
-                        self.render_game_selection()
-                    else:
-                        asyncio.run(self.run_analysis_and_stream_results())
-                elif st.session_state.current_game_id:
-                    self.render_text_based_interface()
-                else:
-                    st.subheader("3. 분석 과정 및 결과")
-                    st.info("게임을 새로 분석하거나, 목록에서 '결과 보기'를 선택해주세요.")
-
-# Streamlit 앱 실행 (표준 방식)
-app = RealLangGraphUI()
-app.render_main_content()
-
-# 최신 Boardgame UI Generator 결과 확인
-st.markdown("---")
-st.markdown("## 📊 최신 Boardgame UI Generator 결과")
-
-latest_boardgame_result = result_reader.get_latest_result("game_ui_analyzer", "ui_analysis")
-
-if latest_boardgame_result:
-    with st.expander("🎲 최신 게임 UI 분석 결과", expanded=False):
-        st.subheader("🤖 최근 게임 UI 분석 결과")
         
-        if isinstance(latest_boardgame_result, dict):
-            # 게임 정보 표시
-            game_name = latest_boardgame_result.get('game_name', 'N/A')
-            st.success(f"**게임: {game_name}**")
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("AI 신뢰도", f"{latest_boardgame_result.get('confidence_score', 0.0):.1%}")
-            col2.metric("보드 타입", latest_boardgame_result.get('board_type', 'N/A'))
-            col3.metric("분석 상태", "완료" if latest_boardgame_result.get('success', False) else "실패")
-            
-            # UI 명세서 표시
-            ui_spec = latest_boardgame_result.get('ui_spec', {})
-            if ui_spec:
-                st.subheader("📋 UI 명세서")
-                with st.expander("상세 UI 명세서", expanded=False):
-            
-            # 분석 결과 표시
-            analysis_result = latest_boardgame_result.get('analysis_result', {})
-            if analysis_result:
-                st.subheader("🔬 분석 결과")
-                with st.expander("상세 분석 결과", expanded=False):
-            
-            # 메타데이터 표시
-            if 'timestamp' in latest_boardgame_result:
-                st.caption(f"⏰ 분석 시간: {latest_boardgame_result['timestamp']}")
-        else:
-else:
-    st.info("💡 아직 Boardgame UI Generator Agent의 결과가 없습니다. 위에서 게임 UI 분석을 실행해보세요.")
+        with col2:
+            if st.session_state.analysis_in_progress:
+                # 만약 BGG 검색 결과가 있고 선택이 필요하다면, 선택 UI를 렌더링
+                if st.session_state.game_selection_needed:
+                    self.render_game_selection()
+                else:
+                    # A2A를 통해 분석 실행
+                    self.run_analysis_via_a2a()
+            elif st.session_state.current_game_id:
+                self.render_text_based_interface()
+            else:
+                st.info("👈 왼쪽에서 게임을 검색하고 분석을 시작하세요!")
+
+def main():
+    ui = RealLangGraphUI()
+    ui.render_main_content()
+
+if __name__ == "__main__":
+    main()

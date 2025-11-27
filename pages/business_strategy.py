@@ -382,8 +382,6 @@ def main():
                                 st.caption(f"⏰ 분석 시간: {time_str}")
                     except:
                         pass
-            else:
-                
     else:
         st.info("💡 아직 Business Strategy Agent의 결과가 없습니다. 위에서 비즈니스 전략 분석을 실행해보세요.")
 

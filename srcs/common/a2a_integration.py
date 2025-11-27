@@ -83,6 +83,7 @@ class A2AAdapter(ABC):
         try:
             current_loop = asyncio.get_running_loop()
             if self._message_queue is None:
+                logger.debug(f"Creating new queue for agent {self.agent_id} in loop {id(current_loop)}")
                 self._message_queue = asyncio.Queue()
             else:
                 # Queue가 다른 loop에 바인딩되어 있는지 확인
@@ -90,14 +91,22 @@ class A2AAdapter(ABC):
                     # Queue의 loop 확인 시도
                     if hasattr(self._message_queue, '_loop'):
                         queue_loop = self._message_queue._loop
-                        if queue_loop is not None and queue_loop != current_loop and queue_loop.is_closed():
-                            # 다른 loop에 바인딩되어 있고 닫혀있는 경우 새로 생성
-                            self._message_queue = asyncio.Queue()
-                except (AttributeError, RuntimeError):
+                        if queue_loop is not None:
+                            if queue_loop != current_loop:
+                                # 다른 loop에 바인딩된 경우 새로 생성
+                                logger.warning(f"Queue for agent {self.agent_id} is bound to different loop, recreating")
+                                self._message_queue = asyncio.Queue()
+                            elif queue_loop.is_closed():
+                                # 같은 loop지만 닫혀있는 경우 새로 생성
+                                logger.warning(f"Queue for agent {self.agent_id} is bound to closed loop, recreating")
+                                self._message_queue = asyncio.Queue()
+                except (AttributeError, RuntimeError) as e:
                     # Queue가 다른 loop에 바인딩된 경우 새로 생성
+                    logger.warning(f"Error checking queue loop for agent {self.agent_id}: {e}, recreating")
                     self._message_queue = asyncio.Queue()
         except RuntimeError:
             # Event loop가 없는 경우 새로 생성
+            logger.debug(f"No event loop for agent {self.agent_id}, creating queue without loop")
             self._message_queue = asyncio.Queue()
         
         return self._message_queue
@@ -268,9 +277,27 @@ class A2AMessageBroker:
         # 메시지 큐에 추가 (비동기 처리)
         logger.info(f"Routing message {message.message_id} ({message.message_type}) from {message.source_agent} to {message.target_agent}")
         try:
+            # adapter가 listener를 시작했는지 확인
+            if not a2a_adapter.is_listening:
+                logger.warning(f"Agent {message.target_agent} listener is not running, starting it...")
+                await a2a_adapter.start_listener()
+            
             queue = a2a_adapter._ensure_queue()
+            queue_size_before = queue.qsize()
+            logger.info(f"Queue for agent {message.target_agent}: {queue}, size before: {queue_size_before}, listener running: {a2a_adapter.is_listening}")
+            
             await queue.put(message)
-            logger.debug(f"Message {message.message_id} added to queue for agent {message.target_agent}")
+            queue_size_after = queue.qsize()
+            logger.info(f"✅ Message {message.message_id} added to queue for agent {message.target_agent}, size after: {queue_size_after}")
+            
+            # listener task가 실행 중인지 확인
+            if hasattr(a2a_adapter, "_message_processor_task") and a2a_adapter._message_processor_task:
+                if a2a_adapter._message_processor_task.done():
+                    logger.warning(f"Listener task for agent {message.target_agent} is done, restarting...")
+                    await a2a_adapter.start_listener()
+                else:
+                    logger.debug(f"Listener task for agent {message.target_agent} is running")
+            
             return True
         except (RuntimeError, AttributeError) as e:
             if "Event loop is closed" in str(e) or "bound to a different event loop" in str(e):

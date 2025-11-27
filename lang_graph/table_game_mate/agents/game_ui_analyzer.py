@@ -5,15 +5,180 @@ Game UI Analyzer Agent
 """
 
 import logging
-from typing import Dict, Any, Optional
+import asyncio
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 import os
+import sys
+from pathlib import Path
+
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from srcs.common.llm.fallback_llm import _try_fallback_llm, DirectHTTPLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 logger = logging.getLogger(__name__)
+
+
+class FallbackLangChainLLM:
+    """LangChain 호환 Fallback LLM Wrapper"""
+    
+    def __init__(self, primary_model: str = "gemini-2.5-flash-lite"):
+        """초기화"""
+        self.primary_model = primary_model
+        self.llm = None
+        self.fallback_llm = None
+        self._use_fallback_only = False
+        self._init_llm()
+    
+    def _init_llm(self):
+        """LLM 초기화 (event loop 체크 후 결정)"""
+        try:
+            # Event loop가 실행 중이고 닫히지 않았는지 확인
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_closed():
+                    logger.warning("Event loop is closed, using fallback LLM only")
+                    self._use_fallback_only = True
+                    self._init_fallback_llm()
+                    return
+            except RuntimeError:
+                # Event loop가 없는 경우도 fallback 사용
+                logger.warning("No event loop available, using fallback LLM only")
+                self._use_fallback_only = True
+                self._init_fallback_llm()
+                return
+            
+            # Event loop가 정상인 경우 기본 LLM 시도
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다.")
+            
+            self.llm = ChatGoogleGenerativeAI(
+                model=self.primary_model,
+                temperature=0.7,
+                google_api_key=api_key
+            )
+            logger.info(f"Primary LLM ({self.primary_model}) 초기화 완료")
+        except Exception as e:
+            logger.warning(f"Primary LLM 초기화 실패: {e}, fallback 시도")
+            self._use_fallback_only = True
+            self._init_fallback_llm()
+    
+    def _init_fallback_llm(self):
+        """Fallback LLM 초기화"""
+        try:
+            fallback_llm = _try_fallback_llm(self.primary_model, logger)
+            if fallback_llm:
+                self.fallback_llm = fallback_llm
+                logger.info("Fallback LLM 초기화 완료")
+            else:
+                raise ValueError("Fallback LLM 초기화 실패")
+        except Exception as e:
+            logger.error(f"Fallback LLM 초기화 실패: {e}")
+            raise
+    
+    async def ainvoke(self, messages: List[BaseMessage], **kwargs) -> AIMessage:
+        """비동기 LLM 호출 (fallback 지원)"""
+        # Fallback만 사용하도록 설정된 경우
+        if self._use_fallback_only:
+            if self.fallback_llm:
+                return await self._invoke_fallback(messages, **kwargs)
+            else:
+                raise RuntimeError("Fallback LLM이 초기화되지 않았습니다.")
+        
+        # 기본 LLM 시도
+        if self.llm:
+            try:
+                # Event loop 체크
+                try:
+                    loop = asyncio.get_running_loop()
+                    if loop.is_closed():
+                        raise RuntimeError("Event loop is closed")
+                except RuntimeError:
+                    # Event loop가 없거나 닫혀있는 경우 fallback으로 전환
+                    logger.warning("Event loop is closed or not available, using fallback LLM")
+                    if not self.fallback_llm:
+                        self._init_fallback_llm()
+                    if self.fallback_llm:
+                        self._use_fallback_only = True  # 이후부터는 fallback만 사용
+                        return await self._invoke_fallback(messages, **kwargs)
+                    raise RuntimeError("Event loop is closed and fallback LLM is not available")
+                
+                response = await self.llm.ainvoke(messages, **kwargs)
+                return response
+            except RuntimeError as e:
+                error_str = str(e).lower()
+                # Event loop 관련 에러인 경우 즉시 fallback으로 전환
+                if "event loop is closed" in error_str or "event loop" in error_str:
+                    logger.warning(f"Event loop 에러 발생, fallback으로 전환: {e}")
+                    if not self.fallback_llm:
+                        self._init_fallback_llm()
+                    if self.fallback_llm:
+                        self._use_fallback_only = True  # 이후부터는 fallback만 사용
+                        return await self._invoke_fallback(messages, **kwargs)
+                raise
+            except Exception as e:
+                error_str = str(e).lower()
+                # 429, 503, quota, resource_exhausted 에러인 경우 fallback 시도
+                if ("429" in error_str or "503" in error_str or "quota" in error_str or 
+                    "resource_exhausted" in error_str or "overloaded" in error_str):
+                    logger.warning(f"Primary LLM 오류 발생, fallback 시도: {e}")
+                    if not self.fallback_llm:
+                        self._init_fallback_llm()
+                    if self.fallback_llm:
+                        return await self._invoke_fallback(messages, **kwargs)
+                raise
+        
+        # Fallback LLM 사용
+        if self.fallback_llm:
+            return await self._invoke_fallback(messages, **kwargs)
+        
+        raise RuntimeError("LLM이 초기화되지 않았습니다.")
+    
+    async def _invoke_fallback(self, messages: List[BaseMessage], **kwargs) -> AIMessage:
+        """Fallback LLM 호출"""
+        # LangChain 메시지를 텍스트로 변환
+        prompt_text = ""
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                prompt_text += f"{msg.content}\n"
+            elif isinstance(msg, AIMessage):
+                prompt_text += f"Assistant: {msg.content}\n"
+        
+        # Fallback LLM 호출
+        if isinstance(self.fallback_llm, DirectHTTPLLM):
+            # DirectHTTPLLM은 generate_str 메서드 사용 (OpenAI 클라이언트 사용 안 함)
+            result = await self.fallback_llm.generate_str(
+                message=prompt_text.strip(),
+                request_params=None
+            )
+            return AIMessage(content=result)
+        elif isinstance(self.fallback_llm, GoogleAugmentedLLM):
+            # GoogleAugmentedLLM은 augmented_generate 메서드 사용
+            formatted_messages = []
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    formatted_messages.append({"role": "user", "content": msg.content})
+                elif isinstance(msg, AIMessage):
+                    formatted_messages.append({"role": "assistant", "content": msg.content})
+            
+            result = await self.fallback_llm.augmented_generate(
+                RequestParams(
+                    messages=formatted_messages,
+                    tools_choice="none"
+                )
+            )
+            return AIMessage(content=result.content)
+        else:
+            raise RuntimeError(f"지원하지 않는 fallback LLM 타입: {type(self.fallback_llm)}")
 
 
 class GameUIAnalysisState(BaseModel):
@@ -32,16 +197,8 @@ class GameUIAnalyzer:
     
     def __init__(self):
         """초기화"""
-        # LLM 초기화
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다.")
-        
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
-            temperature=0.7,
-            google_api_key=api_key
-        )
+        # Fallback LLM wrapper 사용
+        self.llm = FallbackLangChainLLM(primary_model="gemini-2.5-flash-lite")
         
         # 그래프 구성
         self.graph = self._build_graph()
@@ -134,7 +291,7 @@ JSON 형식으로 분석 결과를 반환해주세요:
 분석 결과:
 {json.dumps(analysis, ensure_ascii=False, indent=2)}
 
-다음 형식의 UI 명세서를 JSON으로 생성해주세요:
+다음 형식의 UI 명세서를 JSON으로 생성해주세요. 실제로 Streamlit에서 렌더링 가능한 UI 컴포넌트와 플레이어 인터페이스를 포함해야 합니다:
 {{
     "game_name": "게임 이름",
     "board_type": "grid|card|tile|other",
@@ -143,19 +300,49 @@ JSON 형식으로 분석 결과를 반환해주세요:
             "type": "board|card|token|dice|other",
             "name": "컴포넌트 이름",
             "description": "설명",
-            "properties": {{}}
+            "properties": {{}},
+            "ui_component": "st.board|st.card|st.container|st.columns",
+            "player_interface": {{
+                "visible_to": "all|self|others",
+                "interactive": true,
+                "actions": ["click", "drag", "select"]
+            }}
         }}
     ],
     "layout": {{
         "type": "grid|stack|hand|other",
-        "description": "레이아웃 설명"
+        "description": "레이아웃 설명",
+        "streamlit_layout": {{
+            "columns": 3,
+            "rows": 2,
+            "spacing": "medium"
+        }}
     }},
     "interactions": [
         {{
             "type": "click|drag|select|other",
-            "description": "상호작용 설명"
+            "description": "상호작용 설명",
+            "streamlit_component": "st.button|st.selectbox|st.slider"
         }}
-    ]
+    ],
+    "player_interface": {{
+        "hand_display": {{
+            "component": "st.container",
+            "layout": "horizontal|vertical",
+            "cards_per_row": 5
+        }},
+        "action_buttons": [
+            {{
+                "label": "행동 이름",
+                "component": "st.button",
+                "enabled": true
+            }}
+        ],
+        "status_display": {{
+            "component": "st.metric|st.info",
+            "show": ["score", "resources", "status"]
+        }}
+    }}
 }}"""
 
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
@@ -228,4 +415,10 @@ def get_game_ui_analyzer() -> GameUIAnalyzer:
     if _ui_analyzer_instance is None:
         _ui_analyzer_instance = GameUIAnalyzer()
     return _ui_analyzer_instance
+
+
+# A2A를 위한 모듈 레벨 app 변수
+# standard_agent_runner가 이 변수를 찾을 수 있도록
+_analyzer = get_game_ui_analyzer()
+app = _analyzer.app
 

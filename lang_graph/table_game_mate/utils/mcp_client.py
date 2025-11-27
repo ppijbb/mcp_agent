@@ -42,61 +42,84 @@ class MCPClient:
         self.sessions: Dict[str, ClientSession] = {}
         self.exit_stacks: Dict[str, AsyncExitStack] = {}
         self._initialized = False
+        self._connection_lock: Optional[asyncio.Lock] = None  # 연결 동시성 제어 (lazy init)
     
     async def _ensure_connected(self, server_name: str):
-        """서버 연결 확인 및 초기화"""
+        """서버 연결 확인 및 초기화 (동시성 제어)"""
+        # 이미 연결되어 있으면 반환
         if server_name in self.sessions:
             return
         
-        # MCP 서버 설정 (표준 MCP 서버 또는 커스텀 서버)
-        # 실제 구현에서는 설정 파일이나 환경 변수에서 로드
-        server_configs = {
-            "bgg-api": {
-                "command": "python",
-                "args": ["-m", "lang_graph.table_game_mate.mcp_servers.bgg_mcp_server"],
-            },
-            "brave-search": {
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-            },
-            "fetch": {
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-fetch"],
-            },
-        }
+        # Lock lazy 초기화
+        if self._connection_lock is None:
+            self._connection_lock = asyncio.Lock()
         
-        if server_name not in server_configs:
-            raise MCPClientError(f"알 수 없는 서버: {server_name}")
-        
-        config = server_configs[server_name]
-        
-        try:
-            exit_stack = AsyncExitStack()
-            self.exit_stacks[server_name] = exit_stack
+        # 동시 연결 시도 방지
+        async with self._connection_lock:
+            # 다시 확인 (다른 태스크가 이미 연결했을 수 있음)
+            if server_name in self.sessions:
+                return
             
-            # Stdio 서버 파라미터 생성
-            server_params = StdioServerParameters(
-                command=config["command"],
-                args=config["args"],
-            )
+            # MCP 서버 설정 (표준 MCP 서버 또는 커스텀 서버)
+            # 실제 구현에서는 설정 파일이나 환경 변수에서 로드
+            server_configs = {
+                "bgg-api": {
+                    "command": "python",
+                    "args": ["-m", "lang_graph.table_game_mate.mcp_servers.bgg_mcp_server"],
+                },
+                "brave-search": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+                },
+                "fetch": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-fetch"],
+                },
+            }
             
-            # 클라이언트 연결
-            stdio_streams = await exit_stack.enter_async_context(
-                stdio_client(server_params)
-            )
-            session = await exit_stack.enter_async_context(
-                ClientSession(*stdio_streams)
-            )
+            if server_name not in server_configs:
+                raise MCPClientError(f"알 수 없는 서버: {server_name}")
             
-            # 초기화
-            await session.initialize()
+            config = server_configs[server_name]
             
-            self.sessions[server_name] = session
-            logger.info(f"MCP 서버 '{server_name}' 연결 완료")
-            
-        except Exception as e:
-            logger.error(f"MCP 서버 '{server_name}' 연결 실패: {e}")
-            raise MCPClientError(f"서버 연결 실패: {e}")
+            try:
+                # 현재 이벤트 루프 확인
+                loop = asyncio.get_running_loop()
+                
+                exit_stack = AsyncExitStack()
+                self.exit_stacks[server_name] = exit_stack
+                
+                # Stdio 서버 파라미터 생성
+                server_params = StdioServerParameters(
+                    command=config["command"],
+                    args=config["args"],
+                )
+                
+                # 클라이언트 연결 (같은 이벤트 루프에서)
+                stdio_streams = await exit_stack.enter_async_context(
+                    stdio_client(server_params)
+                )
+                session = await exit_stack.enter_async_context(
+                    ClientSession(*stdio_streams)
+                )
+                
+                # 초기화
+                await session.initialize()
+                
+                self.sessions[server_name] = session
+                logger.info(f"MCP 서버 '{server_name}' 연결 완료")
+                
+            except Exception as e:
+                # 실패 시 정리
+                if server_name in self.exit_stacks:
+                    try:
+                        await self.exit_stacks[server_name].aclose()
+                    except Exception:
+                        pass
+                    del self.exit_stacks[server_name]
+                
+                logger.error(f"MCP 서버 '{server_name}' 연결 실패: {e}", exc_info=True)
+                raise MCPClientError(f"서버 연결 실패: {e}")
     
     async def call(
         self,
@@ -144,10 +167,12 @@ class MCPClient:
             return {"success": True, **output}
             
         except McpError as e:
-            logger.error(f"MCP tool 호출 오류 ({server_name}.{method}): {e}")
+            logger.error(f"MCP tool 호출 오류 ({server_name}.{method}): {e}", exc_info=True)
             return {"success": False, "error": str(e)}
         except Exception as e:
-            logger.error(f"예상치 못한 오류 ({server_name}.{method}): {e}")
+            logger.error(f"예상치 못한 오류 ({server_name}.{method}): {e}", exc_info=True)
+            import traceback
+            logger.debug(f"전체 스택 트레이스:\n{traceback.format_exc()}")
             return {"success": False, "error": str(e)}
     
     async def search_web(
@@ -219,11 +244,20 @@ class MCPClient:
             return {"success": False, "error": str(e), "content": ""}
     
     async def close(self):
-        """모든 연결 종료"""
-        for server_name, exit_stack in self.exit_stacks.items():
+        """모든 연결 종료 (안전하게)"""
+        # 역순으로 종료 (나중에 연결된 것부터)
+        server_names = list(self.exit_stacks.keys())
+        for server_name in reversed(server_names):
             try:
-                await exit_stack.aclose()
-                logger.info(f"MCP 서버 '{server_name}' 연결 종료")
+                exit_stack = self.exit_stacks.get(server_name)
+                if exit_stack:
+                    # 같은 이벤트 루프에서 종료
+                    await exit_stack.aclose()
+                    logger.info(f"MCP 서버 '{server_name}' 연결 종료")
+            except RuntimeError as e:
+                # "Attempted to exit cancel scope in a different task" 에러 무시
+                if "cancel scope" not in str(e).lower():
+                    logger.error(f"서버 '{server_name}' 종료 오류: {e}")
             except Exception as e:
                 logger.error(f"서버 '{server_name}' 종료 오류: {e}")
         

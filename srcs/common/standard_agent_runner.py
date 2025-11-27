@@ -659,78 +659,136 @@ class StandardAgentRunner:
                 else:
                     # 클래스 기반 호출
                     logger.info(f"Loading class-based agent: {module_path}.{class_name}.{method_name}")
-                    
-                    # 모듈 import
-                    module = importlib.import_module(module_path)
-                    
-                    # 클래스 가져오기
-                    agent_class = getattr(module, class_name)
-                    
-                    # 인스턴스 생성 (필요한 경우)
-                    # input_data에서 클래스 초기화에 필요한 인자 추출
-                    init_kwargs = {}
-                    if "init_kwargs" in input_data:
-                        init_kwargs = input_data["init_kwargs"]
-                    
-                    # 인스턴스 생성
-                    if init_kwargs:
-                        agent_instance = agent_class(**init_kwargs)
-                    else:
-                        # 기본 생성자로 생성 시도
-                        try:
-                            agent_instance = agent_class()
-                        except TypeError:
-                            # 생성자가 필요한 인자를 요구하는 경우, input_data에서 추출
-                            agent_instance = agent_class()
-                    
-                    # 메서드 호출
-                    method = getattr(agent_instance, method_name)
-                    
-                    # 메서드 시그니처 확인하여 필요한 인자만 추출
-                    import inspect
-                    try:
-                        sig = inspect.signature(method)
-                        method_params = set(sig.parameters.keys())
-                        
-                        # 메서드가 실제로 받을 수 있는 인자만 필터링
-                        method_kwargs = {k: v for k, v in input_data.items() 
-                                       if k in method_params and k not in ["module_path", "class_name", "method_name", "init_kwargs"]}
-                        
-                        logger.debug(f"Method {method_name} accepts parameters: {method_params}")
-                        logger.debug(f"Passing arguments: {list(method_kwargs.keys())}")
-                    except Exception as e:
-                        logger.warning(f"Could not inspect method signature: {e}, using all input_data")
-                        # 시그니처 확인 실패 시 기본 제외 목록 사용
-                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs", 
-                                      "result_json_path", "_execution_method", "_cli_args"]
-                        method_kwargs = {k: v for k, v in input_data.items() 
-                                       if k not in exclude_keys}
-                    
-                    # 실행
-                    if asyncio.iscoroutinefunction(method):
-                        result = await method(**method_kwargs)
-                    else:
-                        result = method(**method_kwargs)
-            
-            else:
-                # 단순 함수 호출 방식
-                # 모듈 경로 파싱 (예: "srcs.basic_agents.run_rag_agent")
-                if "." in entry_point:
-                    module_path, function_name = entry_point.rsplit(".", 1)
-                else:
-                    module_path = entry_point
-                    function_name = "main"
                 
-                logger.info(f"Loading function-based agent: {module_path}.{function_name}")
-                
+                # 모듈 import
                 module = importlib.import_module(module_path)
-                func = getattr(module, function_name)
+                
+                # 클래스 가져오기
+                agent_class = getattr(module, class_name)
+                
+                # 인스턴스 생성 (필요한 경우)
+                # input_data에서 클래스 초기화에 필요한 인자 추출
+                init_kwargs = {}
+                if "init_kwargs" in input_data:
+                    init_kwargs = input_data["init_kwargs"]
+                
+                # 인스턴스 생성
+                if init_kwargs:
+                    agent_instance = agent_class(**init_kwargs)
+                else:
+                    # 기본 생성자로 생성 시도
+                    try:
+                        agent_instance = agent_class()
+                    except TypeError:
+                        # 생성자가 필요한 인자를 요구하는 경우, input_data에서 추출
+                        agent_instance = agent_class()
+                
+                # 메서드 호출
+                method = getattr(agent_instance, method_name)
+                
+                # 메서드 시그니처 확인하여 필요한 인자만 추출
+                import inspect
+                try:
+                    sig = inspect.signature(method)
+                    method_params = set(sig.parameters.keys())
+                    
+                    # 메서드가 실제로 받을 수 있는 인자만 필터링
+                    method_kwargs = {k: v for k, v in input_data.items() 
+                                   if k in method_params and k not in ["module_path", "class_name", "method_name", "init_kwargs"]}
+                    
+                    logger.debug(f"Method {method_name} accepts parameters: {method_params}")
+                    logger.debug(f"Passing arguments: {list(method_kwargs.keys())}")
+                except Exception as e:
+                    logger.warning(f"Could not inspect method signature: {e}, using all input_data")
+                    # 시그니처 확인 실패 시 기본 제외 목록 사용
+                    exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs", 
+                                  "result_json_path", "_execution_method", "_cli_args"]
+                    method_kwargs = {k: v for k, v in input_data.items() 
+                                   if k not in exclude_keys}
                 
                 # 실행
-                if asyncio.iscoroutinefunction(func):
-                    result = await func(**input_data)
+                if asyncio.iscoroutinefunction(method):
+                    result = await method(**method_kwargs)
                 else:
-                    result = func(**input_data)
+                    result = method(**method_kwargs)
+            
+            else:
+                # 단순 함수 호출 방식 또는 LangGraph 모듈
+                # 모듈 경로 파싱 (예: "srcs.basic_agents.run_rag_agent")
+                if "." in entry_point:
+                    parts = entry_point.rsplit(".", 1)
+                    module_path = parts[0]
+                    potential_function = parts[1]
+                    
+                    # potential_function이 실제 함수인지 모듈 이름인지 확인
+                    # 먼저 모듈을 import하고 확인
+                    try:
+                        module = importlib.import_module(entry_point)
+                        # 모듈 자체가 import되었으면 (예: lang_graph.table_game_mate.agents.game_ui_analyzer)
+                        # app 속성을 찾아봐야 함
+                        if hasattr(module, "app"):
+                            # LangGraph 모듈
+                            graph_app = module.app
+                            logger.info(f"Loading LangGraph agent from module: {entry_point}")
+                            from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
+                            # metadata는 input_data에서 추출하거나 기본값 사용
+                            metadata_dict = input_data.get("_metadata", {})
+                            if not isinstance(metadata_dict, dict):
+                                metadata_dict = metadata_dict.to_dict() if hasattr(metadata_dict, "to_dict") else {}
+                            agent_id_value = input_data.get("_agent_id", entry_point)
+                            wrapper = LangGraphAgentA2AWrapper(agent_id_value, metadata_dict, graph_app=graph_app)
+                            result_data = await wrapper.execute_graph(input_data, stream=False)
+                            result = result_data if isinstance(result_data, dict) else {"result": result_data}
+                        elif callable(getattr(module, potential_function, None)):
+                            # 함수가 있는 경우
+                            function_name = potential_function
+                            logger.info(f"Loading function-based agent: {module_path}.{function_name}")
+                            func = getattr(module, function_name)
+                            if asyncio.iscoroutinefunction(func):
+                                result = await func(**input_data)
+                            else:
+                                result = func(**input_data)
+                        else:
+                            # 함수도 없고 app도 없으면 에러
+                            raise ValueError(f"Module {entry_point} has no 'app' attribute and no callable '{potential_function}' function")
+                    except ImportError:
+                        # 전체 경로로 import 실패, 모듈 경로와 함수로 분리
+                        function_name = potential_function
+                        logger.info(f"Loading function-based agent: {module_path}.{function_name}")
+                        module = importlib.import_module(module_path)
+                        func = getattr(module, function_name)
+                        if asyncio.iscoroutinefunction(func):
+                            result = await func(**input_data)
+                        else:
+                            result = func(**input_data)
+                else:
+                    # 단일 모듈 이름
+                    module_path = entry_point
+                    module = importlib.import_module(module_path)
+                    if hasattr(module, "app"):
+                        # LangGraph 모듈
+                        graph_app = module.app
+                        logger.info(f"Loading LangGraph agent from module: {module_path}")
+                        from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
+                        # metadata는 input_data에서 추출하거나 기본값 사용
+                        metadata_dict = input_data.get("_metadata", {})
+                        if not isinstance(metadata_dict, dict):
+                            metadata_dict = metadata_dict.to_dict() if hasattr(metadata_dict, "to_dict") else {}
+                        agent_id_value = input_data.get("_agent_id", module_path)
+                        wrapper = LangGraphAgentA2AWrapper(agent_id_value, metadata_dict, graph_app=graph_app)
+                        result_data = await wrapper.execute_graph(input_data, stream=False)
+                        result = result_data if isinstance(result_data, dict) else {"result": result_data}
+                    else:
+                        # 함수 찾기 시도
+                        function_name = "main"
+                        if hasattr(module, function_name):
+                            func = getattr(module, function_name)
+                            if asyncio.iscoroutinefunction(func):
+                                result = await func(**input_data)
+                            else:
+                                result = func(**input_data)
+                        else:
+                            raise ValueError(f"Module {module_path} has no 'app' attribute and no '{function_name}' function")
             
             return AgentExecutionResult(
                 success=True,

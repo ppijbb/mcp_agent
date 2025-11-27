@@ -129,7 +129,7 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         LangGraph 실행
         
         Args:
-            input_data: 입력 데이터 (LangGraph state 형식)
+            input_data: 입력 데이터 (LangGraph state 형식 또는 일반 dict)
             stream: 스트리밍 모드 여부
             
         Returns:
@@ -138,10 +138,22 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         if not self.graph_app:
             raise ValueError(f"Graph app not initialized for agent {self.agent_id}")
         
+        # input_data가 GameUIAnalysisState 형식이 아닌 경우 변환
+        # LangGraph는 state 객체를 받지만, dict도 받을 수 있음
         if stream:
             return self.graph_app.astream(input_data)
         else:
-            return await self.graph_app.ainvoke(input_data)
+            result = await self.graph_app.ainvoke(input_data)
+            # result가 state 객체인 경우 dict로 변환
+            if hasattr(result, "model_dump"):
+                return result.model_dump()
+            elif hasattr(result, "dict"):
+                return result.dict()
+            elif isinstance(result, dict):
+                return result
+            else:
+                # 그 외의 경우 dict로 래핑
+                return {"result": result, "state": str(result)}
     
     def serialize_state(self) -> Dict[str, Any]:
         """상태 직렬화"""

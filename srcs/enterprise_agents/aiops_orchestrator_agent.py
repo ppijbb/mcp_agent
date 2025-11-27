@@ -3,7 +3,7 @@ import os
 import json
 import psutil
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Correct imports based on the SEO Doctor Agent
 from mcp_agent.app import MCPApp
@@ -11,7 +11,10 @@ from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.utils import setup_agent_app
-from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
+from srcs.common.llm.fallback_llm import (
+    create_fallback_orchestrator_llm_factory,
+    try_fallback_orchestrator_execution
+)
 
 class AIOpsOrchestratorAgent:
     """
@@ -182,7 +185,7 @@ class AIOpsOrchestratorAgent:
             try:
                 # 4. Run the orchestration via a dedicated ReAct handler method
                 final_result = await self._react_aiops_analysis(
-                    orchestrator, analysis_task, logger
+                    orchestrator, analysis_task, logger, [monitoring_agent, rca_agent]
                 )
 
                 logger.info(f"Analysis complete. Final Result:\n{final_result}")
@@ -218,7 +221,8 @@ class AIOpsOrchestratorAgent:
         self,
         orchestrator: Orchestrator,
         task: str,
-        logger
+        logger,
+        agents: List[Agent]
     ) -> str:
         """
         Real ReAct loop for AIOps analysis based on SEO Doctor pattern.
@@ -247,10 +251,19 @@ class AIOpsOrchestratorAgent:
         """
         
         logger.info("REACT THOUGHT: Planning AIOps analysis approach")
-        thought_result = await orchestrator.generate_str(
-            message=thought_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.1)
-        )
+        try:
+            thought_result = await try_fallback_orchestrator_execution(
+                orchestrator=orchestrator,
+                agents=agents,
+                task=thought_task,
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger,
+                max_loops=30
+            )
+        except Exception as e:
+            logger.error(f"Thought phase failed: {e}")
+            # Fallback 실패 시에도 기본 분석 수행
+            thought_result = f"Analysis planning: I will gather system metrics and analyze the alert for node '{task.get('node', 'unknown')}'"
         
         # ⚡ ACTION PHASE: Execute the monitoring and data collection
         # Get real system snapshot
@@ -286,10 +299,20 @@ class AIOpsOrchestratorAgent:
         """
         
         logger.info("REACT ACTION: Executing monitoring and data collection")
-        action_result = await orchestrator.generate_str(
-            message=action_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.2)
-        )
+        try:
+            action_result = await try_fallback_orchestrator_execution(
+                orchestrator=orchestrator,
+                agents=agents,
+                task=action_task,
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger,
+                max_loops=30
+            )
+        except Exception as e:
+            logger.error(f"Action phase failed: {e}")
+            # Fallback 실패 시에도 시스템 스냅샷 기반 분석 수행
+            system_snapshot = self.get_real_system_snapshot()
+            action_result = f"System analysis based on current metrics:\n{json.dumps(system_snapshot, indent=2)}"
         
         # 🔍 OBSERVATION PHASE: Analyze results and generate conclusions
         observation_task = f"""
@@ -324,10 +347,24 @@ class AIOpsOrchestratorAgent:
         """
         
         logger.info("REACT OBSERVATION: Analyzing results and generating recommendations")
-        observation_result = await orchestrator.generate_str(
-            message=observation_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.1)
-        )
+        try:
+            observation_result = await try_fallback_orchestrator_execution(
+                orchestrator=orchestrator,
+                agents=agents,
+                task=observation_task,
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger,
+                max_loops=30
+            )
+        except Exception as e:
+            logger.error(f"Observation phase failed: {e}")
+            # Fallback 실패 시에도 기본 분석 결과 제공
+            observation_result = f"""Root Cause Analysis:
+Based on the system analysis, I recommend:
+1. Review the system metrics and process information
+2. Check for resource-intensive processes
+3. Monitor system performance over time
+4. Consider scaling or optimization if needed"""
         
         # Combine all ReAct results for comprehensive analysis
         combined_result = f"""

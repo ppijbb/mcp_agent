@@ -31,12 +31,20 @@ class ColoredFormatter(logging.Formatter):
     }
     
     def format(self, record):
-        # 원본 메시지 저장
-        original_msg = record.getMessage()
+        # 원본 메시지 가져오기 (포맷팅 전)
+        if record.args:
+            # 포맷팅이 필요한 경우
+            original_msg = record.msg % record.args
+        else:
+            # 포맷팅이 필요 없는 경우
+            original_msg = record.getMessage()
         
         # 색상 적용
         if record.levelname in self.COLORS:
-            record.msg = f"{self.COLORS[record.levelname]}{original_msg}{self.COLORS['RESET']}"
+            colored_msg = f"{self.COLORS[record.levelname]}{original_msg}{self.COLORS['RESET']}"
+            # record.msg를 수정하지 말고 임시로 저장
+            record.msg = colored_msg
+            record.args = ()  # args를 비워서 재포맷팅 방지
         
         return super().format(record)
 
@@ -88,8 +96,8 @@ class GameLogger:
     
     def _setup_handlers(self):
         """핸들러 설정"""
-        # 콘솔 핸들러 (컬러)
-        console_handler = logging.StreamHandler(sys.stdout)
+        # 콘솔 핸들러 (컬러) - stderr로 리다이렉트 (MCP JSONRPC 파서와 충돌 방지)
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(logging.INFO)
         console_formatter = ColoredFormatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -442,8 +450,8 @@ def initialize_logging(log_level: str = "INFO", log_dir: str = "logs"):
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # 기본 핸들러 추가
-    console_handler = logging.StreamHandler(sys.stdout)
+    # 기본 핸들러 추가 - stderr로 리다이렉트 (MCP JSONRPC 파서와 충돌 방지)
+    console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(logging.INFO)
     console_formatter = ColoredFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',

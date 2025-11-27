@@ -44,7 +44,7 @@ async def rate_limited_request(url: str) -> str:
                 raise Exception(f"BGG API error: {response.status}")
 
 @mcp.tool()
-def search_boardgame(name: str, exact: bool = False) -> dict:
+async def search_boardgame(name: str, exact: bool = False) -> dict:
     """
     BoardGameGeek에서 보드게임 검색
     
@@ -55,48 +55,41 @@ def search_boardgame(name: str, exact: bool = False) -> dict:
     Returns:
         검색 결과 (게임 ID, 이름, 년도 등)
     """
-    async def _search():
-        # BGG 검색 API 호출
-        search_type = "&exact=1" if exact else ""
-        url = f"{BGG_API_BASE}/search?query={name}&type=boardgame{search_type}"
-        
-        try:
-            xml_content = await rate_limited_request(url)
-            root = ET.fromstring(xml_content)
-            
-            games = []
-            for item in root.findall('.//item'):
-                game = {
-                    "id": int(item.get("id")),
-                    "name": item.find("name").get("value"),
-                    "year": item.find("yearpublished").get("value") if item.find("yearpublished") is not None else None
-                }
-                games.append(game)
-            
-            return {
-                "success": True,
-                "games": games,
-                "total": len(games)
-            }
-            
-        except Exception as e:
-            logger.error(f"BGG search error: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "games": []
-            }
+    # BGG 검색 API 호출 (URL 인코딩 필요)
+    from urllib.parse import quote_plus
+    search_type = "&exact=1" if exact else ""
+    encoded_name = quote_plus(name)
+    url = f"{BGG_API_BASE}/search?query={encoded_name}&type=boardgame{search_type}"
     
-    # 동기 함수에서 비동기 실행
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(_search())
-    finally:
-        loop.close()
+        xml_content = await rate_limited_request(url)
+        root = ET.fromstring(xml_content)
+        
+        games = []
+        for item in root.findall('.//item'):
+            game = {
+                "id": int(item.get("id")),
+                "name": item.find("name").get("value"),
+                "year": item.find("yearpublished").get("value") if item.find("yearpublished") is not None else None
+            }
+            games.append(game)
+        
+        return {
+            "success": True,
+            "games": games,
+            "total": len(games)
+        }
+        
+    except Exception as e:
+        logger.error(f"BGG search error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "games": []
+        }
 
 @mcp.tool()
-def get_game_details(bgg_id: int) -> dict:
+async def get_game_details(bgg_id: int) -> dict:
     """
     BGG에서 게임 상세 정보 조회
     
@@ -162,15 +155,11 @@ def get_game_details(bgg_id: int) -> dict:
                 "error": str(e)
             }
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(_get_details())
-    finally:
-        loop.close()
+    # FastMCP는 이미 async 컨텍스트이므로 직접 await
+    return await _get_details()
 
 @mcp.tool()
-def get_game_rules_summary(bgg_id: int) -> dict:
+async def get_game_rules_summary(bgg_id: int) -> dict:
     """
     게임 규칙 요약 생성 (BGG 설명 기반)
     
@@ -180,7 +169,7 @@ def get_game_rules_summary(bgg_id: int) -> dict:
     Returns:
         규칙 요약 정보
     """
-    details = get_game_details(bgg_id)
+    details = await get_game_details(bgg_id)
     
     if not details.get("success"):
         return details

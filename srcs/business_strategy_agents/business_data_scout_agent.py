@@ -143,25 +143,25 @@ class BusinessDataScoutAgent(BaseAgent):
         news_collector = MCP_Agent(
             name="news_data_collector",
             instruction=f"""You are an expert news and media data collector.
-
-Collect comprehensive news and media data for these keywords: {keyword_str}
-Focus on regions: {region_str}
-
-Execute these search strategies:
-1. Recent news articles (last 30 days)
-2. Industry reports and publications
-3. Press releases and announcements
-4. Market analysis and commentary
-
-For each source, extract:
-- Title and publication date
-- Source credibility and reach
-- Key insights and business implications
-- Sentiment analysis (positive/negative/neutral)
-- Trending topics and emerging themes
-
-Organize findings by relevance and business impact.
-Provide source URLs for verification.""",
+            
+            Collect comprehensive news and media data for these keywords: {keyword_str}
+            Focus on regions: {region_str}
+            
+            Execute these search strategies:
+            1. Recent news articles (last 30 days)
+            2. Industry reports and publications
+            3. Press releases and announcements
+            4. Market analysis and commentary
+            
+            For each source, extract:
+            - Title and publication date
+            - Source credibility and reach
+            - Key insights and business implications
+            - Sentiment analysis (positive/negative/neutral)
+            - Trending topics and emerging themes
+            
+            Organize findings by relevance and business impact.
+            Provide source URLs for verification.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -170,25 +170,25 @@ Provide source URLs for verification.""",
         social_collector = MCP_Agent(
             name="social_trends_collector", 
             instruction=f"""You are a social media and trends analysis expert.
-
-Analyze social media trends and community discussions for: {keyword_str}
-Target regions: {region_str}
-
-Research areas:
-1. Social media sentiment and engagement
-2. Trending hashtags and discussions
-3. Influencer opinions and thought leadership
-4. Community feedback and user reviews
-5. Viral content and memes related to topics
-
-Extract valuable insights:
-- Engagement metrics and reach
-- Sentiment trends over time
-- Key opinion leaders and influencers
-- Emerging topics and conversations
-- Consumer behavior patterns
-
-Focus on business-relevant social signals that indicate market opportunities.""",
+            
+            Analyze social media trends and community discussions for: {keyword_str}
+            Target regions: {region_str}
+            
+            Research areas:
+            1. Social media sentiment and engagement
+            2. Trending hashtags and discussions
+            3. Influencer opinions and thought leadership
+            4. Community feedback and user reviews
+            5. Viral content and memes related to topics
+            
+            Extract valuable insights:
+            - Engagement metrics and reach
+            - Sentiment trends over time
+            - Key opinion leaders and influencers
+            - Emerging topics and conversations
+            - Consumer behavior patterns
+            
+            Focus on business-relevant social signals that indicate market opportunities.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -197,25 +197,25 @@ Focus on business-relevant social signals that indicate market opportunities."""
         market_collector = MCP_Agent(
             name="market_intelligence_collector",
             instruction=f"""You are a market intelligence specialist.
-
-Gather competitive and market intelligence for: {keyword_str}
-Geographic focus: {region_str}
-
-Intelligence areas:
-1. Competitor analysis and positioning
-2. Market size and growth projections
-3. Investment and funding activities
-4. Regulatory changes and compliance
-5. Technology trends and innovations
-
-Collect specific data:
-- Market size estimates and growth rates
-- Key players and competitive landscape
-- Investment rounds and valuations
-- Regulatory developments
-- Technology adoption trends
-
-Provide actionable market insights with supporting data and sources.""",
+            
+            Gather competitive and market intelligence for: {keyword_str}
+            Geographic focus: {region_str}
+            
+            Intelligence areas:
+            1. Competitor analysis and positioning
+            2. Market size and growth projections
+            3. Investment and funding activities
+            4. Regulatory changes and compliance
+            5. Technology trends and innovations
+            
+            Collect specific data:
+            - Market size estimates and growth rates
+            - Key players and competitive landscape
+            - Investment rounds and valuations
+            - Regulatory developments
+            - Technology adoption trends
+            
+            Provide actionable market insights with supporting data and sources.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -224,25 +224,25 @@ Provide actionable market insights with supporting data and sources.""",
         data_evaluator = MCP_Agent(
             name="data_quality_evaluator",
             instruction=f"""You are a data quality assessment expert.
-
-Evaluate the collected business data for: {keyword_str}
-
-Assessment criteria:
-1. Source credibility and authority
-2. Data freshness and timeliness
-3. Completeness and coverage
-4. Accuracy and fact-checking
-5. Business relevance and actionability
-
-For each data source, provide:
-- Credibility score (1-10)
-- Freshness assessment
-- Completeness rating
-- Business relevance score
-- Recommendations for improvement
-
-Flag any inconsistencies or questionable data points.
-Prioritize high-quality, actionable business intelligence.""",
+            
+            Evaluate the collected business data for: {keyword_str}
+            
+            Assessment criteria:
+            1. Source credibility and authority
+            2. Data freshness and timeliness
+            3. Completeness and coverage
+            4. Accuracy and fact-checking
+            5. Business relevance and actionability
+            
+            For each data source, provide:
+            - Credibility score (1-10)
+            - Freshness assessment
+            - Completeness rating
+            - Business relevance score
+            - Recommendations for improvement
+            
+            Flag any inconsistencies or questionable data points.
+            Prioritize high-quality, actionable business intelligence.""",
             server_names=["fetch"],
             llm_factory=llm_factory,
         )
@@ -251,30 +251,30 @@ Prioritize high-quality, actionable business intelligence.""",
         report_synthesizer = MCP_Agent(
             name="business_data_synthesizer",
             instruction=f"""You are a business intelligence report synthesizer.
-
-Create a comprehensive business data report for: {keyword_str}
-Geographic scope: {region_str}
-
-Report structure:
-1. Executive Summary
-2. Market Overview and Size
-3. Key Trends and Opportunities
-4. Competitive Landscape
-5. Social and Media Sentiment
-6. Risk Assessment
-7. Strategic Recommendations
-8. Data Sources and References
-
-Synthesis requirements:
-- Integrate all collected data sources
-- Identify patterns and correlations
-- Provide actionable business insights
-- Include data quality assessments
-- Present clear visualizable metrics
-- Maintain professional formatting
-
-Save the comprehensive report to: {output_path}
-Format as clean markdown with proper sections and citations.""",
+            
+            Create a comprehensive business data report for: {keyword_str}
+            Geographic scope: {region_str}
+            
+            Report structure:
+            1. Executive Summary
+            2. Market Overview and Size
+            3. Key Trends and Opportunities
+            4. Competitive Landscape
+            5. Social and Media Sentiment
+            6. Risk Assessment
+            7. Strategic Recommendations
+            8. Data Sources and References
+            
+            Synthesis requirements:
+            - Integrate all collected data sources
+            - Identify patterns and correlations
+            - Provide actionable business insights
+            - Include data quality assessments
+            - Present clear visualizable metrics
+            - Maintain professional formatting
+            
+            Save the comprehensive report to: {output_path}
+            Format as clean markdown with proper sections and citations.""",
             server_names=["filesystem"],
             llm_factory=llm_factory,
         )
@@ -288,48 +288,48 @@ Format as clean markdown with proper sections and citations.""",
         region_str = ", ".join(regions) if regions else "global markets"
         
         task = f"""Execute comprehensive business data collection and analysis for: {keyword_str}
-
-Geographic Focus: {region_str}
-
-Mission: Collect high-quality business intelligence data from multiple sources and synthesize 
-into actionable strategic insights.
-
-Execution Plan:
-
-1. NEWS & MEDIA COLLECTION (news_data_collector):
-   - Gather recent news, industry reports, and media coverage
-   - Focus on business implications and market signals
-   - Analyze sentiment and emerging themes
-
-2. SOCIAL & TRENDS ANALYSIS (social_trends_collector):
-   - Research social media sentiment and engagement
-   - Identify trending topics and community discussions
-   - Map influencer opinions and thought leadership
-
-3. MARKET INTELLIGENCE (market_intelligence_collector):
-   - Analyze competitive landscape and positioning
-   - Research market size, growth, and investment activities
-   - Track regulatory and technology developments
-
-4. DATA QUALITY ASSESSMENT (data_quality_evaluator):
-   - Evaluate source credibility and data accuracy
-   - Assess completeness and business relevance
-   - Flag inconsistencies and provide quality scores
-
-5. COMPREHENSIVE SYNTHESIS (business_data_synthesizer):
-   - Integrate all collected data into unified report
-   - Identify key patterns and business opportunities
-   - Provide strategic recommendations and action items
-   - Save final report to: {output_path}
-
-Success Criteria:
-- High-quality data from credible sources
-- Clear business insights and opportunities
-- Actionable strategic recommendations
-- Professional report with proper citations
-- Comprehensive coverage of all key aspects
-
-Deliver a complete business intelligence report that enables strategic decision-making."""
+        
+        Geographic Focus: {region_str}
+        
+        Mission: Collect high-quality business intelligence data from multiple sources and synthesize 
+        into actionable strategic insights.
+        
+        Execution Plan:
+        
+        1. NEWS & MEDIA COLLECTION (news_data_collector):
+           - Gather recent news, industry reports, and media coverage
+           - Focus on business implications and market signals
+           - Analyze sentiment and emerging themes
+        
+        2. SOCIAL & TRENDS ANALYSIS (social_trends_collector):
+           - Research social media sentiment and engagement
+           - Identify trending topics and community discussions
+           - Map influencer opinions and thought leadership
+        
+        3. MARKET INTELLIGENCE (market_intelligence_collector):
+           - Analyze competitive landscape and positioning
+           - Research market size, growth, and investment activities
+           - Track regulatory and technology developments
+        
+        4. DATA QUALITY ASSESSMENT (data_quality_evaluator):
+           - Evaluate source credibility and data accuracy
+           - Assess completeness and business relevance
+           - Flag inconsistencies and provide quality scores
+        
+        5. COMPREHENSIVE SYNTHESIS (business_data_synthesizer):
+           - Integrate all collected data into unified report
+           - Identify key patterns and business opportunities
+           - Provide strategic recommendations and action items
+           - Save final report to: {output_path}
+        
+        Success Criteria:
+        - High-quality data from credible sources
+        - Clear business insights and opportunities
+        - Actionable strategic recommendations
+        - Professional report with proper citations
+        - Comprehensive coverage of all key aspects
+        
+        Deliver a complete business intelligence report that enables strategic decision-making."""
         
         return task
 
