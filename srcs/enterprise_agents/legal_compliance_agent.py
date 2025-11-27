@@ -20,11 +20,7 @@ OUTPUT_DIR = "legal_compliance_reports"
 COMPANY_NAME = "TechCorp Inc."
 JURISDICTION = "United States - Federal and California State"
 
-app = MCPApp(
-    name="legal_compliance_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+app = setup_agent_app("legal_compliance_system")
 
 
 async def main():
@@ -460,7 +456,7 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             logger.info("Legal compliance workflow completed successfully")

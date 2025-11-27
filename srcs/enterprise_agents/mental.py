@@ -19,7 +19,6 @@ from enum import Enum
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
@@ -27,6 +26,7 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app
 
 # Import visualization module
 from srcs.utils.mental_visualization import MentalStateVisualizer
@@ -87,11 +87,7 @@ OUTPUT_DIR = "mental_care_reports"
 MAX_CONVERSATION_TURNS = 50
 
 # Initialize app
-app = MCPApp(
-    name="mental_care_chatbot",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+app = setup_agent_app("mental_care_chatbot")
 
 
 def get_schema_therapy_knowledge() -> str:
@@ -345,7 +341,7 @@ class MentalCareOrchestrator:
         
         counselor_response = await orchestrator.generate_str(
             message=counselor_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         # 상담사 응답 저장
@@ -378,12 +374,12 @@ class MentalCareOrchestrator:
         # 비동기적으로 분석 실행 (응답 속도 향상)
         emotion_analysis_task = orchestrator.generate_str(
             message=emotion_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         schema_analysis_task = orchestrator.generate_str(
             message=schema_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         print(f"\n🤖 상담사: {counselor_response}\n")
@@ -464,7 +460,7 @@ class MentalCareOrchestrator:
         try:
             report_result = await orchestrator.generate_str(
                 message=report_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             # 보고서 파일 직접 저장

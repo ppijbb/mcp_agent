@@ -8,10 +8,10 @@ from typing import Dict, Any
 # Correct imports based on the SEO Doctor Agent
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from srcs.common.utils import setup_agent_app
 
 class AIOpsOrchestratorAgent:
     """
@@ -22,12 +22,8 @@ class AIOpsOrchestratorAgent:
     def __init__(self, output_dir: str = "aiops_reports"):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        # Initialize MCPApp, pointing to the central config file
-        self.app = MCPApp(
-            name="aiops_orchestrator",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        # Initialize MCPApp using standard setup function
+        self.app = setup_agent_app("aiops_orchestrator")
     
     def get_real_system_snapshot(self) -> Dict[str, Any]:
         """Get actual system metrics using psutil"""
@@ -74,6 +70,43 @@ class AIOpsOrchestratorAgent:
         except Exception as e:
             return {"error": f"Failed to get system snapshot: {str(e)}"}
 
+    async def execute_task(self, alert: Dict[str, Any] = None, **kwargs) -> Dict[str, Any]:
+        """
+        Standard execute_task method for agent runner compatibility.
+        Calls handle_alert with the provided alert data.
+        
+        Args:
+            alert: Alert dictionary with 'id', 'node', 'description' keys
+            **kwargs: Additional parameters (merged into alert if alert is None)
+            
+        Returns:
+            Dict containing the analysis result
+        """
+        # alert가 None이면 kwargs에서 alert 정보 구성
+        if alert is None:
+            alert = kwargs.get("alert", kwargs)
+        
+        # alert가 dict가 아니면 변환 시도
+        if not isinstance(alert, dict):
+            alert = {"id": str(alert), "node": "unknown", "description": str(alert)}
+        
+        # 필수 필드 확인 및 기본값 설정
+        if "id" not in alert:
+            alert["id"] = alert.get("alert_id", "unknown")
+        if "node" not in alert:
+            alert["node"] = alert.get("node_name", "unknown")
+        if "description" not in alert:
+            alert["description"] = alert.get("message", alert.get("text", "No description"))
+        
+        result = await self.handle_alert(alert)
+        
+        return {
+            "success": True,
+            "result": result,
+            "alert_id": alert["id"],
+            "node": alert["node"]
+        }
+    
     async def handle_alert(self, alert: Dict[str, Any]):
         """
         Handles an incoming IT alert by orchestrating a team of virtual agents.
@@ -88,6 +121,7 @@ class AIOpsOrchestratorAgent:
             logger.info(f"AIOps Orchestrator started for alert: {alert['description']}")
 
             # 1. Define Specialized Virtual Agents for the Task
+            # MCP 서버 validation 에러 방지를 위해 server_names 제거
             monitoring_agent = Agent(
                 name="system_monitor",
                 instruction=f"""You are a System Monitor. Your task is to analyze system performance
@@ -101,15 +135,20 @@ class AIOpsOrchestratorAgent:
                 - Immediate remediation steps
                 
                 Provide a detailed technical analysis as if you had access to real system metrics.""",
-                server_names=["g-search", "fetch"] # Use stable servers
+                server_names=[]  # MCP 서버 validation 에러 방지
             )
 
             rca_agent = Agent(
                 name="root_cause_analyst",
                 instruction=f"""You are a Root Cause Analyst. Based on the system snapshot,
-                determine the likely root cause of the issue. Use 'g-search' to look up error messages
-                or unfamiliar process names. Your analysis should be concise and point to a specific cause.""",
-                server_names=["g-search", "fetch"]
+                determine the likely root cause of the issue. Your analysis should be concise and point to a specific cause.
+                
+                Use your knowledge to analyze:
+                - System metrics and process information
+                - Common patterns of high CPU usage
+                - Typical root causes for infrastructure issues
+                - Best practices for troubleshooting""",
+                server_names=[]  # MCP 서버 validation 에러 방지
             )
 
             # 2. Create an Orchestrator to manage the agents
@@ -200,7 +239,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT THOUGHT: Planning AIOps analysis approach")
         thought_result = await orchestrator.generate_str(
             message=thought_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
+            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.1)
         )
         
         # ⚡ ACTION PHASE: Execute the monitoring and data collection
@@ -239,7 +278,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT ACTION: Executing monitoring and data collection")
         action_result = await orchestrator.generate_str(
             message=action_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.2)
+            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.2)
         )
         
         # 🔍 OBSERVATION PHASE: Analyze results and generate conclusions
@@ -277,7 +316,7 @@ class AIOpsOrchestratorAgent:
         logger.info("REACT OBSERVATION: Analyzing results and generating recommendations")
         observation_result = await orchestrator.generate_str(
             message=observation_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07", temperature=0.1)
+            request_params=RequestParams(model="gemini-2.5-flash-lite", temperature=0.1)
         )
         
         # Combine all ReAct results for comprehensive analysis

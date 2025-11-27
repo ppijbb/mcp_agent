@@ -200,63 +200,68 @@ def run_agent_via_a2a(
                 update_status("A2A 통신 초기화 중...")
                 update_log("A2A 통신 시작", "info")
                         
-                # Streamlit UI agent 등록 (아직 등록되지 않은 경우)
+                # Streamlit UI agent 등록 (페이지 전환 시 기존 agent 정리 후 재등록)
                 existing_ui_agent = await registry.get_agent(streamlit_agent_id)
-                if not existing_ui_agent:
-                    update_status("Streamlit UI Agent 등록 중...")
-                    update_log("Streamlit UI Agent 등록 시작", "info")
-                    
-                    ui_metadata = {
-                        "agent_id": streamlit_agent_id,
-                        "agent_name": "Streamlit UI",
-                        "agent_type": "streamlit_ui",
-                        "capabilities": ["ui_display", "result_receiving"],
-                        "description": "Streamlit UI for receiving agent results"
-                    }
-                    ui_wrapper = CommonAgentA2AWrapper(streamlit_agent_id, ui_metadata)
-                    
-                    # task_response 메시지 핸들러 등록
-                    async def handle_task_response(message: A2AMessage) -> Optional[Dict[str, Any]]:
-                        """task_response 메시지 처리"""
-                        nonlocal response_received, response_data
-                        if message.correlation_id == correlation_id:
-                            response_data = message.payload
-                            response_received = True
-                            update_log(f"✅ task_response 수신: {message.message_id} (correlation_id: {correlation_id})", "success")
-                            logger.info(f"Streamlit UI received task response: {message.message_id}")
-                        else:
-                            update_log(f"⚠️ 다른 correlation_id의 메시지 수신: {message.correlation_id} (기대: {correlation_id})", "warning")
-                        return message.payload
-                    
-                    ui_wrapper.register_handler("task_response", handle_task_response)
-                    await ui_wrapper.start_listener()
-                    await registry.register_agent(
-                        agent_id=streamlit_agent_id,
-                        agent_type="streamlit_ui",
-                        metadata=ui_metadata,
-                        a2a_adapter=ui_wrapper
-                    )
-                    update_log(f"✅ Streamlit UI Agent 등록 완료: {streamlit_agent_id}", "success")
-                    logger.info(f"Streamlit UI agent registered: {streamlit_agent_id}")
-                else:
-                    update_log("Streamlit UI Agent 이미 등록됨", "info")
-                    # 이미 등록된 경우 wrapper 가져오기
-                    ui_wrapper = existing_ui_agent.get("a2a_adapter")
-                    if ui_wrapper:
-                        # task_response 핸들러 등록
-                        async def handle_task_response(message: A2AMessage) -> Optional[Dict[str, Any]]:
-                            nonlocal response_received, response_data
-                            if message.correlation_id == correlation_id:
-                                response_data = message.payload
-                                response_received = True
-                                update_log(f"✅ task_response 수신: {message.message_id}", "success")
-                                logger.info(f"Streamlit UI received task response: {message.message_id}")
-                            else:
-                                update_log(f"⚠️ 다른 correlation_id의 메시지 수신: {message.correlation_id}", "warning")
-                            return message.payload
-                        
-                        ui_wrapper.register_handler("task_response", handle_task_response)
-                        update_log("task_response 핸들러 등록 완료", "info")
+                
+                # 기존 agent가 있으면 정리 (다른 event loop에 바인딩된 queue 정리)
+                if existing_ui_agent:
+                    old_wrapper = existing_ui_agent.get("a2a_adapter")
+                    if old_wrapper:
+                        try:
+                            # 기존 listener 중지 (안전하게 처리)
+                            try:
+                                await asyncio.wait_for(old_wrapper.stop_listener(), timeout=1.0)
+                            except (asyncio.TimeoutError, RuntimeError, AttributeError):
+                                # Event loop가 닫혀있거나 타임아웃된 경우 무시
+                                logger.debug("기존 listener 중지 중 타임아웃/에러 (예상됨)")
+                            
+                            # 기존 agent 등록 해제
+                            try:
+                                await registry.unregister_agent(streamlit_agent_id)
+                            except Exception as e:
+                                logger.debug(f"Agent 등록 해제 중 에러 (무시): {e}")
+                            
+                            update_log("기존 Streamlit UI Agent 정리 완료", "info")
+                        except Exception as e:
+                            # 모든 예외를 안전하게 처리하여 Streamlit이 크래시되지 않도록
+                            logger.debug(f"기존 agent 정리 중 오류 (무시): {e}")
+                
+                # 새 Streamlit UI agent 등록 (현재 event loop에서)
+                update_status("Streamlit UI Agent 등록 중...")
+                update_log("Streamlit UI Agent 등록 시작", "info")
+                
+                ui_metadata = {
+                    "agent_id": streamlit_agent_id,
+                    "agent_name": "Streamlit UI",
+                    "agent_type": "streamlit_ui",
+                    "capabilities": ["ui_display", "result_receiving"],
+                    "description": "Streamlit UI for receiving agent results"
+                }
+                ui_wrapper = CommonAgentA2AWrapper(streamlit_agent_id, ui_metadata)
+                
+                # task_response 메시지 핸들러 등록
+                async def handle_task_response(message: A2AMessage) -> Optional[Dict[str, Any]]:
+                    """task_response 메시지 처리"""
+                    nonlocal response_received, response_data
+                    if message.correlation_id == correlation_id:
+                        response_data = message.payload
+                        response_received = True
+                        update_log(f"✅ task_response 수신: {message.message_id} (correlation_id: {correlation_id})", "success")
+                        logger.info(f"Streamlit UI received task response: {message.message_id}")
+                    else:
+                        update_log(f"⚠️ 다른 correlation_id의 메시지 수신: {message.correlation_id} (기대: {correlation_id})", "warning")
+                    return message.payload
+                
+                ui_wrapper.register_handler("task_response", handle_task_response)
+                await ui_wrapper.start_listener()
+                await registry.register_agent(
+                    agent_id=streamlit_agent_id,
+                    agent_type="streamlit_ui",
+                    metadata=ui_metadata,
+                    a2a_adapter=ui_wrapper
+                )
+                update_log(f"✅ Streamlit UI Agent 등록 완료: {streamlit_agent_id}", "success")
+                logger.info(f"Streamlit UI agent registered: {streamlit_agent_id}")
                 
                 # Target agent 등록 및 A2A adapter 설정
                 update_status(f"Target Agent ({agent_id}) 등록 및 A2A Adapter 설정 중...")
@@ -488,7 +493,12 @@ def run_agent_via_a2a(
                                 logger.info(f"Streamlit UI received task response: {message.message_id}")
                             else:
                                 # 다른 메시지는 다시 큐에 넣기
-                                await ui_wrapper._message_queue.put(message)
+                                try:
+                                    queue = ui_wrapper._ensure_queue()
+                                    await queue.put(message)
+                                except (RuntimeError, AttributeError):
+                                    # Event loop 문제로 큐에 넣을 수 없는 경우 무시
+                                    pass
                         except asyncio.TimeoutError:
                             pass
                         except AttributeError:

@@ -50,7 +50,7 @@ def main():
             default=["lighting", "temperature"]
         )
         
-        submitted = st.form_submit_button("🚀 홈 제어 실행", use_container_width=True)
+        submitted = st.form_submit_button("🚀 홈 제어 실행", width='stretch')
 
     if submitted:
         if not home_command.strip():

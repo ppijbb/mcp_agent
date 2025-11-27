@@ -55,7 +55,7 @@ def main():
             help="동시에 실행할 최대 작업 수"
         )
         
-        submitted = st.form_submit_button("🚀 병렬 실행", use_container_width=True)
+        submitted = st.form_submit_button("🚀 병렬 실행", width='stretch')
 
     if submitted:
         if not tasks_input.strip():

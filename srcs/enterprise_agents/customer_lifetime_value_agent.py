@@ -20,11 +20,7 @@ OUTPUT_DIR = "clv_reports"
 COMPANY_NAME = "TechCorp Inc."
 CUSTOMER_BASE = "B2B and B2C Multi-Channel"
 
-app = MCPApp(
-    name="customer_lifetime_value_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+app = setup_agent_app("customer_lifetime_value_system")
 
 
 async def main():
@@ -499,7 +495,7 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             logger.info("Customer lifetime value optimization workflow completed successfully")

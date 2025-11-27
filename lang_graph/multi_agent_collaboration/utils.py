@@ -29,8 +29,8 @@ search_tool = TavilySearchResults(max_results=5, name="web_search")
 
 # LLM 모델 정의
 # 모든 에이전트들이 공통으로 사용하는 언어 모델입니다.
-# gemini-2.5-flash-lite-preview-06-07 모델을 사용하여 강력한 추론 능력을 활용합니다.
-model = ChatOpenAI(model="gemini-2.5-flash-lite-preview-06-07", temperature=0, streaming=True)
+# gemini-2.5-flash-lite 모델을 사용하여 강력한 추론 능력을 활용합니다.
+model = ChatOpenAI(model="gemini-2.5-flash-lite", temperature=0, streaming=True)
 
 # 성능 모니터링을 위한 메트릭 수집기
 @dataclass

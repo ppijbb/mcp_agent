@@ -88,7 +88,7 @@ def main():
             '{"product_id": "prod_abc", "price": 99.99, "currency": "USD"}'
         )
         
-        submitted = st.form_submit_button("🚀 의사결정 분석 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 의사결정 분석 시작", width='stretch')
 
     if submitted:
         if not user_id.strip() or not context_text.strip():

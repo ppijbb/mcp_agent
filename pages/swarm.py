@@ -55,7 +55,7 @@ def main():
             help="협업할 agent의 수"
         )
         
-        submitted = st.form_submit_button("🚀 Swarm 실행", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Swarm 실행", width='stretch')
 
     if submitted:
         if not task_description.strip():

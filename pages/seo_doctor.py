@@ -18,7 +18,13 @@ sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
-from srcs.core.config.loader import settings
+
+# 설정 파일에서 경로 가져오기
+try:
+    from configs.settings import get_reports_path
+except ImportError:
+    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
+    st.stop()
 
 # Result Reader 임포트
 try:
@@ -85,13 +91,13 @@ def main():
             disabled=not include_competitors
         )
         
-        submitted = st.form_submit_button("🚀 SEO 진단 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 SEO 진단 시작", width='stretch')
 
     if submitted:
         if not url or "http" not in url:
             st.warning("유효한 URL을 입력해주세요. (http:// 또는 https:// 포함)")
         else:
-            reports_path = settings.get_reports_path('seo_doctor')
+            reports_path = Path(get_reports_path('seo_doctor'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"seo_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

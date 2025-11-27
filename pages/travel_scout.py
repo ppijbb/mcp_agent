@@ -33,11 +33,12 @@ st.set_page_config(
 try:
     from srcs.common.page_utils import setup_page_header
     from srcs.common.styles import apply_custom_styles
-    from srcs.core.config.loader import settings
     from srcs.travel_scout.travel_scout_agent import (
         load_destination_options, 
         load_origin_options
     )
+    # 설정 파일에서 경로 가져오기
+    from configs.settings import get_reports_path
     mcp_available = True
 except ImportError as e:
     st.error(f"❌ 필수 모듈 로드 실패: {e}")
@@ -93,9 +94,9 @@ with st.form(key="travel_scout_form"):
     
     b1, b2 = st.columns(2)
     with b1:
-        search_hotels_submitted = st.form_submit_button("🏨 Search Hotels", use_container_width=True)
+        search_hotels_submitted = st.form_submit_button("🏨 Search Hotels", width='stretch')
     with b2:
-        search_flights_submitted = st.form_submit_button("✈️ Search Flights", use_container_width=True)
+        search_flights_submitted = st.form_submit_button("✈️ Search Flights", width='stretch')
 
 # --- 🤖 에이전트 실행 로직 ---
 task_to_run = None
@@ -112,7 +113,7 @@ if task_to_run:
     else:
         st.session_state.flight_results = None
 
-    reports_path = settings.get_reports_path('travel_scout')
+    reports_path = Path(get_reports_path('travel_scout'))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_output_dir = reports_path / f"run_{timestamp}"
     run_output_dir.mkdir(parents=True, exist_ok=True)

@@ -51,7 +51,7 @@ def main():
             value=3
         )
         
-        submitted = st.form_submit_button("🚀 협업 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 협업 시작", width='stretch')
 
     if submitted:
         if not collaboration_task.strip():

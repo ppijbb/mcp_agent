@@ -46,7 +46,7 @@ def main():
             default=["productivity", "space_utilization"]
         )
         
-        submitted = st.form_submit_button("🚀 근무 환경 분석 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 근무 환경 분석 시작", width='stretch')
 
     if submitted:
         if not company_name.strip():

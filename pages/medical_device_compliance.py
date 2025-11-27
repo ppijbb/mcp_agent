@@ -50,7 +50,7 @@ def main():
             help="의료기기 규제 기관 선택"
         )
         
-        submitted = st.form_submit_button("🚀 규정 준수 검토 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 규정 준수 검토 시작", width='stretch')
 
     if submitted:
         if not device_description.strip():

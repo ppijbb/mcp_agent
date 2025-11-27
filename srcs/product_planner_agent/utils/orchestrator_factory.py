@@ -31,7 +31,7 @@ def get_orchestrator() -> Orchestrator:
     def llm_factory():
         # Fallback이 가능한 LLM factory 사용 (common 모듈)
         fallback_llm_factory = create_fallback_llm_factory(
-            primary_model="gemini-2.5-flash-lite-preview-06-07",
+            primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
         base_llm = fallback_llm_factory()

@@ -253,15 +253,65 @@ class AIArchitectureDesigner:
         )
     
     def evaluate_architecture(self, genome, task_context=None):
-        """Real architecture evaluation based on genome complexity and task requirements"""
+        """실제 아키텍처 평가 - 문제 설명과 제약 조건을 고려한 시뮬레이션"""
         if not genome or not genome.layers:
             raise ValueError("Valid architecture genome is required for evaluation")
         
-        # Basic evaluation based on architecture complexity
-        complexity_score = len(genome.layers) * 0.1
-        parameter_score = sum(layer.get('parameters', 0) for layer in genome.layers) / 10000
+        # 기본 복잡도 점수
+        complexity_score = min(1.0, len(genome.layers) * 0.15)
+        parameter_score = min(1.0, sum(layer.get('parameters', 0) for layer in genome.layers) / 50000)
         
-        return min(0.95, max(0.1, complexity_score + parameter_score))
+        base_fitness = (complexity_score + parameter_score) / 2
+        
+        # 문제 설명 기반 평가
+        if task_context:
+            problem_desc = task_context.get('problem_description', '').lower()
+            constraints = task_context.get('constraints', {})
+            target_metrics = task_context.get('target_metrics', {})
+            
+            # 문제 유형에 따른 적합성 평가
+            problem_bonus = 0.0
+            if 'image' in problem_desc or 'vision' in problem_desc or 'visual' in problem_desc:
+                # CNN 계열 아키텍처에 보너스
+                arch_types = [layer.get('type', '').lower() for layer in genome.layers]
+                if any('cnn' in t or 'conv' in t for t in arch_types):
+                    problem_bonus = 0.15
+            elif 'text' in problem_desc or 'language' in problem_desc or 'nlp' in problem_desc:
+                # Transformer 계열 아키텍처에 보너스
+                arch_types = [layer.get('type', '').lower() for layer in genome.layers]
+                if any('transformer' in t or 'attention' in t for t in arch_types):
+                    problem_bonus = 0.15
+            elif 'time' in problem_desc or 'sequence' in problem_desc:
+                # RNN 계열 아키텍처에 보너스
+                arch_types = [layer.get('type', '').lower() for layer in genome.layers]
+                if any('rnn' in t or 'lstm' in t or 'gru' in t for t in arch_types):
+                    problem_bonus = 0.15
+            
+            # 제약 조건 검증
+            constraint_penalty = 0.0
+            total_params = sum(layer.get('parameters', 0) for layer in genome.layers)
+            
+            if 'max_memory_mb' in constraints:
+                estimated_memory = total_params * 4 / 1024  # MB
+                if estimated_memory > constraints['max_memory_mb']:
+                    constraint_penalty = 0.2
+            
+            if 'max_latency_ms' in constraints:
+                estimated_latency = len(genome.layers) * 10  # ms
+                if estimated_latency > constraints['max_latency_ms']:
+                    constraint_penalty = max(constraint_penalty, 0.2)
+            
+            # 목표 메트릭 고려
+            target_bonus = 0.0
+            if 'accuracy' in target_metrics:
+                # 목표 정확도에 가까울수록 보너스
+                if base_fitness >= target_metrics['accuracy'] * 0.9:
+                    target_bonus = 0.1
+            
+            base_fitness = base_fitness + problem_bonus + target_bonus - constraint_penalty
+        
+        # 최종 fitness score (0.1 ~ 0.95 범위)
+        return min(0.95, max(0.1, base_fitness))
 
 class ArchitectureType(Enum):
     TRANSFORMER = "transformer"
@@ -443,7 +493,7 @@ class AIArchitectMCP:
             
             thought_result = await orchestrator.generate_str(
                 message=thought_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             reasoning_steps.append(f"Iteration {iteration} Thought: {thought_result[:200]}...")
@@ -459,7 +509,7 @@ class AIArchitectMCP:
             
             action_result = await orchestrator.generate_str(
                 message=action_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             research_insights.append(action_result)
@@ -479,7 +529,7 @@ class AIArchitectMCP:
             
             observation_result = await orchestrator.generate_str(
                 message=observation_task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             reasoning_steps.append(f"Iteration {iteration} Observation: {observation_result[:200]}...")
@@ -599,7 +649,7 @@ class AIArchitectMCP:
         
         analysis_result = await orchestrator.generate_str(
             message=analysis_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         return {
@@ -624,7 +674,7 @@ class AIArchitectMCP:
         
         suggestions_result = await orchestrator.generate_str(
             message=suggestion_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         # Extract suggestions

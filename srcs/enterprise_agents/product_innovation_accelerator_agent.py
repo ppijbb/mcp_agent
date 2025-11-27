@@ -21,11 +21,7 @@ OUTPUT_DIR = "product_innovation_accelerator_reports"
 COMPANY_NAME = "TechCorp Inc."
 INNOVATION_SCOPE = "Technology Product Development"
 
-app = MCPApp(
-    name="product_innovation_accelerator_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+app = setup_agent_app("product_innovation_accelerator_system")
 
 
 async def main():
@@ -500,7 +496,7 @@ async def main():
         try:
             result = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             
             logger.info("Product innovation acceleration workflow completed successfully")

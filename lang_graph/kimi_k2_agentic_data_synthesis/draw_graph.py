@@ -14,7 +14,7 @@ from kimi_k2_agentic_data_synthesis.core.simulation_engine import SimulationEngi
 
 # Mock LLM Config (as it's required by AgentFactory and SimulationEngine)
 llm_config = {
-    "model": "gemini-2.5-flash-lite-preview-06-07",
+    "model": "gemini-2.5-flash-lite",
     "temperature": 0.7,
     "max_tokens": 1000
 }

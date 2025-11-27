@@ -10,5 +10,5 @@ def get_llm_factory() -> Callable[[], GoogleAugmentedLLM]:
     Fallback support included for API errors (503, overloaded, etc.)
     """
     return create_fallback_llm_factory(
-        primary_model="gemini-2.5-flash-lite-preview-06-07"
+        primary_model="gemini-2.5-flash-lite"
     ) 

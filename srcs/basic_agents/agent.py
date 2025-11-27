@@ -50,11 +50,8 @@ COMPANY_NAME = "Apple" if len(sys.argv) <= 1 else sys.argv[1]
 MAX_ITERATIONS = 3
 
 # Initialize app
-app = MCPApp(
-    name="unified_stock_analyzer", 
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+from srcs.common.utils import setup_agent_app
+app = setup_agent_app("unified_stock_analyzer")
 
 
 async def main():
@@ -217,7 +214,7 @@ async def main():
         logger.info("Starting the stock analysis workflow")
         try:
             await orchestrator.generate_str(
-                message=task, request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                message=task, request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
 
             # Check if report was successfully created

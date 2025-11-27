@@ -22,7 +22,6 @@ from pathlib import Path
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
@@ -30,17 +29,14 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
+from srcs.common.utils import setup_agent_app
 
 # Configuration
 OUTPUT_DIR = "dynamic_finance_reports"
 COMPANY_NAME = "Dynamic Finance Advisor"
 TARGET_MARKET = "Korean Personal Finance Market"
 
-app = MCPApp(
-    name="dynamic_finance_health_system",
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+app = setup_agent_app("dynamic_finance_health_system")
 
 
 async def main():
@@ -181,7 +177,7 @@ async def main():
             
             Provide specific product recommendations with reasoning and risk assessment.
             """,
-            server_names=["g-search", "fetch"],
+            server_names=[],  # MCP 서버 validation 에러 방지
         )
         
         # Portfolio Optimization Agent
@@ -311,7 +307,7 @@ async def main():
             
             Ensure all risk assessments include Korean regulatory and market context.
             """,
-            server_names=["g-search", "fetch"],
+            server_names=[],  # MCP 서버 validation 에러 방지
         )
         
         # --- ORCHESTRATOR SETUP ---

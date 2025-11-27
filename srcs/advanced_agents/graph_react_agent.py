@@ -46,7 +46,7 @@ class GraphReActAgent(Agent):
             **kwargs
         )
         self.max_iterations = 10
-        self.model = "gemini-2.5-flash-lite-preview-06-07"
+        self.model = "gemini-2.5-flash-lite"
         self.graph = Neo4jConnector()
         # self.orchestrator and self.logger will be set by the MCPApp/Orchestrator
         # that this agent is part of.
@@ -293,7 +293,7 @@ Thought:
             
             llm_response = await self.orchestrator.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                model="gemini-2.5-flash-lite-preview-06-07",
+                model="gemini-2.5-flash-lite",
                 json_response=True
             )
             
@@ -339,11 +339,8 @@ Thought:
 
         return "Agent stopped after reaching max steps."
 
-app = MCPApp(
-    name="graph_react_agent_app", 
-    settings=get_settings("configs/mcp_agent.config.yaml"),
-    human_input_callback=None
-)
+from srcs.common.utils import setup_agent_app
+app = setup_agent_app("graph_react_agent_app")
 
 async def main():
     """Main function to run the GraphReActAgent."""

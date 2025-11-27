@@ -207,7 +207,7 @@ async def main():
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
-        if st.button("🚀 전체 워크플로우 실행", type="primary", use_container_width=True):
+        if st.button("🚀 전체 워크플로우 실행", type="primary", width='stretch'):
             if not user_input.strip():
                 st.warning("제품 기획 내용을 입력해주세요.")
                 return

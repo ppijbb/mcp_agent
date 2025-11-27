@@ -24,7 +24,6 @@ from enum import Enum
 # MCP Agent imports
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
@@ -108,11 +107,8 @@ class DevOpsAssistantMCPAgent:
         os.makedirs(self.output_dir, exist_ok=True)
         
         # MCP App 초기화
-        self.app = MCPApp(
-            name="devops_assistant",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        from srcs.common.utils import setup_agent_app
+        self.app = setup_agent_app("devops_assistant")
         
         # DevOps 작업 히스토리
         self.task_history: List[DevOpsResult] = []

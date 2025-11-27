@@ -48,7 +48,7 @@ class AgentTemplate(ABC):
         """Create orchestrator with agents and evaluator (with fallback support)"""
         # Fallback이 가능한 LLM factory 사용 (common 모듈)
         fallback_llm_factory = create_fallback_llm_factory(
-            primary_model="gemini-2.5-flash-lite-preview-06-07"
+            primary_model="gemini-2.5-flash-lite"
         )
         
         quality_controller = EvaluatorOptimizerLLM(
@@ -89,7 +89,7 @@ class AgentTemplate(ABC):
                     orchestrator=orchestrator,
                     agents=orchestrator.available_agents,
                     task=task,
-                    primary_model="gemini-2.5-flash-lite-preview-06-07",
+                    primary_model="gemini-2.5-flash-lite",
                     logger_instance=logger,
                     max_loops=30
                 )
@@ -126,7 +126,7 @@ class EnterpriseAgentTemplate(AgentTemplate):
         """Create enterprise-grade quality controller (with fallback support)"""
         # Fallback이 가능한 LLM factory 사용 (common 모듈)
         fallback_llm_factory = create_fallback_llm_factory(
-            primary_model="gemini-2.5-flash-lite-preview-06-07"
+            primary_model="gemini-2.5-flash-lite"
         )
         
         return EvaluatorOptimizerLLM(

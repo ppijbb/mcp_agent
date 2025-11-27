@@ -74,7 +74,33 @@ class A2AAdapter(ABC):
         self.agent_metadata = agent_metadata
         self.message_handlers: Dict[str, Callable] = {}
         self.is_listening = False
-        self._message_queue: asyncio.Queue = asyncio.Queue()
+        # 현재 event loop에서 queue 생성 (페이지 전환 시 새 event loop에서 재생성)
+        # Queue는 나중에 실제로 사용될 때 생성 (lazy initialization)
+        self._message_queue: Optional[asyncio.Queue] = None
+    
+    def _ensure_queue(self) -> asyncio.Queue:
+        """Queue가 없거나 다른 event loop에 바인딩된 경우 새로 생성"""
+        try:
+            current_loop = asyncio.get_running_loop()
+            if self._message_queue is None:
+                self._message_queue = asyncio.Queue()
+            else:
+                # Queue가 다른 loop에 바인딩되어 있는지 확인
+                try:
+                    # Queue의 loop 확인 시도
+                    if hasattr(self._message_queue, '_loop'):
+                        queue_loop = self._message_queue._loop
+                        if queue_loop is not None and queue_loop != current_loop and queue_loop.is_closed():
+                            # 다른 loop에 바인딩되어 있고 닫혀있는 경우 새로 생성
+                            self._message_queue = asyncio.Queue()
+                except (AttributeError, RuntimeError):
+                    # Queue가 다른 loop에 바인딩된 경우 새로 생성
+                    self._message_queue = asyncio.Queue()
+        except RuntimeError:
+            # Event loop가 없는 경우 새로 생성
+            self._message_queue = asyncio.Queue()
+        
+        return self._message_queue
     
     @abstractmethod
     async def send_message(
@@ -241,9 +267,16 @@ class A2AMessageBroker:
         
         # 메시지 큐에 추가 (비동기 처리)
         logger.info(f"Routing message {message.message_id} ({message.message_type}) from {message.source_agent} to {message.target_agent}")
-        await a2a_adapter._message_queue.put(message)
-        logger.debug(f"Message {message.message_id} added to queue for agent {message.target_agent}")
-        return True
+        try:
+            queue = a2a_adapter._ensure_queue()
+            await queue.put(message)
+            logger.debug(f"Message {message.message_id} added to queue for agent {message.target_agent}")
+            return True
+        except (RuntimeError, AttributeError) as e:
+            if "Event loop is closed" in str(e) or "bound to a different event loop" in str(e):
+                logger.warning(f"Cannot route message to {message.target_agent}: event loop issue")
+                return False
+            raise
     
     async def _broadcast_message(self, message: A2AMessage) -> bool:
         """브로드캐스트 메시지 전송"""
@@ -258,8 +291,14 @@ class A2AMessageBroker:
             a2a_adapter = agent_info.get("a2a_adapter")
             if a2a_adapter:
                 try:
-                    await a2a_adapter._message_queue.put(message)
+                    queue = a2a_adapter._ensure_queue()
+                    await queue.put(message)
                     success_count += 1
+                except (RuntimeError, AttributeError) as e:
+                    if "Event loop is closed" in str(e) or "bound to a different event loop" in str(e):
+                        logger.debug(f"Cannot send message to {agent_id}: event loop issue")
+                    else:
+                        logger.error(f"Failed to send message to {agent_id}: {e}")
                 except Exception as e:
                     logger.error(f"Failed to send message to {agent_id}: {e}")
         

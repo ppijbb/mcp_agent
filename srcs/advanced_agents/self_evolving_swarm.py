@@ -174,7 +174,7 @@ async def main():
         config_path="configs/mcp_agent.config.yaml",
         base_swarm_agent=triage_agent,
         test_task="Test task for swarm",
-        request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07"),
+        request_params=RequestParams(model="gemini-2.5-flash-lite"),
     )
     best_arch = await orchestrator.evolve_swarm_architecture(generations=2)
     print(f"Best architecture: {best_arch}")

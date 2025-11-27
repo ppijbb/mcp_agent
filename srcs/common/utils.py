@@ -19,19 +19,26 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 
 def setup_agent_app(app_name):
     """MCPApp을 표준 설정으로 설정하고 구성합니다."""
+    from mcp_agent.config import get_settings
+    from pathlib import Path
     
-    mcp_servers_config = {
-        name: server.model_dump() 
-        for name, server in settings.mcp_servers.items()
-        if server.enabled
-    }
+    # 프로젝트 루트에서 설정 파일 경로 찾기
+    project_root = Path(__file__).resolve().parent.parent.parent
     
-    app_config = {
-        "name": app_name,
-        "mcp": mcp_servers_config
-    }
+    # 먼저 configs 디렉토리에서 찾고, 없으면 프로젝트 루트에서 찾기
+    config_path = project_root / "configs" / "mcp_agent.config.yaml"
+    if not config_path.exists():
+        config_path = project_root / "mcp_agent.config.yaml"
     
-    return MCPApp(settings=app_config, human_input_callback=None)
+    # mcp_agent 라이브러리의 표준 설정 사용
+    # set_global=False로 설정하여 멀티스레드 환경에서 안전하게 사용
+    app_settings = get_settings(str(config_path), set_global=False)
+    
+    return MCPApp(
+        name=app_name,
+        settings=app_settings,
+        human_input_callback=None
+    )
 
 def ensure_output_directory(output_dir):
     """Create output directory if it doesn't exist"""

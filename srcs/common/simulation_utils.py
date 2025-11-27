@@ -434,3 +434,4 @@ class PatternGenerator:
         return pattern
 
 
+

@@ -328,7 +328,7 @@ class DecisionAgentMCP:
             thought_result = await orchestrator.generate_str(
                 message=thought_task,
                 request_params=RequestParams(
-                    model="gemini-2.5-flash-lite-preview-06-07",
+                    model="gemini-2.5-flash-lite",
                     metadata=request_metadata if request_metadata else None
                 )
             )
@@ -353,7 +353,7 @@ class DecisionAgentMCP:
             action_result = await orchestrator.generate_str(
                 message=action_task,
                 request_params=RequestParams(
-                    model="gemini-2.5-flash-lite-preview-06-07",
+                    model="gemini-2.5-flash-lite",
                     metadata=request_metadata if request_metadata else None
                 )
             )
@@ -379,7 +379,7 @@ class DecisionAgentMCP:
             observation_result = await orchestrator.generate_str(
                 message=observation_task,
                 request_params=RequestParams(
-                    model="gemini-2.5-flash-lite-preview-06-07",
+                    model="gemini-2.5-flash-lite",
                     metadata=request_metadata if request_metadata else None
                 )
             )
@@ -407,7 +407,7 @@ class DecisionAgentMCP:
             reflection_result = await orchestrator.generate_str(
                 message=reflection_task,
                 request_params=RequestParams(
-                    model="gemini-2.5-flash-lite-preview-06-07",
+                    model="gemini-2.5-flash-lite",
                     metadata=request_metadata if request_metadata else None
                 )
             )
@@ -501,7 +501,7 @@ class DecisionAgentMCP:
         decision_result = await orchestrator.generate_str(
             message=decision_task,
             request_params=RequestParams(
-                model="gemini-2.5-flash-lite-preview-06-07",
+                model="gemini-2.5-flash-lite",
                 metadata=request_metadata if request_metadata else None
             )
         )

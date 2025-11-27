@@ -351,7 +351,9 @@ async def run_business_data_scout(
 
     llm_factory = lambda: GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
 
-    async with MCPApp(settings=get_settings("configs/mcp_agent.config.yaml")).run() as app:
+    from srcs.common.utils import setup_agent_app
+    app_instance = setup_agent_app("business_data_scout")
+    async with app_instance.run() as app:
         # Create agents
         scout = Agent(
             name="business_data_scout",

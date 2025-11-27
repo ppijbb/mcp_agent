@@ -19,7 +19,13 @@ sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
-from srcs.core.config.loader import settings
+
+# 설정 파일에서 경로 가져오기
+try:
+    from configs.settings import get_reports_path
+except ImportError:
+    st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
+    st.stop()
 
 # Result Reader 임포트
 try:
@@ -35,33 +41,60 @@ def display_results(result_data):
     if not result_data:
         st.warning("분석 결과를 찾을 수 없습니다.")
         return
-        
-    best_architecture = result_data.get('best_architecture', {})
-    if not best_architecture:
-        st.error("최적 아키텍처를 찾지 못했습니다.")
-        st.json(result_data)
+    
+    # result_data가 중첩된 구조일 수 있음 (data.data)
+    actual_data = result_data.get('data', result_data)
+    if isinstance(actual_data, dict) and 'data' in actual_data:
+        actual_data = actual_data.get('data', actual_data)
+    
+    if not actual_data:
+        st.warning("분석 결과 데이터를 찾을 수 없습니다.")
         return
-        
-    st.success(f"**최적 아키텍처: {best_architecture.get('name', 'N/A')}**")
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("최종 점수", f"{best_architecture.get('fitness_score', 0):.4f}")
-    col2.metric("총 세대 수", result_data.get('generations_completed', 'N/A'))
-    col3.metric("평가된 아키텍처", result_data.get('total_architectures_evaluated', 'N/A'))
+    # 간단한 요약 정보 표시
+    problem_desc = actual_data.get('problem_description', 'N/A')
+    best_fitness = actual_data.get('best_fitness', 0.0)
+    generation_count = actual_data.get('generation_count', 0)
+    processing_time = actual_data.get('processing_time', 0.0)
+    result_file_path = actual_data.get('result_file_path', '')
+    evolution_summary = actual_data.get('evolution_summary', {})
     
-    with st.expander("상세 아키텍처 보기", expanded=True):
-        st.markdown("##### 컴포넌트")
-        st.json(best_architecture.get('components', []))
-        st.markdown("##### 연결")
-        st.json(best_architecture.get('connections', []))
-
-    fitness_history = result_data.get('fitness_history', [])
-    if fitness_history:
-        st.markdown("#### 세대별 성능 향상 그래프")
-        df = pd.DataFrame(fitness_history)
-        fig = px.line(df, x='generation', y='max_fitness', title='세대별 최고 적합도', markers=True)
-        fig.update_layout(xaxis_title="세대", yaxis_title="최고 적합도")
-        st.plotly_chart(fig, use_container_width=True)
+    st.success(f"✅ **문제**: {problem_desc}")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("최종 Fitness", f"{best_fitness:.4f}")
+    col2.metric("총 세대 수", generation_count)
+    col3.metric("처리 시간", f"{processing_time:.2f}초")
+    col4.metric("최종 평균 Fitness", f"{evolution_summary.get('final_avg_fitness', 0.0):.4f}")
+    
+    # 진화 히스토리 그래프
+    if result_file_path and Path(result_file_path).exists():
+        try:
+            with open(result_file_path, 'r', encoding='utf-8') as f:
+                full_result = json.load(f)
+            
+            evolution_history = full_result.get('evolution_history', [])
+            if evolution_history:
+                st.markdown("#### 📈 세대별 성능 향상")
+                df = pd.DataFrame(evolution_history)
+                fig = px.line(df, x='generation', y='best_fitness', 
+                            title='세대별 최고 적합도', markers=True)
+                fig.add_scatter(x=df['generation'], y=df['avg_fitness'], 
+                              mode='lines', name='평균 적합도', line=dict(dash='dash'))
+                fig.update_layout(xaxis_title="세대", yaxis_title="적합도")
+                st.plotly_chart(fig, width='stretch')
+                
+                # 최적화 추천 표시
+                recommendations = full_result.get('optimization_recommendations', [])
+                if recommendations:
+                    st.markdown("#### 🚀 최적화 추천")
+                    for i, rec in enumerate(recommendations, 1):
+                        st.write(f"{i}. {rec}")
+        except Exception as e:
+            st.warning(f"상세 결과를 불러올 수 없습니다: {e}")
+    
+    if result_file_path:
+        st.info(f"📄 전체 결과는 다음 파일에 저장되었습니다: `{result_file_path}`")
 
 
 def main():
@@ -97,13 +130,13 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 아키텍처 성능 모델링 시뮬레이터를 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 아키텍처 진화 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 아키텍처 진화 시작", width='stretch')
 
     if submitted:
         if not problem_description.strip():
             st.warning("문제 설명을 입력해주세요.")
         else:
-            reports_path = settings.get_reports_path('ai_architect')
+            reports_path = Path(get_reports_path('ai_architect'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"architecture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             
@@ -117,6 +150,9 @@ def main():
             }
 
             input_data = {
+                "module_path": "srcs.evolutionary_ai_architect.run_ai_architect_agent",
+                "class_name": None,
+                "method_name": "run_ai_architect_agent",
                 "problem_description": problem_description,
                 "max_generations": max_generations,
                 "population_size": population_size,
@@ -167,7 +203,7 @@ def main():
                         df = pd.DataFrame(fitness_history)
                         fig = px.line(df, x='generation', y='max_fitness', title='세대별 최고 적합도', markers=True)
                         fig.update_layout(xaxis_title="세대", yaxis_title="최고 적합도")
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                     
                     # 메타데이터 표시
                     if 'timestamp' in latest_architect_result:

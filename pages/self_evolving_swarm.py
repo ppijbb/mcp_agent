@@ -51,7 +51,7 @@ def main():
             value=5
         )
         
-        submitted = st.form_submit_button("🚀 진화 시작", use_container_width=True)
+        submitted = st.form_submit_button("🚀 진화 시작", width='stretch')
 
     if submitted:
         if not task_description.strip():

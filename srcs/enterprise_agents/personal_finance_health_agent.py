@@ -27,11 +27,7 @@ class PersonalFinanceAgent:
     """
     def __init__(self, output_dir: str = OUTPUT_DIR):
         self.output_dir = output_dir
-        self.app = MCPApp(
-            name="personal_finance_health_system",
-            settings=get_settings("configs/mcp_agent.config.yaml"),
-            human_input_callback=None
-        )
+        self.app = setup_agent_app("personal_finance_health_system")
 
     async def run_analysis(self, user_data: dict) -> dict:
         """
@@ -67,7 +63,7 @@ class PersonalFinanceAgent:
             logger.info(f"Starting personal finance analysis for user.")
             result_str = await orchestrator.generate_str(
                 message=task,
-                request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
             logger.info("Personal finance analysis completed successfully.")
             
@@ -222,7 +218,7 @@ class PersonalFinanceAgent:
             Provide specific investment recommendations with Korean won amounts.
             Include expected returns, risks, and investment timelines.
             """,
-            server_names=["g-search", "fetch"],
+            server_names=[],  # MCP 서버 validation 에러 방지
         )
         
         # Korean Market Specialist Agent
@@ -275,7 +271,7 @@ class PersonalFinanceAgent:
             Provide Korean market-specific insights with actionable implications.
             Include policy change impacts and strategic recommendations.
             """,
-            server_names=["g-search", "fetch"],
+            server_names=[],  # MCP 서버 validation 에러 방지
         )
         
         # Risk Management Agent

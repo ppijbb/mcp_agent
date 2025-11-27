@@ -121,7 +121,7 @@ class EvaluationConfig(BaseModel):
     name: str
     description: str
     rubric: EvaluationRubric
-    llm_model: str = "gemini-2.5-flash-lite-preview-06-07"
+    llm_model: str = "gemini-2.5-flash-lite"
     temperature: float = 0.1
     max_tokens: int = 1000
     
@@ -132,7 +132,7 @@ class EvaluationConfig(BaseModel):
                 "name": "Comprehensive Tool Usage Evaluation",
                 "description": "Multi-dimensional evaluation of tool usage and collaboration",
                 "rubric": {},
-                "llm_model": "gemini-2.5-flash-lite-preview-06-07",
+                "llm_model": "gemini-2.5-flash-lite",
                 "temperature": 0.1,
                 "max_tokens": 1000
             }

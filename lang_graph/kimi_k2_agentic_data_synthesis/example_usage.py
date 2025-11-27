@@ -333,7 +333,7 @@ async def create_evaluation_config():
         name="Comprehensive Tool Usage Evaluation",
         description="Multi-dimensional evaluation of tool usage and collaboration",
         rubric=rubric,
-        llm_model="gemini-2.5-flash-lite-preview-06-07", # Updated model name
+        llm_model="gemini-2.5-flash-lite", # Updated model name
         temperature=0.1,
         max_tokens=1000
     )
@@ -365,7 +365,7 @@ async def run_example_pipeline():
     print("=" * 60)
     
     # LLM Configuration (using a dummy config for demonstration)
-    llm_config = {"model": "gemini-2.5-flash-lite-preview-06-07", "api_key": "YOUR_API_KEY"} # Placeholder
+    llm_config = {"model": "gemini-2.5-flash-lite", "api_key": "YOUR_API_KEY"} # Placeholder
 
     # Initialize the system with llm_config
     system = AgenticDataSynthesisSystem(

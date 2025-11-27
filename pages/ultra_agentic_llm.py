@@ -46,7 +46,7 @@ def main():
         
         agent_id = st.text_input("Agent ID", value="ultra_agent_001")
         
-        submitted = st.form_submit_button("🚀 Ultra Agentic 실행", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Ultra Agentic 실행", width='stretch')
 
     if submitted:
         if not goal.strip():

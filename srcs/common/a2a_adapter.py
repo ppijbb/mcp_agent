@@ -77,29 +77,63 @@ class CommonAgentA2AWrapper(A2AAdapter):
         logger.info(f"Message listener started for agent {self.agent_id}")
     
     async def stop_listener(self) -> None:
-        """메시지 리스너 중지"""
+        """메시지 리스너 중지 - 안전하게 처리"""
         if not self.is_listening:
             return
         
         self.is_listening = False
         if self._message_processor_task:
-            self._message_processor_task.cancel()
             try:
-                await self._message_processor_task
-            except asyncio.CancelledError:
-                pass
+                # Task가 완료되지 않았고 취소되지 않았을 때만 취소
+                if not self._message_processor_task.done():
+                    self._message_processor_task.cancel()
+                    try:
+                        # 짧은 타임아웃으로 완료 대기 (event loop가 닫혀있을 수 있음)
+                        await asyncio.wait_for(self._message_processor_task, timeout=0.5)
+                    except (asyncio.CancelledError, asyncio.TimeoutError, RuntimeError):
+                        # Event loop가 닫혀있거나 타임아웃된 경우 무시
+                        pass
+            except (RuntimeError, AttributeError) as e:
+                # Event loop가 이미 닫혀있는 경우 무시
+                logger.debug(f"Listener stop warning (expected on page switch): {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error stopping listener: {e}")
+        
         logger.info(f"Message listener stopped for agent {self.agent_id}")
     
     async def _process_messages(self) -> None:
-        """메시지 처리 루프"""
+        """메시지 처리 루프 - event loop가 닫혀있을 때 안전하게 처리"""
         while self.is_listening:
             try:
-                message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
+                # Event loop가 닫혀있는지 확인
+                try:
+                    loop = asyncio.get_running_loop()
+                    if loop.is_closed():
+                        logger.debug(f"Event loop is closed, stopping listener for {self.agent_id}")
+                        break
+                except RuntimeError:
+                    # Event loop가 없는 경우
+                    logger.debug(f"No event loop, stopping listener for {self.agent_id}")
+                    break
+                
+                queue = self._ensure_queue()
+                message = await asyncio.wait_for(queue.get(), timeout=1.0)
                 logger.info(f"Agent {self.agent_id} received message: {message.message_type} (id: {message.message_id})")
                 result = await self.handle_message(message)
                 logger.debug(f"Agent {self.agent_id} handled message {message.message_id}, result: {result is not None}")
             except asyncio.TimeoutError:
                 continue
+            except (RuntimeError, AttributeError) as e:
+                # Event loop가 닫혀있거나 queue가 다른 loop에 바인딩된 경우
+                if "Event loop is closed" in str(e) or "bound to a different event loop" in str(e):
+                    logger.debug(f"Event loop issue detected, stopping listener for {self.agent_id}: {e}")
+                    break
+                else:
+                    logger.error(f"Error processing message in agent {self.agent_id}: {e}", exc_info=True)
+            except asyncio.CancelledError:
+                # Task가 취소된 경우 정상 종료
+                logger.debug(f"Message processor cancelled for {self.agent_id}")
+                break
             except Exception as e:
                 logger.error(f"Error processing message in agent {self.agent_id}: {e}", exc_info=True)
     

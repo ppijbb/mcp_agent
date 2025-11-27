@@ -300,14 +300,14 @@ async def test_evaluation_config_creation():
         name="Test Evaluation",
         description="A test evaluation",
         rubric=rubric,
-        llm_model="gemini-2.5-flash-lite-preview-06-07",
+        llm_model="gemini-2.5-flash-lite",
         temperature=0.1,
         max_tokens=500
     )
     
     # Verify evaluation config is valid
     assert evaluation_config.evaluation_id == "test_evaluation"
-    assert evaluation_config.llm_model == "gemini-2.5-flash-lite-preview-06-07"
+    assert evaluation_config.llm_model == "gemini-2.5-flash-lite"
     assert len(evaluation_config.rubric.dimensions) == 1
 
 

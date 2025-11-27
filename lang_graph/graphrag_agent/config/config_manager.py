@@ -33,7 +33,7 @@ class AgentConfig(BaseModel):
     """Base configuration for agents"""
     openai_api_key: str = Field(default="", description="OpenAI API key")
     gemini_api_key: str = Field(default="", description="Gemini API key")
-    model_name: str = Field(default="gemini-2.5-flash-lite-preview-06-07", description="Model name")
+    model_name: str = Field(default="gemini-2.5-flash-lite", description="Model name")
     max_search_results: int = Field(default=5, description="Max search results for RAG")
     context_window_size: int = Field(default=4000, description="Context window size")
     temperature: float = Field(default=0.0, description="Temperature")
@@ -272,7 +272,7 @@ class ConfigManager:
         return {
             "agent": {
                 "openai_api_key": "",
-                "model_name": "gemini-2.5-flash-lite-preview-06-07",
+                "model_name": "gemini-2.5-flash-lite",
                 "max_search_results": 5,
                 "context_window_size": 4000
             },

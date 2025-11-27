@@ -453,7 +453,7 @@ class SelfImprovementEngineMCP:
         
         thought_result = await orchestrator.generate_str(
             message=thought_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         reasoning_steps.append(f"Performance Analysis Thought: {thought_result[:200]}...")
@@ -475,7 +475,7 @@ class SelfImprovementEngineMCP:
         
         action_result = await orchestrator.generate_str(
             message=action_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         research_insights.append(action_result)
@@ -501,7 +501,7 @@ class SelfImprovementEngineMCP:
         
         observation_result = await orchestrator.generate_str(
             message=observation_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         reasoning_steps.append(f"Opportunity Evaluation: {observation_result[:200]}...")
@@ -525,7 +525,7 @@ class SelfImprovementEngineMCP:
         
         strategy_result = await orchestrator.generate_str(
             message=strategy_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         improvement_strategies = self._extract_strategies_from_research(strategy_result, task)
@@ -662,7 +662,7 @@ class SelfImprovementEngineMCP:
         
         plan_result = await orchestrator.generate_str(
             message=plan_task,
-            request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+            request_params=RequestParams(model="gemini-2.5-flash-lite")
         )
         
         return {

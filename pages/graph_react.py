@@ -46,7 +46,7 @@ def main():
         
         graph_path = st.text_input("Graph 경로 (선택)", placeholder="기본 그래프 사용")
         
-        submitted = st.form_submit_button("🚀 Graph ReAct 실행", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Graph ReAct 실행", width='stretch')
 
     if submitted:
         if not query.strip():
