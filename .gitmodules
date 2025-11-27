@@ -34,3 +34,6 @@
 [submodule "open_researcher/skyvern"]
 	path = open_researcher/skyvern
 	url = https://github.com/Skyvern-AI/skyvern.git
+[submodule "open_researcher/cascadeflow"]
+	path = open_researcher/cascadeflow
+	url = https://github.com/lemony-ai/cascadeflow.git
