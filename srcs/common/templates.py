@@ -6,8 +6,14 @@ Base templates and patterns for creating new agents with standardized structure.
 
 from abc import ABC, abstractmethod
 
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
+from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+
 from .config import *
 from .utils import *
+from .llm import create_fallback_llm_factory, try_fallback_orchestrator_execution
 
 class AgentTemplate(ABC):
     """Base template for all agents"""
@@ -39,16 +45,21 @@ class AgentTemplate(ABC):
         return setup_agent_app(f"{self.agent_name}_system")
     
     def create_orchestrator(self, agents, evaluator):
-        """Create orchestrator with agents and evaluator"""
+        """Create orchestrator with agents and evaluator (with fallback support)"""
+        # Fallback이 가능한 LLM factory 사용 (common 모듈)
+        fallback_llm_factory = create_fallback_llm_factory(
+            primary_model="gemini-2.5-flash-lite-preview-06-07"
+        )
+        
         quality_controller = EvaluatorOptimizerLLM(
             optimizer=agents[0],  # Use first agent as optimizer
             evaluator=evaluator,
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=fallback_llm_factory,
             min_rating=QualityRating.GOOD,
         )
         
         return Orchestrator(
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=fallback_llm_factory,
             available_agents=[quality_controller] + agents[1:],
             plan_type="full",
         )
@@ -73,9 +84,14 @@ class AgentTemplate(ABC):
             task = self.define_task()
             
             try:
-                result = await orchestrator.generate_str(
-                    message=task,
-                    request_params=RequestParams(model="gemini-2.5-flash-lite-preview-06-07")
+                # Fallback 지원 orchestrator 실행 (common 모듈)
+                result = await try_fallback_orchestrator_execution(
+                    orchestrator=orchestrator,
+                    agents=orchestrator.available_agents,
+                    task=task,
+                    primary_model="gemini-2.5-flash-lite-preview-06-07",
+                    logger_instance=logger,
+                    max_loops=30
                 )
                 
                 logger.info(f"{self.agent_name} workflow completed successfully")
@@ -107,11 +123,16 @@ class EnterpriseAgentTemplate(AgentTemplate):
         self.business_scope = business_scope or "Global Operations"
     
     def create_quality_controller(self, optimizer_agent, evaluator_agent):
-        """Create enterprise-grade quality controller"""
+        """Create enterprise-grade quality controller (with fallback support)"""
+        # Fallback이 가능한 LLM factory 사용 (common 모듈)
+        fallback_llm_factory = create_fallback_llm_factory(
+            primary_model="gemini-2.5-flash-lite-preview-06-07"
+        )
+        
         return EvaluatorOptimizerLLM(
             optimizer=optimizer_agent,
             evaluator=evaluator_agent,
-            llm_factory=OpenAIAugmentedLLM,
+            llm_factory=fallback_llm_factory,
             min_rating=QualityRating.GOOD,
         )
     

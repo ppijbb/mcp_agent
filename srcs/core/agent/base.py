@@ -149,13 +149,15 @@ class BaseAgent(ABC):
     def get_orchestrator(self, agents: List[MCP_Agent]) -> Orchestrator:
         """
         주어진 에이전트들로 오케스트레이터를 생성합니다.
+        Fallback 지원 포함.
         """
-        from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+        from srcs.common.llm import create_fallback_orchestrator_llm_factory
         
-        # LLM factory 직접 정의 (app.llm_factory가 없으므로)
-        # Orchestrator가 agent 인자를 전달할 수 있으므로 **kwargs로 받음
-        def llm_factory(**kwargs):
-            return OpenAIAugmentedLLM(model="gemini-2.5-flash")
+        # Fallback이 가능한 LLM factory 사용 (common 모듈)
+        llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash",
+            logger_instance=self.logger
+        )
         
         return Orchestrator(
             llm_factory=llm_factory,

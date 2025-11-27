@@ -433,3 +433,4 @@ class PatternGenerator:
             pattern.append(round(value, 4))
         return pattern
 
+

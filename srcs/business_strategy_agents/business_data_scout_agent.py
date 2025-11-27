@@ -9,7 +9,7 @@ import asyncio
 import os
 import sys
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 
 # Add project root to path
@@ -21,9 +21,18 @@ from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityRating
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.config import get_settings
 from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.llm import (
+    create_fallback_llm_for_agents,
+    create_fallback_orchestrator_llm_factory,
+    try_fallback_orchestrator_execution
+)
+# QualityRating schema fix 적용 (mcp_agent 라이브러리 버그 수정)
+from srcs.common.llm.fix_quality_rating_schema import patch_quality_rating_schema
+patch_quality_rating_schema()
 from srcs.core.agent.base import BaseAgent
 from mcp_agent.agents.agent import Agent as MCP_Agent
 
@@ -76,43 +85,48 @@ class BusinessDataScoutAgent(BaseAgent):
                 # app_context에서 context 가져오기
                 context = app_context.context
                 
-                # LLM factory: Gemini 모델을 사용하므로 GoogleAugmentedLLM 사용
-                def llm_factory(**kwargs):
-                    return GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
-                
-                # 1. Define specialized sub-agents with independent judgment
-                # Agent 생성 시 llm_factory는 람다로 전달
-                def llm_factory_for_agents(**kwargs):
-                    return GoogleAugmentedLLM(model="gemini-2.5-flash-lite")
+                # 1. Define specialized sub-agents with fallback support (common 모듈 사용)
+                llm_factory_for_agents = create_fallback_llm_for_agents(
+                    primary_model="gemini-2.5-flash-lite",
+                    logger_instance=self.logger
+                )
                 
                 agents = self._create_specialized_agents(keywords, regions, output_path, llm_factory_for_agents)
                 
-                # 2. Create orchestrator - 공식 예제처럼 클래스 자체를 전달
+                # 2. Create orchestrator with fallback LLM factory (common 모듈 사용)
+                orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                    primary_model="gemini-2.5-flash-lite",
+                    logger_instance=self.logger
+                )
+                
                 orchestrator = Orchestrator(
-                    llm_factory=GoogleAugmentedLLM,
+                    llm_factory=orchestrator_llm_factory,
                     available_agents=agents,
-                    plan_type="full"
+                    plan_type="full",
+                    max_loops=30  # 기본 10에서 30으로 증가 (API 지연 고려)
                 )
 
                 # 3. Define the main task with independent agent requirements
                 task = self._create_data_collection_task(keywords, regions, output_path)
 
-                # 4. Run the orchestrator - 공식 예제처럼 RequestParams는 model만 전달
-                from mcp_agent.workflows.llm.augmented_llm import RequestParams
-                try:
-                    final_report = await orchestrator.generate_str(
-                        message=task,
-                        request_params=RequestParams(model="gemini-2.5-flash-lite")
-                    )
-                except (BrokenPipeError, OSError) as pipe_error:
-                    # EPIPE 또는 파이프 관련 에러 처리
-                    error_code = getattr(pipe_error, 'errno', None)
-                    if error_code == 32 or 'EPIPE' in str(pipe_error):
-                        self.logger.error(f"MCP server process terminated unexpectedly (EPIPE). This may indicate the server crashed or was closed.")
-                        raise RuntimeError(f"MCP server connection lost: {pipe_error}") from pipe_error
-                    raise
+                # 4. Run the orchestrator with fallback support (common 모듈 사용)
+                final_report = await try_fallback_orchestrator_execution(
+                    orchestrator=orchestrator,
+                    agents=agents,
+                    task=task,
+                    primary_model="gemini-2.5-flash-lite",
+                    logger_instance=self.logger,
+                    max_loops=30
+                )
                 
-                self.logger.info(f"Independent data scouting complete. Report saved to {output_path}")
+                # 5. 리포트 파일 저장
+                try:
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        f.write(final_report)
+                    self.logger.info(f"Independent data scouting complete. Report saved to {output_path}")
+                except Exception as save_error:
+                    self.logger.warning(f"Failed to save report to file: {save_error}, but content is available in return value")
+                
                 return {"report_path": output_path, "content": final_report}
                 
             except Exception as e:
@@ -129,25 +143,25 @@ class BusinessDataScoutAgent(BaseAgent):
         news_collector = MCP_Agent(
             name="news_data_collector",
             instruction=f"""You are an expert news and media data collector.
-            
-            Collect comprehensive news and media data for these keywords: {keyword_str}
-            Focus on regions: {region_str}
-            
-            Execute these search strategies:
-            1. Recent news articles (last 30 days)
-            2. Industry reports and publications
-            3. Press releases and announcements
-            4. Market analysis and commentary
-            
-            For each source, extract:
-            - Title and publication date
-            - Source credibility and reach
-            - Key insights and business implications
-            - Sentiment analysis (positive/negative/neutral)
-            - Trending topics and emerging themes
-            
-            Organize findings by relevance and business impact.
-            Provide source URLs for verification.""",
+
+Collect comprehensive news and media data for these keywords: {keyword_str}
+Focus on regions: {region_str}
+
+Execute these search strategies:
+1. Recent news articles (last 30 days)
+2. Industry reports and publications
+3. Press releases and announcements
+4. Market analysis and commentary
+
+For each source, extract:
+- Title and publication date
+- Source credibility and reach
+- Key insights and business implications
+- Sentiment analysis (positive/negative/neutral)
+- Trending topics and emerging themes
+
+Organize findings by relevance and business impact.
+Provide source URLs for verification.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -156,25 +170,25 @@ class BusinessDataScoutAgent(BaseAgent):
         social_collector = MCP_Agent(
             name="social_trends_collector", 
             instruction=f"""You are a social media and trends analysis expert.
-            
-            Analyze social media trends and community discussions for: {keyword_str}
-            Target regions: {region_str}
-            
-            Research areas:
-            1. Social media sentiment and engagement
-            2. Trending hashtags and discussions
-            3. Influencer opinions and thought leadership
-            4. Community feedback and user reviews
-            5. Viral content and memes related to topics
-            
-            Extract valuable insights:
-            - Engagement metrics and reach
-            - Sentiment trends over time
-            - Key opinion leaders and influencers
-            - Emerging topics and conversations
-            - Consumer behavior patterns
-            
-            Focus on business-relevant social signals that indicate market opportunities.""",
+
+Analyze social media trends and community discussions for: {keyword_str}
+Target regions: {region_str}
+
+Research areas:
+1. Social media sentiment and engagement
+2. Trending hashtags and discussions
+3. Influencer opinions and thought leadership
+4. Community feedback and user reviews
+5. Viral content and memes related to topics
+
+Extract valuable insights:
+- Engagement metrics and reach
+- Sentiment trends over time
+- Key opinion leaders and influencers
+- Emerging topics and conversations
+- Consumer behavior patterns
+
+Focus on business-relevant social signals that indicate market opportunities.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -183,25 +197,25 @@ class BusinessDataScoutAgent(BaseAgent):
         market_collector = MCP_Agent(
             name="market_intelligence_collector",
             instruction=f"""You are a market intelligence specialist.
-            
-            Gather competitive and market intelligence for: {keyword_str}
-            Geographic focus: {region_str}
-            
-            Intelligence areas:
-            1. Competitor analysis and positioning
-            2. Market size and growth projections
-            3. Investment and funding activities
-            4. Regulatory changes and compliance
-            5. Technology trends and innovations
-            
-            Collect specific data:
-            - Market size estimates and growth rates
-            - Key players and competitive landscape
-            - Investment rounds and valuations
-            - Regulatory developments
-            - Technology adoption trends
-            
-            Provide actionable market insights with supporting data and sources.""",
+
+Gather competitive and market intelligence for: {keyword_str}
+Geographic focus: {region_str}
+
+Intelligence areas:
+1. Competitor analysis and positioning
+2. Market size and growth projections
+3. Investment and funding activities
+4. Regulatory changes and compliance
+5. Technology trends and innovations
+
+Collect specific data:
+- Market size estimates and growth rates
+- Key players and competitive landscape
+- Investment rounds and valuations
+- Regulatory developments
+- Technology adoption trends
+
+Provide actionable market insights with supporting data and sources.""",
             server_names=["g-search", "fetch"],
             llm_factory=llm_factory,
         )
@@ -210,25 +224,25 @@ class BusinessDataScoutAgent(BaseAgent):
         data_evaluator = MCP_Agent(
             name="data_quality_evaluator",
             instruction=f"""You are a data quality assessment expert.
-            
-            Evaluate the collected business data for: {keyword_str}
-            
-            Assessment criteria:
-            1. Source credibility and authority
-            2. Data freshness and timeliness
-            3. Completeness and coverage
-            4. Accuracy and fact-checking
-            5. Business relevance and actionability
-            
-            For each data source, provide:
-            - Credibility score (1-10)
-            - Freshness assessment
-            - Completeness rating
-            - Business relevance score
-            - Recommendations for improvement
-            
-            Flag any inconsistencies or questionable data points.
-            Prioritize high-quality, actionable business intelligence.""",
+
+Evaluate the collected business data for: {keyword_str}
+
+Assessment criteria:
+1. Source credibility and authority
+2. Data freshness and timeliness
+3. Completeness and coverage
+4. Accuracy and fact-checking
+5. Business relevance and actionability
+
+For each data source, provide:
+- Credibility score (1-10)
+- Freshness assessment
+- Completeness rating
+- Business relevance score
+- Recommendations for improvement
+
+Flag any inconsistencies or questionable data points.
+Prioritize high-quality, actionable business intelligence.""",
             server_names=["fetch"],
             llm_factory=llm_factory,
         )
@@ -237,30 +251,30 @@ class BusinessDataScoutAgent(BaseAgent):
         report_synthesizer = MCP_Agent(
             name="business_data_synthesizer",
             instruction=f"""You are a business intelligence report synthesizer.
-            
-            Create a comprehensive business data report for: {keyword_str}
-            Geographic scope: {region_str}
-            
-            Report structure:
-            1. Executive Summary
-            2. Market Overview and Size
-            3. Key Trends and Opportunities
-            4. Competitive Landscape
-            5. Social and Media Sentiment
-            6. Risk Assessment
-            7. Strategic Recommendations
-            8. Data Sources and References
-            
-            Synthesis requirements:
-            - Integrate all collected data sources
-            - Identify patterns and correlations
-            - Provide actionable business insights
-            - Include data quality assessments
-            - Present clear visualizable metrics
-            - Maintain professional formatting
-            
-            Save the comprehensive report to: {output_path}
-            Format as clean markdown with proper sections and citations.""",
+
+Create a comprehensive business data report for: {keyword_str}
+Geographic scope: {region_str}
+
+Report structure:
+1. Executive Summary
+2. Market Overview and Size
+3. Key Trends and Opportunities
+4. Competitive Landscape
+5. Social and Media Sentiment
+6. Risk Assessment
+7. Strategic Recommendations
+8. Data Sources and References
+
+Synthesis requirements:
+- Integrate all collected data sources
+- Identify patterns and correlations
+- Provide actionable business insights
+- Include data quality assessments
+- Present clear visualizable metrics
+- Maintain professional formatting
+
+Save the comprehensive report to: {output_path}
+Format as clean markdown with proper sections and citations.""",
             server_names=["filesystem"],
             llm_factory=llm_factory,
         )
@@ -274,48 +288,48 @@ class BusinessDataScoutAgent(BaseAgent):
         region_str = ", ".join(regions) if regions else "global markets"
         
         task = f"""Execute comprehensive business data collection and analysis for: {keyword_str}
-        
-        Geographic Focus: {region_str}
-        
-        Mission: Collect high-quality business intelligence data from multiple sources and synthesize 
-        into actionable strategic insights.
-        
-        Execution Plan:
-        
-        1. NEWS & MEDIA COLLECTION (news_data_collector):
-           - Gather recent news, industry reports, and media coverage
-           - Focus on business implications and market signals
-           - Analyze sentiment and emerging themes
-        
-        2. SOCIAL & TRENDS ANALYSIS (social_trends_collector):
-           - Research social media sentiment and engagement
-           - Identify trending topics and community discussions
-           - Map influencer opinions and thought leadership
-        
-        3. MARKET INTELLIGENCE (market_intelligence_collector):
-           - Analyze competitive landscape and positioning
-           - Research market size, growth, and investment activities
-           - Track regulatory and technology developments
-        
-        4. DATA QUALITY ASSESSMENT (data_quality_evaluator):
-           - Evaluate source credibility and data accuracy
-           - Assess completeness and business relevance
-           - Flag inconsistencies and provide quality scores
-        
-        5. COMPREHENSIVE SYNTHESIS (business_data_synthesizer):
-           - Integrate all collected data into unified report
-           - Identify key patterns and business opportunities
-           - Provide strategic recommendations and action items
-           - Save final report to: {output_path}
-        
-        Success Criteria:
-        - High-quality data from credible sources
-        - Clear business insights and opportunities
-        - Actionable strategic recommendations
-        - Professional report with proper citations
-        - Comprehensive coverage of all key aspects
-        
-        Deliver a complete business intelligence report that enables strategic decision-making."""
+
+Geographic Focus: {region_str}
+
+Mission: Collect high-quality business intelligence data from multiple sources and synthesize 
+into actionable strategic insights.
+
+Execution Plan:
+
+1. NEWS & MEDIA COLLECTION (news_data_collector):
+   - Gather recent news, industry reports, and media coverage
+   - Focus on business implications and market signals
+   - Analyze sentiment and emerging themes
+
+2. SOCIAL & TRENDS ANALYSIS (social_trends_collector):
+   - Research social media sentiment and engagement
+   - Identify trending topics and community discussions
+   - Map influencer opinions and thought leadership
+
+3. MARKET INTELLIGENCE (market_intelligence_collector):
+   - Analyze competitive landscape and positioning
+   - Research market size, growth, and investment activities
+   - Track regulatory and technology developments
+
+4. DATA QUALITY ASSESSMENT (data_quality_evaluator):
+   - Evaluate source credibility and data accuracy
+   - Assess completeness and business relevance
+   - Flag inconsistencies and provide quality scores
+
+5. COMPREHENSIVE SYNTHESIS (business_data_synthesizer):
+   - Integrate all collected data into unified report
+   - Identify key patterns and business opportunities
+   - Provide strategic recommendations and action items
+   - Save final report to: {output_path}
+
+Success Criteria:
+- High-quality data from credible sources
+- Clear business insights and opportunities
+- Actionable strategic recommendations
+- Professional report with proper citations
+- Comprehensive coverage of all key aspects
+
+Deliver a complete business intelligence report that enables strategic decision-making."""
         
         return task
 

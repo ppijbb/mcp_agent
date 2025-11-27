@@ -13,9 +13,22 @@ from typing import List, Dict, Any, Optional
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+# QualityRating schema fix 적용 (mcp_agent 라이브러리 버그 수정)
+# 반드시 EvaluatorOptimizerLLM import 전에 patch 적용해야 함
+from srcs.common.llm.fix_quality_rating_schema import patch_quality_rating_schema
+patch_quality_rating_schema()
+
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityRating
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm import (
+    create_fallback_llm_for_agents,
+    create_fallback_orchestrator_llm_factory,
+    try_fallback_orchestrator_execution
+)
+
+
 from srcs.common.utils import setup_agent_app
 from srcs.core.agent.base import BaseAgent
 from mcp_agent.agents.agent import Agent as MCP_Agent
@@ -50,43 +63,49 @@ class TrendAnalyzerAgent(BaseAgent):
             output_path = os.path.join(self.output_dir, output_file)
 
             try:
-                # LLM factory: Gemini 모델을 사용하므로 GoogleAugmentedLLM 사용
-                from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
-                
-                # 1. Define specialized sub-agents with independent judgment
-                # Agent 생성 시 llm_factory는 람다로 전달
-                def llm_factory_for_agents(**kwargs):
-                    return GoogleAugmentedLLM(model="gemini-2.5-flash")
+                # 1. Define specialized sub-agents with fallback support (common 모듈 사용)
+                llm_factory_for_agents = create_fallback_llm_for_agents(
+                    primary_model="gemini-2.5-flash",
+                    logger_instance=self.logger
+                )
                 
                 agents = self._create_trend_agents(focus_areas, time_horizon, output_path, llm_factory_for_agents)
                 
-                # 2. Create orchestrator - 공식 예제처럼 클래스 자체를 전달
+                # 2. Create orchestrator with fallback support (common 모듈 사용)
+                orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                    primary_model="gemini-2.5-flash",
+                    logger_instance=self.logger
+                )
+                
                 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
                 orchestrator = Orchestrator(
-                    llm_factory=GoogleAugmentedLLM,
+                    llm_factory=orchestrator_llm_factory,
                     available_agents=agents,
-                    plan_type="full"
+                    plan_type="full",
+                    max_loops=30
                 )
 
                 # 3. Define the main task with independent agent requirements
                 task = self._create_analysis_task(focus_areas, time_horizon, output_path)
 
-                # 4. Run the orchestrator - 공식 예제처럼 RequestParams는 model만 전달
-                from mcp_agent.workflows.llm.augmented_llm import RequestParams
-                try:
-                    final_report = await orchestrator.generate_str(
-                        message=task,
-                        request_params=RequestParams(model="gemini-2.5-flash")
-                    )
-                except (BrokenPipeError, OSError) as pipe_error:
-                    # EPIPE 또는 파이프 관련 에러 처리
-                    error_code = getattr(pipe_error, 'errno', None)
-                    if error_code == 32 or 'EPIPE' in str(pipe_error):
-                        self.logger.error(f"MCP server process terminated unexpectedly (EPIPE). This may indicate the server crashed or was closed.")
-                        raise RuntimeError(f"MCP server connection lost: {pipe_error}") from pipe_error
-                    raise
+                # 4. Run the orchestrator with fallback support (common 모듈 사용)
+                final_report = await try_fallback_orchestrator_execution(
+                    orchestrator=orchestrator,
+                    agents=agents,
+                    task=task,
+                    primary_model="gemini-2.5-flash",
+                    logger_instance=self.logger,
+                    max_loops=30
+                )
                 
-                self.logger.info(f"Independent trend analysis complete. Report saved to {output_path}")
+                # 5. 리포트 파일 저장
+                try:
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        f.write(final_report)
+                    self.logger.info(f"Independent trend analysis complete. Report saved to {output_path}")
+                except Exception as save_error:
+                    self.logger.warning(f"Failed to save report to file: {save_error}, but content is available in return value")
+                
                 return {"report_path": output_path, "content": final_report}
                 
             except Exception as e:
@@ -157,12 +176,30 @@ class TrendAnalyzerAgent(BaseAgent):
         )
         
         # Create quality-controlled trend collector
-        quality_trend_collector = EvaluatorOptimizerLLM(
-            optimizer=trend_collector,
-            evaluator=trend_evaluator,
-            llm_factory=llm_factory,
-            min_rating=QualityRating.EXCELLENT,
-        )
+        # mcp_agent 라이브러리 버그: QualityRating enum이 정수값인데 JSON 스키마는 문자열 기대
+        # EvaluatorOptimizerLLM 사용 시 validation 오류 발생하므로 직접 agent 사용
+        # TODO: mcp_agent 라이브러리 업데이트 시 EvaluatorOptimizerLLM 사용 가능
+        try:
+            quality_trend_collector = EvaluatorOptimizerLLM(
+                optimizer=trend_collector,
+                evaluator=trend_evaluator,
+                llm_factory=llm_factory,
+                min_rating=QualityRating.GOOD,
+            )
+            self.logger.info("EvaluatorOptimizerLLM 생성 성공")
+        except Exception as eval_error:
+            # QualityRating validation 오류 발생 시 직접 agent 사용
+            error_str = str(eval_error).lower()
+            if "validation" in error_str or "enum" in error_str or "string_type" in error_str:
+                self.logger.warning(
+                    f"EvaluatorOptimizerLLM 생성 실패 (mcp_agent 라이브러리 버그: QualityRating enum validation 오류). "
+                    f"직접 agent 사용: {eval_error}"
+                )
+                # EvaluatorOptimizerLLM 없이 직접 trend_collector 사용
+                quality_trend_collector = trend_collector
+            else:
+                # 다른 오류는 그대로 발생
+                raise
         
         # Pattern Recognition Analyst
         pattern_analyst = MCP_Agent(

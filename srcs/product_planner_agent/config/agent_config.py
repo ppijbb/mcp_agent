@@ -10,6 +10,7 @@ import os
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from srcs.common.llm import create_fallback_llm_factory
 
 # Correcting the relative import path.
 # It should point to the 'agents' directory within the 'product_planner_agent' package.
@@ -345,11 +346,13 @@ class AgentConfiguration:
         if orchestrator:
             self.orchestrator = orchestrator
         else:
-            llm_fact = (
-                llm_factory
-                if llm_factory
-                else lambda: GoogleAugmentedLLM(model="gemini-2.0-flash-lite-001")
-            )
+            # Fallback이 가능한 LLM factory 사용 (common 모듈)
+            if llm_factory:
+                llm_fact = llm_factory
+            else:
+                llm_fact = create_fallback_llm_factory(
+                    primary_model="gemini-2.0-flash-lite-001"
+                )
             self.orchestrator = Orchestrator(
                 llm_factory=llm_fact,
                 available_agents=agents,

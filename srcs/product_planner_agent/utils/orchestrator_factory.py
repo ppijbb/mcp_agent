@@ -4,15 +4,20 @@ It applies:
 2. Turn budget limits forwarded via `max_loops` / Planner `max_iterations`.
 3. LLM caching (wrap with CachedLLM).
 4. Optional MCPAggregator exposure of servers (`fetch`, `filesystem`).
+5. Fallback support for LLM API errors (503, overloaded, etc.)
 """
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any, Callable
 
 from srcs.basic_agents.workflow_orchestration import Orchestrator, OpenAIAugmentedLLM
+from srcs.common.llm import create_fallback_llm_factory
 
 from .cached_llm import CachedLLM
+
+logger = logging.getLogger(__name__)
 
 # Singleton pattern to reuse orchestrator instance
 _ORCHESTRATOR_CACHE: Orchestrator | None = None
@@ -22,9 +27,14 @@ def get_orchestrator() -> Orchestrator:
     if _ORCHESTRATOR_CACHE is not None:
         return _ORCHESTRATOR_CACHE
 
-    # ---------- LLM Factory with caching ----------
+    # ---------- LLM Factory with caching and fallback ----------
     def llm_factory():
-        base_llm = OpenAIAugmentedLLM(model="gemini-2.5-flash-lite-preview-06-07")
+        # Fallback이 가능한 LLM factory 사용 (common 모듈)
+        fallback_llm_factory = create_fallback_llm_factory(
+            primary_model="gemini-2.5-flash-lite-preview-06-07",
+            logger_instance=logger
+        )
+        base_llm = fallback_llm_factory()
         return CachedLLM(base_llm)
 
     # ---------- Planner with iteration limit ----------

@@ -78,3 +78,4 @@ def patch_transform_mcp_tool_schema():
         logger.warning(f"Failed to patch transform_mcp_tool_schema: {e}")
         # Don't raise - allow code to continue without patch
 
+
