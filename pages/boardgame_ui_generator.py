@@ -647,6 +647,84 @@ class RealLangGraphUI:
         st.session_state.analysis_in_progress = False
         st.rerun()
 
+    async def _format_result_as_markdown(self, game_info: dict) -> str:
+        """LLM을 사용해서 게임 분석 결과를 마크다운 형식으로 변환"""
+        try:
+            from srcs.common.llm.fallback_llm import _try_fallback_llm
+            import json
+            
+            # Fallback LLM 가져오기
+            llm = _try_fallback_llm("gemini-2.5-flash-lite", logger)
+            if not llm:
+                # Fallback LLM이 없으면 기본 포맷팅
+                return self._format_result_basic(game_info)
+            
+            # JSON 결과를 마크다운으로 변환하는 프롬프트
+            prompt = f"""다음 보드게임 UI 분석 결과를 읽기 쉬운 마크다운 형식의 보고서로 변환해주세요.
+
+게임 정보:
+- 게임 이름: {game_info.get('name', 'N/A')}
+- 보드 타입: {game_info.get('board_type', 'N/A')}
+- AI 신뢰도: {game_info.get('confidence', 0.0):.1%}
+
+UI 명세서:
+{json.dumps(game_info.get('full_spec', {}), ensure_ascii=False, indent=2)}
+
+분석 결과:
+{json.dumps(game_info.get('analysis_summary', {}), ensure_ascii=False, indent=2)}
+
+다음 형식으로 마크다운 보고서를 작성해주세요:
+1. 게임 개요 (게임 이름, 타입, 신뢰도)
+2. UI 컴포넌트 설명 (각 컴포넌트의 역할과 기능)
+3. 레이아웃 구조 (화면 배치 설명)
+4. 상호작용 방식 (플레이어가 어떻게 게임을 조작하는지)
+5. 플레이어 인터페이스 (손패, 액션 버튼, 상태 표시 등)
+
+기술적인 JSON 구조보다는 실제 게임을 플레이할 때 어떻게 보이고 작동하는지 설명하는 방식으로 작성해주세요."""
+
+            # LLM 호출
+            if hasattr(llm, 'generate_str'):
+                result = await llm.generate_str(message=prompt, request_params=None)
+                return result
+            else:
+                return self._format_result_basic(game_info)
+        except Exception as e:
+            logger.error(f"마크다운 변환 오류: {e}", exc_info=True)
+            return self._format_result_basic(game_info)
+    
+    def _format_result_basic(self, game_info: dict) -> str:
+        """기본 마크다운 포맷팅 (LLM 없이)"""
+        md = f"""# 🎲 {game_info.get('name', '게임')} - UI 분석 결과
+
+## 📊 분석 개요
+
+- **게임 이름**: {game_info.get('name', 'N/A')}
+- **보드 타입**: {game_info.get('board_type', 'N/A')}
+- **AI 신뢰도**: {game_info.get('confidence', 0.0):.1%}
+
+## 🎮 UI 컴포넌트
+
+"""
+        full_spec = game_info.get('full_spec', {})
+        components = full_spec.get('components', [])
+        for comp in components:
+            md += f"### {comp.get('name', '컴포넌트')}\n"
+            md += f"- **타입**: {comp.get('type', 'N/A')}\n"
+            md += f"- **설명**: {comp.get('description', 'N/A')}\n"
+            md += f"- **UI 컴포넌트**: {comp.get('ui_component', 'N/A')}\n\n"
+        
+        md += "## 📐 레이아웃\n\n"
+        layout = full_spec.get('layout', {})
+        md += f"- **타입**: {layout.get('type', 'N/A')}\n"
+        md += f"- **설명**: {layout.get('description', 'N/A')}\n\n"
+        
+        md += "## 🎯 상호작용\n\n"
+        interactions = full_spec.get('interactions', [])
+        for inter in interactions:
+            md += f"- **{inter.get('type', 'N/A')}**: {inter.get('description', 'N/A')}\n"
+        
+        return md
+
     def render_text_based_interface(self):
         game_id = st.session_state.current_game_id
         game_info = st.session_state.generated_games.get(game_id)
@@ -666,10 +744,27 @@ class RealLangGraphUI:
         col2.metric("보드 타입", game_info.get('board_type', "N/A"))
         col3.metric("복잡도", game_info.get('analysis_summary', {}).get('게임_복잡도', "N/A"))
 
-        with st.expander("📜 AI가 생성한 전체 UI 명세서 (JSON)", expanded=True):
+        # 마크다운 형식으로 결과 표시
+        with st.spinner("📝 분석 결과를 마크다운 형식으로 변환 중..."):
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            try:
+                markdown_result = loop.run_until_complete(self._format_result_as_markdown(game_info))
+                st.markdown(markdown_result)
+            except Exception as e:
+                logger.error(f"마크다운 변환 실패: {e}", exc_info=True)
+                # 기본 포맷팅으로 대체
+                markdown_result = self._format_result_basic(game_info)
+                st.markdown(markdown_result)
+        
+        # 원본 JSON은 접을 수 있는 섹션에 숨김
+        with st.expander("🔧 원본 JSON 데이터 (개발자용)", expanded=False):
             st.json(game_info.get('full_spec', {}))
-        with st.expander("🔬 AI의 핵심 분석 내용 (JSON)", expanded=False):
-            st.json(game_info.get('analysis_summary', {}))
 
     def render_main_content(self):
         st.title("🤖 LangGraph AI Game Mate")
