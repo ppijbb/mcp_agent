@@ -661,6 +661,43 @@ class UniversalMCPHub:
         else:
             return value
     
+    def _check_server_requirements(self, server_name: str, server_config: Dict[str, Any]) -> bool:
+        """
+        서버에 필요한 API 키나 환경변수가 있는지 확인.
+        
+        Returns:
+            True: 서버를 로드해도 됨
+            False: API 키가 없어서 스킵해야 함
+        """
+        # exa 서버는 EXA_API_KEY 필요
+        if server_name == "exa" or "exa" in server_name.lower():
+            exa_key = os.getenv("EXA_API_KEY")
+            if not exa_key:
+                return False
+            # headers에 Authorization이 필요한 경우 확인
+            headers = server_config.get("headers", {})
+            if "Authorization" in headers:
+                auth_value = headers.get("Authorization", "")
+                # 환경변수 치환이 안된 경우 (${EXA_API_KEY} 형태)
+                if "${" in auth_value or not auth_value.replace("Bearer ", "").strip():
+                    return False
+        
+        # semantic_scholar는 SMITHERY_API_KEY 필요
+        if "semantic" in server_name.lower() or "scholar" in server_name.lower():
+            smithery_key = os.getenv("SMITHERY_API_KEY")
+            if not smithery_key:
+                return False
+        
+        # Smithery 기반 서버들 (fetch, docfork, context7-mcp, parallel-search, tavily-mcp, WebSearch-MCP)
+        smithery_servers = ["fetch", "docfork", "context7-mcp", "parallel-search", "tavily-mcp", "WebSearch-MCP"]
+        if server_name in smithery_servers:
+            smithery_key = os.getenv("SMITHERY_API_KEY")
+            if not smithery_key:
+                return False
+        
+        # 다른 서버들은 API 키가 없어도 사용 가능 (예: ddg_search)
+        return True
+    
     def _load_mcp_servers_from_config(self):
         """MCP 서버 설정을 config에서 로드하고 환경변수 치환."""
         try:
@@ -676,7 +713,24 @@ class UniversalMCPHub:
                     raw_configs = config_data.get("mcpServers", {})
                     
                     # 환경변수 치환
-                    self.mcp_server_configs = self._resolve_env_vars_in_value(raw_configs)
+                    resolved_configs = self._resolve_env_vars_in_value(raw_configs)
+                    
+                    # API 키 확인 및 필터링
+                    filtered_configs = {}
+                    for server_name, server_config in resolved_configs.items():
+                        # disabled 플래그 확인
+                        if server_config.get("disabled"):
+                            logger.info(f"[MCP][skip.disabled] server={server_name}")
+                            continue
+                        
+                        # API 키가 필요한 서버 확인
+                        if not self._check_server_requirements(server_name, server_config):
+                            logger.info(f"[MCP][skip.no-api-key] server={server_name} (API key not configured)")
+                            continue
+                        
+                        filtered_configs[server_name] = server_config
+                    
+                    self.mcp_server_configs = filtered_configs
                     logger.info(f"✅ Loaded MCP server configs: {list(self.mcp_server_configs.keys())}")
             else:
                 # 기본 DuckDuckGo MCP 서버 설정
