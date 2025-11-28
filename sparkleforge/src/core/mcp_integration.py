@@ -981,9 +981,8 @@ class UniversalMCPHub:
                     self.connection_diagnostics[server_name] = di
                     return False
             
-            self.mcp_sessions[server_name] = session
-            
             # 세션 초기화 및 도구 목록 가져오기 (서버별 설정 적용)
+            # 초기화 성공 후에만 mcp_sessions에 추가 (heartbeat 무한 루프 방지)
             try:
                 t0 = asyncio.get_running_loop().time()
                 
@@ -1010,13 +1009,24 @@ class UniversalMCPHub:
                     "list_ms": (t2 - t1) * 1000.0,
                 })
                 self.connection_diagnostics[server_name] = di
+                
+                # 초기화 성공 후에만 세션 등록 (heartbeat 무한 루프 방지)
+                self.mcp_sessions[server_name] = session
             except asyncio.CancelledError:
                 # 작업이 취소된 경우 (종료 신호 등) - 정상적인 동작
                 logger.info(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list (shutdown in progress)")
+                # 세션이 아직 mcp_sessions에 등록되지 않았으므로 정리만 수행
+                if server_name in self.exit_stacks:
+                    del self.exit_stacks[server_name]
                 try:
-                    await self._disconnect_from_mcp_server(server_name)
-                except Exception:
-                    pass  # cleanup 중 오류는 무시
+                    # 세션이 생성되었지만 등록되지 않은 경우 정리
+                    if hasattr(session, 'shutdown'):
+                        try:
+                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
+                        except:
+                            pass
+                except:
+                    pass
                 di = self.connection_diagnostics.get(server_name, {})
                 di.update({"stage": "cancelled_initialize_or_list", "error": "cancelled"})
                 self.connection_diagnostics[server_name] = di
@@ -1030,7 +1040,15 @@ class UniversalMCPHub:
                 # 타임아웃 발생 시 exit_stack 참조만 제거 (aclose() 호출하지 않음 - anyio 오류 방지)
                 if server_name in self.exit_stacks:
                     del self.exit_stacks[server_name]
-                await self._disconnect_from_mcp_server(server_name)
+                # 세션이 아직 mcp_sessions에 등록되지 않았으므로 직접 정리
+                try:
+                    if hasattr(session, 'shutdown'):
+                        try:
+                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
+                        except:
+                            pass
+                except:
+                    pass
                 return False
             except McpError as e:
                 # MCP 프로토콜 에러 - 명확한 에러 메시지 출력
@@ -1058,10 +1076,17 @@ class UniversalMCPHub:
                 })
                 self.connection_diagnostics[server_name] = di
                 
-                # 세션 정리
+                # 세션 정리 (아직 mcp_sessions에 등록되지 않았으므로 직접 정리)
                 if server_name in self.exit_stacks:
                     del self.exit_stacks[server_name]
-                await self._disconnect_from_mcp_server(server_name)
+                try:
+                    if hasattr(session, 'shutdown'):
+                        try:
+                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
+                        except:
+                            pass
+                except:
+                    pass
                 return False
             except Exception as e:
                 # 기타 예외 - 명확한 에러 메시지 출력
@@ -1080,10 +1105,17 @@ class UniversalMCPHub:
                 })
                 self.connection_diagnostics[server_name] = di
                 
-                # 세션 정리
+                # 세션 정리 (아직 mcp_sessions에 등록되지 않았으므로 직접 정리)
                 if server_name in self.exit_stacks:
                     del self.exit_stacks[server_name]
-                await self._disconnect_from_mcp_server(server_name)
+                try:
+                    if hasattr(session, 'shutdown'):
+                        try:
+                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
+                        except:
+                            pass
+                except:
+                    pass
                 return False
             
             # 도구 맵 생성 및 Registry에 동적 등록
@@ -1142,16 +1174,21 @@ class UniversalMCPHub:
     async def _disconnect_from_mcp_server(self, server_name: str):
         """MCP 서버 연결 해제 - 안전한 비동기 정리."""
         try:
-            # 세션 먼저 제거
+            # 세션 먼저 제거 및 종료 (heartbeat 무한 루프 방지)
             if server_name in self.mcp_sessions:
                 session = self.mcp_sessions[server_name]
                 try:
-                    # 세션 종료 시도 (안전하게)
+                    # 세션 종료 시도 (안전하게) - heartbeat 중지
                     if hasattr(session, 'shutdown'):
                         await asyncio.wait_for(session.shutdown(), timeout=1.0)
-                except (asyncio.TimeoutError, AttributeError, Exception):
-                    pass  # 세션 종료 실패는 무시
-                del self.mcp_sessions[server_name]
+                    elif hasattr(session, 'close'):
+                        await asyncio.wait_for(session.close(), timeout=1.0)
+                except (asyncio.TimeoutError, AttributeError, Exception) as e:
+                    logger.debug(f"Session shutdown timeout/error for {server_name}: {e}")
+                    # 타임아웃이어도 세션은 제거 (heartbeat 중지)
+                finally:
+                    # 세션 제거 (heartbeat 무한 루프 방지)
+                    del self.mcp_sessions[server_name]
             
             # Exit stack 정리: aclose() 호출하지 않음 (anyio cancel scope 오류 방지)
             # 참조만 제거 - 컨텍스트는 원래 태스크에서 정리됨
@@ -1165,6 +1202,12 @@ class UniversalMCPHub:
             
         except Exception as e:
             logger.debug(f"Error disconnecting from MCP server {server_name}: {e}")
+            # 예외가 발생해도 세션은 제거 시도 (heartbeat 무한 루프 방지)
+            if server_name in self.mcp_sessions:
+                try:
+                    del self.mcp_sessions[server_name]
+                except:
+                    pass
     
     async def initialize_mcp(self):
         """MCP 초기화 - OpenRouter와 MCP 서버 연결."""
