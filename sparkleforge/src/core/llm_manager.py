@@ -18,7 +18,7 @@ import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.core.researcher_config import get_llm_config, get_agent_config
+from src.core.researcher_config import get_llm_config, get_agent_config, get_cascade_config
 from src.core.reliability import execute_with_reliability
 
 logger = logging.getLogger(__name__)
@@ -647,9 +647,11 @@ class MultiModelOrchestrator:
         task_type: TaskType,
         model_name: str = None,
         system_message: str = None,
+        use_cascade: bool = True,
+        complexity: float = 5.0,
         **kwargs
     ) -> ModelResult:
-        """모델로 실행."""
+        """모델로 실행 - Cascade 지원."""
         if model_name is None:
             model_name = self.select_model(task_type)
         
@@ -665,8 +667,43 @@ class MultiModelOrchestrator:
         actual_model_used = model_name_clean  # 실제 사용된 모델 추적
         
         try:
-            # 우선순위에 따라 모델 실행 및 폴백
-            if model_provider == "openrouter":
+            # Cascade 설정 확인
+            try:
+                cascade_config = get_cascade_config()
+            except RuntimeError:
+                cascade_config = None
+            
+            cascade_enabled = (
+                use_cascade and
+                cascade_config and
+                cascade_config.enabled
+            ) if cascade_config else use_cascade
+            
+            # Provider의 모든 모델 리스트 가져오기
+            provider_models = self._get_provider_models(model_provider, task_type)
+            
+            # Cascade 실행 조건 체크
+            use_cascade_for_provider = (
+                cascade_enabled and
+                len(provider_models) >= (cascade_config.min_models_for_cascade if cascade_config else 2)
+            )
+            
+            if use_cascade_for_provider:
+                # Cascade 실행
+                logger.info(f"Using cascade for provider {model_provider} with {len(provider_models)} models")
+                try:
+                    result, actual_model_used = await self._execute_provider_cascade(
+                        provider_models, prompt, system_message, task_type, complexity, **kwargs
+                    )
+                except Exception as cascade_error:
+                    logger.warning(f"Cascade execution failed: {cascade_error}, falling back to single model...")
+                    # Cascade 실패 시 기존 단일 모델 실행 로직으로 fallback
+                    use_cascade_for_provider = False
+            
+            if not use_cascade_for_provider:
+                # 기존 단일 모델 실행 로직
+                # 우선순위에 따라 모델 실행 및 폴백
+                if model_provider == "openrouter":
                 logger.info(f"Executing with OpenRouter model: {model_name_clean}")
                 try:
                     result = await self._execute_openrouter_model(
@@ -715,8 +752,8 @@ class MultiModelOrchestrator:
                     result, actual_model_used = await self._try_fallback_models(
                         task_type, prompt, system_message, skip_providers=["openrouter", "groq", "google", "openai"], **kwargs
                     )
-            else:
-                raise ValueError(f"Unknown provider: {model_provider}")
+                else:
+                    raise ValueError(f"Unknown provider: {model_provider}")
             
             execution_time = time.time() - start_time
             
@@ -1017,6 +1054,240 @@ class MultiModelOrchestrator:
                 "usage": data.get("usage", {})
             }
         }
+    
+    def _get_provider_models(
+        self,
+        provider: str,
+        task_type: TaskType
+    ) -> List[str]:
+        """
+        Provider의 모든 사용 가능한 모델 리스트 반환.
+        
+        Args:
+            provider: Provider 이름 (openrouter, groq, google, openai 등)
+            task_type: 작업 유형
+        
+        Returns:
+            해당 provider의 모델 이름 리스트 (비용 오름차순 정렬)
+        """
+        if provider == "cerebras":
+            # Cerebras는 OpenRouter를 통해 접근
+            models = [
+                name for name, config in self.models.items()
+                if config.provider == "openrouter"
+                and "cerebras" in config.model_id.lower()
+                and task_type in config.capabilities
+            ]
+        else:
+            models = [
+                name for name, config in self.models.items()
+                if config.provider == provider
+                and task_type in config.capabilities
+            ]
+        
+        # 비용 기준 정렬 (저비용 우선)
+        models.sort(key=lambda name: self.models[name].cost_per_token)
+        
+        return models
+    
+    def _classify_models_for_cascade(
+        self,
+        provider_models: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Provider 모델 리스트를 Drafter/Verifier로 분류.
+        
+        기준:
+        - Drafter: cost_per_token < threshold 또는 speed_rating > threshold
+        - Verifier: cost_per_token >= threshold 또는 quality_rating > threshold
+        
+        Returns:
+            (drafter_models, verifier_models) 튜플
+        """
+        try:
+            cascade_config = get_cascade_config()
+        except RuntimeError:
+            cascade_config = None
+        
+        if cascade_config:
+            drafter_cost_threshold = cascade_config.drafter_cost_threshold
+            drafter_speed_threshold = cascade_config.drafter_speed_threshold
+            verifier_quality_threshold = cascade_config.verifier_quality_threshold
+        else:
+            # 기본값
+            drafter_cost_threshold = 0.0002
+            drafter_speed_threshold = 7.0
+            verifier_quality_threshold = 8.0
+        
+        drafter_models = []
+        verifier_models = []
+        
+        for model_name in provider_models:
+            config = self.models[model_name]
+            
+            is_drafter = (
+                config.cost_per_token < drafter_cost_threshold or
+                config.speed_rating > drafter_speed_threshold
+            )
+            
+            is_verifier = (
+                config.cost_per_token >= drafter_cost_threshold or
+                config.quality_rating > verifier_quality_threshold
+            )
+            
+            if is_drafter:
+                drafter_models.append(model_name)
+            if is_verifier:
+                verifier_models.append(model_name)
+        
+        # 기본값: 첫 번째 모델을 drafter, 마지막 모델을 verifier로
+        if not drafter_models:
+            drafter_models = [provider_models[0]] if provider_models else []
+        if not verifier_models:
+            verifier_models = [provider_models[-1]] if provider_models else []
+        
+        return drafter_models, verifier_models
+    
+    def _validate_draft_quality(
+        self,
+        draft_result: Dict[str, Any],
+        prompt: str,
+        task_type: TaskType,
+        complexity: float = 5.0
+    ) -> bool:
+        """
+        Draft 품질 검증.
+        
+        Cascadeflow의 validation 방식을 참고:
+        - Confidence score 체크
+        - Complexity 기반 threshold 조정
+        - 기본 threshold: 0.75
+        
+        Returns:
+            True if draft should be accepted, False if needs verifier
+        """
+        try:
+            cascade_config = get_cascade_config()
+        except RuntimeError:
+            cascade_config = None
+        
+        base_threshold = cascade_config.confidence_threshold if cascade_config else 0.75
+        enable_adaptive = cascade_config.enable_adaptive_threshold if cascade_config else True
+        
+        # Complexity 기반 threshold 조정
+        if enable_adaptive:
+            if complexity > 7.0:
+                threshold = 0.85  # 높은 복잡도는 더 높은 threshold
+            elif complexity > 5.0:
+                threshold = 0.80
+            else:
+                threshold = base_threshold
+        else:
+            threshold = base_threshold
+        
+        # Confidence 체크
+        confidence = draft_result.get("confidence", 0.0)
+        if confidence >= threshold:
+            return True
+        
+        # Quality score 체크 (있는 경우)
+        quality_score = draft_result.get("quality_score", None)
+        if quality_score is not None and quality_score >= threshold:
+            return True
+        
+        return False
+    
+    async def _execute_single_model_by_provider(
+        self,
+        model_name: str,
+        prompt: str,
+        system_message: str = None,
+        task_type: TaskType = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Provider별 단일 모델 실행 (기존 로직 재사용).
+        
+        기존의 _execute_openrouter_model, _execute_groq_model 등을 호출.
+        """
+        model_provider = self.models[model_name].provider
+        
+        if model_provider == "openrouter":
+            return await self._execute_openrouter_model(
+                model_name, prompt, system_message, **kwargs
+            )
+        elif model_provider == "groq":
+            return await self._execute_groq_model(
+                model_name, prompt, system_message, **kwargs
+            )
+        elif model_provider == "google":
+            if model_name.endswith("_langchain"):
+                return await self._execute_langchain_model(
+                    model_name, prompt, system_message, **kwargs
+                )
+            else:
+                return await self._execute_gemini_model(
+                    model_name, prompt, system_message, **kwargs
+                )
+        elif model_provider == "openai":
+            return await self._execute_openai_model(
+                model_name, prompt, system_message, **kwargs
+            )
+        else:
+            raise ValueError(f"Unknown provider: {model_provider}")
+    
+    async def _execute_provider_cascade(
+        self,
+        provider_models: List[str],
+        prompt: str,
+        system_message: str = None,
+        task_type: TaskType = None,
+        complexity: float = 5.0,
+        **kwargs
+    ) -> Tuple[Dict[str, Any], str]:
+        """
+        Provider 내부 모델 리스트로 Cascade 실행.
+        
+        흐름:
+        1. Drafter/Verifier 분류
+        2. Drafter로 실행
+        3. Quality validation
+        4. Accept → Drafter 결과 반환
+        5. Reject → Verifier로 승격
+        
+        Returns:
+            (result_dict, actual_model_used) 튜플
+        """
+        # 1. Drafter/Verifier 분류
+        drafter_models, verifier_models = self._classify_models_for_cascade(
+            provider_models
+        )
+        
+        drafter = drafter_models[0]
+        verifier = verifier_models[0] if verifier_models else provider_models[-1]
+        
+        # 2. Drafter 실행
+        logger.info(f"Executing cascade drafter: {drafter}")
+        draft_result = await self._execute_single_model_by_provider(
+            drafter, prompt, system_message, task_type, **kwargs
+        )
+        
+        # 3. Quality validation
+        should_accept = self._validate_draft_quality(
+            draft_result, prompt, task_type, complexity
+        )
+        
+        if should_accept:
+            logger.info(f"✓ Draft accepted: {drafter}")
+            return draft_result, drafter
+        
+        # 4. Verifier로 승격
+        logger.info(f"✗ Draft rejected, escalating to verifier: {verifier}")
+        verifier_result = await self._execute_single_model_by_provider(
+            verifier, prompt, system_message, task_type, **kwargs
+        )
+        
+        return verifier_result, verifier
     
     async def _try_fallback_models(
         self,

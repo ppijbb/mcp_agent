@@ -275,6 +275,22 @@ class CouncilConfig(BaseModel):
         return v
 
 
+class CascadeConfig(BaseModel):
+    """Provider Cascade configuration for cost-efficient model selection."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
+    # Basic settings - Optional with defaults
+    enabled: bool = True
+    confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0, description="Confidence threshold for draft acceptance")
+    min_models_for_cascade: int = Field(default=2, ge=2, description="Minimum number of models required for cascade")
+    enable_adaptive_threshold: bool = Field(default=True, description="Enable complexity-based adaptive threshold")
+    
+    # Model classification thresholds
+    drafter_cost_threshold: float = Field(default=0.0002, ge=0.0, description="Cost threshold for drafter classification")
+    verifier_quality_threshold: float = Field(default=8.0, ge=0.0, le=10.0, description="Quality threshold for verifier classification")
+    drafter_speed_threshold: float = Field(default=7.0, ge=0.0, le=10.0, description="Speed threshold for drafter classification")
+
+
 class AgentToolConfig(BaseModel):
     """에이전트별 MCP 도구 할당 설정."""
 
@@ -318,6 +334,7 @@ class ResearcherSystemConfig(BaseModel):
     context_window: ContextWindowConfig = Field(description="Context window configuration")
     reliability: ReliabilityConfig = Field(description="Reliability configuration")
     council: CouncilConfig = Field(description="Council configuration")
+    cascade: CascadeConfig = Field(default_factory=CascadeConfig, description="Cascade configuration")
     agent_tools: AgentToolConfig = Field(description="Agent tools configuration")
     
     def model_post_init(self, __context):
@@ -412,11 +429,11 @@ def get_reliability_config() -> ReliabilityConfig:
     return config.reliability
 
 
-def get_council_config() -> CouncilConfig:
-    """Get council configuration."""
+def get_cascade_config() -> CascadeConfig:
+    """Get Cascade configuration."""
     if config is None:
         raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
-    return config.council
+    return config.cascade
 
 
 def get_council_config() -> CouncilConfig:
@@ -656,6 +673,17 @@ def load_config_from_env() -> ResearcherSystemConfig:
         request_timeout=get_optional_env("COUNCIL_REQUEST_TIMEOUT", 120.0, float)
     )
     
+    # Load Cascade configuration (Optional with defaults)
+    cascade_config = CascadeConfig(
+        enabled=get_optional_env("CASCADE_ENABLED", True, bool),
+        confidence_threshold=get_optional_env("CASCADE_CONFIDENCE_THRESHOLD", 0.75, float),
+        min_models_for_cascade=get_optional_env("CASCADE_MIN_MODELS", 2, int),
+        enable_adaptive_threshold=get_optional_env("CASCADE_ENABLE_ADAPTIVE_THRESHOLD", True, bool),
+        drafter_cost_threshold=get_optional_env("CASCADE_DRAFTER_COST_THRESHOLD", 0.0002, float),
+        verifier_quality_threshold=get_optional_env("CASCADE_VERIFIER_QUALITY_THRESHOLD", 8.0, float),
+        drafter_speed_threshold=get_optional_env("CASCADE_DRAFTER_SPEED_THRESHOLD", 7.0, float)
+    )
+    
     # Create and store global config instance
     global config
     config = ResearcherSystemConfig(
@@ -669,6 +697,7 @@ def load_config_from_env() -> ResearcherSystemConfig:
         context_window=context_window_config,
         reliability=reliability_config,
         council=council_config,
+        cascade=cascade_config,
         agent_tools=agent_tool_config
     )
     
