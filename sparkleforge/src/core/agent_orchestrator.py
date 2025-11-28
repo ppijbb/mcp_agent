@@ -175,6 +175,109 @@ class PlannerAgent:
         self.config = load_agent_config("planner")
         self.instruction = self.config.instructions
     
+    async def domain_exploration(self, query: str) -> Dict[str, Any]:
+        """
+        도메인 분석 및 탐색을 수행합니다.
+        
+        Args:
+            query: 연구 질문
+            
+        Returns:
+            도메인 분석 결과 딕셔너리
+        """
+        logger.info(f"[{self.name}] 🔍 Starting domain exploration for query: {query[:100]}...")
+        
+        from src.core.llm_manager import execute_llm_task, TaskType
+        from src.core.skills.agent_loader import get_prompt
+        
+        try:
+            # 도메인 분석 프롬프트 가져오기
+            domain_prompt = get_prompt("planner", "domain_analysis", query=query)
+            
+            # LLM으로 도메인 분석 수행
+            domain_result = await execute_llm_task(
+                prompt=domain_prompt,
+                task_type=TaskType.ANALYSIS,
+                model_name=None,
+                system_message="You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."
+            )
+            
+            # JSON 파싱 시도
+            import json
+            import re
+            
+            domain_text = domain_result.content or "{}"
+            
+            # JSON 블록 추출
+            json_match = re.search(r'\{[\s\S]*\}', domain_text)
+            if json_match:
+                try:
+                    domain_analysis = json.loads(json_match.group())
+                except json.JSONDecodeError:
+                    logger.warning(f"[{self.name}] Failed to parse domain analysis JSON, using default structure")
+                    domain_analysis = {
+                        "domain": "general",
+                        "subdomains": [],
+                        "characteristics": [],
+                        "key_terminology": [],
+                        "data_types": ["quantitative", "qualitative"],
+                        "reliable_source_types": ["academic", "news", "government"],
+                        "verification_criteria": ["source_reliability", "data_recency"],
+                        "search_strategy": {
+                            "keywords": [],
+                            "related_topics": []
+                        }
+                    }
+            else:
+                logger.warning(f"[{self.name}] No JSON found in domain analysis result, using default structure")
+                domain_analysis = {
+                    "domain": "general",
+                    "subdomains": [],
+                    "characteristics": [],
+                    "key_terminology": [],
+                    "data_types": ["quantitative", "qualitative"],
+                    "reliable_source_types": ["academic", "news", "government"],
+                    "verification_criteria": ["source_reliability", "data_recency"],
+                    "search_strategy": {
+                        "keywords": [],
+                        "related_topics": []
+                    }
+                }
+            
+            # 메타데이터 추가
+            domain_analysis['_metadata'] = {
+                'model_used': domain_result.model_used,
+                'confidence': domain_result.confidence,
+                'execution_time': domain_result.execution_time,
+                'timestamp': domain_result.timestamp if hasattr(domain_result, 'timestamp') else None
+            }
+            
+            logger.info(f"[{self.name}] ✅ Domain analysis completed: {domain_analysis.get('domain', 'unknown')}")
+            logger.info(f"[{self.name}] Domain characteristics: {domain_analysis.get('characteristics', [])}")
+            logger.info(f"[{self.name}] Reliable source types: {domain_analysis.get('reliable_source_types', [])}")
+            
+            return domain_analysis
+            
+        except Exception as e:
+            logger.error(f"[{self.name}] Domain exploration failed: {e}")
+            # 기본 도메인 분석 결과 반환
+            return {
+                "domain": "general",
+                "subdomains": [],
+                "characteristics": [],
+                "key_terminology": [],
+                "data_types": ["quantitative", "qualitative"],
+                "reliable_source_types": ["academic", "news", "government"],
+                "verification_criteria": ["source_reliability", "data_recency"],
+                "search_strategy": {
+                    "keywords": [],
+                    "related_topics": []
+                },
+                "_metadata": {
+                    "error": str(e)
+                }
+            }
+    
     async def execute(self, state: AgentState) -> AgentState:
         """Execute planning task with Skills-based instruction and detailed logging."""
         logger.info(f"=" * 80)
@@ -213,6 +316,12 @@ class PlannerAgent:
         # Use YAML-based prompt
         from src.core.skills.agent_loader import get_prompt
         
+        # Phase 1: Domain Analysis and Exploration
+        logger.info(f"[{self.name}] 🔍 Starting domain analysis and exploration...")
+        domain_analysis_result = await self.domain_exploration(state['user_query'])
+        state['domain_analysis'] = domain_analysis_result
+        logger.info(f"[{self.name}] ✅ Domain analysis completed: {domain_analysis_result.get('domain', 'unknown')}")
+        
         # Format previous_plans for prompt - only include if from current session
         if previous_plans:
             # Filter to ensure only current session plans are included
@@ -230,10 +339,27 @@ class PlannerAgent:
         else:
             previous_plans_text = "No previous research found in current session. This is a NEW task - focus only on the current query."
         
+        # 도메인 분석 결과를 프롬프트에 포함
+        domain_context = ""
+        if domain_analysis_result:
+            domain_context = f"""
+Domain Analysis Results:
+- Domain: {domain_analysis_result.get('domain', 'general')}
+- Subdomains: {', '.join(domain_analysis_result.get('subdomains', []))}
+- Characteristics: {', '.join(domain_analysis_result.get('characteristics', []))}
+- Key Terminology: {', '.join(domain_analysis_result.get('key_terminology', []))}
+- Reliable Source Types: {', '.join(domain_analysis_result.get('reliable_source_types', []))}
+- Verification Criteria: {', '.join(domain_analysis_result.get('verification_criteria', []))}
+"""
+        
         prompt = get_prompt("planner", "planning",
                            instruction=self.instruction,
                            user_query=state['user_query'],
                            previous_plans=previous_plans_text)
+        
+        # 도메인 분석 결과를 프롬프트에 추가
+        if domain_context:
+            prompt = f"{domain_context}\n\n{prompt}"
 
         logger.info(f"[{self.name}] Calling LLM for planning...")
         # Gemini 실행
@@ -310,11 +436,16 @@ Provide an improved version of the plan that addresses any gaps or issues you id
         
         # Use YAML-based prompt template for task decomposition
         from src.core.skills.agent_loader import get_prompt
+        
+        # 도메인 분석 결과를 JSON 문자열로 변환
+        domain_analysis_text = json.dumps(domain_analysis_result, ensure_ascii=False, indent=2) if domain_analysis_result else "{}"
+        
         task_split_prompt = get_prompt(
             "planner",
             "task_decomposition",
             plan=plan,
-            query=state['user_query']
+            query=state['user_query'],
+            domain_analysis=domain_analysis_text
         )
 
         try:
@@ -328,7 +459,6 @@ Provide an improved version of the plan that addresses any gaps or issues you id
             task_split_text = task_split_result.content or ""
             
             # JSON 파싱 시도
-            import json
             import re
             
             # JSON 블록 추출
@@ -394,8 +524,39 @@ Provide an improved version of the plan that addresses any gaps or issues you id
             for i, task in enumerate(tasks):
                 if 'task_id' not in task:
                     task['task_id'] = f"task_{i + 1}"
+                if 'name' not in task:
+                    task['name'] = task.get('description', state['user_query'])[:100]
                 if 'description' not in task:
                     task['description'] = state['user_query']
+                
+                # Task 구조 확장 필드 기본값 설정
+                if 'objectives' not in task:
+                    task['objectives'] = [task.get('description', state['user_query'])]
+                
+                if 'required_information' not in task:
+                    task['required_information'] = {
+                        'data_types': ['quantitative', 'qualitative'],
+                        'key_entities': [],
+                        'sources': {
+                            'min_count': 3,
+                            'reliability_threshold': 0.7,
+                            'preferred_types': ['academic', 'news', 'government']
+                        }
+                    }
+                
+                if 'verification_strategy' not in task:
+                    task['verification_strategy'] = {
+                        'cross_verify': True,
+                        'fact_check': True,
+                        'source_validation': True,
+                        'min_consensus_sources': 2
+                    }
+                
+                if 'success_criteria' not in task:
+                    task['success_criteria'] = [
+                        f"Task {task.get('task_id')} completed with valid results",
+                        "Sources meet reliability threshold"
+                    ]
                 
                 # 검색 쿼리 검증 및 필터링
                 if 'search_queries' in task and task['search_queries']:
@@ -503,6 +664,135 @@ class ExecutorAgent:
             self.instruction = self.skill.instructions
         else:
             self.instruction = "You are a research execution agent."
+    
+    async def _filter_results_by_relevance(
+        self,
+        search_results: List[Dict[str, Any]],
+        user_query: str,
+        search_queries: List[str]
+    ) -> List[Dict[str, Any]]:
+        """
+        검색 결과를 관련성 기준으로 사전 필터링합니다.
+        
+        Args:
+            search_results: 필터링할 검색 결과 리스트
+            user_query: 원래 사용자 쿼리
+            search_queries: 검색에 사용된 쿼리 리스트
+            
+        Returns:
+            관련성 점수 3점 이상인 결과만 포함된 리스트
+        """
+        from src.core.llm_manager import execute_llm_task, TaskType
+        
+        MIN_REQUIRED_RESULTS = 30
+        RELEVANCE_THRESHOLD = 3  # 1-10 점수 기준
+        
+        if len(search_results) <= MIN_REQUIRED_RESULTS:
+            # 결과가 이미 충분하면 필터링 스킵 (너무 공격적으로 필터링하지 않음)
+            logger.info(f"[{self.name}] Results count ({len(search_results)}) is acceptable, skipping aggressive filtering")
+            return search_results
+        
+        logger.info(f"[{self.name}] 🔍 Filtering {len(search_results)} results by relevance (threshold: {RELEVANCE_THRESHOLD}/10)")
+        
+        # 배치로 관련성 평가 (성능 최적화)
+        batch_size = 10
+        filtered_results = []
+        
+        for i in range(0, len(search_results), batch_size):
+            batch = search_results[i:i+batch_size]
+            
+            # 배치 평가 프롬프트
+            batch_evaluation_prompt = f"""다음 검색 결과들을 원래 쿼리와의 관련성에 따라 평가하세요.
+
+원래 쿼리: {user_query}
+검색 쿼리: {', '.join(search_queries[:3])}
+
+검색 결과:
+{chr(10).join([f"{j+1}. 제목: {r.get('title', 'N/A')[:100]}{chr(10)}   내용: {r.get('snippet', r.get('content', ''))[:200]}{chr(10)}   URL: {r.get('url', 'N/A')}" for j, r in enumerate(batch)])}
+
+각 결과에 대해 다음을 평가하세요:
+1. 직접적 관련성 (1-10): 쿼리와 직접적으로 관련이 있는가?
+2. 간접적 관련성 (1-10): 배경 정보나 맥락 제공에 도움이 되는가?
+3. 완전히 무관한지 여부 (YES/NO)
+
+응답 형식 (JSON):
+{{
+  "evaluations": [
+    {{
+      "index": 1,
+      "direct_relevance": 8,
+      "indirect_relevance": 5,
+      "is_irrelevant": false,
+      "overall_score": 7,
+      "reason": "엔비디아 GPU 시장 점유율에 대한 직접적 정보"
+    }},
+    ...
+  ]
+}}
+
+⚠️ 중요:
+- 완전히 무관한 결과만 제외 (예: 엔비디아 쿼리인데 부동산 관련 결과)
+- 관련성이 약간 낮아도 배경 정보로 유용하면 포함
+- overall_score는 (direct_relevance * 0.7 + indirect_relevance * 0.3)로 계산"""
+            
+            try:
+                evaluation_result = await execute_llm_task(
+                    prompt=batch_evaluation_prompt,
+                    task_type=TaskType.ANALYSIS,
+                    model_name=None,
+                    system_message="You are an expert information relevance evaluator. Evaluate search results for relevance to the query."
+                )
+                
+                # JSON 파싱
+                import json
+                import re
+                
+                evaluation_text = evaluation_result.content or "{}"
+                json_match = re.search(r'\{[\s\S]*\}', evaluation_text)
+                if json_match:
+                    try:
+                        evaluation_data = json.loads(json_match.group())
+                        evaluations = evaluation_data.get('evaluations', [])
+                        
+                        for eval_item in evaluations:
+                            idx = eval_item.get('index', 0) - 1  # 1-based to 0-based
+                            if 0 <= idx < len(batch):
+                                overall_score = eval_item.get('overall_score', 0)
+                                is_irrelevant = eval_item.get('is_irrelevant', False)
+                                
+                                # 관련성 점수가 threshold 이상이고 무관하지 않으면 포함
+                                if overall_score >= RELEVANCE_THRESHOLD and not is_irrelevant:
+                                    result = batch[idx].copy()
+                                    result['relevance_score'] = overall_score
+                                    result['relevance_reason'] = eval_item.get('reason', '')
+                                    filtered_results.append(result)
+                                else:
+                                    logger.debug(f"[{self.name}] Filtered out result {i+idx+1}: score={overall_score}, irrelevant={is_irrelevant}")
+                    except json.JSONDecodeError:
+                        logger.warning(f"[{self.name}] Failed to parse relevance evaluation JSON, including all results in batch")
+                        filtered_results.extend(batch)
+                else:
+                    logger.warning(f"[{self.name}] No JSON found in relevance evaluation, including all results in batch")
+                    filtered_results.extend(batch)
+                    
+            except Exception as e:
+                logger.warning(f"[{self.name}] Relevance evaluation failed for batch {i//batch_size + 1}: {e}. Including all results in batch.")
+                filtered_results.extend(batch)
+        
+        # 필터링 후에도 최소 30개 이상 보장
+        if len(filtered_results) < MIN_REQUIRED_RESULTS:
+            logger.warning(f"[{self.name}] ⚠️ Filtered results ({len(filtered_results)}) < minimum ({MIN_REQUIRED_RESULTS}), including lower relevance results")
+            # 관련성 점수 순으로 정렬하여 상위 결과 포함
+            scored_results = []
+            for result in search_results:
+                score = result.get('relevance_score', 5)  # 기본값 5
+                scored_results.append((score, result))
+            
+            scored_results.sort(reverse=True, key=lambda x: x[0])
+            filtered_results = [r for _, r in scored_results[:MIN_REQUIRED_RESULTS]]
+            logger.info(f"[{self.name}] ✅ Included top {len(filtered_results)} results to meet minimum requirement")
+        
+        return filtered_results
     
     async def execute(self, state: AgentState, assigned_task: Optional[Dict[str, Any]] = None) -> AgentState:
         """Execute research tasks with detailed logging."""
@@ -678,29 +968,59 @@ class ExecutorAgent:
             logger.info(f"[{self.name}] Search queries: {search_queries}")
             
             async def execute_single_search(search_query: str, query_index: int) -> Dict[str, Any]:
-                """단일 검색 실행."""
-                try:
-                    # 실제 검색 쿼리 값 로그 출력
-                    logger.info(f"[{self.name}] Search {query_index + 1}/{len(search_queries)}: '{search_query}'")
-                    # 각 검색마다 더 많은 결과 수집 (최소 5개 출처 보장을 위해)
-                    search_result = await execute_tool(
-                        "g-search",
-                        {"query": search_query, "max_results": 15}  # 10 -> 15로 증가
-                    )
-                    return {
-                        "query": search_query,
-                        "index": query_index,
-                        "result": search_result,
-                        "success": search_result.get('success', False)
-                    }
-                except Exception as e:
-                    logger.error(f"[{self.name}] Search {query_index + 1} failed: {e}")
-                    return {
-                        "query": search_query,
-                        "index": query_index,
-                        "result": {"success": False, "error": str(e)},
-                        "success": False
-                    }
+                """단일 검색 실행 (여러 검색 도구 fallback 지원)."""
+                # 실제 검색 쿼리 값 로그 출력
+                logger.info(f"[{self.name}] Search {query_index + 1}/{len(search_queries)}: '{search_query}'")
+                
+                # 각 검색마다 더 많은 결과 수집 (최소 30개 출처 보장을 위해)
+                # 여러 검색 쿼리 사용 시 각 쿼리당 최소 10-15개씩 수집하여 총 30개 이상 보장
+                num_queries = len(search_queries)
+                results_per_query = max(10, min(15, 30 // max(1, num_queries)))  # 최소 10개, 최대 15개, 총 30개 이상 보장
+                
+                # 여러 검색 도구 시도 (fallback 지원)
+                search_tools = ["g-search", "mcp_search", "ddg_search"]  # 우선순위 순서
+                
+                for tool_name in search_tools:
+                    try:
+                        logger.info(f"[{self.name}] Trying search tool: {tool_name}")
+                        search_result = await execute_tool(
+                            tool_name,
+                            {"query": search_query, "max_results": results_per_query}
+                        )
+                        
+                        # 성공한 경우
+                        if search_result.get('success', False):
+                            logger.info(f"[{self.name}] ✅ Search succeeded with {tool_name}")
+                            return {
+                                "query": search_query,
+                                "index": query_index,
+                                "result": search_result,
+                                "success": True,
+                                "tool_used": tool_name
+                            }
+                        else:
+                            # 실패했지만 에러가 없는 경우 (다음 도구 시도)
+                            error_msg = search_result.get('error', 'Unknown error')
+                            logger.warning(f"[{self.name}] ⚠️ {tool_name} returned success=False: {error_msg}")
+                            continue
+                            
+                    except Exception as e:
+                        error_str = str(e)
+                        # DuckDuckGo MCP 서버 버그 등 특정 에러 처리
+                        if "AttributeError" in error_str or "TimeoutError" in error_str or "HTTPStatusError" in error_str:
+                            logger.warning(f"[{self.name}] ⚠️ {tool_name} failed with known issue: {error_str[:100]}... (trying next tool)")
+                        else:
+                            logger.warning(f"[{self.name}] ⚠️ {tool_name} failed: {error_str[:100]}... (trying next tool)")
+                        continue
+                
+                # 모든 검색 도구 실패
+                logger.error(f"[{self.name}] ❌ All search tools failed for query: '{search_query}'")
+                return {
+                    "query": search_query,
+                    "index": query_index,
+                    "result": {"success": False, "error": "All search tools failed"},
+                    "success": False
+                }
             
             # 모든 검색을 병렬로 실행
             search_tasks = [execute_single_search(q, i) for i, q in enumerate(search_queries)]
@@ -710,6 +1030,58 @@ class ExecutorAgent:
             
             # 모든 성공한 검색 결과 통합
             successful_results = [sr for sr in search_results_list if sr.get('success') and sr.get('result', {}).get('data')]
+            
+            # 최소 30개 결과 보장을 위한 추가 검색 로직
+            MIN_REQUIRED_RESULTS = 30
+            total_results_count = 0
+            for sr in successful_results:
+                result_data = sr.get('result', {}).get('data', {})
+                if isinstance(result_data, dict):
+                    total_results_count += len(result_data.get('results', result_data.get('items', [])))
+                elif isinstance(result_data, list):
+                    total_results_count += len(result_data)
+            
+            logger.info(f"[{self.name}] 📊 Total results collected so far: {total_results_count}")
+            
+            # 결과가 부족하면 추가 검색 수행
+            if total_results_count < MIN_REQUIRED_RESULTS and len(search_queries) > 0:
+                additional_queries_needed = (MIN_REQUIRED_RESULTS - total_results_count) // 10 + 1
+                logger.info(f"[{self.name}] 🔍 Results insufficient ({total_results_count} < {MIN_REQUIRED_RESULTS}), generating {additional_queries_needed} additional search queries...")
+                
+                # 추가 검색 쿼리 생성 (동의어, 관련 용어 기반)
+                from src.core.llm_manager import execute_llm_task, TaskType
+                query_expansion_prompt = f"""Generate {additional_queries_needed} additional search queries related to the following research topic. Use synonyms, related terms, and different perspectives.
+
+Original queries: {', '.join(search_queries[:3])}
+Research topic: {state['user_query']}
+
+Generate diverse search queries that will help find more relevant documents. Each query should be specific and different from the original queries.
+
+Return only the queries, one per line, without numbering or bullets."""
+                
+                try:
+                    expansion_result = await execute_llm_task(
+                        prompt=query_expansion_prompt,
+                        task_type=TaskType.PLANNING,
+                        model_name=None,
+                        system_message="You are a search query expansion expert. Generate diverse, specific search queries."
+                    )
+                    
+                    additional_queries = [q.strip() for q in expansion_result.content.split('\n') if q.strip() and len(q.strip()) > 10]
+                    additional_queries = additional_queries[:additional_queries_needed]
+                    
+                    logger.info(f"[{self.name}] ✅ Generated {len(additional_queries)} additional search queries")
+                    
+                    # 추가 검색 수행
+                    additional_search_tasks = [execute_single_search(q, len(search_queries) + i) for i, q in enumerate(additional_queries)]
+                    additional_search_results = await asyncio.gather(*additional_search_tasks)
+                    search_results_list.extend(additional_search_results)
+                    
+                    # 성공한 결과 업데이트
+                    successful_results = [sr for sr in search_results_list if sr.get('success') and sr.get('result', {}).get('data')]
+                    logger.info(f"[{self.name}] ✅ Additional searches completed: {len([sr for sr in additional_search_results if sr.get('success')])} successful")
+                except Exception as e:
+                    logger.warning(f"[{self.name}] ⚠️ Failed to generate additional queries: {e}")
             
             if not successful_results:
                 # 실패한 검색 상세 정보 수집
@@ -822,6 +1194,17 @@ class ExecutorAgent:
                 if search_results and len(search_results) > 0:
                     first_result = search_results[0]
                     logger.info(f"[{self.name}] First result type: {type(first_result)}, sample: {str(first_result)[:200]}")
+                
+                # Phase 2: 검색 결과 관련성 사전 필터링
+                if search_results and len(search_results) > 0:
+                    logger.info(f"[{self.name}] 🔍 Starting relevance pre-filtering for {len(search_results)} results...")
+                    filtered_results = await self._filter_results_by_relevance(
+                        search_results, 
+                        state['user_query'],
+                        assigned_task.get('search_queries', [state['user_query']]) if assigned_task else [state['user_query']]
+                    )
+                    search_results = filtered_results
+                    logger.info(f"[{self.name}] ✅ Relevance filtering completed: {len(search_results)} relevant results (from {len(search_results) + (len(search_results) - len(filtered_results)) if len(filtered_results) < len(search_results) else 0} total)")
                 
                 if search_results and len(search_results) > 0:
                     # 실제 검색 결과를 구조화된 형식으로 저장
@@ -1786,8 +2169,77 @@ REASON: 최종 판단 이유 (한 줄)
                 
                 try:
                     logger.info(f"[{self.name}] 🔍 Verifying result {i}/{len(results)}: '{title[:60]}...'")
+                    
+                    # Source Validation 수행
+                    source_validation_result = None
+                    if url:
+                        try:
+                            from src.verification.source_validator import SourceValidator
+                            source_validator = SourceValidator()
+                            source_validation_result = await source_validator.validate_source(url, verification_content)
+                            logger.info(f"[{self.name}] 📊 Source validation: {source_validation_result.overall_score:.2f} (domain: {source_validation_result.domain_type.value})")
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Source validation failed: {e}")
+                    
+                    # Fact-checking 수행 (주요 주장이 있는 경우)
+                    fact_check_result = None
+                    if verification_content and len(verification_content) > 100:
+                        try:
+                            from src.verification.fact_checker import FactChecker
+                            fact_checker = FactChecker()
+                            # 주요 주장 추출 (숫자, 날짜, 통계 등)
+                            claims = []
+                            # 숫자 패턴 찾기
+                            import re
+                            numbers = re.findall(r'\d+[.,]\d+[조억만원%]|\d+[조억만원%]', verification_content)
+                            if numbers:
+                                claims.extend([f"숫자/통계: {num}" for num in numbers[:3]])
+                            # 날짜 패턴 찾기
+                            dates = re.findall(r'\d{4}년|\d{4}-\d{2}-\d{2}', verification_content)
+                            if dates:
+                                claims.extend([f"날짜: {date}" for date in dates[:2]])
+                            
+                            if claims:
+                                fact_check_result = await fact_checker.verify_fact(
+                                    fact_text=verification_content[:500],
+                                    sources=[result]
+                                )
+                                logger.info(f"[{self.name}] ✅ Fact-checking: {fact_check_result.fact_status.value} (confidence: {fact_check_result.confidence_score:.2f})")
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Fact-checking failed: {e}")
+                    
+                    # Cross-verification 수행 (다른 결과와 비교)
+                    cross_verification_score = None
+                    if len(results) > 1:
+                        try:
+                            # 같은 정보가 다른 출처에서도 확인되는지 체크
+                            similar_results = []
+                            for other_result in results:
+                                if other_result != result and isinstance(other_result, dict):
+                                    other_title = other_result.get('title', '')
+                                    other_snippet = other_result.get('snippet', '')
+                                    # 유사도 체크 (간단한 키워드 기반)
+                                    common_keywords = set(title.lower().split()) & set(other_title.lower().split())
+                                    if len(common_keywords) >= 2:
+                                        similar_results.append(other_result)
+                            
+                            if similar_results:
+                                cross_verification_score = len(similar_results) / len(results)
+                                logger.info(f"[{self.name}] 🔄 Cross-verification: {len(similar_results)} similar results found (score: {cross_verification_score:.2f})")
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Cross-verification failed: {e}")
+                    
+                    # 검증 프롬프트에 추가 정보 포함
+                    enhanced_prompt = verification_prompt
+                    if source_validation_result:
+                        enhanced_prompt += f"\n\n**출처 신뢰도 정보:**\n- 도메인 신뢰도: {source_validation_result.domain_trust:.2f}\n- 전체 신뢰도 점수: {source_validation_result.overall_score:.2f}\n- 도메인 타입: {source_validation_result.domain_type.value}"
+                    if fact_check_result:
+                        enhanced_prompt += f"\n\n**Fact-checking 결과:**\n- 상태: {fact_check_result.fact_status.value}\n- 신뢰도: {fact_check_result.confidence_score:.2f}"
+                    if cross_verification_score is not None:
+                        enhanced_prompt += f"\n\n**Cross-verification:**\n- 유사 결과 발견: {cross_verification_score:.2f}"
+                    
                     verification_result = await execute_llm_task(
-                        prompt=verification_prompt,
+                        prompt=enhanced_prompt,
                         task_type=TaskType.VERIFICATION,
                         model_name=None,
                         system_message="You are a verification agent that checks and provides recommendations for research materials. Your role is to guide proper use of materials, not to overly suppress them. Only reject materials with major errors or complete irrelevance. For minor issues, provide recommendations and include the material."
@@ -1874,7 +2326,17 @@ REASON: 최종 판단 이유 (한 줄)
                             "verification_note": verification_text[:500],  # 더 긴 제언 포함
                             "relevance_score": relevance_score,
                             "recommendations": recommendations,
-                            "issues": issues
+                            "issues": issues,
+                            "source_validation": {
+                                "overall_score": source_validation_result.overall_score if source_validation_result else None,
+                                "domain_type": source_validation_result.domain_type.value if source_validation_result else None,
+                                "domain_trust": source_validation_result.domain_trust if source_validation_result else None
+                            } if source_validation_result else None,
+                            "fact_check": {
+                                "status": fact_check_result.fact_status.value if fact_check_result else None,
+                                "confidence": fact_check_result.confidence_score if fact_check_result else None
+                            } if fact_check_result else None,
+                            "cross_verification_score": cross_verification_score
                         }
                         # full_content와 published_date 포함
                         if full_content:
@@ -2178,6 +2640,104 @@ class GeneratorAgent:
         else:
             self.instruction = "You are a report generation agent."
     
+    def _validate_and_enhance_citations(self, report: str, source_mapping: Dict[int, Dict[str, Any]], verified_results: List[Dict[str, Any]]) -> str:
+        """
+        보고서의 출처 인용을 검증하고 보완합니다.
+        본문에서 실제로 인용된 출처만 참고문헌에 포함합니다.
+        
+        Args:
+            report: 생성된 보고서
+            source_mapping: 출처 번호 -> 출처 정보 매핑
+            verified_results: 검증된 결과 리스트
+            
+        Returns:
+            출처 인용이 보완된 보고서
+        """
+        import re
+        
+        # 본문에서 인용된 출처 번호 추출
+        body_text = report
+        references_section_match = re.search(r'##?\s*참고\s*문헌|##?\s*References|##?\s*출처', report, re.IGNORECASE)
+        if references_section_match:
+            body_text = report[:references_section_match.start()]
+        
+        # 본문에서 인용 패턴 찾기: [1], [1,2], 출처 1, (출처 1), 출처1 등
+        cited_patterns = [
+            r'\[(\d+)\]',  # [1]
+            r'\[(\d+),\s*(\d+)\]',  # [1, 2]
+            r'출처\s*(\d+)',  # 출처 1
+            r'\(출처\s*(\d+)\)',  # (출처 1)
+            r'출처(\d+)',  # 출처1
+        ]
+        
+        cited_numbers = set()
+        for pattern in cited_patterns:
+            matches = re.findall(pattern, body_text)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for num in match:
+                        if num and num.isdigit():
+                            cited_numbers.add(int(num))
+                elif match and match.isdigit():
+                    cited_numbers.add(int(match))
+        
+        logger.info(f"[{self.name}] 📋 Found {len(cited_numbers)} cited sources in body: {sorted(cited_numbers)}")
+        
+        # 참고 문헌 섹션 확인 및 재생성
+        if references_section_match:
+            # 기존 참고 문헌 섹션 제거
+            report = report[:references_section_match.start()].rstrip()
+        
+        # 본문에서 인용된 출처만 포함하는 참고 문헌 생성
+        if cited_numbers:
+            references_text = "\n\n## 참고 문헌\n\n"
+            
+            # 인용된 번호 순서대로 정렬
+            sorted_cited = sorted(cited_numbers)
+            new_source_mapping = {}
+            
+            for new_idx, old_num in enumerate(sorted_cited, 1):
+                if old_num in source_mapping:
+                    source_info = source_mapping[old_num]
+                    new_source_mapping[new_idx] = source_info
+                    references_text += f"{new_idx}. [{source_info['title']}]({source_info['url']})\n"
+                    if source_info.get('published_date'):
+                        references_text += f"   발행일: {source_info['published_date']}\n"
+                    references_text += "\n"
+                else:
+                    # source_mapping에 없는 경우 verified_results에서 찾기
+                    if old_num <= len(verified_results):
+                        result = verified_results[old_num - 1]
+                        if isinstance(result, dict):
+                            title = result.get('title', '')
+                            url = result.get('url', '')
+                            if title and url:
+                                new_source_mapping[new_idx] = {
+                                    'title': title,
+                                    'url': url,
+                                    'published_date': result.get('published_date', '')
+                                }
+                                references_text += f"{new_idx}. [{title}]({url})\n"
+                                if result.get('published_date'):
+                                    references_text += f"   발행일: {result['published_date']}\n"
+                                references_text += "\n"
+            
+            # 본문의 출처 번호를 새로운 번호로 업데이트
+            for old_idx, new_idx in enumerate(sorted_cited, 1):
+                old_num = sorted_cited[old_idx - 1]
+                # [old_num] -> [new_idx]로 변경
+                report = re.sub(rf'\[{old_num}\]', f'[{new_idx}]', report)
+                report = re.sub(rf'출처\s*{old_num}\b', f'출처 {new_idx}', report)
+                report = re.sub(rf'\(출처\s*{old_num}\)', f'(출처 {new_idx})', report)
+            
+            report += references_text
+            logger.info(f"[{self.name}] ✅ Rebuilt references section with {len(sorted_cited)} cited sources (removed uncited sources)")
+        else:
+            # 인용이 없으면 참고 문헌 섹션 제거
+            logger.warning(f"[{self.name}] ⚠️ No citations found in body, removing references section")
+        
+        return report
+    
     async def execute(self, state: AgentState) -> AgentState:
         """Generate final report."""
         logger.info(f"[{self.name}] Generating final report...")
@@ -2433,10 +2993,37 @@ class GeneratorAgent:
    - 논박 결과를 바탕으로 최종 결론을 도출하세요
    - 논박에서 지적된 문제점이나 개선사항을 반영하세요
 
+**출처 인용 요구사항 (필수):**
+
+⚠️ **모든 정보는 반드시 출처를 명시해야 합니다:**
+
+1. **숫자/통계 인용**: 모든 숫자, 통계, 수치는 반드시 출처를 명시하세요
+   - 예: "2025년 상반기 매출 3.2조 원(출처 1)" 또는 "매출 3.2조 원[1]"
+   - 출처 번호는 아래 참고 문헌 섹션과 일치해야 합니다
+
+2. **주장(Claims) 인용**: 모든 주장, 사실, 주장은 반드시 출처를 명시하세요
+   - 예: "한화시스템은 방산 분야의 핵심 기업이다(출처 1, 출처 2)" 또는 "핵심 기업이다[1,2]"
+
+3. **날짜/시점 인용**: 날짜, 시점 정보도 출처를 명시하세요
+   - 예: "2025년 11월 발표(출처 3)" 또는 "2025년 11월[3]"
+
+4. **참고 문헌 섹션**: 보고서 끝에 반드시 참고 문헌 섹션을 포함하세요
+   - 각 출처는 번호와 함께 제목, URL을 포함해야 합니다
+   - 본문에서 인용한 모든 출처가 참고 문헌에 포함되어야 합니다
+   - 참고 문헌에 있는 출처는 본문에서 인용되어야 합니다
+
+5. **출처 없는 정보**: 출처를 확인할 수 없는 정보는 불확실성을 표시하세요
+   - 예: "추정", "예상", "~로 알려짐" 등의 표현 사용
+
+6. **관련성 확인**: 참고 문헌에 포함할 출처는 반드시 쿼리와 관련이 있어야 합니다
+   - 엔비디아 분석인데 부동산 관련 출처를 포함하지 마세요
+   - 쿼리와 무관한 출처는 제외하세요
+   - 본문에서 인용하지 않은 출처는 참고 문헌에 포함하지 마세요
+
 **보고서 구조 (깊이 있는 사고 반영):**
 
-1. **현재 상태 섹션**: 현재 상태, 맥락, 알려진 정보에 대한 명확한 평가
-2. **깊이 있는 분석**: 패턴, 연결, 함의를 포함한 심층 분석
+1. **현재 상태 섹션**: 현재 상태, 맥락, 알려진 정보에 대한 명확한 평가 (모든 정보에 출처 인용)
+2. **깊이 있는 분석**: 패턴, 연결, 함의를 포함한 심층 분석 (모든 정보에 출처 인용)
 3. **비판적 통찰**: 깊은 사고를 통해 도출된 의미 있는 통찰
 4. **Agent 논박 종합**: 모든 Agent들의 논박 결과를 종합하여 일관성과 논리적 올바름이 검증된 내용 반영
 5. **종합적 이해**: 깊은 이해를 보여주는 완전한 그림 (논박 결과 반영)
@@ -2604,6 +3191,12 @@ Provide a review with:
             else:
                 # 완성도가 낮지만 사용 가능한 경우 경고만
                 logger.warning(f"[{self.name}] ⚠️ Report has completeness issues but will be saved: {final_completeness['issues']}")
+        
+        # 출처 인용 검증 및 보완
+        source_mapping = state.get('source_mapping', {})
+        if source_mapping:
+            report = self._validate_and_enhance_citations(report, source_mapping, verified_results)
+            logger.info(f"[{self.name}] ✅ Citation validation completed")
         
         state['final_report'] = report
         state['current_agent'] = self.name

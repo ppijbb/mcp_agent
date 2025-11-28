@@ -80,12 +80,15 @@ prompts:
       - previous_plans
 
   task_decomposition:
-    system_message: "You are a task decomposition agent. Split research plans into independent parallel tasks."
+    system_message: "You are a task decomposition agent. Split research plans into independent parallel tasks with detailed verification strategies."
     template: |
       연구 계획:
       {plan}
 
       원래 질문: {query}
+
+      도메인 분석 결과:
+      {domain_analysis}
 
       위 연구 계획을 분석하여 여러 독립적으로 실행 가능한 연구 작업으로 분할하세요.
       각 작업은 별도의 연구자(ExecutorAgent)가 동시에 처리할 수 있어야 합니다.
@@ -105,12 +108,37 @@ prompts:
       - "서울시 부동산 가격 동향 2026"
       - "서울 부동산 시장 분석 2026"
 
+      각 작업에 대해 다음을 포함하세요:
+      1. **구체적인 목표**: 이 작업이 달성해야 하는 명확한 목표
+      2. **필수 정보 요소**: 수집해야 하는 정보 유형 (정량적/정성적/시계열/비교 데이터 등)
+      3. **검증 전략**: 정보를 어떻게 검증할지 (Cross-verification, Fact-checking, Source validation)
+      4. **출처 요구사항**: 최소 출처 수, 신뢰도 기준, 선호하는 출처 유형
+      5. **성공 기준**: 이 작업이 성공적으로 완료되었다고 판단하는 기준
+
       응답 형식 (JSON):
       {{
         "tasks": [
           {{
             "task_id": "task_1",
+            "name": "작업 이름",
             "description": "작업 설명 (원래 질문의 특정 측면)",
+            "objectives": ["구체적인 목표 1", "구체적인 목표 2"],
+            "required_information": {{
+              "data_types": ["quantitative", "qualitative", "temporal", "comparative"],
+              "key_entities": ["도메인별 주요 엔티티나 개념 (동적으로 생성)"],
+              "sources": {{
+                "min_count": 3,
+                "reliability_threshold": 0.7,
+                "preferred_types": ["academic", "news", "government"]
+              }}
+            }},
+            "verification_strategy": {{
+              "cross_verify": true,
+              "fact_check": true,
+              "source_validation": true,
+              "min_consensus_sources": 2
+            }},
+            "success_criteria": ["명확한 성공 기준 1", "명확한 성공 기준 2"],
             "search_queries": ["원래 질문의 실제 내용을 포함한 구체적인 검색 쿼리 1", "원래 질문의 실제 내용을 포함한 구체적인 검색 쿼리 2"],
             "priority": 1,
             "estimated_time": "medium",
@@ -127,11 +155,13 @@ prompts:
       - 작업 분할 방법론, 병렬화, 태스크 분할 등 메타 정보는 검색 쿼리가 아님
       - 우선순위와 예상 시간을 포함해야 함
       - 의존성이 없어야 함 (병렬 실행을 위해)
+      - required_information의 key_entities는 도메인에 맞게 동적으로 생성해야 함 (예: 금융 도메인이면 "매출", "PER" 등, 기술 도메인이면 "성능", "처리량" 등)
 
       작업 수: 3-5개 권장
     variables:
       - plan
       - query
+      - domain_analysis
 
   query_generation:
     system_message: "You are a research query generator. Generate specific search queries based on research plans."
@@ -146,6 +176,51 @@ prompts:
       응답 형식: 각 줄에 하나의 검색 쿼리만 작성하세요. 번호나 기호 없이 쿼리만 작성하세요.
     variables:
       - plan
+      - query
+
+  domain_analysis:
+    system_message: "You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."
+    template: |
+      연구 질문: {query}
+
+      위 연구 질문의 도메인을 심층 분석하세요. 다음 항목들을 포함하여 분석하세요:
+
+      1. **도메인 식별**:
+         - 이 질문이 속하는 주요 도메인은 무엇인가요? (예: 기술, 과학, 비즈니스, 의학, 법률 등)
+         - 관련된 하위 도메인이나 연결 분야는 무엇인가요?
+
+      2. **도메인 특성 분석**:
+         - 이 도메인의 특성은 무엇인가요? (학술적/실무적/기술적/정책적 등)
+         - 이 도메인에서 중요한 전문 용어나 개념은 무엇인가요?
+         - 이 도메인에서 일반적으로 사용되는 데이터 유형은 무엇인가요? (정량적/정성적/시계열/비교 등)
+
+      3. **신뢰할 수 있는 출처 유형**:
+         - 이 도메인에서 신뢰할 수 있는 출처 유형은 무엇인가요? (학술 논문, 정부 보고서, 전문 기관, 언론사 등)
+         - 이 도메인에서 피해야 할 출처 유형은 무엇인가요?
+
+      4. **검증 기준 및 품질 표준**:
+         - 이 도메인에서 정보의 신뢰성을 판단하는 기준은 무엇인가요?
+         - 이 도메인에서 중요한 검증 요소는 무엇인가요? (출처 명시, 데이터 날짜, 방법론 등)
+
+      5. **도메인별 검색 전략**:
+         - 이 도메인에서 효과적인 검색 키워드나 쿼리 패턴은 무엇인가요?
+         - 이 도메인에서 추가로 탐색해야 할 관련 주제나 관점은 무엇인가요?
+
+      응답 형식 (JSON):
+      {{
+        "domain": "주요 도메인",
+        "subdomains": ["하위 도메인 1", "하위 도메인 2"],
+        "characteristics": ["특성 1", "특성 2"],
+        "key_terminology": ["용어 1", "용어 2"],
+        "data_types": ["정량적", "정성적", "시계열", "비교"],
+        "reliable_source_types": ["학술", "정부", "전문기관", "언론"],
+        "verification_criteria": ["기준 1", "기준 2"],
+        "search_strategy": {{
+          "keywords": ["키워드 1", "키워드 2"],
+          "related_topics": ["관련 주제 1", "관련 주제 2"]
+        }}
+      }}
+    variables:
       - query
 
 configuration:
