@@ -704,7 +704,7 @@ class MultiModelOrchestrator:
                 # 기존 단일 모델 실행 로직
                 # 우선순위에 따라 모델 실행 및 폴백
                 if model_provider == "openrouter":
-                logger.info(f"Executing with OpenRouter model: {model_name_clean}")
+                    logger.info(f"Executing with OpenRouter model: {model_name_clean}")
                 try:
                     result = await self._execute_openrouter_model(
                         model_name_clean, prompt, system_message, **kwargs
