@@ -128,9 +128,13 @@ if task_to_run:
         "description": "호텔 및 항공편 검색 및 여행 계획"
     }
 
+    # 클래스 기반 실행을 위한 input_data 구성
+    result_json_path = run_output_dir / "results.json"
+    
     input_data = {
-        "task": task_to_run,
-        "result_txt_path": str(result_txt_path)
+        "module_path": "srcs.travel_scout.run_travel_scout_agent",
+        "class_name": "TravelScoutRunner",
+        "result_json_path": str(result_json_path)
     }
 
     # 작업에 따른 인자 추가
@@ -138,6 +142,7 @@ if task_to_run:
         check_in = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
         check_out = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
         input_data.update({
+            "method_name": "run_hotels",
             "destination": destination,
             "check_in": check_in,
             "check_out": check_out,
@@ -149,6 +154,7 @@ if task_to_run:
         departure = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
         ret_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
         input_data.update({
+            "method_name": "run_flights",
             "origin": origin,
             "destination": destination,
             "departure_date": departure,
@@ -161,24 +167,142 @@ if task_to_run:
         placeholder=placeholder,
         agent_metadata=agent_metadata,
         input_data=input_data,
-        result_json_path=None,
+        result_json_path=result_json_path,
         use_a2a=True
     )
     
     if result:
-        # 결과에서 텍스트 추출 (결과는 {'result_text': '...'} 형태일 수 있음)
-        result_text = result.get('result_text', str(result))
-
-        if task_to_run == 'search_hotels':
-            st.session_state.hotel_results = result_text
-        else:
-            st.session_state.flight_results = result_text
+        # 결과 처리 - result는 AgentExecutionResult 형태일 수 있음
+        result_data = result.get('data', result) if isinstance(result, dict) else result
         
-        # 스크린샷 경로는 output 디렉토리에서 찾기
-        screenshot_files = []
-        for ext in ['*.png', '*.jpg', '*.jpeg']:
-            screenshot_files.extend(Path(run_output_dir).glob(ext))
-        st.session_state.screenshots = [str(f) for f in screenshot_files]
+        # 결과가 dict인 경우 처리
+        if isinstance(result_data, dict):
+            # 성공 여부 확인
+            if result_data.get('success'):
+                # 실제 데이터 추출
+                search_data = result_data.get('data', {})
+                search_type = result_data.get('search_type', task_to_run)
+                
+                # 결과 텍스트 생성
+                if search_type == 'hotels' or task_to_run == 'search_hotels':
+                    result_text = _format_hotel_results(search_data)
+                    st.session_state.hotel_results = result_text
+                elif search_type == 'flights' or task_to_run == 'search_flights':
+                    result_text = _format_flight_results(search_data)
+                    st.session_state.flight_results = result_text
+                else:
+                    result_text = json.dumps(result_data, indent=2, ensure_ascii=False)
+                    if task_to_run == 'search_hotels':
+                        st.session_state.hotel_results = result_text
+                    else:
+                        st.session_state.flight_results = result_text
+                
+                # 스크린샷 경로 추출
+                screenshots = result_data.get('screenshots', [])
+                if screenshots:
+                    st.session_state.screenshots = screenshots
+                else:
+                    # output 디렉토리에서 스크린샷 찾기
+                    screenshot_files = []
+                    for ext in ['*.png', '*.jpg', '*.jpeg']:
+                        screenshot_files.extend(Path(run_output_dir).glob(ext))
+                    st.session_state.screenshots = [str(f) for f in screenshot_files]
+            else:
+                error_msg = result_data.get('error', 'Unknown error')
+                st.error(f"❌ 검색 실패: {error_msg}")
+        else:
+            # 결과가 다른 형태인 경우 문자열로 변환
+            result_text = json.dumps(result_data, indent=2, ensure_ascii=False) if not isinstance(result_data, str) else result_data
+            if task_to_run == 'search_hotels':
+                st.session_state.hotel_results = result_text
+            else:
+                st.session_state.flight_results = result_text
+            
+            # 스크린샷 찾기
+            screenshot_files = []
+            for ext in ['*.png', '*.jpg', '*.jpeg']:
+                screenshot_files.extend(Path(run_output_dir).glob(ext))
+            st.session_state.screenshots = [str(f) for f in screenshot_files]
+
+
+def _format_hotel_results(search_data: dict) -> str:
+    """호텔 검색 결과를 포맷팅"""
+    if not search_data:
+        return "검색 결과가 없습니다."
+    
+    hotels = search_data.get('data', [])
+    ai_analysis = search_data.get('ai_analysis', {})
+    search_params = search_data.get('search_params', {})
+    
+    result_lines = []
+    result_lines.append("=" * 50)
+    result_lines.append("🏨 호텔 검색 결과")
+    result_lines.append("=" * 50)
+    result_lines.append(f"\n검색 조건:")
+    result_lines.append(f"  - 목적지: {search_params.get('destination', 'N/A')}")
+    result_lines.append(f"  - 체크인: {search_params.get('check_in', 'N/A')}")
+    result_lines.append(f"  - 체크아웃: {search_params.get('check_out', 'N/A')}")
+    result_lines.append(f"  - 게스트: {search_params.get('guests', 'N/A')}명")
+    result_lines.append(f"\n발견된 호텔: {len(hotels)}개\n")
+    
+    if hotels:
+        result_lines.append("호텔 목록:")
+        for i, hotel in enumerate(hotels[:10], 1):  # 상위 10개만 표시
+            result_lines.append(f"\n{i}. {hotel.get('name', 'N/A')}")
+            result_lines.append(f"   가격: {hotel.get('price', 'N/A')}")
+            result_lines.append(f"   평점: {hotel.get('rating', 'N/A')}")
+            if hotel.get('location'):
+                result_lines.append(f"   위치: {hotel.get('location')}")
+    
+    if ai_analysis:
+        result_lines.append("\n" + "=" * 50)
+        result_lines.append("AI 분석 결과")
+        result_lines.append("=" * 50)
+        analysis_text = ai_analysis.get('analysis', '')
+        if analysis_text:
+            result_lines.append(analysis_text)
+    
+    return "\n".join(result_lines)
+
+
+def _format_flight_results(search_data: dict) -> str:
+    """항공편 검색 결과를 포맷팅"""
+    if not search_data:
+        return "검색 결과가 없습니다."
+    
+    flights = search_data.get('data', [])
+    ai_analysis = search_data.get('ai_analysis', {})
+    search_params = search_data.get('search_params', {})
+    
+    result_lines = []
+    result_lines.append("=" * 50)
+    result_lines.append("✈️ 항공편 검색 결과")
+    result_lines.append("=" * 50)
+    result_lines.append(f"\n검색 조건:")
+    result_lines.append(f"  - 출발지: {search_params.get('origin', 'N/A')}")
+    result_lines.append(f"  - 목적지: {search_params.get('destination', 'N/A')}")
+    result_lines.append(f"  - 출발일: {search_params.get('departure_date', 'N/A')}")
+    result_lines.append(f"  - 귀국일: {search_params.get('return_date', 'N/A')}")
+    result_lines.append(f"\n발견된 항공편: {len(flights)}개\n")
+    
+    if flights:
+        result_lines.append("항공편 목록:")
+        for i, flight in enumerate(flights[:10], 1):  # 상위 10개만 표시
+            result_lines.append(f"\n{i}. {flight.get('airline', 'N/A')}")
+            result_lines.append(f"   가격: {flight.get('price', 'N/A')}")
+            result_lines.append(f"   소요시간: {flight.get('duration', 'N/A')}")
+            if flight.get('departure_time'):
+                result_lines.append(f"   출발시간: {flight.get('departure_time')}")
+    
+    if ai_analysis:
+        result_lines.append("\n" + "=" * 50)
+        result_lines.append("AI 분석 결과")
+        result_lines.append("=" * 50)
+        analysis_text = ai_analysis.get('analysis', '')
+        if analysis_text:
+            result_lines.append(analysis_text)
+    
+    return "\n".join(result_lines)
     
 # --- 📊 검색 결과 표시 ---
 st.markdown("---")

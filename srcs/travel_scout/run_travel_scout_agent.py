@@ -2,9 +2,11 @@ import argparse
 import asyncio
 import json
 import sys
+import os
 from pathlib import Path
 import base64
 from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).parent.parent.parent
@@ -12,6 +14,254 @@ sys.path.insert(0, str(project_root))
 
 from srcs.travel_scout.mcp_browser_client import MCPBrowserClient
 from srcs.travel_scout.travel_scout_agent import TravelScoutAgent
+
+
+class TravelScoutRunner:
+    """
+    Runner for Travel Scout Agent.
+    Provides unified access to travel search capabilities via A2A.
+    """
+    
+    def __init__(self):
+        """Initialize TravelScoutRunner."""
+        pass
+    
+    async def run_hotels(
+        self,
+        destination: str,
+        check_in: str,
+        check_out: str,
+        guests: int = 2,
+        result_json_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run hotel search using TravelScoutAgent.
+        
+        Args:
+            destination: Destination city
+            check_in: Check-in date (YYYY-MM-DD)
+            check_out: Check-out date (YYYY-MM-DD)
+            guests: Number of guests
+            result_json_path: Optional path to save JSON result
+            
+        Returns:
+            Dict containing search results
+        """
+        print(f"🏨 Starting hotel search in {destination}...")
+        
+        # Output directory 설정
+        if result_json_path:
+            output_dir = Path(result_json_path).parent
+        else:
+            from configs.settings import get_reports_path
+            reports_path = Path(get_reports_path('travel_scout'))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = reports_path / f"run_{timestamp}"
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # MCP Browser Client 및 Agent 초기화
+        client = MCPBrowserClient(headless=True, disable_gpu=True, screenshot_dir=str(output_dir))
+        agent = TravelScoutAgent(browser_client=client)
+        
+        final_result = {"success": False, "data": None, "screenshots": [], "error": None}
+        
+        try:
+            print("🔌 Connecting to MCP Server...")
+            if not await client.connect_to_mcp_server():
+                raise Exception("Failed to connect to MCP Server.")
+            print("✅ MCP Server Connected.")
+            
+            print(f"🏨 Searching hotels in {destination}...")
+            data = await agent.search_hotels(destination, check_in, check_out, guests)
+            
+            print("✅ Hotel search completed.")
+            
+            final_result["success"] = True
+            final_result["data"] = data
+            final_result["screenshots"] = client.screenshots
+            final_result["search_type"] = "hotels"
+            final_result["timestamp"] = datetime.now().isoformat()
+            
+        except Exception as e:
+            print(f"❌ An error occurred: {e}")
+            final_result["error"] = str(e)
+        
+        finally:
+            print("🧹 Cleaning up browser instance...")
+            await agent.cleanup()
+            
+            # 결과 저장
+            if result_json_path:
+                result_path = Path(result_json_path)
+            else:
+                result_path = output_dir / "results.json"
+            
+            print("💾 Saving final results...")
+            with open(result_path, 'w', encoding='utf-8') as f:
+                json.dump(final_result, f, indent=2, ensure_ascii=False)
+            print(f"🎉 Results saved to {result_path}")
+        
+        return final_result
+    
+    async def run_flights(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        return_date: str,
+        result_json_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run flight search using TravelScoutAgent.
+        
+        Args:
+            origin: Origin city
+            destination: Destination city
+            departure_date: Departure date (YYYY-MM-DD)
+            return_date: Return date (YYYY-MM-DD)
+            result_json_path: Optional path to save JSON result
+            
+        Returns:
+            Dict containing search results
+        """
+        print(f"✈️ Starting flight search from {origin} to {destination}...")
+        
+        # Output directory 설정
+        if result_json_path:
+            output_dir = Path(result_json_path).parent
+        else:
+            from configs.settings import get_reports_path
+            reports_path = Path(get_reports_path('travel_scout'))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = reports_path / f"run_{timestamp}"
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # MCP Browser Client 및 Agent 초기화
+        client = MCPBrowserClient(headless=True, disable_gpu=True, screenshot_dir=str(output_dir))
+        agent = TravelScoutAgent(browser_client=client)
+        
+        final_result = {"success": False, "data": None, "screenshots": [], "error": None}
+        
+        try:
+            print("🔌 Connecting to MCP Server...")
+            if not await client.connect_to_mcp_server():
+                raise Exception("Failed to connect to MCP Server.")
+            print("✅ MCP Server Connected.")
+            
+            print(f"✈️ Searching flights from {origin} to {destination}...")
+            data = await agent.search_flights(origin, destination, departure_date, return_date)
+            
+            print("✅ Flight search completed.")
+            
+            final_result["success"] = True
+            final_result["data"] = data
+            final_result["screenshots"] = client.screenshots
+            final_result["search_type"] = "flights"
+            final_result["timestamp"] = datetime.now().isoformat()
+            
+        except Exception as e:
+            print(f"❌ An error occurred: {e}")
+            final_result["error"] = str(e)
+        
+        finally:
+            print("🧹 Cleaning up browser instance...")
+            await agent.cleanup()
+            
+            # 결과 저장
+            if result_json_path:
+                result_path = Path(result_json_path)
+            else:
+                result_path = output_dir / "results.json"
+            
+            print("💾 Saving final results...")
+            with open(result_path, 'w', encoding='utf-8') as f:
+                json.dump(final_result, f, indent=2, ensure_ascii=False)
+            print(f"🎉 Results saved to {result_path}")
+        
+        return final_result
+    
+    async def run_complete_travel(
+        self,
+        origin: str,
+        destination: str,
+        check_in: str,
+        check_out: str,
+        guests: int = 2,
+        result_json_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run complete travel search (hotels + flights) using TravelScoutAgent.
+        
+        Args:
+            origin: Origin city
+            destination: Destination city
+            check_in: Check-in date (YYYY-MM-DD)
+            check_out: Check-out date (YYYY-MM-DD)
+            guests: Number of guests
+            result_json_path: Optional path to save JSON result
+            
+        Returns:
+            Dict containing search results
+        """
+        print(f"🧳 Starting complete travel search from {origin} to {destination}...")
+        
+        # Output directory 설정
+        if result_json_path:
+            output_dir = Path(result_json_path).parent
+        else:
+            from configs.settings import get_reports_path
+            reports_path = Path(get_reports_path('travel_scout'))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = reports_path / f"run_{timestamp}"
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # MCP Browser Client 및 Agent 초기화
+        client = MCPBrowserClient(headless=True, disable_gpu=True, screenshot_dir=str(output_dir))
+        agent = TravelScoutAgent(browser_client=client)
+        
+        final_result = {"success": False, "data": None, "screenshots": [], "error": None}
+        
+        try:
+            print("🔌 Connecting to MCP Server...")
+            if not await client.connect_to_mcp_server():
+                raise Exception("Failed to connect to MCP Server.")
+            print("✅ MCP Server Connected.")
+            
+            print(f"🧳 Searching complete travel package from {origin} to {destination}...")
+            data = await agent.search_complete_travel(origin, destination, check_in, check_out, guests)
+            
+            print("✅ Complete travel search completed.")
+            
+            final_result["success"] = True
+            final_result["data"] = data
+            final_result["screenshots"] = client.screenshots
+            final_result["search_type"] = "complete_travel"
+            final_result["timestamp"] = datetime.now().isoformat()
+            
+        except Exception as e:
+            print(f"❌ An error occurred: {e}")
+            final_result["error"] = str(e)
+        
+        finally:
+            print("🧹 Cleaning up browser instance...")
+            await agent.cleanup()
+            
+            # 결과 저장
+            if result_json_path:
+                result_path = Path(result_json_path)
+            else:
+                result_path = output_dir / "results.json"
+            
+            print("💾 Saving final results...")
+            with open(result_path, 'w', encoding='utf-8') as f:
+                json.dump(final_result, f, indent=2, ensure_ascii=False)
+            print(f"🎉 Results saved to {result_path}")
+        
+        return final_result
+
 
 async def run_agent(args):
     """Travel Scout 에이전트의 핵심 로직을 실행합니다."""
