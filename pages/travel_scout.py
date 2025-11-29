@@ -119,11 +119,13 @@ if task_to_run:
     run_output_dir.mkdir(parents=True, exist_ok=True)
     result_txt_path = run_output_dir / "results.txt"
     
+    from srcs.common.agent_interface import AgentType
+    
     agent_metadata = {
         "agent_id": "travel_scout_agent",
         "agent_name": "Travel Scout Agent",
         "entry_point": "srcs.travel_scout.run_travel_scout_agent",
-        "agent_type": "mcp_agent",
+        "agent_type": AgentType.MCP_AGENT,
         "capabilities": ["hotel_search", "flight_search", "travel_planning"],
         "description": "호텔 및 항공편 검색 및 여행 계획"
     }
