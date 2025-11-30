@@ -2,26 +2,36 @@
 💡 Product Innovation Accelerator Agent Page
 
 제품 혁신 가속화 AI
+표준 A2A 패턴 적용
 """
 
 import streamlit as st
 import sys
 from pathlib import Path
-import json
 from datetime import datetime
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from srcs.common.standard_a2a_page_helper import (
+    execute_standard_agent_via_a2a,
+    process_standard_agent_result
+)
+from srcs.common.agent_interface import AgentType
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
 from configs.settings import get_reports_path
 
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
+
+def display_results(result_data):
+    st.markdown("---")
+    st.subheader("📊 제품 혁신 분석 결과")
+    if result_data:
+        st.json(result_data)
 
 def main():
     create_agent_page(
@@ -51,7 +61,7 @@ def main():
             }.get(x, x)
         )
         
-        submitted = st.form_submit_button("🚀 혁신 분석 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 혁신 분석 시작", use_container_width=True)
 
     if submitted:
         if not product_domain.strip():
@@ -61,47 +71,37 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"innovation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "product_innovation_agent",
-                "agent_name": "Product Innovation Accelerator Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
-                "capabilities": ["product_innovation", "market_analysis", "technology_trend_analysis"],
-                "description": "제품 혁신 아이디어 생성 및 개발 가속화"
-            }
-
-            input_data = {
-                "module_path": "srcs.enterprise_agents.product_innovation_accelerator_agent",
-                "class_name": "ProductInnovationAcceleratorAgent",
-                "method_name": "analyze_innovation",
-                "config": {
+            # 표준화된 방식으로 agent 실행 (클래스 기반)
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_id="product_innovation_agent",
+                agent_name="Product Innovation Accelerator Agent",
+                entry_point="srcs.enterprise_agents.product_innovation_accelerator_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["product_innovation", "market_analysis", "technology_trend_analysis"],
+                description="제품 혁신 아이디어 생성 및 개발 가속화",
+                input_params={
                     "product_domain": product_domain,
                     "innovation_focus": innovation_focus
                 },
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
+                class_name="ProductInnovationAcceleratorAgent",
+                method_name="analyze_innovation",
+                result_json_path=result_json_path
             )
 
-            if result and "data" in result:
-                display_results(result["data"])
+            # 결과 처리
+            processed = process_standard_agent_result(result, "product_innovation_agent")
+            if processed["success"] and processed["has_data"]:
+                display_results(processed["data"])
 
     st.markdown("---")
     st.markdown("## 📊 최신 Innovation 결과")
     latest_result = result_reader.get_latest_result("innovation_agent", "innovation_analysis")
     if latest_result:
         with st.expander("💡 최신 제품 혁신 분석 결과", expanded=False):
-
-def display_results(result_data):
-    st.markdown("---")
-    st.subheader("📊 제품 혁신 분석 결과")
-    if result_data:
+            st.json(latest_result)
+    else:
+        st.info("💡 아직 Product Innovation Accelerator Agent의 결과가 없습니다. 위에서 혁신 분석을 실행해보세요.")
 
 if __name__ == "__main__":
     main()

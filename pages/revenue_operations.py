@@ -61,36 +61,34 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"revenue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "revenue_operations_agent",
-                "agent_name": "Revenue Operations Intelligence Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
-                "capabilities": ["revenue_forecast", "pipeline_analysis", "conversion_optimization"],
-                "description": "매출 예측, 파이프라인 분석 및 최적화"
-            }
+            from srcs.common.standard_a2a_page_helper import (
+                execute_standard_agent_via_a2a,
+                process_standard_agent_result
+            )
+            from srcs.common.agent_interface import AgentType
 
-            input_data = {
-                "module_path": "srcs.enterprise_agents.revenue_operations_intelligence_agent",
-                "class_name": "RevenueOperationsIntelligenceAgent",
-                "method_name": "analyze_revenue",
-                "config": {
+            # 표준화된 방식으로 agent 실행 (클래스 기반)
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_id="revenue_operations_agent",
+                agent_name="Revenue Operations Intelligence Agent",
+                entry_point="srcs.enterprise_agents.revenue_operations_intelligence_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["revenue_forecast", "pipeline_analysis", "conversion_optimization"],
+                description="매출 예측, 파이프라인 분석 및 최적화",
+                input_params={
                     "company_name": company_name,
                     "analysis_type": analysis_type
                 },
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
+                class_name="RevenueOperationsIntelligenceAgent",
+                method_name="analyze_revenue",
+                result_json_path=result_json_path
             )
 
-            if result and "data" in result:
-                display_results(result["data"])
+            # 결과 처리
+            processed = process_standard_agent_result(result, "revenue_operations_agent")
+            if processed["success"] and processed["has_data"]:
+                display_results(processed["data"])
 
     st.markdown("---")
     st.markdown("## 📊 최신 Revenue Operations 결과")

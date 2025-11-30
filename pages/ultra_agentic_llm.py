@@ -56,36 +56,34 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"ultra_agentic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "ultra_agentic_llm_agent",
-                "agent_name": "Ultra Agentic LLM Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
-                "capabilities": ["autonomous_planning", "self_reflection", "goal_driven_execution", "multi_agent_collaboration"],
-                "description": "LLM 중심의 초 Agentic 시스템 - 자율 의사결정, 계획, 학습"
-            }
+            from srcs.common.standard_a2a_page_helper import (
+                execute_standard_agent_via_a2a,
+                process_standard_agent_result
+            )
+            from srcs.common.agent_interface import AgentType
 
-            input_data = {
-                "module_path": "srcs.advanced_agents.ultra_agentic_llm_agent",
-                "class_name": "UltraAgenticLLMAgent",
-                "method_name": "run",
-                "config": {
+            # 표준화된 방식으로 agent 실행 (클래스 기반)
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_id="ultra_agentic_llm_agent",
+                agent_name="Ultra Agentic LLM Agent",
+                entry_point="srcs.advanced_agents.ultra_agentic_llm_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["autonomous_planning", "self_reflection", "goal_driven_execution", "multi_agent_collaboration"],
+                description="LLM 중심의 초 Agentic 시스템 - 자율 의사결정, 계획, 학습",
+                input_params={
                     "agent_id": agent_id,
                     "goal": goal
                 },
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
+                class_name="UltraAgenticLLMAgent",
+                method_name="run",
+                result_json_path=result_json_path
             )
 
-            if result and "data" in result:
-                display_results(result["data"])
+            # 결과 처리
+            processed = process_standard_agent_result(result, "ultra_agentic_llm_agent")
+            if processed["success"] and processed["has_data"]:
+                display_results(processed["data"])
 
     st.markdown("---")
     st.markdown("## 📊 최신 Ultra Agentic LLM 결과")

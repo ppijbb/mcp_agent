@@ -56,31 +56,32 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"supply_chain_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "supply_chain_agent",
-                "agent_name": "Supply Chain Orchestrator Agent",
-                "entry_point": "srcs.enterprise_agents.supply_chain_orchestrator_agent",
-                "agent_type": "mcp_agent",
-                "capabilities": ["supply_chain_management", "inventory_optimization", "supplier_risk_analysis", "logistics"],
-                "description": "공급망 관리, 최적화 및 리스크 분석"
-            }
+            from srcs.common.standard_a2a_page_helper import (
+                execute_standard_agent_via_a2a,
+                process_standard_agent_result
+            )
+            from srcs.common.agent_interface import AgentType
 
-            input_data = {
-                "company_name": company_name,
-                "analysis_focus": analysis_focus,
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
+            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
+                agent_id="supply_chain_agent",
+                agent_name="Supply Chain Orchestrator Agent",
+                entry_point="srcs.enterprise_agents.supply_chain_orchestrator_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["supply_chain_management", "inventory_optimization", "supplier_risk_analysis", "logistics"],
+                description="공급망 관리, 최적화 및 리스크 분석",
+                input_params={
+                    "company_name": company_name,
+                    "analysis_focus": analysis_focus
+                },
+                result_json_path=result_json_path
             )
 
-            if result and "data" in result:
-                display_results(result["data"])
+            # 결과 처리
+            processed = process_standard_agent_result(result, "supply_chain_agent")
+            if processed["success"] and processed["has_data"]:
+                display_results(processed["data"])
 
     st.markdown("---")
     st.markdown("## 📊 최신 Supply Chain 결과")

@@ -100,32 +100,33 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"seo_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "seo_doctor_agent",
-                "agent_name": "SEO Doctor Agent",
-                "entry_point": "srcs.seo_doctor.run_seo_doctor",
-                "agent_type": "mcp_agent",
-                "capabilities": ["seo_analysis", "website_diagnosis", "competitor_analysis", "seo_optimization"],
-                "description": "웹사이트를 정밀 진단하고 검색 엔진 최적화(SEO)를 위한 처방"
-            }
+            from srcs.common.standard_a2a_page_helper import (
+                execute_standard_agent_via_a2a,
+                process_standard_agent_result
+            )
+            from srcs.common.agent_interface import AgentType
 
-            input_data = {
-                "url": url,
-                "include_competitors": include_competitors,
-                "competitor_urls": [u.strip() for u in competitor_urls_text.split(',')] if competitor_urls_text.strip() else [],
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
+            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
+                agent_id="seo_doctor_agent",
+                agent_name="SEO Doctor Agent",
+                entry_point="srcs.seo_doctor.run_seo_doctor",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["seo_analysis", "website_diagnosis", "competitor_analysis", "seo_optimization"],
+                description="웹사이트를 정밀 진단하고 검색 엔진 최적화(SEO)를 위한 처방",
+                input_params={
+                    "url": url,
+                    "include_competitors": include_competitors,
+                    "competitor_urls": [u.strip() for u in competitor_urls_text.split(',')] if competitor_urls_text.strip() else []
+                },
+                result_json_path=result_json_path
             )
 
-            if result and "data" in result:
-                display_results(result["data"])
+            # 결과 처리
+            processed = process_standard_agent_result(result, "seo_doctor_agent")
+            if processed["success"] and processed["has_data"]:
+                display_results(processed["data"])
 
     # 최신 SEO Doctor 결과 확인
     st.markdown("---")
