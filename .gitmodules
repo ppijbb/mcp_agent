@@ -43,3 +43,6 @@
 [submodule "open_researcher/beads"]
 	path = open_researcher/beads
 	url = https://github.com/steveyegge/beads.git
+[submodule "open_researcher/ERA"]
+	path = open_researcher/ERA
+	url = https://github.com/BinSquare/ERA.git
