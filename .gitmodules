@@ -40,3 +40,6 @@
 [submodule "open_researcher/prompt-refiner"]
 	path = open_researcher/prompt-refiner
 	url = https://github.com/JacobHuang91/prompt-refiner.git
+[submodule "open_researcher/beads"]
+	path = open_researcher/beads
+	url = https://github.com/steveyegge/beads.git
