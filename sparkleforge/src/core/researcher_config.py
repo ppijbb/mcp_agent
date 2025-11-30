@@ -225,6 +225,15 @@ class OutputConfig:
     enable_latex_export: bool
 
 
+@dataclass
+class PromptRefinerConfig:
+    """Prompt Refiner configuration for prompt optimization."""
+    enabled: bool = True
+    strategy: str = "aggressive"  # minimal, standard, aggressive, custom
+    max_tokens: Optional[int] = None  # None means adaptive based on model
+    collect_stats: bool = True
+
+
 class CouncilConfig(BaseModel):
     """LLM Council configuration for multi-model consensus - Optional with defaults."""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
@@ -336,6 +345,7 @@ class ResearcherSystemConfig(BaseModel):
     council: CouncilConfig = Field(description="Council configuration")
     cascade: CascadeConfig = Field(default_factory=CascadeConfig, description="Cascade configuration")
     agent_tools: AgentToolConfig = Field(description="Agent tools configuration")
+    prompt_refiner: PromptRefinerConfig = Field(default_factory=lambda: PromptRefinerConfig(), description="Prompt Refiner configuration")
     
     def model_post_init(self, __context):
         # Ensure output directory exists
@@ -441,6 +451,13 @@ def get_council_config() -> CouncilConfig:
     if config is None:
         raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
     return config.council
+
+
+def get_prompt_refiner_config() -> PromptRefinerConfig:
+    """Get prompt refiner configuration."""
+    if config is None:
+        raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
+    return config.prompt_refiner
 
 
 def load_config_from_env() -> ResearcherSystemConfig:
@@ -684,6 +701,14 @@ def load_config_from_env() -> ResearcherSystemConfig:
         drafter_speed_threshold=get_optional_env("CASCADE_DRAFTER_SPEED_THRESHOLD", 7.0, float)
     )
     
+    # Load PromptRefiner configuration (Optional with defaults)
+    prompt_refiner_config = PromptRefinerConfig(
+        enabled=get_optional_env("PROMPT_REFINER_ENABLED", True, bool),
+        strategy=get_optional_env("PROMPT_REFINER_STRATEGY", "aggressive"),
+        max_tokens=get_optional_env("PROMPT_REFINER_MAX_TOKENS", None, int) if get_optional_env("PROMPT_REFINER_MAX_TOKENS") else None,
+        collect_stats=get_optional_env("PROMPT_REFINER_COLLECT_STATS", True, bool)
+    )
+    
     # Create and store global config instance
     global config
     config = ResearcherSystemConfig(
@@ -698,7 +723,8 @@ def load_config_from_env() -> ResearcherSystemConfig:
         reliability=reliability_config,
         council=council_config,
         cascade=cascade_config,
-        agent_tools=agent_tool_config
+        agent_tools=agent_tool_config,
+        prompt_refiner=prompt_refiner_config
     )
     
     return config

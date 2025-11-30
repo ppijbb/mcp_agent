@@ -20,6 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.core.researcher_config import get_llm_config, get_agent_config, get_cascade_config
 from src.core.reliability import execute_with_reliability
+from src.core.prompt_refiner_wrapper import refine_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -663,8 +664,11 @@ class MultiModelOrchestrator:
             raise ValueError(f"Model {model_name_clean} not found in models")
         
         model_provider = self.models[model_name_clean].provider
+        model_config = self.models[model_name_clean]
         start_time = time.time()
         actual_model_used = model_name_clean  # 실제 사용된 모델 추적
+        
+        # prompt와 system_message는 execute_llm_task의 decorator에서 자동으로 최적화됨
         
         try:
             # Cascade 설정 확인
@@ -1759,6 +1763,7 @@ def get_llm_orchestrator() -> 'MultiModelOrchestrator':
     return _llm_orchestrator
 
 
+@refine_llm_call
 async def execute_llm_task(
     prompt: str,
     task_type: TaskType,

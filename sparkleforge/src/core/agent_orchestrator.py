@@ -31,6 +31,7 @@ from src.core.researcher_config import get_agent_config
 from src.core.mcp_auto_discovery import FastMCPMulti
 from src.core.mcp_tool_loader import MCPToolLoader
 from src.core.agent_tool_selector import AgentToolSelector, AgentType
+# prompt refiner는 execute_llm_task의 decorator에서 자동 적용됨
 
 logger = logging.getLogger(__name__)
 
@@ -193,13 +194,14 @@ class PlannerAgent:
         try:
             # 도메인 분석 프롬프트 가져오기
             domain_prompt = get_prompt("planner", "domain_analysis", query=query)
+            system_message = "You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."
             
-            # LLM으로 도메인 분석 수행
+            # domain_prompt와 system_message는 execute_llm_task의 decorator에서 자동으로 최적화됨
             domain_result = await execute_llm_task(
                 prompt=domain_prompt,
                 task_type=TaskType.ANALYSIS,
                 model_name=None,
-                system_message="You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."
+                system_message=system_message
             )
             
             # JSON 파싱 시도
@@ -361,6 +363,7 @@ Domain Analysis Results:
         if domain_context:
             prompt = f"{domain_context}\n\n{prompt}"
 
+        # prompt는 execute_llm_task의 decorator에서 자동으로 최적화됨
         logger.info(f"[{self.name}] Calling LLM for planning...")
         # Gemini 실행
         model_result = await execute_llm_task(
@@ -917,6 +920,8 @@ class ExecutorAgent:
 
                     try:
                         system_message = self.config.prompts["query_generation"]["system_message"]
+                        # query_generation_prompt와 system_message는 execute_llm_task의 decorator에서 자동으로 최적화됨
+                        
                         query_result = await execute_llm_task(
                             prompt=query_generation_prompt,
                             task_type=TaskType.PLANNING,
