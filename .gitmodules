@@ -37,3 +37,6 @@
 [submodule "open_researcher/cascadeflow"]
 	path = open_researcher/cascadeflow
 	url = https://github.com/lemony-ai/cascadeflow.git
+[submodule "open_researcher/prompt-refiner"]
+	path = open_researcher/prompt-refiner
+	url = https://github.com/JacobHuang91/prompt-refiner.git
