@@ -326,6 +326,36 @@ class AgentToolConfig(BaseModel):
     cross_agent_timeout: float = Field(default=30.0, ge=5.0, le=300.0, description="Cross-Agent 호출 타임아웃(초)")
 
 
+class ERAConfig(BaseModel):
+    """ERA Agent Configuration - Safe Code Execution."""
+    model_config = ConfigDict(validate_assignment=True, extra='forbid')
+    
+    enabled: bool = Field(default=True, description="Enable ERA for safe code execution")
+    server_url: str = Field(default="http://localhost:8080", description="ERA server URL")
+    auto_start: bool = Field(default=True, description="Auto-start ERA server if not running")
+    agent_binary_path: Optional[str] = Field(default=None, description="ERA Agent binary path (auto-detect if None)")
+    default_cpu: int = Field(default=1, ge=1, description="Default CPU count")
+    default_memory: int = Field(default=256, ge=128, description="Default memory in MB")
+    default_timeout: int = Field(default=30, gt=0, description="Default timeout in seconds")
+    network_mode: str = Field(default="none", description="Network policy (none, allow_all)")
+    api_key: Optional[str] = Field(default=None, description="ERA API key (optional)")
+    
+    @classmethod
+    def from_env(cls) -> "ERAConfig":
+        """Create ERAConfig from environment variables."""
+        return cls(
+            enabled=os.getenv("ERA_ENABLED", "true").lower() in ("true", "1", "yes"),
+            server_url=os.getenv("ERA_SERVER_URL", "http://localhost:8080"),
+            auto_start=os.getenv("ERA_AUTO_START", "true").lower() in ("true", "1", "yes"),
+            agent_binary_path=os.getenv("ERA_AGENT_BINARY") or None,
+            default_cpu=int(os.getenv("ERA_DEFAULT_CPU", "1")),
+            default_memory=int(os.getenv("ERA_DEFAULT_MEMORY", "256")),
+            default_timeout=int(os.getenv("ERA_DEFAULT_TIMEOUT", "30")),
+            network_mode=os.getenv("ERA_NETWORK_MODE", "none"),
+            api_key=os.getenv("ERA_API_KEY") or None
+        )
+
+
 class ResearcherSystemConfig(BaseModel):
     """Overall system configuration with 8 core innovations."""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
@@ -451,6 +481,11 @@ def get_council_config() -> CouncilConfig:
     if config is None:
         raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
     return config.council
+
+
+def get_era_config() -> ERAConfig:
+    """Get ERA configuration."""
+    return ERAConfig.from_env()
 
 
 def get_prompt_refiner_config() -> PromptRefinerConfig:
