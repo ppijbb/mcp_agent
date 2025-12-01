@@ -36,6 +36,8 @@ class TaskType(Enum):
     ANALYSIS = "analysis"
     SYNTHESIS = "synthesis"
     CREATIVE = "creative"
+    MEMORY_EXTRACTION = "memory_extraction"  # 메모리 추출 (백서 요구사항)
+    MEMORY_CONSOLIDATION = "memory_consolidation"  # 메모리 통합 (백서 요구사항)
 
 
 class Provider(Enum):

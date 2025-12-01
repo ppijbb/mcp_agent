@@ -57,37 +57,126 @@ class ERAServerManager:
     
     def _find_agent_binary(self) -> Optional[str]:
         """
-        ERA Agent 바이너리 경로 자동 탐지
+        ERA Agent 바이너리 경로 자동 탐지 (자동 빌드 포함)
         
         Returns:
             바이너리 경로 또는 None
         """
-        # 일반적인 경로들 확인
-        possible_paths = [
+        # 1. 프로젝트 내부 경로 우선 확인 (가장 가능성 높음)
+        project_root = Path(__file__).parent.parent.parent.parent
+        project_paths = [
+            project_root / "open_researcher" / "ERA" / "era-agent" / "agent",
+            project_root.parent / "open_researcher" / "ERA" / "era-agent" / "agent",
+            project_root / "era-agent" / "agent",
+            project_root / "agent",
+        ]
+        
+        # 2. 일반적인 시스템 경로
+        system_paths = [
             "agent",  # PATH에 있는 경우
             "era-agent",
             "/usr/local/bin/agent",
             "/usr/bin/agent",
             os.path.expanduser("~/.local/bin/agent"),
+            os.path.expanduser("~/go/bin/agent"),
         ]
         
-        # 환경변수 확인
+        # 3. 환경변수 확인 (선택사항)
         env_path = os.getenv("ERA_AGENT_BINARY")
         if env_path:
-            possible_paths.insert(0, env_path)
+            system_paths.insert(0, env_path)
         
-        # PATH에서 찾기
+        # 4. PATH에서 찾기
         agent_path = shutil.which("agent")
         if agent_path:
-            possible_paths.insert(0, agent_path)
+            system_paths.insert(0, agent_path)
         
-        for path in possible_paths:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                logger.debug(f"Found ERA Agent binary at: {path}")
-                return path
+        # 모든 경로 확인
+        all_paths = project_paths + system_paths
         
-        logger.warning("ERA Agent binary not found. Code execution will use fallback mode.")
+        for path in all_paths:
+            path_str = str(path) if isinstance(path, Path) else path
+            if os.path.isfile(path_str) and os.access(path_str, os.X_OK):
+                logger.info(f"Found ERA Agent binary at: {path_str}")
+                return path_str
+        
+        # 바이너리를 찾지 못했으면 자동 빌드 시도
+        logger.info("ERA Agent binary not found, attempting to build...")
+        built_path = self._try_build_agent(project_root)
+        if built_path:
+            return built_path
+        
+        logger.error("ERA Agent binary not found and could not be built automatically.")
+        logger.error("Please install Go and build ERA Agent manually:")
+        logger.error("  1. sudo apt install golang-go")
+        logger.error("  2. cd open_researcher/ERA/era-agent")
+        logger.error("  3. make agent")
         return None
+    
+    def _try_build_agent(self, project_root: Path) -> Optional[str]:
+        """
+        ERA Agent 자동 빌드 시도
+        
+        Args:
+            project_root: 프로젝트 루트 경로
+            
+        Returns:
+            빌드된 바이너리 경로 또는 None
+        """
+        # Go가 설치되어 있는지 확인
+        go_path = shutil.which("go")
+        if not go_path:
+            logger.warning("Go is not installed. Cannot build ERA Agent automatically.")
+            return None
+        
+        # ERA Agent 소스 경로 확인
+        era_agent_dir = project_root / "open_researcher" / "ERA" / "era-agent"
+        if not era_agent_dir.exists():
+            # 상위 디렉토리 확인
+            era_agent_dir = project_root.parent / "open_researcher" / "ERA" / "era-agent"
+            if not era_agent_dir.exists():
+                logger.warning(f"ERA Agent source not found at {era_agent_dir}")
+                return None
+        
+        agent_binary = era_agent_dir / "agent"
+        
+        # 이미 빌드되어 있으면 반환
+        if agent_binary.exists() and agent_binary.is_file() and os.access(str(agent_binary), os.X_OK):
+            logger.info(f"Found existing ERA Agent binary at: {agent_binary}")
+            return str(agent_binary)
+        
+        # Makefile 확인
+        makefile = era_agent_dir / "Makefile"
+        if not makefile.exists():
+            logger.warning(f"Makefile not found at {makefile}")
+            return None
+        
+        # 빌드 시도
+        logger.info(f"Building ERA Agent from {era_agent_dir}...")
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["make", "agent"],
+                cwd=str(era_agent_dir),
+                capture_output=True,
+                text=True,
+                timeout=300  # 5분 타임아웃
+            )
+            
+            if result.returncode == 0 and agent_binary.exists():
+                # 실행 권한 부여
+                os.chmod(str(agent_binary), 0o755)
+                logger.info(f"Successfully built ERA Agent at: {agent_binary}")
+                return str(agent_binary)
+            else:
+                logger.error(f"Failed to build ERA Agent: {result.stderr}")
+                return None
+        except subprocess.TimeoutExpired:
+            logger.error("ERA Agent build timed out")
+            return None
+        except Exception as e:
+            logger.error(f"Error building ERA Agent: {e}")
+            return None
     
     def is_server_running(self) -> bool:
         """

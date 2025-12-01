@@ -321,7 +321,7 @@ Provide a structured response with quality assessment, completeness check, value
 """
         else:
             system_message = "You are a collaborative research agent that provides constructive feedback through critical debate."
-            discussion_prompt = f"""
+        discussion_prompt = f"""
 You are an AI research agent participating in a collaborative debate about research results.
 
 Your agent ID: {agent_id}

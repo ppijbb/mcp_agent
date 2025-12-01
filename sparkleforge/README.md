@@ -32,18 +32,54 @@ Unlike traditional research tools, SparkleForge simulates a **team of master cra
 
 ### Installation
 
+**Option 1: Automated Installation (Recommended)**
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/sparkleforge.git
 cd sparkleforge
 
-# Install dependencies
+# Run the installation script (installs Go, builds ERA Agent, etc.)
+./install.sh
+
+# Install Python dependencies
 pip install -r requirements.txt
 
 # Set up environment
 cp env.example .env
 # Edit .env with your OpenRouter API key
 ```
+
+**Option 2: Manual Installation**
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/sparkleforge.git
+cd sparkleforge
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install Go (if not already installed)
+# Ubuntu/Debian: sudo apt install golang-go
+# Fedora/RHEL: sudo dnf install golang
+# macOS: brew install go
+
+# Build ERA Agent manually
+cd ../open_researcher/ERA/era-agent
+make agent
+cd ../../../sparkleforge
+
+# Set up environment
+cp env.example .env
+# Edit .env with your OpenRouter API key
+```
+
+**Note:** The installation script automatically:
+- Detects and installs Go if needed
+- Builds ERA Agent for secure code execution
+- Installs optional dependencies (krunvm, buildah) if desired
+- No manual environment variable configuration needed!
 
 ### Basic Usage
 

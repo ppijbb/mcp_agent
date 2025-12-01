@@ -148,7 +148,8 @@ class ERAClient:
         memory: int = 256,
         network: str = "none",
         timeout: int = 30,
-        file: Optional[str] = None
+        file: Optional[str] = None,
+        code_content: Optional[str] = None
     ) -> ExecutionResult:
         """
         임시 VM에서 코드 실행
@@ -160,7 +161,8 @@ class ERAClient:
             memory: 메모리 (MB)
             network: 네트워크 정책 (none, allow_all)
             timeout: 실행 타임아웃 (초)
-            file: 업로드할 파일 경로 (선택사항)
+            file: 업로드할 파일 경로 (선택사항, 로컬 파일 경로)
+            code_content: 코드 내용 (선택사항, file이 없을 때 사용)
             
         Returns:
             실행 결과
@@ -174,8 +176,28 @@ class ERAClient:
             "timeout": timeout
         }
         
+        # file 파라미터는 로컬 파일 경로 (서버가 접근 가능한 경우)
+        # HTTP API를 통해 전송할 때는 파일 내용을 base64로 인코딩하여 전송해야 할 수도 있음
+        # 현재는 로컬 파일 경로를 전송 (서버가 같은 머신에서 실행되는 경우)
         if file:
             req_data["file"] = file
+        elif code_content:
+            # 코드 내용을 base64로 인코딩하여 전송 (향후 개선)
+            # 현재는 file 파라미터만 지원하므로 임시 파일 사용
+            import base64
+            import tempfile
+            import os
+            temp_file = None
+            try:
+                # 임시 파일에 코드 저장
+                file_ext = ".py" if language.lower() in ["python", "py"] else ".js"
+                temp_file = os.path.join(tempfile.gettempdir(), f"era_code_{os.getpid()}_{id(code_content)}{file_ext}")
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    f.write(code_content)
+                req_data["file"] = temp_file
+            except Exception as e:
+                logger.warning(f"Failed to create temp file for code: {e}")
+                # fallback: code_content를 사용하지 않음
         
         try:
             result = await self._make_request('/api/vm/temp', 'POST', req_data)

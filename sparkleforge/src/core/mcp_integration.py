@@ -290,7 +290,7 @@ class UniversalMCPHub:
         self.fastmcp_tool_loader: Optional[MCPToolLoader] = None
         self.auto_discovered_tools: Dict[str, BaseTool] = {}  # 자동 발견된 도구들
         self.auto_discovered_tool_infos: Dict[str, MCPToolInfo] = {}  # 도구 메타데이터
-        
+
         # ERA 서버 관리자 (안전한 코드 실행)
         self.era_server_manager: Optional[Any] = None
         try:
@@ -1217,7 +1217,7 @@ class UniversalMCPHub:
                     # 타임아웃이어도 세션은 제거 (heartbeat 중지)
                 finally:
                     # 세션 제거 (heartbeat 무한 루프 방지)
-                    del self.mcp_sessions[server_name]
+                del self.mcp_sessions[server_name]
             
             # Exit stack 정리: aclose() 호출하지 않음 (anyio cancel scope 오류 방지)
             # 참조만 제거 - 컨텍스트는 원래 태스크에서 정리됨
@@ -3622,14 +3622,14 @@ async def _execute_data_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
 
 
 async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """실제 코드 도구 실행 - ERA를 통한 안전한 실행."""
+    """실제 코드 도구 실행 - ERA를 통한 안전한 실행 (무조건 ERA만 사용)."""
     import time
     
     start_time = time.time()
     code = parameters.get("code", "")
     language = parameters.get("language", "python")
     
-    # ERA 설정 확인
+    # ERA 설정 확인 - 필수
     try:
         from src.core.researcher_config import get_era_config
         from src.core.era_client import ERAClient
@@ -3637,175 +3637,169 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
         
         era_config = get_era_config()
         
-        # ERA가 활성화되어 있으면 사용
-        if era_config.enabled:
-            try:
-                # ERA 서버 관리자 초기화
-                server_manager = ERAServerManager(
-                    agent_binary_path=era_config.agent_binary_path,
-                    server_url=era_config.server_url,
-                    server_addr=f":{era_config.server_url.split(':')[-1]}" if ':' in era_config.server_url else ":8080",
-                    auto_start=era_config.auto_start
-                )
-                
-                # 서버가 실행 중인지 확인하고 필요시 시작
-                if not await server_manager.ensure_server_running():
-                    logger.warning("ERA server is not available, falling back to direct execution")
-                    raise ConnectionError("ERA server not available")
-                
-                # ERA 클라이언트 생성
-                era_client = ERAClient(
-                    base_url=era_config.server_url,
-                    api_key=era_config.api_key,
-                    timeout=float(era_config.default_timeout) + 10.0  # 여유 시간 추가
-                )
-                
-                try:
-                    # 언어별 명령 생성
-                    if language.lower() in ["python", "py"]:
-                        # Python 코드 실행
-                        # 긴 코드는 임시 파일 사용, 짧은 코드는 -c 사용
-                        if len(code) > 500 or '\n' in code:
-                            # 긴 코드는 임시 파일로 실행
-                            # ERA는 /in 디렉토리에 파일을 업로드할 수 있지만, 
-                            # 현재는 간단하게 python -c로 실행 (코드를 이스케이프)
-                            # 더 나은 방법: ERA의 file 파라미터 사용 (향후 개선)
-                            import base64
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                                f.write(code)
-                                temp_file = f.name
-                            
-                            try:
-                                # 파일 내용을 읽어서 python -c로 실행
-                                # 또는 임시 파일 경로를 사용 (ERA가 /in에 마운트하는 경우)
-                                # 현재는 python -c 방식 사용 (더 안전)
-                                escaped_code = code.replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'").replace('\n', '\\n')
-                                command = f'python -c "{escaped_code}"'
-                                result = await era_client.run_temp(
-                                    language="python",
-                                    command=command,
-                                    cpu=era_config.default_cpu,
-                                    memory=era_config.default_memory,
-                                    network=era_config.network_mode,
-                                    timeout=era_config.default_timeout
-                                )
-                            finally:
-                                import os
-                                try:
-                                    os.unlink(temp_file)
-                                except:
-                                    pass
-                        else:
-                            # 짧은 코드는 -c 사용
-                            escaped_code = code.replace('"', '\\"').replace("'", "\\'")
-                            command = f'python -c "{escaped_code}"'
-                            result = await era_client.run_temp(
-                                language="python",
-                                command=command,
-                                cpu=era_config.default_cpu,
-                                memory=era_config.default_memory,
-                                network=era_config.network_mode,
-                                timeout=era_config.default_timeout
-                            )
-                    elif language.lower() in ["javascript", "js", "node", "nodejs"]:
-                        # JavaScript/Node 코드 실행
-                        escaped_code = code.replace('"', '\\"').replace("'", "\\'")
-                        command = f'node -e "{escaped_code}"'
-                        result = await era_client.run_temp(
-                            language="javascript",
-                            command=command,
-                            cpu=era_config.default_cpu,
-                            memory=era_config.default_memory,
-                            network=era_config.network_mode,
-                            timeout=era_config.default_timeout
-                        )
-                    else:
-                        raise ValueError(f"Unsupported language for ERA: {language}")
-                    
-                    # ERA 실행 결과를 ToolResult로 변환
-                    execution_time = time.time() - start_time
-                    
-                    return ToolResult(
-                        success=result.exit_code == 0,
-                        data={
-                            "code": code,
-                            "language": language,
-                            "output": result.stdout,
-                            "error": result.stderr,
-                            "return_code": result.exit_code,
-                            "vm_id": result.vm_id,
-                            "duration": result.duration
-                        },
-                        execution_time=execution_time,
-                        confidence=0.9 if result.exit_code == 0 else 0.5
-                    )
-                finally:
-                    await era_client.close()
-            except (ConnectionError, ValueError) as e:
-                # ERA 연결 실패 또는 설정 오류 - fallback 사용
-                logger.warning(f"ERA execution failed ({e}), falling back to direct execution")
-                # 아래 fallback 코드로 계속 진행
-            except Exception as e:
-                # 기타 ERA 오류 - fallback 사용
-                logger.warning(f"ERA execution error ({e}), falling back to direct execution")
-                # 아래 fallback 코드로 계속 진행
-    except ImportError:
-        # ERA 모듈이 없으면 fallback 사용
-        logger.debug("ERA modules not available, using direct execution")
-    except Exception as e:
-        logger.warning(f"ERA initialization failed ({e}), using direct execution")
-    
-    # Fallback: 기존 방식 (직접 실행)
-    try:
-        if tool_name in ["python_coder", "code_interpreter"]:
-            # Python 코드 실행 (fallback - 안전하지 않음)
-            import subprocess
-            import tempfile
-            import os
+        # ERA가 비활성화되어 있으면 에러 반환
+        if not era_config.enabled:
+            error_msg = "ERA is disabled. Code execution requires ERA to be enabled for security."
+            logger.error(error_msg)
+            return ToolResult(
+                success=False,
+                data=None,
+                error=error_msg,
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+        
+        # ERA 서버 관리자 초기화
+        server_manager = ERAServerManager(
+            agent_binary_path=era_config.agent_binary_path,
+            server_url=era_config.server_url,
+            server_addr=f":{era_config.server_url.split(':')[-1]}" if ':' in era_config.server_url else ":8080",
+            auto_start=era_config.auto_start
+        )
+        
+        # 서버가 실행 중인지 확인하고 필요시 시작
+        if not await server_manager.ensure_server_running():
+            error_msg = "ERA server is not available. Please ensure ERA Agent is installed and running."
+            logger.error(error_msg)
+            return ToolResult(
+                success=False,
+                data=None,
+                error=error_msg,
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+        
+        # ERA 클라이언트 생성
+        era_client = ERAClient(
+            base_url=era_config.server_url,
+            api_key=era_config.api_key,
+            timeout=float(era_config.default_timeout) + 10.0  # 여유 시간 추가
+        )
+        
+        try:
+            # 언어별 명령 생성
+            # Cloudflare Worker 방식: 코드를 base64로 인코딩하여 command에 포함
+            # 이 방식이 가장 안전하고 확실함 (이스케이프 문제 없음)
+            import base64
+            import uuid
             
-            logger.warning("⚠️ Using unsafe direct code execution (ERA not available). This is not recommended for untrusted code.")
+            # 코드를 base64로 인코딩
+            code_bytes = code.encode('utf-8')
+            code_base64 = base64.b64encode(code_bytes).decode('ascii')
             
-            # 임시 파일에 코드 저장
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(code)
-                temp_file = f.name
+            # 언어별 실행 명령 생성
+            unique_id = uuid.uuid4().hex[:8]
             
-            try:
-                # 코드 실행
-                result = subprocess.run(
-                    [sys.executable, temp_file],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            if language.lower() in ["python", "py"]:
+                # Python: base64 디코딩 후 파이프로 전달
+                # 긴 코드나 멀티라인 코드는 임시 파일 사용
+                if len(code) > 1000 or code.count('\n') > 10:
+                    # 긴 코드는 임시 파일로 실행
+                    tmp_file = f"/tmp/code_{unique_id}.py"
+                    # base64 문자열을 안전하게 전달 (single quote 사용)
+                    command = f'sh -c "echo \'{code_base64}\' | base64 -d > {tmp_file} && python {tmp_file} && rm -f {tmp_file}"'
+                else:
+                    # 짧은 코드는 파이프로 실행
+                    command = f'sh -c "echo \'{code_base64}\' | base64 -d | python"'
                 
+                result = await era_client.run_temp(
+                    language="python",
+                    command=command,
+                    cpu=era_config.default_cpu,
+                    memory=era_config.default_memory,
+                    network=era_config.network_mode,
+                    timeout=era_config.default_timeout
+                )
+            elif language.lower() in ["javascript", "js", "node", "nodejs"]:
+                # JavaScript/Node: base64 디코딩 후 파이프로 전달
+                if len(code) > 1000 or code.count('\n') > 10:
+                    # 긴 코드는 임시 파일로 실행
+                    tmp_file = f"/tmp/code_{unique_id}.js"
+                    command = f'sh -c "echo \'{code_base64}\' | base64 -d > {tmp_file} && node {tmp_file} && rm -f {tmp_file}"'
+                else:
+                    # 짧은 코드는 파이프로 실행
+                    command = f'sh -c "echo \'{code_base64}\' | base64 -d | node"'
+                
+                result = await era_client.run_temp(
+                    language="javascript",
+                    command=command,
+                    cpu=era_config.default_cpu,
+                    memory=era_config.default_memory,
+                    network=era_config.network_mode,
+                    timeout=era_config.default_timeout
+                )
+            else:
+                error_msg = f"Unsupported language for ERA: {language}"
+                logger.error(error_msg)
                 return ToolResult(
-                    success=True,
+                    success=False,
+                    data=None,
+                    error=error_msg,
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            # ERA 실행 결과를 ToolResult로 변환
+            execution_time = time.time() - start_time
+            
+            return ToolResult(
+                success=result.exit_code == 0,
                     data={
                         "code": code,
                         "language": language,
                         "output": result.stdout,
                         "error": result.stderr,
-                        "return_code": result.returncode,
-                        "warning": "Code executed directly without sandboxing (ERA not available)"
+                    "return_code": result.exit_code,
+                    "vm_id": result.vm_id,
+                    "duration": result.duration
                     },
-                    execution_time=time.time() - start_time,
-                    confidence=0.6  # 낮은 신뢰도 (안전하지 않음)
+                execution_time=execution_time,
+                confidence=0.9 if result.exit_code == 0 else 0.5
                 )
             finally:
-                # 임시 파일 삭제
-                os.unlink(temp_file)
-        
-        else:
-            raise ValueError(f"Unknown code tool: {tool_name}")
+            await era_client.close()
             
-    except Exception as e:
-        logger.error(f"Code tool execution failed: {tool_name} - {e}")
+    except ImportError as e:
+        # ERA 모듈이 없으면 에러 반환
+        error_msg = f"ERA modules not available: {e}. Please install ERA Agent dependencies."
+        logger.error(error_msg)
         return ToolResult(
             success=False,
             data=None,
-            error=f"Code tool execution failed: {str(e)}",
+            error=error_msg,
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+    except ConnectionError as e:
+        # ERA 연결 실패 - 에러 반환
+        error_msg = f"ERA connection failed: {e}. Please ensure ERA server is running."
+        logger.error(error_msg)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=error_msg,
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+    except ValueError as e:
+        # ERA 설정 오류 - 에러 반환
+        error_msg = f"ERA configuration error: {e}"
+        logger.error(error_msg)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=error_msg,
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+    except Exception as e:
+        # 기타 ERA 오류 - 에러 반환
+        error_msg = f"ERA execution error: {e}"
+        logger.error(error_msg, exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=error_msg,
             execution_time=time.time() - start_time,
             confidence=0.0
         )

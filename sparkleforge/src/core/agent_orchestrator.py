@@ -31,6 +31,9 @@ from src.core.researcher_config import get_agent_config
 from src.core.mcp_auto_discovery import FastMCPMulti
 from src.core.mcp_tool_loader import MCPToolLoader
 from src.core.agent_tool_selector import AgentToolSelector, AgentType
+from src.core.session_manager import get_session_manager, SessionManager
+from src.core.context_engineer import get_context_engineer
+from src.core.memory_service import get_background_memory_service
 # prompt refiner는 execute_llm_task의 decorator에서 자동 적용됨
 
 logger = logging.getLogger(__name__)
@@ -3475,7 +3478,21 @@ class AgentOrchestrator:
         self.tool_loader = MCPToolLoader(FastMCPMulti(self.mcp_servers))
         self.tool_selector = AgentToolSelector()
 
-        logger.info("AgentOrchestrator initialized with MCP tool auto-discovery")
+        # 세션 관리자 초기화
+        self.session_manager = get_session_manager()
+        self.session_manager.set_shared_memory(self.shared_memory)
+        self.session_manager.set_context_engineer(get_context_engineer())
+        
+        # 백그라운드 메모리 서비스 초기화
+        self.memory_service = get_background_memory_service()
+        # 서비스 시작 (이미 시작되어 있으면 무시)
+        try:
+            if not self.memory_service.is_running:
+                await self.memory_service.start()
+        except Exception as e:
+            logger.warning(f"Failed to start memory service: {e}")
+
+        logger.info("AgentOrchestrator initialized with MCP tool auto-discovery, session management, and background memory service")
 
     def _initialize_mcp_servers(self) -> dict[str, Any]:
         """환경 변수 및 구성에서 MCP 서버 설정을 초기화.
@@ -4067,15 +4084,53 @@ class AgentOrchestrator:
         logger.info(f"Report Generated: {bool(state.get('final_report'))}")
         logger.info(f"Failed: {state.get('research_failed') or state.get('verification_failed') or state.get('report_failed')}")
         logger.info("=" * 80)
+        
+        # 백그라운드 메모리 생성 트리거 (세션 종료 시)
+        try:
+            session_id = state.get('session_id')
+            user_id = state.get('metadata', {}).get('user_id') or 'default_user'
+            
+            # 대화 히스토리 구성 (messages에서)
+            conversation_history = []
+            for msg in state.get('messages', []):
+                if isinstance(msg, dict):
+                    conversation_history.append({
+                        'role': msg.get('type', msg.get('role', 'unknown')),
+                        'content': msg.get('content', msg.get('text', ''))
+                    })
+                else:
+                    # LangChain Message 객체인 경우
+                    conversation_history.append({
+                        'role': getattr(msg, 'type', 'unknown'),
+                        'content': getattr(msg, 'content', str(msg))
+                    })
+            
+            # 백그라운드 메모리 생성 작업 제출 (non-blocking)
+            if conversation_history:
+                task_id = await self.memory_service.submit_memory_generation(
+                    session_id=session_id,
+                    user_id=user_id,
+                    conversation_history=conversation_history,
+                    metadata={
+                        'research_results_count': len(state.get('research_results', [])),
+                        'verified_results_count': len(state.get('verified_results', [])),
+                        'has_report': bool(state.get('final_report'))
+                    }
+                )
+                logger.info(f"Background memory generation task submitted: {task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to trigger background memory generation: {e}")
+        
         return state
     
-    async def execute(self, user_query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    async def execute(self, user_query: str, session_id: Optional[str] = None, restore_session: bool = False) -> Dict[str, Any]:
         """
         Execute multi-agent workflow with Skills auto-selection.
         
         Args:
             user_query: User's research query
-            session_id: Session ID
+            session_id: Session ID (if None, generates new session)
+            restore_session: If True and session_id exists, restore from saved session
             
         Returns:
             Final result from the workflow
@@ -4083,7 +4138,21 @@ class AgentOrchestrator:
         if session_id is None:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
-        logger.info(f"Starting workflow for query: {user_query}")
+        logger.info(f"Starting workflow for query: {user_query}, session: {session_id}")
+        
+        # 세션 복원 시도
+        initial_state = None
+        if restore_session:
+            logger.info(f"Attempting to restore session: {session_id}")
+            restored_state = await self.restore_session(session_id)
+            if restored_state:
+                logger.info(f"✅ Session restored: {session_id}")
+                initial_state = AgentState(**restored_state)
+                # 복원된 세션의 쿼리와 새 쿼리가 다를 수 있으므로 업데이트
+                if user_query:
+                    initial_state['user_query'] = user_query
+            else:
+                logger.info(f"Session not found or restore failed: {session_id}, starting new session")
         
         # Objective ID 생성 (병렬 실행 및 결과 공유용)
         objective_id = f"objective_{session_id}"
@@ -4107,32 +4176,156 @@ class AgentOrchestrator:
         if self.graph is None:
             self._build_graph(user_query, session_id)
         
-        # Initialize state
-        initial_state = AgentState(
-            messages=[],
-            user_query=user_query,
-            research_plan=None,
-            research_tasks=[],
-            research_results=[],
-            verified_results=[],
-            final_report=None,
-            current_agent=None,
-            iteration=0,
-            session_id=session_id,
-            research_failed=False,
-            verification_failed=False,
-            report_failed=False,
-            error=None
-        )
+        # Initialize state if not restored
+        if initial_state is None:
+            initial_state = AgentState(
+                messages=[],
+                user_query=user_query,
+                research_plan=None,
+                research_tasks=[],
+                research_results=[],
+                verified_results=[],
+                final_report=None,
+                current_agent=None,
+                iteration=0,
+                session_id=session_id,
+                research_failed=False,
+                verification_failed=False,
+                report_failed=False,
+                error=None
+            )
         
         # Execute workflow
         try:
             result = await self.graph.ainvoke(initial_state)
+            
+            # 세션 자동 저장 (워크플로우 완료 후)
+            try:
+                await self.save_session(session_id, result)
+            except Exception as e:
+                logger.warning(f"Failed to auto-save session: {e}")
+            
+            # 백그라운드 메모리 생성은 _end_node에서 이미 트리거됨
+            
             logger.info("Workflow execution completed successfully")
             return result
         except Exception as e:
             logger.error(f"Workflow execution failed: {e}")
             raise
+    
+    async def restore_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        세션 복원.
+        
+        Args:
+            session_id: 세션 ID
+            
+        Returns:
+            복원된 AgentState 또는 None
+        """
+        try:
+            context_engineer = get_context_engineer()
+            restored_state = self.session_manager.restore_session(
+                session_id=session_id,
+                context_engineer=context_engineer,
+                shared_memory=self.shared_memory
+            )
+            
+            if restored_state:
+                logger.info(f"Session restored successfully: {session_id}")
+                return restored_state
+            else:
+                logger.warning(f"Session restore returned None: {session_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error restoring session {session_id}: {e}", exc_info=True)
+            return None
+    
+    async def save_session(self, session_id: str, state: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        세션 저장.
+        
+        Args:
+            session_id: 세션 ID
+            state: AgentState 데이터
+            metadata: 추가 메타데이터
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            context_engineer = get_context_engineer()
+            success = self.session_manager.save_session(
+                session_id=session_id,
+                agent_state=state,
+                context_engineer=context_engineer,
+                shared_memory=self.shared_memory,
+                metadata=metadata
+            )
+            
+            if success:
+                logger.info(f"Session saved successfully: {session_id}")
+            else:
+                logger.warning(f"Session save returned False: {session_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error saving session {session_id}: {e}", exc_info=True)
+            return False
+    
+    def list_sessions(self, user_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        세션 목록 조회.
+        
+        Args:
+            user_id: 사용자 ID 필터
+            limit: 최대 결과 수
+            
+        Returns:
+            세션 메타데이터 목록
+        """
+        from dataclasses import asdict
+        sessions = self.session_manager.list_sessions(user_id=user_id, limit=limit)
+        return [asdict(session) for session in sessions]
+    
+    def delete_session(self, session_id: str) -> bool:
+        """
+        세션 삭제.
+        
+        Args:
+            session_id: 세션 ID
+            
+        Returns:
+            성공 여부
+        """
+        return self.session_manager.delete_session(session_id)
+    
+    def create_snapshot(self, session_id: str) -> Optional[str]:
+        """
+        세션 스냅샷 생성.
+        
+        Args:
+            session_id: 세션 ID
+            
+        Returns:
+            스냅샷 ID 또는 None
+        """
+        return self.session_manager.create_snapshot(session_id)
+    
+    def restore_from_snapshot(self, session_id: str, snapshot_id: str) -> bool:
+        """
+        스냅샷에서 세션 복원.
+        
+        Args:
+            session_id: 복원할 세션 ID
+            snapshot_id: 스냅샷 ID
+            
+        Returns:
+            성공 여부
+        """
+        return self.session_manager.restore_from_snapshot(session_id, snapshot_id)
     
     async def stream(self, user_query: str, session_id: Optional[str] = None):
         """Stream workflow execution."""
