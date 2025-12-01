@@ -28,8 +28,8 @@ except ImportError:
 # 공통 스타일 및 유틸리티 임포트
 from srcs.common.styles import get_common_styles, get_page_header
 from srcs.common.page_utils import setup_page, render_home_button, create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
-from srcs.business_strategy_agents.run_business_strategy_agents import BusinessStrategyRunner
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -203,32 +203,24 @@ def main():
                 'mode': analysis_mode
             }
 
-            from srcs.common.agent_interface import AgentType
-            
-            agent_metadata = {
-                "agent_id": "business_strategy_agent",
-                "agent_name": "Business Strategy Agent",
-                "entry_point": "srcs.business_strategy_agents.run_business_strategy_agents",
-                "agent_type": AgentType.MCP_AGENT,
-                "capabilities": ["market_analysis", "competitive_analysis", "strategy_planning"],
-                "description": "시장, 경쟁사 분석 및 비즈니스 모델 설계"
-            }
-
-            input_data = {
-                "module_path": "srcs.business_strategy_agents.run_business_strategy_agents",
-                "class_name": "BusinessStrategyRunner",
-                "method_name": "run_agents",
-                "industry": config.get("keywords", [""])[0] if config.get("keywords") else "General",
-                "company_profile": config.get("business_context", {}).get("description", "Business analysis") if config.get("business_context") else "Business analysis",
-                "competitors": config.get("keywords", [])[1:] if len(config.get("keywords", [])) > 1 else [],
-                "tech_trends": config.get("keywords", []),
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
+            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+                agent_id="business_strategy_agent",
+                agent_name="Business Strategy Agent",
+                entry_point="srcs.business_strategy_agents.run_business_strategy_agents",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["market_analysis", "competitive_analysis", "strategy_planning"],
+                description="시장, 경쟁사 분석 및 비즈니스 모델 설계",
+                input_params={
+                    "industry": config.get("keywords", [""])[0] if config.get("keywords") else "General",
+                    "company_profile": config.get("business_context", {}).get("description", "Business analysis") if config.get("business_context") else "Business analysis",
+                    "competitors": config.get("keywords", [])[1:] if len(config.get("keywords", [])) > 1 else [],
+                    "tech_trends": config.get("keywords", []),
+                    "result_json_path": str(result_json_path)
+                },
+                class_name="BusinessStrategyRunner",
+                method_name="run_agents",
                 result_json_path=result_json_path,
                 use_a2a=True
             )

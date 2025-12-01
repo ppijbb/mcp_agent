@@ -15,7 +15,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 # Result Reader 임포트
@@ -39,20 +40,20 @@ def main():
 
     with st.form("mental_care_form"):
         st.subheader("📝 상담 세션 시작")
-        
+
         user_message = st.text_area(
             "어떤 고민이 있으신가요?",
             placeholder="예: 최근 업무 스트레스가 심해서 잠을 잘 못 자고 있어요.",
             height=150,
             help="자유롭게 말씀해주세요. AI가 심리 상태를 분석하고 도움을 드립니다."
         )
-        
+
         session_type = st.selectbox(
             "상담 유형",
             options=["일반 상담", "감정 분석", "심리 도식 분석", "종합 분석"],
             help="원하는 상담 유형을 선택하세요"
         )
-        
+
         submitted = st.form_submit_button("🚀 상담 시작", width='stretch')
 
     if submitted:
@@ -63,25 +64,28 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"mental_care_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
-                "agent_id": "mental_care_agent",
-                "agent_name": "Mental Care Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
-                "capabilities": ["mental_health_analysis", "emotion_analysis", "psychological_schema_analysis"],
-                "description": "심리도식치료 기반 심리 건강 관리 및 분석 시스템"
-            }
-
-            input_data = {
-                "module_path": "srcs.enterprise_agents.mental",
-                "class_name": "MentalCareOrchestrator",
-                "method_name": "start_conversation_session",
-                "config": {
+            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_id="mental_care_agent",
+                agent_name="Mental Care Agent",
+                entry_point="srcs.enterprise_agents.mental",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["mental_health_analysis", "emotion_analysis", "psychological_schema_analysis"],
+                description="심리도식치료 기반 심리 건강 관리 및 분석 시스템",
+                input_params={
                     "user_message": user_message,
-                    "session_type": session_type
+                    "session_type": session_type,
+                    "result_json_path": str(result_json_path)
                 },
-                "result_json_path": str(result_json_path)
-            }
+                class_name="MentalCareOrchestrator",
+                method_name="start_conversation_session",
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
+
+            if result and "data" in result:
+                display_results(result["data"])
 
             result = run_agent_via_a2a(
                 placeholder=result_placeholder,

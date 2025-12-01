@@ -17,7 +17,8 @@ from srcs.advanced_agents.decision_agent import (
     InteractionType,
 )
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -105,26 +106,21 @@ def main():
             # Get the enum key from its value for the command line
             interaction_enum_key = InteractionType(interaction_type).name
 
-            agent_metadata = {
-                "agent_id": "decision_agent",
-                "agent_name": "Decision Agent",
-                "entry_point": "srcs.advanced_agents.run_decision_agent",
-                "agent_type": "mcp_agent",
-                "capabilities": ["decision_making", "scenario_analysis", "risk_assessment"],
-                "description": "복잡한 상황을 분석하고 최적의 결정을 내리는 AI 에이전트"
-            }
-
-            input_data = {
-                "user_id": user_id,
-                "interaction_type": interaction_enum_key,
-                "context_json": context_text,
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
+            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+                agent_id="decision_agent",
+                agent_name="Decision Agent",
+                entry_point="srcs.advanced_agents.run_decision_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["decision_making", "scenario_analysis", "risk_assessment"],
+                description="복잡한 상황을 분석하고 최적의 결정을 내리는 AI 에이전트",
+                input_params={
+                    "user_id": user_id,
+                    "interaction_type": interaction_enum_key,
+                    "context_json": context_text,
+                    "result_json_path": str(result_json_path)
+                },
                 result_json_path=result_json_path,
                 use_a2a=True
             )
