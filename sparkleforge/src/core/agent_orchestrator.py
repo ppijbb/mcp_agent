@@ -2126,8 +2126,8 @@ class VerifierAgent:
                     except:
                         date_info = f"\n- 발행일: {published_date[:10]}"
                 
-                # LLM으로 검증 (점검 및 제언 중심)
-                verification_prompt = f"""다음 검색 결과를 점검하고 제언하세요:
+                # LLM으로 검증 (점검 및 제언 중심) - 강화된 버전
+                verification_prompt = f"""다음 검색 결과를 엄격하게 점검하고 제언하세요:
 
 **검색 결과 정보:**
 - 제목: {title}
@@ -2138,42 +2138,58 @@ class VerifierAgent:
 
 **점검 및 제언 작업:**
 
-당신의 역할은 자료를 "억제"하는 것이 아니라, 자료를 **점검하고 제언**하는 것입니다.
+당신의 역할은 자료를 "억제"하는 것이 아니라, 자료를 **엄격하게 점검하고 제언**하는 것입니다.
 
-1. **관련성 점검**:
-   - 이 자료가 쿼리와 관련이 있는가? (직접적/간접적/배경 정보 모두 포함)
-   - 관련성이 낮더라도 배경 정보나 맥락 제공에 도움이 되면 포함 고려
+1. **관련성 점검** (엄격):
+   - 이 자료가 쿼리와 직접적으로 관련이 있는가?
+   - 관련성이 낮다면 어떤 부분이 관련이 있는가? (구체적으로 명시)
+   - 배경 정보로만 유용한가? (그렇다면 낮은 관련성 점수 부여)
 
-2. **품질 점검**:
-   - 자료의 신뢰성은 어떤가?
-   - 정보의 정확성에 큰 오류가 있는가?
-   - 출처가 신뢰할 수 있는가?
+2. **품질 점검** (엄격):
+   - 자료의 신뢰성은 어떤가? (출처, 작성자, 발행기관 고려)
+   - 정보의 정확성에 오류가 있는가? (구체적인 오류 명시)
+   - 출처가 신뢰할 수 있는가? (도메인, 기관, 작성자 검증)
+   - 통계나 숫자가 있다면 출처가 명시되어 있는가?
 
-3. **제언**:
-   - 이 자료를 사용할 때 주의할 점은?
-   - 개선이 필요한 부분은?
+3. **근거 및 증거 점검** (새로 추가):
+   - 주장에 대한 근거가 제시되어 있는가?
+   - 통계나 숫자는 출처가 있는가?
+   - 날짜나 사실은 검증 가능한가?
+   - 불확실한 정보는 명시되어 있는가?
+
+4. **제언**:
+   - 이 자료를 사용할 때 주의할 점은? (구체적으로)
+   - 개선이 필요한 부분은? (구체적으로)
    - 다른 자료와 함께 사용하면 더 좋을 정보인가?
+   - 추가 조사가 필요한 부분은? (구체적으로)
 
 **중요 원칙:**
 - **큰 오류만 조정**: 명백한 오류나 완전히 무관한 자료만 거부
 - **작은 문제는 제언과 함께 통과**: 관련성이 약간 낮거나 품질이 약간 낮아도 제언과 함께 포함
 - **억제보다는 유도**: 자료를 거부하기보다는 올바른 방향으로 사용하도록 제언
 - **검색 결과의 특성 이해**: LLM이 모르는 상태에서 찾아본 결과이므로, 완벽하지 않아도 관련 정보는 포함
+- **근거 없는 확신 금지**: 불확실한 정보는 반드시 불확실성 명시, 근거 없는 주장은 낮은 신뢰도 부여
 
 **응답 형식 (반드시 이 형식으로 작성):**
 ```
 STATUS: VERIFIED 또는 REJECTED
-RELEVANCE_SCORE: 1-10 (관련성 점수)
-QUALITY_SCORE: 1-10 (품질 점수)
-ISSUES: 발견된 문제점 (없으면 "없음")
-RECOMMENDATIONS: 사용 시 제언사항 (없으면 "없음")
-REASON: 최종 판단 이유 (한 줄)
+RELEVANCE_SCORE: 1-10 (관련성 점수, 엄격하게 평가)
+QUALITY_SCORE: 1-10 (품질 점수, 엄격하게 평가)
+EVIDENCE_SCORE: 1-10 (근거/증거 점수, 새로 추가)
+CONFIDENCE_LEVEL: HIGH/MEDIUM/LOW (신뢰도 수준)
+UNCERTAINTY_ISSUES: 불확실한 부분 명시 (없으면 "없음")
+ISSUES: 발견된 문제점 (구체적으로, 없으면 "없음")
+RECOMMENDATIONS: 사용 시 제언사항 (구체적으로, 없으면 "없음")
+ADDITIONAL_RESEARCH_NEEDED: 추가 조사 필요한 부분 (구체적으로, 없으면 "없음")
+REASON: 최종 판단 이유 (한 줄, 구체적으로)
 ```
 
 ⚠️ **절대 하지 말 것:**
 - "y y y y..." 같은 반복 문자 사용 금지
 - 단순히 "REJECTED"만 작성하지 말고 반드시 위 형식 준수
-- 너무 엄격하게 판단하지 말 것"""
+- 너무 엄격하게 판단하지 말 것
+- **근거 없는 확신 표현 금지**: 불확실한 정보는 반드시 불확실성 명시
+- **모호한 표현 금지**: 모든 점수와 판단은 구체적인 근거와 함께 제공"""
                 
                 try:
                     logger.info(f"[{self.name}] 🔍 Verifying result {i}/{len(results)}: '{title[:60]}...'")
@@ -2286,6 +2302,80 @@ REASON: 최종 판단 이유 (한 줄)
                             except:
                                 pass
                     
+                    # QUALITY_SCORE 추출 (품질 점수)
+                    quality_score = 5  # 기본값
+                    if "QUALITY_SCORE:" in verification_upper:
+                        score_lines = [line for line in verification_upper.split('\n') if 'QUALITY_SCORE:' in line]
+                        if score_lines:
+                            try:
+                                score_str = score_lines[0].split('QUALITY_SCORE:')[1].strip().split()[0]
+                                quality_score = int(float(score_str))
+                            except:
+                                pass
+                    
+                    # EVIDENCE_SCORE 추출 (근거/증거 점수) - 새로 추가
+                    evidence_score = 5  # 기본값
+                    if "EVIDENCE_SCORE:" in verification_upper:
+                        score_lines = [line for line in verification_upper.split('\n') if 'EVIDENCE_SCORE:' in line]
+                        if score_lines:
+                            try:
+                                score_str = score_lines[0].split('EVIDENCE_SCORE:')[1].strip().split()[0]
+                                evidence_score = int(float(score_str))
+                            except:
+                                pass
+                    
+                    # CONFIDENCE_LEVEL 추출 (신뢰도 수준) - 새로 추가
+                    confidence_level = "MEDIUM"  # 기본값
+                    if "CONFIDENCE_LEVEL:" in verification_upper:
+                        level_lines = [line for line in verification_upper.split('\n') if 'CONFIDENCE_LEVEL:' in line]
+                        if level_lines:
+                            level_str = level_lines[0].split('CONFIDENCE_LEVEL:')[1].strip().split()[0]
+                            if level_str in ["HIGH", "MEDIUM", "LOW"]:
+                                confidence_level = level_str
+                    
+                    # UNCERTAINTY_ISSUES 추출 (불확실성 이슈) - 새로 추가
+                    uncertainty_issues = "없음"
+                    if "UNCERTAINTY_ISSUES:" in verification_text:
+                        issue_lines = [line for line in verification_text.split('\n') if 'UNCERTAINTY_ISSUES:' in line]
+                        if issue_lines:
+                            issue_text = issue_lines[0].split('UNCERTAINTY_ISSUES:')[1].strip()
+                            if issue_text and issue_text != "없음":
+                                uncertainty_issues = issue_text[:300]
+                    
+                    # ADDITIONAL_RESEARCH_NEEDED 추출 (추가 조사 필요) - 새로 추가
+                    additional_research_needed = "없음"
+                    if "ADDITIONAL_RESEARCH_NEEDED:" in verification_text:
+                        research_lines = [line for line in verification_text.split('\n') if 'ADDITIONAL_RESEARCH_NEEDED:' in line]
+                        if research_lines:
+                            research_text = research_lines[0].split('ADDITIONAL_RESEARCH_NEEDED:')[1].strip()
+                            if research_text and research_text != "없음":
+                                additional_research_needed = research_text[:300]
+                    
+                    # 종합 신뢰도 계산 (다단계 검증)
+                    # Self-verification: evidence_score와 quality_score의 평균
+                    self_verification_score = (evidence_score + quality_score) / 2.0 / 10.0
+                    # Cross-verification: cross_verification_score 사용 (이미 계산됨)
+                    cross_verification_score_normalized = cross_verification_score if cross_verification_score is not None else 0.5
+                    # External verification: source_validation과 fact_check 사용
+                    external_verification_score = 0.5  # 기본값
+                    if source_validation_result:
+                        external_verification_score = source_validation_result.overall_score
+                    elif fact_check_result:
+                        external_verification_score = fact_check_result.confidence_score
+                    
+                    # 최종 신뢰도 점수 (가중 평균)
+                    final_confidence = (
+                        self_verification_score * 0.3 +
+                        cross_verification_score_normalized * 0.4 +
+                        external_verification_score * 0.3
+                    )
+                    
+                    # 신뢰도 수준에 따른 점수 조정
+                    if confidence_level == "LOW":
+                        final_confidence = min(final_confidence, 0.5)
+                    elif confidence_level == "HIGH":
+                        final_confidence = max(final_confidence, 0.7)
+                    
                     # 검증 판단: REJECTED가 명시적으로 있고 관련성 점수가 매우 낮은 경우만 거부
                     is_verified = True  # 기본값은 통과
                     if status_match and "REJECTED" in status_match:
@@ -2333,8 +2423,21 @@ REASON: 최종 판단 이유 (한 줄)
                             "status": "verified",
                             "verification_note": verification_text[:500],  # 더 긴 제언 포함
                             "relevance_score": relevance_score,
+                            "quality_score": quality_score,
+                            "evidence_score": evidence_score,
+                            "confidence_level": confidence_level,
+                            "final_confidence": final_confidence,
+                            "uncertainty_issues": uncertainty_issues,
                             "recommendations": recommendations,
                             "issues": issues,
+                            "additional_research_needed": additional_research_needed,
+                            # 다단계 검증 점수
+                            "verification_stages": {
+                                "self_verification_score": self_verification_score,
+                                "cross_verification_score": cross_verification_score_normalized,
+                                "external_verification_score": external_verification_score,
+                                "final_confidence": final_confidence
+                            },
                             "source_validation": {
                                 "overall_score": source_validation_result.overall_score if source_validation_result else None,
                                 "domain_type": source_validation_result.domain_type.value if source_validation_result else None,
@@ -2846,7 +2949,24 @@ class GeneratorAgent:
             logger.info(f"[{self.name}] 📥 Added {added_from_shared} verified results from shared agent communications")
             logger.info(f"[{self.name}] 🤝 Agent communication: Incorporated results from agents: {list(set(r.agent_id for r in all_shared_results))}")
         
+        # 검증 요약 가져오기 (VerifierAgent에서 전달된 정보)
+        verification_summary = state.get('verification_summary', {})
+        if not verification_summary:
+            verification_summary = memory.read(
+                key=f"verification_summary_{state['session_id']}",
+                scope=MemoryScope.SESSION,
+                session_id=state['session_id']
+            ) or {}
+        
         logger.info(f"[{self.name}] Found {len(verified_results)} verified results for report generation (including shared results)")
+        
+        # 검증 요약 정보 로깅
+        if verification_summary:
+            logger.info(f"[{self.name}] 📊 Verification Summary received:")
+            logger.info(f"[{self.name}]   - Total verified: {verification_summary.get('total_verified', 0)}")
+            logger.info(f"[{self.name}]   - High confidence: {verification_summary.get('high_confidence_count', 0)}")
+            logger.info(f"[{self.name}]   - Low confidence: {verification_summary.get('low_confidence_count', 0)}")
+            logger.info(f"[{self.name}]   - Additional research needed: {verification_summary.get('additional_research_needed_count', 0)}")
         
         if not verified_results or len(verified_results) == 0:
             # Fallback 제거 - 명확한 에러만 반환
@@ -2958,16 +3078,44 @@ class GeneratorAgent:
         # LLM으로 사용자 요청에 맞는 형식으로 생성
         from src.core.llm_manager import execute_llm_task, TaskType
         
+        # 검증 요약 정보를 프롬프트에 포함
+        verification_summary_text = ""
+        if verification_summary:
+            verification_summary_text = f"""
+**검증 요약 정보 (VerifierAgent에서 전달):**
+- 총 검증된 결과: {verification_summary.get('total_verified', 0)}개
+- 높은 신뢰도: {verification_summary.get('high_confidence_count', 0)}개
+- 중간 신뢰도: {verification_summary.get('medium_confidence_count', 0)}개
+- 낮은 신뢰도: {verification_summary.get('low_confidence_count', 0)}개
+- 평균 신뢰도: {verification_summary.get('average_confidence', 0.0):.2f}
+- 불확실성 이슈: {verification_summary.get('uncertainty_issues_count', 0)}개
+- 추가 조사 필요: {verification_summary.get('additional_research_needed_count', 0)}개
+
+"""
+            if verification_summary.get('low_confidence_topics'):
+                verification_summary_text += "\n**낮은 신뢰도 주제 (주의 필요):**\n"
+                for topic in verification_summary['low_confidence_topics']:
+                    verification_summary_text += f"- {topic.get('title', '')}: {topic.get('reason', '')} (신뢰도: {topic.get('confidence', 0.0):.2f})\n"
+            
+            if verification_summary.get('additional_research_topics'):
+                verification_summary_text += "\n**추가 조사 필요한 주제:**\n"
+                for topic in verification_summary['additional_research_topics']:
+                    verification_summary_text += f"- {topic.get('topic', '')}: {topic.get('reason', '')}\n"
+        
         # 사용자 요청을 그대로 전달 - LLM이 형식을 결정하도록
         generation_prompt = f"""사용자 요청: {state['user_query']}
 
 검증된 연구 결과 (실제 웹 페이지 전체 내용 포함):
 {verified_text}
 
+{verification_summary_text}
+
 **Agent 논박 결과 (모든 Agent들의 논박을 통한 일관성 및 논리적 올바름 검증):**
 {agent_debates_summary if agent_debates_summary else "논박 결과 없음 - Executor 결과가 직접 사용됨"}
 
 ⚠️ **깊이 있는 분석과 사고를 통한 보고서 작성 필수**
+⚠️ **불확실성 명시 필수**: 낮은 신뢰도 정보나 불확실한 부분은 반드시 명시하세요
+⚠️ **근거 없는 확신 금지**: 확실하지 않은 정보는 "~로 보인다", "~일 가능성이 있다" 등으로 표현하세요
 
 **DEEP ANALYSIS REQUIREMENTS - 반드시 포함해야 할 깊이 있는 사고:**
 
@@ -3023,7 +3171,21 @@ class GeneratorAgent:
 5. **출처 없는 정보**: 출처를 확인할 수 없는 정보는 불확실성을 표시하세요
    - 예: "추정", "예상", "~로 알려짐" 등의 표현 사용
 
-6. **관련성 확인**: 참고 문헌에 포함할 출처는 반드시 쿼리와 관련이 있어야 합니다
+6. **신뢰도 기반 표현** (검증 요약 정보 반영):
+   - 높은 신뢰도 정보 (신뢰도 0.8 이상): 확실한 표현 사용 가능
+   - 중간 신뢰도 정보 (신뢰도 0.6-0.8): "~로 보인다", "~일 가능성이 있다" 등으로 표현
+   - 낮은 신뢰도 정보 (신뢰도 0.6 미만): "~라고 주장되지만", "확인 필요", "추가 조사 필요" 등으로 명시
+   - 불확실성 이슈가 있는 정보: "불확실", "추가 검증 필요" 등으로 명시
+
+7. **불확실성 명시**: 검증 요약에서 언급된 불확실성 이슈는 반드시 보고서에 명시하세요
+   - 낮은 신뢰도 주제는 "주의: 신뢰도 낮음" 등으로 표시
+   - 불확실한 부분은 "~로 알려져 있으나 확인 필요" 등으로 표현
+
+8. **추가 조사 필요성**: 검증 요약에서 언급된 추가 조사 필요한 부분은 보고서에 포함하세요
+   - "추가 조사가 필요한 영역" 섹션에 포함
+   - 또는 해당 부분에서 "추가 조사 필요"로 명시
+
+9. **관련성 확인**: 참고 문헌에 포함할 출처는 반드시 쿼리와 관련이 있어야 합니다
    - 엔비디아 분석인데 부동산 관련 출처를 포함하지 마세요
    - 쿼리와 무관한 출처는 제외하세요
    - 본문에서 인용하지 않은 출처는 참고 문헌에 포함하지 마세요
