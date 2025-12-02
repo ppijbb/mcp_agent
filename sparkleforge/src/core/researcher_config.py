@@ -313,9 +313,9 @@ class AgentToolConfig(BaseModel):
 
     # 도구 카테고리 필터링
     planner_categories: List[str] = Field(default_factory=lambda: ["planning", "search", "utility"], description="PlannerAgent용 도구 카테고리")
-    executor_categories: List[str] = Field(default_factory=lambda: ["search", "data", "academic", "business", "code"], description="ExecutorAgent용 도구 카테고리")
+    executor_categories: List[str] = Field(default_factory=lambda: ["search", "data", "academic", "business", "code", "browser", "file"], description="ExecutorAgent용 도구 카테고리")
     verifier_categories: List[str] = Field(default_factory=lambda: ["verification", "search", "data", "academic"], description="VerifierAgent용 도구 카테고리")
-    generator_categories: List[str] = Field(default_factory=lambda: ["generation", "utility", "search"], description="GeneratorAgent용 도구 카테고리")
+    generator_categories: List[str] = Field(default_factory=lambda: ["generation", "utility", "search", "document", "file"], description="GeneratorAgent용 도구 카테고리")
 
     # 도구 할당 제한
     max_tools_per_agent: int = Field(default=5, ge=1, le=20, description="에이전트당 최대 도구 수")

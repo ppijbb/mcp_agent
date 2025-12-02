@@ -20,6 +20,15 @@ import pdfkit
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+# PowerPoint imports
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    PPTX_AVAILABLE = True
+except ImportError:
+    PPTX_AVAILABLE = False
+    Presentation = None
+
 from src.utils.config_manager import ConfigManager
 from src.utils.logger import setup_logger
 
@@ -60,7 +69,7 @@ class ReportGenerator:
         Args:
             research_data: Research data and results
             report_type: Type of report (executive, detailed, academic, presentation)
-            output_format: Output format (pdf, html, docx, markdown)
+            output_format: Output format (pdf, html, docx, pptx, markdown)
             
         Returns:
             Path to generated report file
@@ -90,6 +99,8 @@ class ReportGenerator:
                 file_path = await self._generate_html_report(content, report_data)
             elif output_format == "docx":
                 file_path = await self._generate_docx_report(content, report_data)
+            elif output_format == "pptx":
+                file_path = await self._generate_pptx_report(content, report_data)
             elif output_format == "markdown":
                 file_path = await self._generate_markdown_report(content, report_data)
             else:
@@ -345,6 +356,125 @@ class ReportGenerator:
             
         except Exception as e:
             logger.error(f"Failed to generate DOCX report: {e}")
+            raise
+    
+    async def _generate_pptx_report(self, content: str, report_data: Dict[str, Any]) -> str:
+        """Generate PowerPoint presentation report."""
+        try:
+            if not PPTX_AVAILABLE:
+                raise ImportError("python-pptx is required for PPTX generation. Install it with: pip install python-pptx")
+            
+            # Create presentation
+            prs = Presentation()
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
+            
+            # Title slide
+            title_slide_layout = prs.slide_layouts[0]
+            slide = prs.slides.add_slide(title_slide_layout)
+            title = slide.shapes.title
+            subtitle = slide.placeholders[1]
+            
+            title.text = report_data['metadata']['title']
+            subtitle.text = f"Generated: {report_data['metadata']['generated_at']}"
+            
+            # Summary slide
+            summary_slide_layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(summary_slide_layout)
+            title = slide.shapes.title
+            title.text = "Executive Summary"
+            
+            content_shape = slide.placeholders[1]
+            tf = content_shape.text_frame
+            tf.text = f"Total Objectives: {report_data['summary']['total_objectives']}"
+            
+            p = tf.add_paragraph()
+            p.text = f"Total Tasks: {report_data['summary']['total_tasks']}"
+            
+            p = tf.add_paragraph()
+            p.text = f"Completed Tasks: {report_data['summary']['completed_tasks']}"
+            
+            p = tf.add_paragraph()
+            p.text = f"Success Rate: {report_data['summary']['success_rate']:.1f}%"
+            
+            p = tf.add_paragraph()
+            p.text = f"Quality Score: {report_data['summary']['quality_score']:.2f}"
+            
+            # Objectives slides
+            if report_data['objectives']:
+                for i, objective in enumerate(report_data['objectives'], 1):
+                    slide = prs.slides.add_slide(summary_slide_layout)
+                    title = slide.shapes.title
+                    title.text = f"Objective {i}"
+                    
+                    content_shape = slide.placeholders[1]
+                    tf = content_shape.text_frame
+                    tf.text = f"Description: {objective.get('description', 'N/A')}"
+                    
+                    p = tf.add_paragraph()
+                    p.text = f"Priority: {objective.get('priority', 'N/A')}"
+                    
+                    p = tf.add_paragraph()
+                    p.text = f"Status: {objective.get('status', 'N/A')}"
+            
+            # Results slides
+            if report_data['results']:
+                for i, result in enumerate(report_data['results'], 1):
+                    slide = prs.slides.add_slide(summary_slide_layout)
+                    title = slide.shapes.title
+                    title.text = f"Result {i}"
+                    
+                    content_shape = slide.placeholders[1]
+                    tf = content_shape.text_frame
+                    tf.text = f"Agent: {result.get('agent', 'N/A')}"
+                    
+                    p = tf.add_paragraph()
+                    p.text = f"Status: {result.get('status', 'N/A')}"
+                    
+                    if result.get('summary'):
+                        p = tf.add_paragraph()
+                        p.text = f"Summary: {result['summary']}"
+            
+            # Recommendations slide
+            if report_data['recommendations']:
+                slide = prs.slides.add_slide(summary_slide_layout)
+                title = slide.shapes.title
+                title.text = "Recommendations"
+                
+                content_shape = slide.placeholders[1]
+                tf = content_shape.text_frame
+                for i, rec in enumerate(report_data['recommendations'], 1):
+                    if i == 1:
+                        tf.text = f"{i}. {rec}"
+                    else:
+                        p = tf.add_paragraph()
+                        p.text = f"{i}. {rec}"
+            
+            # Key Findings slide
+            if report_data['key_findings']:
+                slide = prs.slides.add_slide(summary_slide_layout)
+                title = slide.shapes.title
+                title.text = "Key Findings"
+                
+                content_shape = slide.placeholders[1]
+                tf = content_shape.text_frame
+                for i, finding in enumerate(report_data['key_findings'], 1):
+                    if i == 1:
+                        tf.text = f"{i}. {finding}"
+                    else:
+                        p = tf.add_paragraph()
+                        p.text = f"{i}. {finding}"
+            
+            # Generate filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"research_report_{timestamp}.pptx"
+            file_path = self.output_dir / filename
+            
+            prs.save(str(file_path))
+            return str(file_path)
+            
+        except Exception as e:
+            logger.error(f"Failed to generate PPTX report: {e}")
             raise
     
     async def _generate_markdown_report(self, content: str, report_data: Dict[str, Any]) -> str:

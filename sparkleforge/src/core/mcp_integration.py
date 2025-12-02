@@ -83,6 +83,9 @@ class ToolCategory(Enum):
     ACADEMIC = "academic"
     BUSINESS = "business"
     UTILITY = "utility"
+    BROWSER = "browser"  # 브라우저 자동화
+    DOCUMENT = "document"  # 문서 생성
+    FILE = "file"  # 파일 작업
 
 
 @dataclass
@@ -147,7 +150,13 @@ class ToolRegistry:
             category = ToolCategory.SEARCH
         elif 'scholar' in tool_lower or 'arxiv' in tool_lower or 'paper' in tool_lower:
             category = ToolCategory.ACADEMIC
-        elif 'fetch' in tool_lower or 'file' in tool_lower:
+        elif 'browser' in tool_lower:
+            category = ToolCategory.BROWSER
+        elif tool_lower.startswith('generate_') or 'document' in tool_lower or 'pdf' in tool_lower or 'docx' in tool_lower or 'pptx' in tool_lower:
+            category = ToolCategory.DOCUMENT
+        elif 'file' in tool_lower and 'fetch' not in tool_lower:
+            category = ToolCategory.FILE
+        elif 'fetch' in tool_lower:
             category = ToolCategory.DATA
         elif 'code' in tool_lower or 'python' in tool_lower:
             category = ToolCategory.CODE
@@ -368,7 +377,10 @@ class UniversalMCPHub:
                 "code": ToolCategory.CODE,
                 "academic": ToolCategory.ACADEMIC,
                 "business": ToolCategory.BUSINESS,
-                "utility": ToolCategory.UTILITY
+                "utility": ToolCategory.UTILITY,
+                "browser": ToolCategory.BROWSER,
+                "document": ToolCategory.DOCUMENT,
+                "file": ToolCategory.FILE
             }
             
             category_str = tool_config.get("category", "utility")
@@ -537,7 +549,10 @@ class UniversalMCPHub:
                 "code": ToolCategory.CODE,
                 "academic": ToolCategory.ACADEMIC,
                 "business": ToolCategory.BUSINESS,
-                "utility": ToolCategory.UTILITY
+                "utility": ToolCategory.UTILITY,
+                "browser": ToolCategory.BROWSER,
+                "document": ToolCategory.DOCUMENT,
+                "file": ToolCategory.FILE
             }
 
             category_str = tool_config.get("category", "utility")
@@ -623,7 +638,10 @@ class UniversalMCPHub:
                 "code": ToolCategory.CODE,
                 "academic": ToolCategory.ACADEMIC,
                 "business": ToolCategory.BUSINESS,
-                "utility": ToolCategory.UTILITY
+                "utility": ToolCategory.UTILITY,
+                "browser": ToolCategory.BROWSER,
+                "document": ToolCategory.DOCUMENT,
+                "file": ToolCategory.FILE
             }
 
             # 도구 설명에서 카테고리 추론 (단순 키워드 기반)
@@ -1706,6 +1724,189 @@ class UniversalMCPHub:
                     "execution_time": execution_time,
                     "confidence": 0.0,
                     "source": "mcp_search_routing_failed"
+                }
+        
+        # 브라우저 도구 라우팅 (우선 처리)
+        if tool_name.startswith("browser_"):
+            logger.info(f"[MCP][exec.browser] Routing {tool_name} to _execute_browser_tool")
+            try:
+                from src.core.mcp_integration import _execute_browser_tool, ToolResult
+                tool_result = await _execute_browser_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
+                
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict):
+                        if "extracted_data" in tool_result.data:
+                            result_summary = f"콘텐츠 추출 완료 ({tool_result.data.get('content_length', 0)}자)"
+                        elif "screenshot_path" in tool_result.data:
+                            result_summary = f"스크린샷 저장: {tool_result.data['screenshot_path']}"
+                        elif "actions" in tool_result.data:
+                            result_summary = f"{len(tool_result.data['actions'])}개 액션 실행"
+                        else:
+                            result_summary = "브라우저 작업 완료"
+                    else:
+                        result_summary = f"데이터 반환됨 ({type(tool_result.data).__name__})"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "browser"
+                }
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.browser.error] {tool_name} failed: {e}", exc_info=True)
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"브라우저 도구 실행 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Browser tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0
+                }
+        
+        # 문서 생성 도구 라우팅
+        if tool_name.startswith("generate_"):
+            logger.info(f"[MCP][exec.document] Routing {tool_name} to _execute_document_tool")
+            try:
+                from src.core.mcp_integration import _execute_document_tool, ToolResult
+                tool_result = await _execute_document_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
+                
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict) and "file_path" in tool_result.data:
+                        result_summary = f"문서 생성 완료: {tool_result.data['file_path']}"
+                    else:
+                        result_summary = "문서 생성 완료"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "document"
+                }
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.document.error] {tool_name} failed: {e}", exc_info=True)
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"문서 생성 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Document tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0
+                }
+        
+        # 파일 도구 라우팅
+        if tool_name in ["create_file", "read_file", "write_file", "edit_file", "list_files", "delete_file"]:
+            logger.info(f"[MCP][exec.file] Routing {tool_name} to _execute_file_tool")
+            try:
+                from src.core.mcp_integration import _execute_file_tool, ToolResult
+                tool_result = await _execute_file_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
+                
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict):
+                        if "file_path" in tool_result.data:
+                            result_summary = f"파일 작업 완료: {tool_result.data['file_path']}"
+                        elif "files" in tool_result.data:
+                            result_summary = f"{len(tool_result.data['files'])}개 파일/디렉토리"
+                        else:
+                            result_summary = "파일 작업 완료"
+                    else:
+                        result_summary = "파일 작업 완료"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "file"
+                }
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.file.error] {tool_name} failed: {e}", exc_info=True)
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"파일 작업 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"File tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0
                 }
         
         # Tool 찾기 (server_name::tool_name 또는 tool_name)
@@ -3800,6 +4001,440 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
             success=False,
             data=None,
             error=error_msg,
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_browser_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """브라우저 자동화 도구 실행."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from src.automation.browser_manager import BrowserManager
+        
+        # BrowserManager 인스턴스 생성 (싱글톤 패턴 고려)
+        browser_manager = BrowserManager()
+        
+        # 브라우저 초기화 (아직 안 되어 있으면)
+        if not browser_manager.browser_available:
+            await browser_manager.initialize_browser()
+        
+        if tool_name == "browser_navigate":
+            # URL로 이동 및 콘텐츠 추출
+            url = parameters.get("url", "")
+            extraction_goal = parameters.get("extraction_goal", "extract_all_content")
+            
+            if not url:
+                raise ValueError("URL parameter is required for browser_navigate")
+            
+            result = await browser_manager.navigate_and_extract(url, extraction_goal)
+            
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "browser_extract":
+            # 특정 목표에 맞는 콘텐츠 추출
+            url = parameters.get("url", "")
+            extraction_goal = parameters.get("extraction_goal", "extract_all_content")
+            
+            if not url:
+                raise ValueError("URL parameter is required for browser_extract")
+            
+            result = await browser_manager.navigate_and_extract(url, extraction_goal)
+            
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "browser_screenshot":
+            # 스크린샷 캡처
+            url = parameters.get("url", "")
+            output_path = parameters.get("output_path", None)
+            
+            if not url:
+                raise ValueError("URL parameter is required for browser_screenshot")
+            
+            # Playwright를 사용한 스크린샷
+            try:
+                from playwright.async_api import async_playwright
+                PLAYWRIGHT_AVAILABLE = True
+            except ImportError:
+                PLAYWRIGHT_AVAILABLE = False
+            
+            if PLAYWRIGHT_AVAILABLE:
+                from playwright.async_api import async_playwright
+                
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    page = await browser.new_page()
+                    await page.goto(url, wait_until="networkidle")
+                    
+                    if output_path:
+                        await page.screenshot(path=output_path, full_page=True)
+                    else:
+                        # 임시 파일에 저장
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            output_path = tmp.name
+                            await page.screenshot(path=output_path, full_page=True)
+                    
+                    await browser.close()
+                    
+                    return ToolResult(
+                        success=True,
+                        data={"screenshot_path": output_path, "url": url},
+                        execution_time=time.time() - start_time,
+                        confidence=0.9
+                    )
+            else:
+                raise RuntimeError("Playwright not available for screenshot")
+        
+        elif tool_name == "browser_interact":
+            # 버튼 클릭, 폼 작성 등 상호작용
+            url = parameters.get("url", "")
+            actions = parameters.get("actions", [])  # List of action dicts
+            
+            if not url:
+                raise ValueError("URL parameter is required for browser_interact")
+            
+            if not actions:
+                raise ValueError("actions parameter is required for browser_interact")
+            
+            # Playwright를 사용한 상호작용
+            try:
+                from playwright.async_api import async_playwright
+                PLAYWRIGHT_AVAILABLE = True
+            except ImportError:
+                PLAYWRIGHT_AVAILABLE = False
+            
+            if PLAYWRIGHT_AVAILABLE:
+                from playwright.async_api import async_playwright
+                
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    page = await browser.new_page()
+                    await page.goto(url, wait_until="networkidle")
+                    
+                    results = []
+                    for action in actions:
+                        action_type = action.get("type")
+                        selector = action.get("selector")
+                        value = action.get("value")
+                        
+                        try:
+                            if action_type == "click":
+                                await page.click(selector)
+                                results.append({"type": "click", "selector": selector, "success": True})
+                            elif action_type == "fill":
+                                await page.fill(selector, value)
+                                results.append({"type": "fill", "selector": selector, "success": True})
+                            elif action_type == "select":
+                                await page.select_option(selector, value)
+                                results.append({"type": "select", "selector": selector, "success": True})
+                            elif action_type == "wait":
+                                await page.wait_for_selector(selector, timeout=5000)
+                                results.append({"type": "wait", "selector": selector, "success": True})
+                            else:
+                                results.append({"type": action_type, "success": False, "error": "Unknown action type"})
+                        except Exception as e:
+                            results.append({"type": action_type, "success": False, "error": str(e)})
+                    
+                    # 최종 페이지 콘텐츠 추출
+                    final_content = await page.content()
+                    
+                    await browser.close()
+                    
+                    return ToolResult(
+                        success=all(r.get("success", False) for r in results),
+                        data={
+                            "url": url,
+                            "actions": results,
+                            "final_content": final_content[:10000]  # 처음 10000자만
+                        },
+                        execution_time=time.time() - start_time,
+                        confidence=0.8 if all(r.get("success", False) for r in results) else 0.5
+                    )
+            else:
+                raise RuntimeError("Playwright not available for browser interaction")
+        
+        else:
+            raise ValueError(f"Unknown browser tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"Browser tool execution failed: {tool_name} - {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Browser tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_document_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """문서 생성 도구 실행."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from src.generation.report_generator import ReportGenerator
+        
+        generator = ReportGenerator()
+        research_data = parameters.get("research_data", {})
+        report_type = parameters.get("report_type", "comprehensive")
+        
+        if not research_data:
+            raise ValueError("research_data parameter is required for document generation")
+        
+        # 도구 이름에서 형식 추출
+        if tool_name == "generate_pdf":
+            output_format = "pdf"
+        elif tool_name == "generate_docx":
+            output_format = "docx"
+        elif tool_name == "generate_pptx":
+            output_format = "pptx"
+        elif tool_name == "generate_html":
+            output_format = "html"
+        elif tool_name == "generate_markdown":
+            output_format = "markdown"
+        else:
+            raise ValueError(f"Unknown document tool: {tool_name}")
+        
+        # 문서 생성
+        file_path = await generator.generate_research_report(
+            research_data=research_data,
+            report_type=report_type,
+            output_format=output_format
+        )
+        
+        return ToolResult(
+            success=True,
+            data={
+                "file_path": file_path,
+                "format": output_format,
+                "report_type": report_type
+            },
+            execution_time=time.time() - start_time,
+            confidence=0.9
+        )
+        
+    except Exception as e:
+        logger.error(f"Document tool execution failed: {tool_name} - {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Document tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_file_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """파일 작업 도구 실행."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from pathlib import Path
+        import os
+        
+        # 안전성 검증: 작업 디렉토리 제한
+        allowed_dirs = [
+            Path.cwd(),  # 현재 작업 디렉토리
+            Path("./outputs"),  # 출력 디렉토리
+            Path("./workspace"),  # 워크스페이스
+            Path("./temp"),  # 임시 디렉토리
+        ]
+        
+        def _is_safe_path(file_path: str) -> bool:
+            """경로 안전성 검증."""
+            try:
+                path = Path(file_path).resolve()
+                # 상대 경로만 허용
+                if path.is_absolute() and not any(path.is_relative_to(allowed) for allowed in allowed_dirs):
+                    # 절대 경로인 경우 허용된 디렉토리 내에 있는지 확인
+                    for allowed in allowed_dirs:
+                        try:
+                            path.relative_to(allowed.resolve())
+                            return True
+                        except ValueError:
+                            continue
+                    return False
+                # 상대 경로는 허용
+                return True
+            except Exception:
+                return False
+        
+        if tool_name == "create_file":
+            file_path = parameters.get("file_path", "")
+            content = parameters.get("content", "")
+            
+            if not file_path:
+                raise ValueError("file_path parameter is required")
+            if not _is_safe_path(file_path):
+                raise ValueError(f"Unsafe file path: {file_path}")
+            
+            path = Path(file_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding='utf-8')
+            
+            return ToolResult(
+                success=True,
+                data={"file_path": str(path), "size": len(content)},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "read_file":
+            file_path = parameters.get("file_path", "")
+            
+            if not file_path:
+                raise ValueError("file_path parameter is required")
+            if not _is_safe_path(file_path):
+                raise ValueError(f"Unsafe file path: {file_path}")
+            
+            path = Path(file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+            
+            content = path.read_text(encoding='utf-8')
+            
+            return ToolResult(
+                success=True,
+                data={"file_path": str(path), "content": content, "size": len(content)},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "write_file":
+            file_path = parameters.get("file_path", "")
+            content = parameters.get("content", "")
+            
+            if not file_path:
+                raise ValueError("file_path parameter is required")
+            if not _is_safe_path(file_path):
+                raise ValueError(f"Unsafe file path: {file_path}")
+            
+            path = Path(file_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding='utf-8')
+            
+            return ToolResult(
+                success=True,
+                data={"file_path": str(path), "size": len(content)},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "edit_file":
+            file_path = parameters.get("file_path", "")
+            old_string = parameters.get("old_string", "")
+            new_string = parameters.get("new_string", "")
+            
+            if not file_path:
+                raise ValueError("file_path parameter is required")
+            if not _is_safe_path(file_path):
+                raise ValueError(f"Unsafe file path: {file_path}")
+            
+            path = Path(file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+            
+            content = path.read_text(encoding='utf-8')
+            if old_string not in content:
+                raise ValueError(f"Old string not found in file: {file_path}")
+            
+            new_content = content.replace(old_string, new_string)
+            path.write_text(new_content, encoding='utf-8')
+            
+            return ToolResult(
+                success=True,
+                data={"file_path": str(path), "replacements": content.count(old_string)},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "list_files":
+            directory_path = parameters.get("directory_path", ".")
+            recursive = parameters.get("recursive", False)
+            
+            if not _is_safe_path(directory_path):
+                raise ValueError(f"Unsafe directory path: {directory_path}")
+            
+            path = Path(directory_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Directory not found: {directory_path}")
+            if not path.is_dir():
+                raise ValueError(f"Path is not a directory: {directory_path}")
+            
+            files = []
+            if recursive:
+                for item in path.rglob("*"):
+                    files.append({
+                        "name": item.name,
+                        "path": str(item.relative_to(path)),
+                        "is_file": item.is_file(),
+                        "size": item.stat().st_size if item.is_file() else 0
+                    })
+            else:
+                for item in path.iterdir():
+                    files.append({
+                        "name": item.name,
+                        "path": item.name,
+                        "is_file": item.is_file(),
+                        "size": item.stat().st_size if item.is_file() else 0
+                    })
+            
+            return ToolResult(
+                success=True,
+                data={"directory": str(path), "files": files, "count": len(files)},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "delete_file":
+            file_path = parameters.get("file_path", "")
+            
+            if not file_path:
+                raise ValueError("file_path parameter is required")
+            if not _is_safe_path(file_path):
+                raise ValueError(f"Unsafe file path: {file_path}")
+            
+            path = Path(file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"File or directory not found: {file_path}")
+            
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                import shutil
+                shutil.rmtree(path)
+            
+            return ToolResult(
+                success=True,
+                data={"file_path": str(path), "deleted": True},
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        else:
+            raise ValueError(f"Unknown file tool: {tool_name}")
+            
+    except Exception as e:
+        logger.error(f"File tool execution failed: {tool_name} - {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"File tool execution failed: {str(e)}",
             execution_time=time.time() - start_time,
             confidence=0.0
         )
