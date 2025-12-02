@@ -15,7 +15,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 # Result Reader 임포트
@@ -84,16 +85,7 @@ def main():
         reports_path.mkdir(parents=True, exist_ok=True)
         result_json_path = reports_path / f"devops_{task_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-        # A2A를 통한 agent 실행
-        agent_metadata = {
-            "agent_id": "devops_assistant_agent",
-            "agent_name": "DevOps Assistant Agent",
-            "entry_point": "srcs.common.generic_agent_runner",
-            "agent_type": "mcp_agent",
-            "capabilities": ["code_review", "deployment_check", "issue_analysis", "team_standup", "performance_analysis"],
-            "description": "GitHub 코드 리뷰, CI/CD 모니터링, 이슈 분석 등 개발자 생산성 자동화"
-        }
-
+        # 표준화된 방식으로 agent 실행
         config = {
             "task_type": task_type,
             "owner": owner,
@@ -103,18 +95,24 @@ def main():
         if task_type == "code_review":
             config["pull_number"] = int(pull_number)
 
-        input_data = {
-            "module_path": "srcs.enterprise_agents.devops_assistant_agent",
-            "class_name": "DevOpsAssistantMCPAgent",
-            "method_name": f"run_{task_type}",
-            "config": config,
-            "result_json_path": str(result_json_path)
-        }
-
-        result = run_agent_via_a2a(
+        result = execute_standard_agent_via_a2a(
             placeholder=result_placeholder,
-            agent_metadata=agent_metadata,
-            input_data=input_data,
+            agent_id="devops_assistant_agent",
+            agent_name="DevOps Assistant Agent",
+            entry_point="srcs.enterprise_agents.devops_assistant_agent",
+            agent_type=AgentType.MCP_AGENT,
+            capabilities=["code_review", "deployment_check", "issue_analysis", "team_standup", "performance_analysis"],
+            description="GitHub 코드 리뷰, CI/CD 모니터링, 이슈 분석 등 개발자 생산성 자동화",
+            input_params={
+                "task_type": task_type,
+                "owner": owner,
+                "repo": repo,
+                "simulation_mode": simulation_mode,
+                "pull_number": int(pull_number) if task_type == "code_review" else None,
+                "result_json_path": str(result_json_path)
+            },
+            class_name="DevOpsAssistantMCPAgent",
+            method_name=f"run_{task_type}",
             result_json_path=result_json_path,
             use_a2a=True
         )
@@ -149,7 +147,7 @@ def main():
                     for rec in latest_devops_result['recommendations']:
                         st.write(f"• {rec}")
             else:
-                
+                st.json(latest_devops_result)
     else:
         st.info("💡 아직 DevOps Assistant Agent의 결과가 없습니다. 위에서 DevOps 작업을 실행해보세요.")
 

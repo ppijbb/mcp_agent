@@ -87,17 +87,6 @@ def main():
             if result and "data" in result:
                 display_results(result["data"])
 
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
-
-            if result and "data" in result:
-                display_results(result["data"])
-
     # 최신 Mental Care 결과 확인
     st.markdown("---")
     st.markdown("## 📊 최신 Mental Care 결과")

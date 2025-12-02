@@ -14,7 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 try:
@@ -60,26 +61,18 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"medical_compliance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
+                        # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                 "agent_id": "medical_device_compliance_agent",
                 "agent_name": "Medical Device Compliance Agent",
                 "entry_point": "lang_graph.medical_device_compliance_agent",
-                "agent_type": "langgraph_agent",
+                agent_type=AgentType.LANGGRAPH_AGENT,
                 "capabilities": ["medical_device_compliance", "regulatory_analysis", "fda_compliance", "ce_compliance"],
                 "description": "LangGraph 기반 의료기기 규정 준수 검토 시스템"
-            }
-
-            input_data = {
-                "device": device_description,
-                "region": regulatory_region,
-                "messages": [{"role": "user", "content": f"Device: {device_description}, Region: {regulatory_region}"}],
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+            ,
+                input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
             )

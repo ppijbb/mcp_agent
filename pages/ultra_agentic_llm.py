@@ -14,7 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 try:

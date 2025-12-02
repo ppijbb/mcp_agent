@@ -16,7 +16,8 @@ import pandas as pd
 import plotly.express as px
 from srcs.common.streamlit_log_handler import setup_streamlit_logging
 from srcs.advanced_agents.enhanced_data_generator import SyntheticDataAgent
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from srcs.common.agent_interface import AgentType
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -323,28 +324,14 @@ def execute_detailed_data_agent_process(agent_method: str, config: dict):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             result_json_path = reports_path / f"detailed_data_result_{agent_method}_{timestamp}.json"
             
-            agent_metadata = {
-                "agent_id": f"detailed_data_agent_{agent_method}",
-                "agent_name": f"Detailed Data Agent ({agent_method})",
-                "agent_type": AgentType.MCP_AGENT,
-                "entry_point": "srcs.basic_agents.run_detailed_data_agent",
-                "capabilities": ["data_generation", "synthetic_data", "data_analysis"],
-                "description": "AI 기반 상세 데이터 생성 에이전트"
-            }
-            
-            input_data = {
-                "agent_method": agent_method,
-                "config": config,
-                "result_json_path": str(result_json_path)
-            }
-            
-            result = run_agent_via_a2a(
-                placeholder=placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+                        # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
+                "agent_id": f"detailed_data_agent_{agent_method,
+                input_params=input_data,
                 result_json_path=result_json_path,
-                use_a2a=True,
-                log_expander_title="실시간 실행 로그"
+                use_a2a=True
             )
             
             if result and result.get("success"):

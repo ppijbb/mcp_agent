@@ -11,7 +11,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -140,25 +141,18 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"drone_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
+                        # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                 "agent_id": "drone_scout_agent",
                 "agent_name": "Drone Scout Agent",
                 "entry_point": "srcs.drone_scout.run_drone_scout",
-                "agent_type": "mcp_agent",
+                agent_type=AgentType.MCP_AGENT,
                 "capabilities": ["drone_mission", "aerial_survey", "autonomous_flight"],
                 "description": "자연어 임무를 입력하여 자율 드론 정찰"
-            }
-
-            input_data = {
-                "mission": mission_text,
-                "simulation_mode": simulation_mode,
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+            ,
+                input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
             )

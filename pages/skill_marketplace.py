@@ -14,7 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 try:
@@ -64,26 +65,18 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"skill_marketplace_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-            agent_metadata = {
+                        # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                 "agent_id": "skill_marketplace_agent",
                 "agent_name": "Skill Marketplace Agent",
                 "entry_point": "lang_graph.skill_marketplace_agent",
-                "agent_type": "langgraph_agent",
+                agent_type=AgentType.LANGGRAPH_AGENT,
                 "capabilities": ["skill_matching", "job_matching", "skill_gap_analysis"],
                 "description": "LangGraph 기반 스킬 매칭 및 마켓플레이스 시스템"
-            }
-
-            input_data = {
-                "query": skill_query,
-                "match_type": match_type,
-                "messages": [{"role": "user", "content": skill_query}],
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+            ,
+                input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
             )

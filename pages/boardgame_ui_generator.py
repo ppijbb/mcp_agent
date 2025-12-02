@@ -20,7 +20,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # A2A 실행을 위한 import
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 # LLM import (게임 이름 추출용)
@@ -595,31 +596,21 @@ class RealLangGraphUI:
         }
         
         # A2A를 통한 agent 실행
-        agent_metadata = {
+                    # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
             "agent_id": "game_ui_analyzer",
             "agent_name": "Game UI Analyzer",
             "entry_point": "lang_graph.table_game_mate.agents.game_ui_analyzer",
-            "agent_type": "langgraph_agent",
+            agent_type=AgentType.LANGGRAPH_AGENT,
             "capabilities": ["game_analysis", "ui_spec_generation", "board_game_analysis"],
             "description": "LangGraph 기반 보드게임 UI 분석 및 명세서 생성 시스템"
-        }
-        
-        input_data = {
-            "game_description": input_state_data["game_description"],
-            "detailed_rules": input_state_data["detailed_rules"],
-            "messages": input_state_data["messages"],
-            "result_json_path": str(result_json_path)
-        }
-        
-        result_placeholder = st.empty()
-        
-        result = run_agent_via_a2a(
-            placeholder=result_placeholder,
-            agent_metadata=agent_metadata,
-            input_data=input_data,
-            result_json_path=result_json_path,
-            use_a2a=True
-        )
+        ,
+                input_params=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
         
         if result and result.get("success") and result.get("data"):
             # 결과 처리

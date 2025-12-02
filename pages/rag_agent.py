@@ -16,7 +16,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 from srcs.basic_agents.rag_agent import get_qdrant_status
 
@@ -73,23 +74,21 @@ def main():
                     # 이전 대화 기록 (마지막 응답 제외)
                     history = [msg for msg in st.session_state.rag_messages if msg['role'] != 'assistant']
 
-                    agent_metadata = {
+                                # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                         "agent_id": "rag_agent",
                         "agent_name": "RAG Agent",
                         "entry_point": "srcs.basic_agents.run_rag_agent",
-                        "agent_type": "mcp_agent",
+                        agent_type=AgentType.MCP_AGENT,
                         "capabilities": ["document_qa", "information_retrieval", "context_aware_answering"],
                         "description": "문서 기반 질의응답 및 정보 추출"
-                    }
-
-                    input_data = {
-                        "query": prompt,
-                        "history": history,
-                        "result_json_path": str(result_json_path)
-                    }
-
-                    result = run_agent_via_a2a(
-                        placeholder=st.empty(),
+                    ,
+                input_params=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            ),
                         agent_metadata=agent_metadata,
                         input_data=input_data,
                         result_json_path=result_json_path,

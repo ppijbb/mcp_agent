@@ -16,7 +16,8 @@ import json
 import yfinance as yf
 from typing import Dict, List, Any, Optional
 import os
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
@@ -485,28 +486,21 @@ def render_real_finance_agent(save_to_file=False):
                 placeholder = st.empty()
                 result_json_path = Path(st.session_state['finance_result_json_path'])
                 
-                agent_metadata = {
+                            # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                     "agent_id": "finance_health_agent",
                     "agent_name": "Finance Health Agent",
                     "agent_type": AgentType.MCP_AGENT,
                     "entry_point": "srcs.enterprise_agents.run_finance_health_agent",
                     "capabilities": ["financial_analysis", "health_scoring", "retirement_planning"],
                     "description": "개인 및 기업 재무 건강도 진단 및 최적화"
-                }
-                
-                input_data = {
-                    "input_data": st.session_state['finance_input_data'],
-                    "result_json_path": str(result_json_path)
-                }
-                
-                result = run_agent_via_a2a(
-                    placeholder=placeholder,
-                    agent_metadata=agent_metadata,
-                    input_data=input_data,
-                    result_json_path=result_json_path,
-                    use_a2a=True,
-                    log_expander_title="재무 건강 분석 실시간 로그"
-                )
+                ,
+                input_params=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
                 
                 if result and result.get("success"):
                     # 분석 결과 표시

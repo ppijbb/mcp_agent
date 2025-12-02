@@ -16,7 +16,8 @@ import base64
 from pathlib import Path
 from datetime import datetime, timedelta
 import streamlit_process_manager as spm
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # --- 1. 프로젝트 경로 설정 ---
 project_root = Path(__file__).parent.parent
@@ -203,57 +204,21 @@ if task_to_run:
     
     from srcs.common.agent_interface import AgentType
     
-    agent_metadata = {
+                # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
         "agent_id": "travel_scout_agent",
         "agent_name": "Travel Scout Agent",
         "entry_point": "srcs.travel_scout.run_travel_scout_agent",
         "agent_type": AgentType.MCP_AGENT,
         "capabilities": ["hotel_search", "flight_search", "travel_planning"],
         "description": "호텔 및 항공편 검색 및 여행 계획"
-    }
-
-    # 클래스 기반 실행을 위한 input_data 구성
-    result_json_path = run_output_dir / "results.json"
-    
-    input_data = {
-        "module_path": "srcs.travel_scout.run_travel_scout_agent",
-        "class_name": "TravelScoutRunner",
-        "result_json_path": str(result_json_path)
-    }
-
-    # 작업에 따른 인자 추가
-    if task_to_run == 'search_hotels':
-        check_in = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-        check_out = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
-        input_data.update({
-            "method_name": "run_hotels",
-            "destination": destination,
-            "check_in": check_in,
-            "check_out": check_out,
-            "guests": guests
-        })
-        st.info(f"🏨 {destination} 호텔 검색을 시작합니다...")
-
-    elif task_to_run == 'search_flights':
-        departure = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-        ret_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
-        input_data.update({
-            "method_name": "run_flights",
-            "origin": origin,
-            "destination": destination,
-            "departure_date": departure,
-            "return_date": ret_date
-        })
-        st.info(f"✈️ {origin} -> {destination} 항공편 검색을 시작합니다...")
-
-    placeholder = st.empty()
-    result = run_agent_via_a2a(
-        placeholder=placeholder,
-        agent_metadata=agent_metadata,
-        input_data=input_data,
-        result_json_path=result_json_path,
-        use_a2a=True
-    )
+    ,
+                input_params=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
     
     if result:
         # 결과 처리 - result는 AgentExecutionResult 형태일 수 있음

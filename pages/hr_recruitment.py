@@ -15,7 +15,8 @@ import streamlit_process_manager as spm
 
 
 from srcs.common.page_utils import create_agent_page
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -109,27 +110,18 @@ def main():
                 'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
             }
 
-            agent_metadata = {
+                        # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
                 "agent_id": "hr_recruitment_agent",
                 "agent_name": "HR Recruitment Agent",
                 "entry_point": "srcs.common.generic_agent_runner",
-                "agent_type": "mcp_agent",
+                agent_type=AgentType.MCP_AGENT,
                 "capabilities": ["job_description", "resume_screening", "interview_questions", "reference_check"],
                 "description": "인재 채용 및 관리 최적화"
-            }
-
-            input_data = {
-                "module_path": "srcs.enterprise_agents.hr_recruitment_agent",
-                "class_name": "HRRecruitmentAgent",
-                "method_name": "run_recruitment_workflow",
-                "config": config,
-                "result_json_path": str(result_json_path)
-            }
-
-            result = run_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_metadata=agent_metadata,
-                input_data=input_data,
+            ,
+                input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
             )

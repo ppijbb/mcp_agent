@@ -13,7 +13,8 @@ from pathlib import Path
 import json
 from datetime import datetime
 import streamlit_process_manager as spm
-from srcs.common.streamlit_a2a_runner import run_agent_via_a2a
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -281,30 +282,21 @@ def execute_workflow_process(task: str, model_name: str, plan_type: str):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result_json_path = reports_path / f"workflow_result_{timestamp}.json"
     
-    agent_metadata = {
+                # 표준화된 방식으로 agent 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                
         "agent_id": "workflow_orchestrator_agent",
         "agent_name": "Workflow Orchestrator Agent",
         "entry_point": "srcs.basic_agents.run_workflow_agent",
-        "agent_type": "mcp_agent",
+        agent_type=AgentType.MCP_AGENT,
         "capabilities": ["workflow_automation", "multi_agent_coordination", "task_orchestration"],
         "description": "복잡한 워크플로우 자동화 및 다중 에이전트 협업 시스템"
-    }
-
-    input_data = {
-        "task": task,
-        "model": model_name,
-        "plan_type": plan_type,
-        "result_json_path": str(result_json_path)
-    }
-
-    placeholder = st.empty()
-    result = run_agent_via_a2a(
-        placeholder=placeholder,
-        agent_metadata=agent_metadata,
-        input_data=input_data,
-        result_json_path=result_json_path,
-        use_a2a=True
-    )
+    ,
+                input_params=input_data,
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
     
     if result:
         render_results(result)
