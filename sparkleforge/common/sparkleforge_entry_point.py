@@ -31,7 +31,7 @@ async def run_sparkleforge_agent(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         # SparkleForge A2A wrapper import
-        from sparkleforge_a2a_wrapper import SparkleForgeA2AWrapper
+        from sparkleforge.common.sparkleforge_a2a_wrapper import SparkleForgeA2AWrapper
 
         logger.info("SparkleForge Agent 실행 시작")
 
@@ -66,7 +66,7 @@ class SparkleForgeAgent:
 
     async def initialize(self):
         """초기화"""
-        from sparkleforge_a2a_wrapper import SparkleForgeA2AWrapper
+        from sparkleforge.common.sparkleforge_a2a_wrapper import SparkleForgeA2AWrapper
         self.wrapper = SparkleForgeA2AWrapper()
         logger.info("SparkleForge Agent 초기화 완료")
 

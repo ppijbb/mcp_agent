@@ -13,7 +13,9 @@ import os
 import json
 
 # sparkleforge 프로젝트 경로 추가
-sparkleforge_path = Path(__file__).parent / "sparkleforge"
+# __file__이 sparkleforge/common/sparkleforge_a2a_wrapper.py이므로
+# parent.parent가 sparkleforge 디렉토리
+sparkleforge_path = Path(__file__).parent.parent
 sys.path.insert(0, str(sparkleforge_path))
 
 from srcs.common.a2a_integration import (
@@ -48,7 +50,7 @@ class SparkleForgeA2AWrapper(A2AAdapter):
             agent_metadata = {
                 'agent_id': agent_id,
                 'agent_name': 'SparkleForge Multi-Agent Research System',
-                'entry_point': 'sparkleforge_a2a_wrapper',
+                'entry_point': 'sparkleforge.common.sparkleforge_a2a_wrapper',
                 'agent_type': AgentType.MCP_AGENT,  # MCP_AGENT로 취급
                 'capabilities': [
                     'research',

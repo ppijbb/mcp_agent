@@ -161,7 +161,7 @@ if execute_button and research_topic.strip():
                 placeholder=result_placeholder,
                 agent_id="sparkleforge_agent",
                 agent_name="SparkleForge Multi-Agent Research System",
-                entry_point="sparkleforge_entry_point.run_sparkleforge_agent",
+                entry_point="sparkleforge.common.sparkleforge_entry_point.run_sparkleforge_agent",
                 agent_type=AgentType.MCP_AGENT,
                 capabilities=[
                     "research",
