@@ -77,38 +77,60 @@ bing_search = {
 
 # 웹 스크래핑
 web_scraping = {
-    'system_message': 'You are an expert web scraper with content extraction capabilities.',
+    'system_message': 'You are an expert web scraper with content extraction capabilities. You ensure URL normalization and avoid duplication.',
     'template': '''다음 URL에서 콘텐츠를 추출하고 분석하세요.
 
 URL: {url}
 추출 목표: {extraction_goal}
 
+**변수 검증 (Variable Validation):**
+- `url`이 존재하고 None이 아닌지 확인하세요. 없거나 None인 경우 명시적으로 보고하세요.
+- `extraction_goal`이 존재하고 유효한지 확인하세요.
+
+**URL 관리 규칙 (URL Management):**
+- URL은 전체 표기하세요 (축약 금지).
+- URL 정규화: trailing slash 제거, 소문자 변환.
+- 소스 수집 시 중복 체크를 수행하세요.
+- 이미 수집된 URL인지 확인하세요.
+
 추출 작업:
 1. 웹페이지 콘텐츠를 체계적으로 추출하세요
 2. 텍스트, 이미지, 메타데이터를 포함하세요
 3. 구조화된 형식으로 정리하세요
+4. URL을 전체 표기하여 기록하세요
 
 추출 결과를 분석하여 핵심 정보를 요약하세요.''',
     'variables': ['url', 'extraction_goal'],
-    'description': '웹 스크래핑 프롬프트'
+    'description': '웹 스크래핑 프롬프트 (URL 정규화 및 중복 체크 포함)'
 }
 
 # 브라우저 연구
 browser_research = {
-    'system_message': 'You are an expert researcher with browser automation capabilities.',
+    'system_message': 'You are an expert researcher with browser automation capabilities. You ensure URL normalization and avoid duplication.',
     'template': '''브라우저 자동화를 사용하여 다음 연구 작업을 수행하세요.
 
 연구 계획: {research_plan}
 최대 결과 수: {max_results}
 
+**변수 검증 (Variable Validation):**
+- `research_plan`이 존재하고 None이 아닌지 확인하세요. 없거나 None인 경우 명시적으로 보고하세요.
+- `max_results`가 유효한 숫자인지 확인하세요.
+
+**URL 관리 규칙 (URL Management):**
+- 모든 URL은 전체 표기하세요 (축약 금지).
+- URL 정규화: trailing slash 제거, 소문자 변환.
+- 소스 수집 시 중복 체크를 수행하세요.
+- 이미 수집된 URL인지 확인하세요.
+
 연구 전략:
 1. 브라우저를 사용하여 동적 웹사이트에 접근하세요
 2. JavaScript 기반 콘텐츠를 추출하세요
 3. 상호작용이 필요한 페이지를 처리하세요
+4. 모든 URL을 전체 표기하여 기록하세요
 
 연구 결과를 종합하여 반환하세요.''',
     'variables': ['research_plan', 'max_results'],
-    'description': '브라우저 자동화 연구 프롬프트'
+    'description': '브라우저 자동화 연구 프롬프트 (URL 정규화 및 중복 체크 포함)'
 }
 
 # 상호작용 연구
@@ -185,38 +207,59 @@ report_writing = {
 
 # 종합
 synthesis = {
-    'system_message': 'You are an expert research synthesizer.',
+    'system_message': 'You are an expert research synthesizer. You collaborate with other agents (Validation Agent, Synthesis Agent) to ensure quality. IMPORTANT: All internal communication between agents must be in English. Only the final report to the user should be in the user\'s requested language.',
     'template': '''여러 출처의 연구 데이터를 종합하세요.
 
 데이터: {data}
 종합 유형: {synthesis_type}
 
+**변수 검증 (Variable Validation):**
+- `data`가 존재하고 None이 아닌지 확인하세요. 없거나 None인 경우 명시적으로 보고하세요.
+- `synthesis_type`이 존재하고 유효한지 확인하세요.
+
+**URL 관리 규칙 (URL Management):**
+- 모든 URL은 전체 표기하세요 (축약 금지).
+- URL 정규화: trailing slash 제거, 소문자 변환.
+- 소스 수집 시 중복 체크를 수행하세요.
+
 데이터 종합:
 1. 다양한 출처의 정보를 통합하세요
 2. 일관성과 모순을 분석하세요
 3. 종합된 결과를 도출하세요
+4. 모든 URL을 전체 표기하여 기록하세요
+
+**Agent 간 협동 (Agent Collaboration):**
+- Validation Agent에게 결과 검증을 요청하세요.
+- Synthesis Agent와 협동하여 품질을 보장하세요.
+- **중요: 모든 내부 agent 간 소통은 영어로 해야 합니다.**
 
 종합 결과를 반환하세요.''',
     'variables': ['data', 'synthesis_type'],
-    'description': '데이터 종합 프롬프트'
+    'description': '데이터 종합 프롬프트 (URL 관리 및 협동 기능 포함)'
 }
 
 # 검증
 validation = {
-    'system_message': 'You are an expert research validator.',
+    'system_message': 'You are an expert research validator. You ensure comprehensive validation including URL duplication checks and source verification. IMPORTANT: All internal communication between agents must be in English. Only the final report to the user should be in the user\'s requested language.',
     'template': '''연구 결과를 검증하세요.
 
 결과: {results}
 검증 기준: {criteria}
 
+**변수 검증 (Variable Validation):**
+- `results`가 존재하고 None이 아닌지 확인하세요. 없거나 None인 경우 명시적으로 보고하세요.
+- `criteria`가 존재하고 유효한지 확인하세요.
+
 검증 작업:
 1. 결과의 정확성을 검증하세요
 2. 출처의 신뢰성을 확인하세요
-3. 검증 결과를 정리하세요
+3. **URL 중복 검사**: 모든 URL이 한 번만 나타나는지 확인하세요
+4. **소스 검증**: 각 URL이 실제로 사용되었는지 확인하세요
+5. 검증 결과를 정리하세요
 
 검증 결과를 반환하세요.''',
     'variables': ['results', 'criteria'],
-    'description': '연구 결과 검증 프롬프트'
+    'description': '연구 결과 검증 프롬프트 (URL 중복 검사 및 소스 검증 강화)'
 }
 
 # 권장사항
