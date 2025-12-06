@@ -18,7 +18,6 @@ from srcs.common.streamlit_log_handler import setup_streamlit_logging
 from srcs.advanced_agents.enhanced_data_generator import SyntheticDataAgent
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
-from srcs.common.agent_interface import AgentType
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -324,11 +323,25 @@ def execute_detailed_data_agent_process(agent_method: str, config: dict):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             result_json_path = reports_path / f"detailed_data_result_{agent_method}_{timestamp}.json"
             
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "agent_method": agent_method,
+                "config": config,
+                "result_json_path": str(result_json_path)
+            }
+            
+            # 결과 표시용 placeholder 생성
+            result_placeholder = st.empty()
+            
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": f"detailed_data_agent_{agent_method,
+                agent_id=f"detailed_data_agent_{agent_method}",
+                agent_name=f"Detailed Data Agent ({agent_method})",
+                entry_point="srcs.basic_agents.data_generator",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=["data_generation", "synthetic_data", "custom_datasets"],
+                description="AI 기반 데이터 생성 및 분석",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -359,6 +372,7 @@ def display_detailed_data_results(result: dict, config: dict):
         st.toast("다운로드가 시작되었습니다!")
 
     with st.expander("🔍 품질 측정 항목 보기"):
+        st.info("품질 측정 항목은 데이터 생성 완료 후 표시됩니다.")
 
 
 # 아래 함수들은 기존 로직을 그대로 사용하거나, 더미 데이터를 반환합니다.
@@ -506,8 +520,10 @@ def render_results_viewer():
             # 설정 정보 표시
             if 'config' in latest_result:
                 with st.expander("⚙️ 생성 설정", expanded=False):
+                    st.json(latest_result['config'])
         
         else:
+            st.write("결과 데이터 형식이 예상과 다릅니다.")
     
     else:
         st.warning("📭 아직 생성된 데이터가 없습니다.")

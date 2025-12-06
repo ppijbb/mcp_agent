@@ -99,6 +99,7 @@ def display_results(result_data):
         st.warning("No trajectory data available for visualization.")
 
     with st.expander("Full Mission Log"):
+        st.write("Mission log will be displayed here.")
 
 
 def main():
@@ -141,17 +142,21 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"drone_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "mission_text": mission_text,
+                "simulation_mode": simulation_mode
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "drone_scout_agent",
-                "agent_name": "Drone Scout Agent",
-                "entry_point": "srcs.drone_scout.run_drone_scout",
+                agent_id="drone_scout_agent",
+                agent_name="Drone Scout Agent",
+                entry_point="srcs.drone_scout.run_drone_scout",
                 agent_type=AgentType.MCP_AGENT,
-                "capabilities": ["drone_mission", "aerial_survey", "autonomous_flight"],
-                "description": "자연어 임무를 입력하여 자율 드론 정찰"
-            ,
+                capabilities=["drone_mission", "aerial_survey", "autonomous_flight"],
+                description="자연어 임무를 입력하여 자율 드론 정찰",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -212,6 +217,7 @@ def main():
                 if 'timestamp' in latest_drone_result:
                     st.caption(f"⏰ 미션 시간: {latest_drone_result['timestamp']}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 Drone Scout Agent의 결과가 없습니다. 위에서 드론 미션을 실행해보세요.")
 

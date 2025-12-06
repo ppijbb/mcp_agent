@@ -74,23 +74,23 @@ def main():
                     # 이전 대화 기록 (마지막 응답 제외)
                     history = [msg for msg in st.session_state.rag_messages if msg['role'] != 'assistant']
 
-                                # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-                        "agent_id": "rag_agent",
-                        "agent_name": "RAG Agent",
-                        "entry_point": "srcs.basic_agents.run_rag_agent",
+                    # 입력 파라미터 준비
+                    input_data = {
+                        "query": prompt,
+                        "history": history,
+                        "result_json_path": str(result_json_path)
+                    }
+
+                    # 표준화된 방식으로 agent 실행
+                    result = execute_standard_agent_via_a2a(
+                        placeholder=result_placeholder,
+                        agent_id="rag_agent",
+                        agent_name="RAG Agent",
+                        entry_point="srcs.basic_agents.run_rag_agent",
                         agent_type=AgentType.MCP_AGENT,
-                        "capabilities": ["document_qa", "information_retrieval", "context_aware_answering"],
-                        "description": "문서 기반 질의응답 및 정보 추출"
-                    ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            ),
-                        agent_metadata=agent_metadata,
-                        input_data=input_data,
+                        capabilities=["document_qa", "information_retrieval", "context_aware_answering"],
+                        description="문서 기반 질의응답 및 정보 추출",
+                        input_params=input_data,
                         result_json_path=result_json_path,
                         use_a2a=True
                     )
@@ -133,6 +133,9 @@ def main():
                 if 'timestamp' in latest_rag_result:
                     st.caption(f"⏰ 생성 시간: {latest_rag_result['timestamp']}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
+    else:
+        st.info("💡 아직 RAG Agent의 결과가 없습니다. 위에서 질문을 해보세요.")
 
 if __name__ == "__main__":
     main() 

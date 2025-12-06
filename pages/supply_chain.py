@@ -89,11 +89,31 @@ def main():
     latest_result = result_reader.get_latest_result("supply_chain_agent", "supply_chain_analysis")
     if latest_result:
         with st.expander("🔗 최신 공급망 분석 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Supply Chain Agent의 결과가 없습니다. 위에서 공급망 분석을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 공급망 분석 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'analysis_result' in result_data:
+                st.markdown("### 📊 분석 결과")
+                st.write(result_data['analysis_result'])
+            if 'recommendations' in result_data:
+                st.markdown("### 💡 권장사항")
+                recommendations = result_data['recommendations']
+                if isinstance(recommendations, list):
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                else:
+                    st.write(recommendations)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

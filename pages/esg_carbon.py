@@ -88,11 +88,28 @@ def main():
     latest_result = result_reader.get_latest_result("esg_agent", "esg_analysis")
     if latest_result:
         with st.expander("🌱 최신 ESG 분석 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 ESG Agent의 결과가 없습니다. 위에서 ESG 분석을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 ESG 분석 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if "carbon_footprint" in result_data:
+                st.metric("탄소 발자국", f"{result_data['carbon_footprint']:.2f} tCO2e")
+            if "esg_score" in result_data:
+                st.metric("ESG 점수", f"{result_data['esg_score']:.1f}/100")
+            if "recommendations" in result_data:
+                st.subheader("💡 권장사항")
+                for rec in result_data['recommendations']:
+                    st.write(f"• {rec}")
+            st.json(result_data)
+        else:
+            st.write(result_data)
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

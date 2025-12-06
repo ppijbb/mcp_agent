@@ -61,21 +61,26 @@ def main():
         reports_path.mkdir(parents=True, exist_ok=True)
         result_json_path = reports_path / f"news_collector_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                    # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-            "agent_id": "news_collector_agent",
-            "agent_name": "News Collector Agent",
-            "entry_point": "srcs.common.generic_agent_runner",
+        # 입력 파라미터 준비
+        input_data = {
+            "target_date": str(target_date),
+            "news_types": news_types if news_types else ["both"],
+            "result_json_path": str(result_json_path)
+        }
+
+        # 표준화된 방식으로 agent 실행
+        result = execute_standard_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_id="news_collector_agent",
+            agent_name="News Collector Agent",
+            entry_point="srcs.common.generic_agent_runner",
             agent_type=AgentType.MCP_AGENT,
-            "capabilities": ["news_collection", "domestic_news", "international_news"],
-            "description": "MCP를 사용하여 국내뉴스와 국제뉴스를 수집하고 정리"
-        ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+            capabilities=["news_collection", "domestic_news", "international_news"],
+            description="MCP를 사용하여 국내뉴스와 국제뉴스를 수집하고 정리",
+            input_params=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
 
         if result and result.get("success") and result.get("data"):
             display_results(result["data"])
@@ -110,6 +115,7 @@ def main():
                     for news in latest_news_result['international_news'][:5]:
                         st.write(f"• {news.get('title', 'N/A')}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 News Collector Agent의 결과가 없습니다. 위에서 뉴스 수집을 실행해보세요.")
 

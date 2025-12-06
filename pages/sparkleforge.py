@@ -9,9 +9,12 @@ import asyncio
 import json
 from typing import Dict, Any, Optional
 import logging
+from datetime import datetime
+from pathlib import Path
 
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
+from configs.settings import get_reports_path
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -156,6 +159,14 @@ if execute_button and research_topic.strip():
                 "save_results": save_results
             }
 
+            # 결과 파일 경로 설정
+            result_json_path = None
+            if save_results:
+                reports_path = Path(get_reports_path('sparkleforge'))
+                reports_path.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                result_json_path = reports_path / f"research_{timestamp}.json"
+
             # A2A를 통해 SparkleForge 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
@@ -172,7 +183,7 @@ if execute_button and research_topic.strip():
                 ],
                 description="혁신적인 다중 에이전트 연구 시스템",
                 input_params=input_params,
-                result_json_path=f"outputs/sparkleforge/research_{asyncio.get_event_loop().time()}.json" if save_results else None,
+                result_json_path=result_json_path,
                 use_a2a=True
             )
 

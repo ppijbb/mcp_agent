@@ -13,7 +13,6 @@ import os
 from datetime import datetime
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
-from srcs.common.agent_interface import AgentType
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -171,21 +170,29 @@ def run_research_interface():
         result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         result_json_path.parent.mkdir(parents=True, exist_ok=True)
         
-                    # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-            "agent_id": "sparkleforge_research_agent",
-            "agent_name": "SparkleForge Research Agent",
-            "agent_type": AgentType.SPARKLEFORGE_AGENT,
-            "entry_point": "sparkleforge.src.core.agent_orchestrator",
-            "capabilities": ["research", "autonomous_research", "multi_agent_orchestration"],
-            "description": "SparkleForge 기반 자율 연구 시스템"
-        ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+        # 입력 파라미터 준비
+        input_data = {
+            "query": research_query,
+            "context": context,
+            "result_json_path": str(result_json_path)
+        }
+        
+        # 결과 표시용 placeholder 생성
+        result_placeholder = st.empty()
+        
+        # 표준화된 방식으로 agent 실행
+        result = execute_standard_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_id="sparkleforge_research_agent",
+            agent_name="SparkleForge Research Agent",
+            agent_type=AgentType.SPARKLEFORGE_AGENT,
+            entry_point="sparkleforge.src.core.agent_orchestrator",
+            capabilities=["research", "autonomous_research", "multi_agent_orchestration"],
+            description="SparkleForge 기반 자율 연구 시스템",
+            input_params=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
         
         if result and result.get("success"):
             objective_id = result.get("data", {}).get('objective_id', f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
@@ -319,21 +326,30 @@ def run_fallback_interface():
         result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         result_json_path.parent.mkdir(parents=True, exist_ok=True)
         
-                    # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-            "agent_id": "sparkleforge_research_agent",
-            "agent_name": "SparkleForge Research Agent",
-            "agent_type": AgentType.SPARKLEFORGE_AGENT,
-            "entry_point": "sparkleforge.src.core.agent_orchestrator",
-            "capabilities": ["research", "autonomous_research", "multi_agent_orchestration"],
-            "description": "SparkleForge 기반 자율 연구 시스템"
-        ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+        # 입력 파라미터 준비
+        input_data = {
+            "query": research_query,
+            "research_focus": research_focus,
+            "research_depth": research_depth,
+            "result_json_path": str(result_json_path)
+        }
+        
+        # 결과 표시용 placeholder 생성
+        result_placeholder = st.empty()
+        
+        # 표준화된 방식으로 agent 실행
+        result = execute_standard_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_id="sparkleforge_research_agent",
+            agent_name="SparkleForge Research Agent",
+            agent_type=AgentType.SPARKLEFORGE_AGENT,
+            entry_point="sparkleforge.src.core.agent_orchestrator",
+            capabilities=["research", "autonomous_research", "multi_agent_orchestration"],
+            description="SparkleForge 기반 자율 연구 시스템",
+            input_params=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
         
         if result and result.get("success"):
             st.success("✅ 연구가 완료되었습니다!")

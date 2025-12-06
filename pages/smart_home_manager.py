@@ -61,17 +61,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"smart_home_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "home_command": home_command,
+                "device_type": device_type,
+                "messages": [{"role": "user", "content": home_command}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "smart_home_manager_agent",
-                "agent_name": "Smart Home Manager Agent",
-                "entry_point": "lang_graph.smart_home_manager",
+                agent_id="smart_home_manager_agent",
+                agent_name="Smart Home Manager Agent",
+                entry_point="lang_graph.smart_home_manager",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["home_automation", "device_control", "smart_home_management"],
-                "description": "LangGraph 기반 스마트 홈 자동화 및 관리 시스템"
-            ,
+                capabilities=["home_automation", "device_control", "smart_home_management"],
+                description="LangGraph 기반 스마트 홈 자동화 및 관리 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -85,11 +91,31 @@ def main():
     latest_result = result_reader.get_latest_result("smart_home_agent", "home_control")
     if latest_result:
         with st.expander("🏡 최신 홈 제어 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Smart Home Manager Agent의 결과가 없습니다. 위에서 홈 제어를 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 홈 제어 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'execution_status' in result_data:
+                st.markdown("### ⚙️ 실행 상태")
+                st.write(result_data['execution_status'])
+            if 'devices_controlled' in result_data:
+                st.markdown("### 🏠 제어된 디바이스")
+                devices = result_data['devices_controlled']
+                if isinstance(devices, list):
+                    for device in devices:
+                        st.write(f"• {device}")
+                else:
+                    st.write(devices)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

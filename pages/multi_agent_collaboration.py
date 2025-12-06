@@ -62,17 +62,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"multi_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "collaboration_task": collaboration_task,
+                "agent_count": agent_count,
+                "messages": [{"role": "user", "content": collaboration_task}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "multi_agent_collaboration",
-                "agent_name": "Multi-Agent Collaboration",
-                "entry_point": "lang_graph.multi_agent_collaboration",
+                agent_id="multi_agent_collaboration",
+                agent_name="Multi-Agent Collaboration",
+                entry_point="lang_graph.multi_agent_collaboration",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["multi_agent_collaboration", "task_decomposition", "coordination"],
-                "description": "LangGraph 기반 다중 Agent 협업 및 통신 시스템"
-            ,
+                capabilities=["multi_agent_collaboration", "task_decomposition", "coordination"],
+                description="LangGraph 기반 다중 Agent 협업 및 통신 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -86,11 +92,34 @@ def main():
     latest_result = result_reader.get_latest_result("multi_agent_collaboration", "collaboration_execution")
     if latest_result:
         with st.expander("🤝 최신 협업 실행 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Multi-Agent Collaboration의 결과가 없습니다. 위에서 협업 작업을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 협업 실행 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'collaboration_result' in result_data:
+                st.markdown("### 🤝 협업 결과")
+                st.write(result_data['collaboration_result'])
+            if 'agents_involved' in result_data:
+                st.markdown("### 👥 참여 Agent")
+                agents = result_data['agents_involved']
+                if isinstance(agents, list):
+                    for agent in agents:
+                        st.write(f"• {agent}")
+                else:
+                    st.write(agents)
+            if 'task_decomposition' in result_data:
+                st.markdown("### 📋 작업 분해")
+                st.json(result_data['task_decomposition'])
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

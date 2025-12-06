@@ -115,7 +115,9 @@ def main():
                 
                 if latest_mental_result.get('analysis_results'):
                     st.subheader("📋 분석 결과")
+                    st.write(latest_mental_result['analysis_results'])
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 Mental Care Agent의 결과가 없습니다. 위에서 상담을 시작해보세요.")
 

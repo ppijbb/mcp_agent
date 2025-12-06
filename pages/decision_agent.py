@@ -4,7 +4,6 @@ import sys
 import json
 import os
 from datetime import datetime
-import streamlit_process_manager as spm
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -177,6 +176,7 @@ def main():
                 if 'timestamp' in latest_decision_result:
                     st.caption(f"⏰ 분석 시간: {latest_decision_result['timestamp']}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 Decision Agent의 결과가 없습니다. 위에서 의사결정 분석을 실행해보세요.")
 

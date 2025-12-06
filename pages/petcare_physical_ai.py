@@ -93,11 +93,37 @@ def main():
     latest_result = result_reader.get_latest_result("petcare_agent", "petcare_analysis")
     if latest_result:
         with st.expander("🐾 최신 반려동물 케어 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Petcare Physical AI Agent의 결과가 없습니다. 위에서 케어 계획을 생성해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 반려동물 케어 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'care_plan' in result_data:
+                st.markdown("### 🐾 케어 계획")
+                st.write(result_data['care_plan'])
+            if 'health_recommendations' in result_data:
+                st.markdown("### 💊 건강 권장사항")
+                recommendations = result_data['health_recommendations']
+                if isinstance(recommendations, list):
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                else:
+                    st.write(recommendations)
+            if 'nutrition_plan' in result_data:
+                st.markdown("### 🍖 영양 계획")
+                st.write(result_data['nutrition_plan'])
+            if 'exercise_plan' in result_data:
+                st.markdown("### 🏃 운동 계획")
+                st.write(result_data['exercise_plan'])
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

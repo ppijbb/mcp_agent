@@ -65,17 +65,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"skill_marketplace_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "skill_query": skill_query,
+                "match_type": match_type,
+                "messages": [{"role": "user", "content": skill_query}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "skill_marketplace_agent",
-                "agent_name": "Skill Marketplace Agent",
-                "entry_point": "lang_graph.skill_marketplace_agent",
+                agent_id="skill_marketplace_agent",
+                agent_name="Skill Marketplace Agent",
+                entry_point="lang_graph.skill_marketplace_agent",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["skill_matching", "job_matching", "skill_gap_analysis"],
-                "description": "LangGraph 기반 스킬 매칭 및 마켓플레이스 시스템"
-            ,
+                capabilities=["skill_matching", "job_matching", "skill_gap_analysis"],
+                description="LangGraph 기반 스킬 매칭 및 마켓플레이스 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -89,11 +95,31 @@ def main():
     latest_result = result_reader.get_latest_result("skill_marketplace_agent", "skill_matching")
     if latest_result:
         with st.expander("🎯 최신 스킬 매칭 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Skill Marketplace Agent의 결과가 없습니다. 위에서 스킬 매칭을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 스킬 매칭 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'matches' in result_data:
+                st.markdown("### 🎯 매칭 결과")
+                matches = result_data['matches']
+                if isinstance(matches, list):
+                    for match in matches:
+                        st.write(f"• {match}")
+                else:
+                    st.write(matches)
+            if 'skill_gap_analysis' in result_data:
+                st.markdown("### 📊 스킬 격차 분석")
+                st.write(result_data['skill_gap_analysis'])
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

@@ -96,11 +96,34 @@ def main():
     latest_result = result_reader.get_latest_result("revenue_agent", "revenue_analysis")
     if latest_result:
         with st.expander("📈 최신 매출 운영 분석 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Revenue Operations Agent의 결과가 없습니다. 위에서 매출 분석을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 매출 운영 분석 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'revenue_forecast' in result_data:
+                st.markdown("### 📈 매출 예측")
+                st.write(result_data['revenue_forecast'])
+            if 'pipeline_analysis' in result_data:
+                st.markdown("### 🔄 파이프라인 분석")
+                st.write(result_data['pipeline_analysis'])
+            if 'recommendations' in result_data:
+                st.markdown("### 💡 권장사항")
+                recommendations = result_data['recommendations']
+                if isinstance(recommendations, list):
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                else:
+                    st.write(recommendations)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

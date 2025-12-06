@@ -66,17 +66,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"kimi_k2_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "synthesis_task": synthesis_task,
+                "data_type": data_type,
+                "messages": [{"role": "user", "content": synthesis_task}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "kimi_k2_agentic_data_synthesis",
-                "agent_name": "Kimi K2 Agentic Data Synthesis",
-                "entry_point": "lang_graph.kimi_k2_agentic_data_synthesis",
+                agent_id="kimi_k2_agentic_data_synthesis",
+                agent_name="Kimi K2 Agentic Data Synthesis",
+                entry_point="lang_graph.kimi_k2_agentic_data_synthesis",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["data_synthesis", "time_series_generation", "tabular_data_generation"],
-                "description": "LangGraph 기반 에이전트식 데이터 합성 시스템"
-            ,
+                capabilities=["data_synthesis", "time_series_generation", "tabular_data_generation"],
+                description="LangGraph 기반 에이전트식 데이터 합성 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -90,11 +96,26 @@ def main():
     latest_result = result_reader.get_latest_result("kimi_k2_agent", "data_synthesis")
     if latest_result:
         with st.expander("🧪 최신 데이터 합성 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Kimi K2 Agent의 결과가 없습니다. 위에서 데이터 합성을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 데이터 합성 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'synthesized_data' in result_data:
+                st.markdown("### 📊 합성된 데이터")
+                st.json(result_data['synthesized_data'])
+            if 'synthesis_metadata' in result_data:
+                st.markdown("### 📋 합성 메타데이터")
+                st.json(result_data['synthesis_metadata'])
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

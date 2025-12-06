@@ -140,7 +140,7 @@ def main():
                 
                 if latest_devops_result.get('result_data'):
                     st.subheader("📋 작업 결과")
-                    
+                    st.json(latest_devops_result['result_data'])
                 
                 if latest_devops_result.get('recommendations'):
                     st.subheader("💡 권장사항")
@@ -169,7 +169,7 @@ def display_results(result_data):
     
     if result_data.get('result_data'):
         st.subheader("📋 작업 결과")
-        
+        st.json(result_data['result_data'])
     
     if result_data.get('recommendations'):
         st.subheader("💡 권장사항")

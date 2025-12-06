@@ -11,20 +11,11 @@ import os
 import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-import streamlit_process_manager as spm
 
 
 from srcs.common.page_utils import create_agent_page
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
-
-# Result Reader 임포트
-try:
-    from srcs.utils.result_reader import result_reader, result_display
-except ImportError as e:
-    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
-    st.stop()
-from configs.settings import get_reports_path
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -32,6 +23,13 @@ sys.path.insert(0, str(project_root))
 
 # 중앙 설정 시스템 import
 from configs.settings import get_reports_path
+
+# Result Reader 임포트
+try:
+    from srcs.utils.result_reader import result_reader, result_display
+except ImportError as e:
+    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+    st.stop()
 
 # HR Recruitment Agent 임포트 시도
 try:
@@ -110,17 +108,23 @@ def main():
                 'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
             }
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "position": position,
+                "company": company,
+                "workflows": workflows,
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "hr_recruitment_agent",
-                "agent_name": "HR Recruitment Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
+                agent_id="hr_recruitment_agent",
+                agent_name="HR Recruitment Agent",
+                entry_point="srcs.common.generic_agent_runner",
                 agent_type=AgentType.MCP_AGENT,
-                "capabilities": ["job_description", "resume_screening", "interview_questions", "reference_check"],
-                "description": "인재 채용 및 관리 최적화"
-            ,
+                capabilities=["job_description", "resume_screening", "interview_questions", "reference_check"],
+                description="인재 채용 및 관리 최적화",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -180,6 +184,7 @@ def main():
                 if 'timestamp' in latest_recruitment_result:
                     st.caption(f"⏰ 분석 시간: {latest_recruitment_result['timestamp']}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 HR Recruitment Agent의 결과가 없습니다. 위에서 채용 분석을 실행해보세요.")
 

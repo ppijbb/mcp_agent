@@ -65,17 +65,22 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"aiops_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "task_description": task_description,
+                "simulation_mode": simulation_mode,
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "aiops_orchestrator_agent",
-                "agent_name": "AIOps Orchestrator Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
+                agent_id="aiops_orchestrator_agent",
+                agent_name="AIOps Orchestrator Agent",
+                entry_point="srcs.common.generic_agent_runner",
                 agent_type=AgentType.MCP_AGENT,
-                "capabilities": ["it_operations", "performance_monitoring", "automation", "infrastructure_management"],
-                "description": "AI 기반 IT 운영 자동화 및 모니터링"
-            ,
+                capabilities=["it_operations", "performance_monitoring", "automation", "infrastructure_management"],
+                description="AI 기반 IT 운영 자동화 및 모니터링",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True

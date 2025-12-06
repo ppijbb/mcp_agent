@@ -172,6 +172,7 @@ def main():
                 if 'timestamp' in latest_seo_result:
                     st.caption(f"⏰ 진단 시간: {latest_seo_result['timestamp']}")
             else:
+                st.write("결과 데이터 형식이 예상과 다릅니다.")
     else:
         st.info("💡 아직 SEO Doctor Agent의 결과가 없습니다. 위에서 SEO 진단을 실행해보세요.")
 

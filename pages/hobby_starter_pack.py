@@ -65,17 +65,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"hobby_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "hobby_interest": hobby_interest,
+                "experience_level": experience_level,
+                "messages": [{"role": "user", "content": hobby_interest}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "hobby_starter_pack_agent",
-                "agent_name": "Hobby Starter Pack Agent",
-                "entry_point": "lang_graph.hobby_starter_pack_agent",
+                agent_id="hobby_starter_pack_agent",
+                agent_name="Hobby Starter Pack Agent",
+                entry_point="lang_graph.hobby_starter_pack_agent",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["hobby_recommendation", "hobby_guide_generation", "skill_learning_path"],
-                "description": "LangGraph 기반 취미 시작 가이드 및 추천 시스템"
-            ,
+                capabilities=["hobby_recommendation", "hobby_guide_generation", "skill_learning_path"],
+                description="LangGraph 기반 취미 시작 가이드 및 추천 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -89,11 +95,31 @@ def main():
     latest_result = result_reader.get_latest_result("hobby_agent", "hobby_guide")
     if latest_result:
         with st.expander("🎨 최신 취미 가이드 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Hobby Starter Pack Agent의 결과가 없습니다. 위에서 취미 가이드를 생성해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 취미 가이드 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'hobby_guide' in result_data:
+                st.markdown("### 🎨 취미 가이드")
+                st.write(result_data['hobby_guide'])
+            if 'recommended_hobbies' in result_data:
+                st.markdown("### 💡 추천 취미")
+                hobbies = result_data['recommended_hobbies']
+                if isinstance(hobbies, list):
+                    for hobby in hobbies:
+                        st.write(f"• {hobby}")
+                else:
+                    st.write(hobbies)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

@@ -61,17 +61,23 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"medical_compliance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "device_description": device_description,
+                "regulatory_region": regulatory_region,
+                "messages": [{"role": "user", "content": device_description}],
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "medical_device_compliance_agent",
-                "agent_name": "Medical Device Compliance Agent",
-                "entry_point": "lang_graph.medical_device_compliance_agent",
+                agent_id="medical_device_compliance_agent",
+                agent_name="Medical Device Compliance Agent",
+                entry_point="lang_graph.medical_device_compliance_agent",
                 agent_type=AgentType.LANGGRAPH_AGENT,
-                "capabilities": ["medical_device_compliance", "regulatory_analysis", "fda_compliance", "ce_compliance"],
-                "description": "LangGraph 기반 의료기기 규정 준수 검토 시스템"
-            ,
+                capabilities=["medical_device_compliance", "regulatory_analysis", "fda_compliance", "ce_compliance"],
+                description="LangGraph 기반 의료기기 규정 준수 검토 시스템",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -85,11 +91,39 @@ def main():
     latest_result = result_reader.get_latest_result("medical_compliance_agent", "compliance_review")
     if latest_result:
         with st.expander("🏥 최신 규정 준수 검토 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Medical Device Compliance Agent의 결과가 없습니다. 위에서 규정 준수 검토를 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 규정 준수 검토 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'compliance_status' in result_data:
+                st.markdown("### ✅ 준수 상태")
+                st.write(result_data['compliance_status'])
+            if 'regulatory_requirements' in result_data:
+                st.markdown("### 📋 규제 요구사항")
+                requirements = result_data['regulatory_requirements']
+                if isinstance(requirements, list):
+                    for req in requirements:
+                        st.write(f"• {req}")
+                else:
+                    st.write(requirements)
+            if 'recommendations' in result_data:
+                st.markdown("### 💡 권장사항")
+                recommendations = result_data['recommendations']
+                if isinstance(recommendations, list):
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                else:
+                    st.write(recommendations)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

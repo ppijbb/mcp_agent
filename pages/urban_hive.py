@@ -3,7 +3,6 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime
-import streamlit_process_manager as spm
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 
@@ -109,21 +108,28 @@ def main():
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 result_json_path = reports_path / f"urban_hive_result_{timestamp}.json"
                 
-                            # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
+                # 입력 파라미터 준비
+                input_data = {
+                    "query": prompt,
+                    "result_json_path": str(result_json_path)
+                }
                 
-                    "agent_id": "urban_hive_agent",
-                    "agent_name": "Urban Hive Agent",
-                    "entry_point": "srcs.urban_hive.run_urban_hive_agent",
+                # 결과 표시용 placeholder 생성
+                result_placeholder = st.empty()
+                
+                # 표준화된 방식으로 agent 실행
+                result = execute_standard_agent_via_a2a(
+                    placeholder=result_placeholder,
+                    agent_id="urban_hive_agent",
+                    agent_name="Urban Hive Agent",
+                    entry_point="srcs.urban_hive.run_urban_hive_agent",
                     agent_type=AgentType.MCP_AGENT,
-                    "capabilities": ["urban_data_analysis", "traffic_analysis", "safety_analysis", "real_estate_analysis"],
-                    "description": "AI 기반 도시 데이터 분석 플랫폼"
-                ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+                    capabilities=["urban_data_analysis", "traffic_analysis", "safety_analysis", "real_estate_analysis"],
+                    description="AI 기반 도시 데이터 분석 플랫폼",
+                    input_params=input_data,
+                    result_json_path=result_json_path,
+                    use_a2a=True
+                )
                 
                 if result:
                     response_md = format_urban_hive_output(result)
@@ -222,5 +228,6 @@ if latest_urban_result:
             if 'analysis_timestamp' in latest_urban_result:
                 st.caption(f"⏰ 분석 시간: {latest_urban_result['analysis_timestamp']}")
         else:
-else:
+            st.write("결과 데이터 형식이 예상과 다릅니다.")
+    else:
     st.info("💡 아직 Urban Hive Agent의 결과가 없습니다. 위에서 도시 데이터 분석을 실행해보세요.")

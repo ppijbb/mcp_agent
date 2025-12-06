@@ -91,11 +91,29 @@ def main():
     latest_result = result_reader.get_latest_result("ultra_agentic_agent", "ultra_agentic_execution")
     if latest_result:
         with st.expander("🚀 최신 Ultra Agentic 실행 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Ultra Agentic LLM Agent의 결과가 없습니다. 위에서 Ultra Agentic 작업을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 Ultra Agentic 실행 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'execution_result' in result_data:
+                st.markdown("### ⚙️ 실행 결과")
+                st.write(result_data['execution_result'])
+            if 'plan' in result_data:
+                st.markdown("### 📋 계획")
+                st.write(result_data['plan'])
+            if 'reflection' in result_data:
+                st.markdown("### 🤔 반성 및 학습")
+                st.write(result_data['reflection'])
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

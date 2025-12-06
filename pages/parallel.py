@@ -147,33 +147,6 @@ def main():
     else:
         st.info("💡 아직 Parallel Agent의 결과가 없습니다. 위에서 병렬 작업을 실행해보세요.")
 
-def display_results(result_data):
-    """결과 표시"""
-    st.markdown("---")
-    st.subheader("📊 병렬 실행 결과")
-    
-    if not result_data:
-        st.warning("실행 결과를 찾을 수 없습니다.")
-        return
-    
-    tasks = result_data.get('tasks', [])
-    st.success(f"**총 작업 수: {len(tasks)}**")
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("완료된 작업", result_data.get('completed_count', 0))
-    col2.metric("실패한 작업", result_data.get('failed_count', 0))
-    col3.metric("실행 시간", f"{result_data.get('execution_time', 0):.2f}초")
-    
-    if result_data.get('results'):
-        st.subheader("📋 작업별 결과")
-        for i, task_result in enumerate(result_data['results'], 1):
-            with st.expander(f"작업 {i}: {task_result.get('task', 'N/A')}", expanded=False):
-                st.write(f"**상태**: {'✅ 성공' if task_result.get('success') else '❌ 실패'}")
-                if task_result.get('result'):
-                    st.write(f"**결과**: {task_result['result']}")
-                if task_result.get('error'):
-                    st.error(f"**오류**: {task_result['error']}")
-
 if __name__ == "__main__":
     main()
 

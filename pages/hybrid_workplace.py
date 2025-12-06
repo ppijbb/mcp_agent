@@ -57,17 +57,22 @@ def main():
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"workplace_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-                        # 표준화된 방식으로 agent 실행
+            # 입력 파라미터 준비
+            input_data = {
+                "company_name": company_name,
+                "analysis_focus": analysis_focus,
+                "result_json_path": str(result_json_path)
+            }
+
+            # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
-                
-                "agent_id": "hybrid_workplace_agent",
-                "agent_name": "Hybrid Workplace Optimizer Agent",
-                "entry_point": "srcs.common.generic_agent_runner",
+                agent_id="hybrid_workplace_agent",
+                agent_name="Hybrid Workplace Optimizer Agent",
+                entry_point="srcs.common.generic_agent_runner",
                 agent_type=AgentType.MCP_AGENT,
-                "capabilities": ["workplace_optimization", "space_utilization", "productivity_analysis"],
-                "description": "하이브리드 근무 환경 최적화 및 생산성 향상"
-            ,
+                capabilities=["workplace_optimization", "space_utilization", "productivity_analysis"],
+                description="하이브리드 근무 환경 최적화 및 생산성 향상",
                 input_params=input_data,
                 result_json_path=result_json_path,
                 use_a2a=True
@@ -81,11 +86,31 @@ def main():
     latest_result = result_reader.get_latest_result("workplace_agent", "workplace_analysis")
     if latest_result:
         with st.expander("🏢 최신 근무 환경 분석 결과", expanded=False):
+            display_results(latest_result)
+    else:
+        st.info("💡 아직 Hybrid Workplace Agent의 결과가 없습니다. 위에서 근무 환경 분석을 실행해보세요.")
 
 def display_results(result_data):
     st.markdown("---")
     st.subheader("📊 근무 환경 분석 결과")
     if result_data:
+        if isinstance(result_data, dict):
+            if 'analysis_result' in result_data:
+                st.markdown("### 📊 분석 결과")
+                st.write(result_data['analysis_result'])
+            if 'recommendations' in result_data:
+                st.markdown("### 💡 권장사항")
+                recommendations = result_data['recommendations']
+                if isinstance(recommendations, list):
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                else:
+                    st.write(recommendations)
+            st.json(result_data)
+        else:
+            st.write(str(result_data))
+    else:
+        st.warning("결과 데이터가 없습니다.")
 
 if __name__ == "__main__":
     main()

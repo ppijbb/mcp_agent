@@ -18,7 +18,6 @@ from typing import Dict, List, Any, Optional
 import os
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
-from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
@@ -486,21 +485,28 @@ def render_real_finance_agent(save_to_file=False):
                 placeholder = st.empty()
                 result_json_path = Path(st.session_state['finance_result_json_path'])
                 
-                            # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
+                # 입력 파라미터 준비
+                input_data = {
+                    "financial_data": st.session_state['finance_input_data'],
+                    "result_json_path": str(result_json_path)
+                }
                 
-                    "agent_id": "finance_health_agent",
-                    "agent_name": "Finance Health Agent",
-                    "agent_type": AgentType.MCP_AGENT,
-                    "entry_point": "srcs.enterprise_agents.run_finance_health_agent",
-                    "capabilities": ["financial_analysis", "health_scoring", "retirement_planning"],
-                    "description": "개인 및 기업 재무 건강도 진단 및 최적화"
-                ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+                # 결과 표시용 placeholder 생성
+                result_placeholder = st.empty()
+                
+                # 표준화된 방식으로 agent 실행
+                result = execute_standard_agent_via_a2a(
+                    placeholder=result_placeholder,
+                    agent_id="finance_health_agent",
+                    agent_name="Finance Health Agent",
+                    agent_type=AgentType.MCP_AGENT,
+                    entry_point="srcs.enterprise_agents.run_finance_health_agent",
+                    capabilities=["financial_analysis", "health_scoring", "retirement_planning"],
+                    description="개인 및 기업 재무 건강도 진단 및 최적화",
+                    input_params=input_data,
+                    result_json_path=result_json_path,
+                    use_a2a=True
+                )
                 
                 if result and result.get("success"):
                     # 분석 결과 표시
@@ -994,5 +1000,6 @@ if latest_finance_result:
             if 'timestamp' in latest_finance_result:
                 st.caption(f"⏰ 분석 시간: {latest_finance_result['timestamp']}")
         else:
-else:
+            st.write("결과 데이터 형식이 예상과 다릅니다.")
+    else:
     st.info("💡 아직 Finance Health Agent의 결과가 없습니다. 위에서 재무 건강 분석을 실행해보세요.") 

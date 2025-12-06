@@ -595,22 +595,27 @@ class RealLangGraphUI:
             "messages": []
         }
         
+        # 입력 파라미터 준비
+        input_data = {
+            "state": input_state_data,
+            "result_json_path": str(result_json_path)
+        }
+        
         # A2A를 통한 agent 실행
-                    # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-            "agent_id": "game_ui_analyzer",
-            "agent_name": "Game UI Analyzer",
-            "entry_point": "lang_graph.table_game_mate.agents.game_ui_analyzer",
+        # 표준화된 방식으로 agent 실행
+        result_placeholder = st.empty()
+        result = execute_standard_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_id="game_ui_analyzer",
+            agent_name="Game UI Analyzer",
+            entry_point="lang_graph.table_game_mate.agents.game_ui_analyzer",
             agent_type=AgentType.LANGGRAPH_AGENT,
-            "capabilities": ["game_analysis", "ui_spec_generation", "board_game_analysis"],
-            "description": "LangGraph 기반 보드게임 UI 분석 및 명세서 생성 시스템"
-        ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+            capabilities=["game_analysis", "ui_spec_generation", "board_game_analysis"],
+            description="LangGraph 기반 보드게임 UI 분석 및 명세서 생성 시스템",
+            input_params=input_data,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
         
         if result and result.get("success") and result.get("data"):
             # 결과 처리
