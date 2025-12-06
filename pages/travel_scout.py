@@ -10,12 +10,9 @@ Travel Scout - REAL MCP Integration (v3 - Process Manager)
 
 import streamlit as st
 import sys
-import os
 import json
-import base64
 from pathlib import Path
 from datetime import datetime, timedelta
-import streamlit_process_manager as spm
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 
