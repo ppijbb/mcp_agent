@@ -200,25 +200,50 @@ if task_to_run:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_output_dir = reports_path / f"run_{timestamp}"
     run_output_dir.mkdir(parents=True, exist_ok=True)
-    result_txt_path = run_output_dir / "results.txt"
+    result_json_path = run_output_dir / "results.json"
     
-    from srcs.common.agent_interface import AgentType
+    # 날짜 계산
+    check_in_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+    check_out_date = (datetime.now() + timedelta(days=days+3)).strftime("%Y-%m-%d")
+    departure_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+    return_date = (datetime.now() + timedelta(days=days+7)).strftime("%Y-%m-%d")
     
-                # 표준화된 방식으로 agent 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                
-        "agent_id": "travel_scout_agent",
-        "agent_name": "Travel Scout Agent",
-        "entry_point": "srcs.travel_scout.run_travel_scout_agent",
-        "agent_type": AgentType.MCP_AGENT,
-        "capabilities": ["hotel_search", "flight_search", "travel_planning"],
-        "description": "호텔 및 항공편 검색 및 여행 계획"
-    ,
-                input_params=input_data,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
+    # 입력 파라미터 준비
+    input_data = {
+        "task": task_to_run
+    }
+    
+    if task_to_run == 'search_hotels':
+        input_data.update({
+            "destination": destination,
+            "check_in": check_in_date,
+            "check_out": check_out_date,
+            "guests": guests
+        })
+    elif task_to_run == 'search_flights':
+        input_data.update({
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date
+        })
+    
+    # 결과 표시용 placeholder 생성
+    result_placeholder = st.empty()
+    
+    # 표준화된 방식으로 agent 실행
+    result = execute_standard_agent_via_a2a(
+        placeholder=result_placeholder,
+        agent_id="travel_scout_agent",
+        agent_name="Travel Scout Agent",
+        entry_point="srcs.travel_scout.run_travel_scout_agent",
+        agent_type=AgentType.MCP_AGENT,
+        capabilities=["hotel_search", "flight_search", "travel_planning"],
+        description="호텔 및 항공편 검색 및 여행 계획",
+        input_params=input_data,
+        result_json_path=result_json_path,
+        use_a2a=True
+    )
     
     if result:
         # 결과 처리 - result는 AgentExecutionResult 형태일 수 있음
