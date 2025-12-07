@@ -46,3 +46,6 @@
 [submodule "open_researcher/ERA"]
 	path = open_researcher/ERA
 	url = https://github.com/BinSquare/ERA.git
+[submodule "open_researcher/AI-reseach-SKILLs"]
+	path = open_researcher/AI-reseach-SKILLs
+	url = https://github.com/zechenzhangAGI/AI-research-SKILLs.git
