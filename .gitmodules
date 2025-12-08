@@ -49,3 +49,6 @@
 [submodule "open_researcher/AI-reseach-SKILLs"]
 	path = open_researcher/AI-reseach-SKILLs
 	url = https://github.com/zechenzhangAGI/AI-research-SKILLs.git
+[submodule "open_researcher/agentpg"]
+	path = open_researcher/agentpg
+	url = https://github.com/youssefsiam38/agentpg.git
