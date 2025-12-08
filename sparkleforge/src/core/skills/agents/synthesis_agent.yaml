@@ -18,17 +18,17 @@ prompts:
   data_analysis:
     system_message: "You are an expert data analyst with pattern recognition capabilities."
     template: |
-      다음 데이터를 분석하세요:
+      Analyze the following data:
 
-      데이터: {data}
-      분석 목표: {analysis_goal}
+      Data: {data}
+      Analysis Goal: {analysis_goal}
 
-      분석 작업:
-      1. 데이터의 패턴과 트렌드를 식별하세요
-      2. 주요 통찰력을 도출하세요
-      3. 데이터의 의미를 해석하세요
+      Analysis Tasks:
+      1. Identify patterns and trends in the data
+      2. Derive key insights
+      3. Interpret the meaning of the data
 
-      분석 결과를 구조화하여 반환하세요.
+      Return analysis results in a structured format.
     variables:
       - data
       - analysis_goal
@@ -36,17 +36,17 @@ prompts:
   source_comparison:
     system_message: "You are an expert comparative analyst with cross-source evaluation capabilities."
     template: |
-      여러 출처의 데이터를 비교 분석하세요:
+      Compare and analyze data from multiple sources:
 
-      데이터 출처: {data_sources}
-      비교 기준: {comparison_criteria}
+      Data Sources: {data_sources}
+      Comparison Criteria: {comparison_criteria}
 
-      비교 분석:
-      1. 각 출처의 강점과 약점을 평가하세요
-      2. 일관성과 차이점을 식별하세요
-      3. 종합적인 평가를 제시하세요
+      Comparative Analysis:
+      1. Evaluate strengths and weaknesses of each source
+      2. Identify consistencies and differences
+      3. Provide comprehensive assessment
 
-      비교 결과를 구조화하여 반환하세요.
+      Return comparison results in a structured format.
     variables:
       - data_sources
       - comparison_criteria
@@ -54,17 +54,17 @@ prompts:
   pattern_recognition:
     system_message: "You are an expert pattern analyst with advanced recognition capabilities."
     template: |
-      데이터에서 패턴을 식별하고 분석하세요:
+      Identify and analyze patterns in the data:
 
-      데이터: {data}
-      패턴 유형: {pattern_type}
+      Data: {data}
+      Pattern Type: {pattern_type}
 
-      패턴 분석:
-      1. 반복되는 패턴을 식별하세요
-      2. 패턴의 의미를 해석하세요
-      3. 미래 트렌드를 예측하세요
+      Pattern Analysis:
+      1. Identify recurring patterns
+      2. Interpret the meaning of patterns
+      3. Predict future trends
 
-      패턴 분석 결과를 반환하세요.
+      Return pattern analysis results.
     variables:
       - data
       - pattern_type
@@ -72,17 +72,17 @@ prompts:
   predictive_analysis:
     system_message: "You are an expert predictive analyst with forecasting capabilities."
     template: |
-      데이터를 바탕으로 예측 분석을 수행하세요:
+      Perform predictive analysis based on the data:
 
-      데이터: {data}
-      예측 목표: {prediction_goal}
+      Data: {data}
+      Prediction Goal: {prediction_goal}
 
-      예측 분석:
-      1. 현재 트렌드를 분석하세요
-      2. 미래 시나리오를 예측하세요
-      3. 예측의 불확실성을 평가하세요
+      Predictive Analysis:
+      1. Analyze current trends
+      2. Predict future scenarios
+      3. Assess uncertainty of predictions
 
-      예측 결과를 반환하세요.
+      Return prediction results.
     variables:
       - data
       - prediction_goal
@@ -90,17 +90,17 @@ prompts:
   strategic_advice:
     system_message: "You are an expert strategic advisor with recommendation generation capabilities."
     template: |
-      데이터를 바탕으로 전략적 조언을 제시하세요:
+      Provide strategic advice based on the data:
 
-      데이터: {data}
-      전략적 맥락: {strategic_context}
+      Data: {data}
+      Strategic Context: {strategic_context}
 
-      전략적 조언:
-      1. 현재 상황을 분석하세요
-      2. 전략적 옵션을 제시하세요
-      3. 실행 가능한 권장사항을 제시하세요
+      Strategic Advice:
+      1. Analyze current situation
+      2. Present strategic options
+      3. Provide actionable recommendations
 
-      전략적 조언을 구조화하여 반환하세요.
+      Return strategic advice in a structured format.
     variables:
       - data
       - strategic_context
@@ -108,17 +108,17 @@ prompts:
   synthesis:
     system_message: "You are an expert research synthesizer with professional writing capabilities."
     template: |
-      여러 출처의 연구 데이터를 종합하여 보고서를 작성하세요:
+      Synthesize research data from multiple sources and write a report:
 
-      연구 데이터: {research_data}
-      종합 목표: {synthesis_goal}
+      Research Data: {research_data}
+      Synthesis Goal: {synthesis_goal}
 
-      종합 작업:
-      1. 다양한 출처의 정보를 통합하세요
-      2. 일관된 narrative를 구성하세요
-      3. 실행 가능한 결론을 도출하세요
+      Synthesis Tasks:
+      1. Integrate information from diverse sources
+      2. Construct a coherent narrative
+      3. Derive actionable conclusions
 
-      종합 보고서를 작성하세요.
+      Write the synthesis report.
     variables:
       - research_data
       - synthesis_goal
@@ -126,17 +126,17 @@ prompts:
   validation:
     system_message: "You are an expert quality validator with synthesis assessment capabilities."
     template: |
-      종합 결과의 품질을 검증하세요:
+      Validate the quality of synthesis results:
 
-      종합 결과: {synthesis_results}
-      검증 기준: {validation_criteria}
+      Synthesis Results: {synthesis_results}
+      Validation Criteria: {validation_criteria}
 
-      검증 작업:
-      1. 종합의 정확성을 검증하세요
-      2. 논리의 일관성을 확인하세요
-      3. 개선 방안을 제시하세요
+      Validation Tasks:
+      1. Verify accuracy of synthesis
+      2. Confirm logical consistency
+      3. Provide improvement recommendations
 
-      검증 결과를 반환하세요.
+      Return validation results.
     variables:
       - synthesis_results
       - validation_criteria

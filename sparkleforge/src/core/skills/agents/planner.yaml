@@ -82,50 +82,50 @@ prompts:
   task_decomposition:
     system_message: "You are a task decomposition agent. Split research plans into independent parallel tasks with detailed verification strategies."
     template: |
-      연구 계획:
+      Research Plan:
       {plan}
 
-      원래 질문: {query}
+      Original Query: {query}
 
-      도메인 분석 결과:
+      Domain Analysis Results:
       {domain_analysis}
 
-      위 연구 계획을 분석하여 여러 독립적으로 실행 가능한 연구 작업으로 분할하세요.
-      각 작업은 별도의 연구자(ExecutorAgent)가 동시에 처리할 수 있어야 합니다.
+      Analyze the above research plan and decompose it into multiple independently executable research tasks.
+      Each task must be processable simultaneously by separate researchers (ExecutorAgent).
 
-      ⚠️ 중요: 검색 쿼리는 반드시 원래 질문("{query}")과 직접 관련된 실제 연구 주제여야 합니다.
-      작업 분할 방법론, 병렬화 전략, 태스크 분할 사례 등 메타 정보는 검색 쿼리가 아닙니다.
-      각 검색 쿼리는 원래 질문의 특정 측면이나 하위 주제를 다루어야 합니다.
+      ⚠️ IMPORTANT: Search queries must be directly related to the actual research topic of the original query ("{query}").
+      Meta information such as task decomposition methodologies, parallelization strategies, and task splitting examples are NOT search queries.
+      Each search query must address a specific aspect or sub-topic of the original query.
       
-      ❌ 잘못된 예시:
-      - "{query} 원인 분석"
-      - "{query} 미래 전망"
-      - "작업 분할 방법론"
-      - "병렬화 전략"
+      ❌ Incorrect Examples:
+      - "{query} cause analysis"
+      - "{query} future outlook"
+      - "task decomposition methodology"
+      - "parallelization strategy"
       
-      ✅ 올바른 예시 (원래 질문이 "2026년 서울시 부동산 시장 흐름의 전망"인 경우):
-      - "2026년 서울시 부동산 시장 전망"
-      - "서울시 부동산 가격 동향 2026"
-      - "서울 부동산 시장 분석 2026"
+      ✅ Correct Examples (if original query is "2026 Seoul real estate market outlook"):
+      - "2026 Seoul real estate market outlook"
+      - "Seoul real estate price trends 2026"
+      - "Seoul real estate market analysis 2026"
 
-      각 작업에 대해 다음을 포함하세요:
-      1. **구체적인 목표**: 이 작업이 달성해야 하는 명확한 목표
-      2. **필수 정보 요소**: 수집해야 하는 정보 유형 (정량적/정성적/시계열/비교 데이터 등)
-      3. **검증 전략**: 정보를 어떻게 검증할지 (Cross-verification, Fact-checking, Source validation)
-      4. **출처 요구사항**: 최소 출처 수, 신뢰도 기준, 선호하는 출처 유형
-      5. **성공 기준**: 이 작업이 성공적으로 완료되었다고 판단하는 기준
+      For each task, include:
+      1. **Specific Objectives**: Clear goals this task must achieve
+      2. **Required Information Elements**: Types of information to collect (quantitative/qualitative/temporal/comparative data, etc.)
+      3. **Verification Strategy**: How to verify information (Cross-verification, Fact-checking, Source validation)
+      4. **Source Requirements**: Minimum source count, reliability threshold, preferred source types
+      5. **Success Criteria**: Criteria for determining successful completion of this task
 
-      응답 형식 (JSON):
+      Response Format (JSON):
       {{
         "tasks": [
           {{
             "task_id": "task_1",
-            "name": "작업 이름",
-            "description": "작업 설명 (원래 질문의 특정 측면)",
-            "objectives": ["구체적인 목표 1", "구체적인 목표 2"],
+            "name": "Task name",
+            "description": "Task description (specific aspect of original query)",
+            "objectives": ["Specific objective 1", "Specific objective 2"],
             "required_information": {{
               "data_types": ["quantitative", "qualitative", "temporal", "comparative"],
-              "key_entities": ["도메인별 주요 엔티티나 개념 (동적으로 생성)"],
+              "key_entities": ["Domain-specific key entities or concepts (dynamically generated)"],
               "sources": {{
                 "min_count": 3,
                 "reliability_threshold": 0.7,
@@ -138,8 +138,8 @@ prompts:
               "source_validation": true,
               "min_consensus_sources": 2
             }},
-            "success_criteria": ["명확한 성공 기준 1", "명확한 성공 기준 2"],
-            "search_queries": ["원래 질문의 실제 내용을 포함한 구체적인 검색 쿼리 1", "원래 질문의 실제 내용을 포함한 구체적인 검색 쿼리 2"],
+            "success_criteria": ["Clear success criterion 1", "Clear success criterion 2"],
+            "search_queries": ["Specific search query 1 containing actual content of original query", "Specific search query 2 containing actual content of original query"],
             "priority": 1,
             "estimated_time": "medium",
             "dependencies": []
@@ -148,16 +148,16 @@ prompts:
         ]
       }}
 
-      각 작업은:
-      - 독립적으로 실행 가능해야 함
-      - 검색 쿼리는 반드시 원래 질문("{query}")의 실제 내용을 포함한 구체적인 검색어여야 함
-      - "{query}" 플레이스홀더를 그대로 사용하지 말고, 실제 질문 내용을 포함한 완전한 검색 쿼리를 작성해야 함
-      - 작업 분할 방법론, 병렬화, 태스크 분할 등 메타 정보는 검색 쿼리가 아님
-      - 우선순위와 예상 시간을 포함해야 함
-      - 의존성이 없어야 함 (병렬 실행을 위해)
-      - required_information의 key_entities는 도메인에 맞게 동적으로 생성해야 함 (예: 금융 도메인이면 "매출", "PER" 등, 기술 도메인이면 "성능", "처리량" 등)
+      Each task must:
+      - Be independently executable
+      - Have search queries that contain actual content from the original query ("{query}") as specific search terms
+      - NOT use "{query}" placeholder as-is, but write complete search queries containing actual query content
+      - NOT include meta information like task decomposition methodology, parallelization, or task splitting as search queries
+      - Include priority and estimated time
+      - Have no dependencies (for parallel execution)
+      - Dynamically generate key_entities in required_information based on domain (e.g., "revenue", "PER" for finance domain; "performance", "throughput" for technology domain)
 
-      작업 수: 3-5개 권장
+      Recommended number of tasks: 3-5
     variables:
       - plan
       - query
@@ -166,14 +166,14 @@ prompts:
   query_generation:
     system_message: "You are a research query generator. Generate specific search queries based on research plans."
     template: |
-      연구 계획:
+      Research Plan:
       {plan}
 
-      원래 질문: {query}
+      Original Query: {query}
 
-      위 연구 계획을 바탕으로 검색에 사용할 구체적인 검색 쿼리 3-5개를 생성하세요.
-      각 쿼리는 서로 다른 관점이나 측면을 다루어야 합니다.
-      응답 형식: 각 줄에 하나의 검색 쿼리만 작성하세요. 번호나 기호 없이 쿼리만 작성하세요.
+      Generate 3-5 specific search queries based on the above research plan.
+      Each query should address different perspectives or aspects.
+      Response Format: Write only one search query per line. No numbers or symbols, just the queries.
     variables:
       - plan
       - query
@@ -181,43 +181,43 @@ prompts:
   domain_analysis:
     system_message: "You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."
     template: |
-      연구 질문: {query}
+      Research Query: {query}
 
-      위 연구 질문의 도메인을 심층 분석하세요. 다음 항목들을 포함하여 분석하세요:
+      Conduct an in-depth analysis of the domain for the above research query. Include the following items in your analysis:
 
-      1. **도메인 식별**:
-         - 이 질문이 속하는 주요 도메인은 무엇인가요? (예: 기술, 과학, 비즈니스, 의학, 법률 등)
-         - 관련된 하위 도메인이나 연결 분야는 무엇인가요?
+      1. **Domain Identification**:
+         - What is the primary domain this query belongs to? (e.g., technology, science, business, medicine, law, etc.)
+         - What are the related subdomains or connected fields?
 
-      2. **도메인 특성 분석**:
-         - 이 도메인의 특성은 무엇인가요? (학술적/실무적/기술적/정책적 등)
-         - 이 도메인에서 중요한 전문 용어나 개념은 무엇인가요?
-         - 이 도메인에서 일반적으로 사용되는 데이터 유형은 무엇인가요? (정량적/정성적/시계열/비교 등)
+      2. **Domain Characteristics Analysis**:
+         - What are the characteristics of this domain? (academic/practical/technical/policy-oriented, etc.)
+         - What are the important specialized terms or concepts in this domain?
+         - What data types are commonly used in this domain? (quantitative/qualitative/temporal/comparative, etc.)
 
-      3. **신뢰할 수 있는 출처 유형**:
-         - 이 도메인에서 신뢰할 수 있는 출처 유형은 무엇인가요? (학술 논문, 정부 보고서, 전문 기관, 언론사 등)
-         - 이 도메인에서 피해야 할 출처 유형은 무엇인가요?
+      3. **Reliable Source Types**:
+         - What are reliable source types in this domain? (academic papers, government reports, professional institutions, news media, etc.)
+         - What source types should be avoided in this domain?
 
-      4. **검증 기준 및 품질 표준**:
-         - 이 도메인에서 정보의 신뢰성을 판단하는 기준은 무엇인가요?
-         - 이 도메인에서 중요한 검증 요소는 무엇인가요? (출처 명시, 데이터 날짜, 방법론 등)
+      4. **Verification Criteria and Quality Standards**:
+         - What are the criteria for judging information reliability in this domain?
+         - What are important verification elements in this domain? (source citation, data date, methodology, etc.)
 
-      5. **도메인별 검색 전략**:
-         - 이 도메인에서 효과적인 검색 키워드나 쿼리 패턴은 무엇인가요?
-         - 이 도메인에서 추가로 탐색해야 할 관련 주제나 관점은 무엇인가요?
+      5. **Domain-Specific Search Strategy**:
+         - What are effective search keywords or query patterns in this domain?
+         - What related topics or perspectives should be further explored in this domain?
 
-      응답 형식 (JSON):
+      Response Format (JSON):
       {{
-        "domain": "주요 도메인",
-        "subdomains": ["하위 도메인 1", "하위 도메인 2"],
-        "characteristics": ["특성 1", "특성 2"],
-        "key_terminology": ["용어 1", "용어 2"],
-        "data_types": ["정량적", "정성적", "시계열", "비교"],
-        "reliable_source_types": ["학술", "정부", "전문기관", "언론"],
-        "verification_criteria": ["기준 1", "기준 2"],
+        "domain": "Primary domain",
+        "subdomains": ["Subdomain 1", "Subdomain 2"],
+        "characteristics": ["Characteristic 1", "Characteristic 2"],
+        "key_terminology": ["Term 1", "Term 2"],
+        "data_types": ["quantitative", "qualitative", "temporal", "comparative"],
+        "reliable_source_types": ["academic", "government", "professional_institution", "news"],
+        "verification_criteria": ["Criterion 1", "Criterion 2"],
         "search_strategy": {{
-          "keywords": ["키워드 1", "키워드 2"],
-          "related_topics": ["관련 주제 1", "관련 주제 2"]
+          "keywords": ["Keyword 1", "Keyword 2"],
+          "related_topics": ["Related topic 1", "Related topic 2"]
         }}
       }}
     variables:

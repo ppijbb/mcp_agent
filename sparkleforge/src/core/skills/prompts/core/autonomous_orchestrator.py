@@ -1,103 +1,103 @@
 """
-Autonomous Orchestrator 프롬프트 모듈
+Autonomous Orchestrator Prompt Module
 
-Autonomous Orchestrator에서 사용되는 모든 프롬프트들을 포함합니다.
+Contains all prompts used by Autonomous Orchestrator.
 """
 
 # 분석
 analysis = {
     'system_message': 'You are an expert research analyst with comprehensive domain knowledge.',
-    'template': '''다음 데이터를 분석하고 평가하세요:
+    'template': '''Analyze and evaluate the following data:
 
-데이터: {data}
-분석 목표: {analysis_goal}
+Data: {data}
+Analysis Goal: {analysis_goal}
 
-분석 작업:
-1. 데이터의 품질과 완전성을 평가하세요
-2. 주요 패턴과 트렌드를 식별하세요
-3. 잠재적 문제를 발견하세요
-4. 개선 방안을 제시하세요
+Analysis Tasks:
+1. Assess data quality and completeness
+2. Identify key patterns and trends
+3. Discover potential issues
+4. Provide improvement recommendations
 
-분석 결과를 구조화하여 반환하세요.''',
+Return analysis results in a structured format.''',
     'variables': ['data', 'analysis_goal'],
-    'description': '데이터 분석 프롬프트'
+    'description': 'Data analysis prompt'
 }
 
 # 검증
 verification = {
     'system_message': 'You are an expert research planner and quality auditor with deep knowledge of research methodologies and resource optimization.',
-    'template': '''연구 결과를 검증하고 품질을 평가하세요:
+    'template': '''Verify research results and assess quality:
 
-연구 결과: {research_results}
-검증 기준: {verification_criteria}
+Research Results: {research_results}
+Verification Criteria: {verification_criteria}
 
-검증 작업:
-1. 결과의 정확성과 신뢰성을 확인하세요
-2. 방법론의 적절성을 평가하세요
-3. 잠재적 편향이나 오류를 식별하세요
-4. 품질 점수와 개선 제안을 제시하세요
+Verification Tasks:
+1. Confirm accuracy and reliability of results
+2. Assess appropriateness of methodology
+3. Identify potential biases or errors
+4. Provide quality score and improvement recommendations
 
-검증 결과를 반환하세요.''',
+Return verification results.''',
     'variables': ['research_results', 'verification_criteria'],
-    'description': '연구 결과 검증 프롬프트'
+    'description': 'Research results verification prompt'
 }
 
 # 평가
 evaluation = {
     'system_message': 'You are an expert research evaluator with comprehensive quality assessment capabilities.',
-    'template': '''연구 프로세스와 결과를 종합적으로 평가하세요:
+    'template': '''Comprehensively evaluate the research process and results:
 
-평가 대상: {evaluation_target}
-평가 기준: {evaluation_criteria}
+Evaluation Target: {evaluation_target}
+Evaluation Criteria: {evaluation_criteria}
 
-평가 작업:
-1. 프로세스의 효과성을 평가하세요
-2. 결과의 품질을 분석하세요
-3. 강점과 약점을 식별하세요
-4. 개선 방안을 제시하세요
+Evaluation Tasks:
+1. Assess effectiveness of the process
+2. Analyze quality of results
+3. Identify strengths and weaknesses
+4. Provide improvement recommendations
 
-평가 결과를 반환하세요.''',
+Return evaluation results.''',
     'variables': ['evaluation_target', 'evaluation_criteria'],
-    'description': '프로세스 및 결과 평가 프롬프트'
+    'description': 'Process and results evaluation prompt'
 }
 
 # 종합
 synthesis = {
     'system_message': 'You are an expert research synthesizer with adaptive context window capabilities.',
-    'template': '''다양한 출처의 데이터를 종합하여 통합된 결과를 생성하세요:
+    'template': '''Synthesize data from various sources to generate integrated results:
 
-데이터 출처: {data_sources}
-종합 목표: {synthesis_goal}
+Data Sources: {data_sources}
+Synthesis Goal: {synthesis_goal}
 
-종합 작업:
-1. 서로 다른 출처의 정보를 통합하세요
-2. 일관성과 모순을 분석하세요
-3. 종합된 narrative를 구성하세요
-4. 실행 가능한 결론을 도출하세요
+Synthesis Tasks:
+1. Integrate information from different sources
+2. Analyze consistency and contradictions
+3. Construct a synthesized narrative
+4. Derive actionable conclusions
 
-종합 결과를 반환하세요.''',
+Return synthesis results.''',
     'variables': ['data_sources', 'synthesis_goal'],
-    'description': '데이터 종합 프롬프트'
+    'description': 'Data synthesis prompt'
 }
 
 # 작업 분해
 decomposition = {
     'system_message': 'You are an expert research project manager with deep knowledge of task decomposition and resource allocation.',
-    'template': '''복잡한 연구 작업을 독립적으로 실행 가능한 하위 작업으로 분해하세요:
+    'template': '''Decompose complex research tasks into independently executable subtasks:
 
-연구 작업: {research_task}
-분해 기준: {decomposition_criteria}
+Research Task: {research_task}
+Decomposition Criteria: {decomposition_criteria}
 
-작업 분해:
-1. 작업의 주요 구성 요소를 식별하세요
-2. 각 하위 작업의 범위를 정의하세요
-3. 의존 관계를 분석하세요
-4. 우선순위와 예상 시간을 설정하세요
-5. 리소스 요구사항을 지정하세요
+Task Decomposition:
+1. Identify main components of the task
+2. Define scope of each subtask
+3. Analyze dependency relationships
+4. Set priorities and estimated time
+5. Specify resource requirements
 
-분해된 작업 목록을 반환하세요.''',
+Return decomposed task list.''',
     'variables': ['research_task', 'decomposition_criteria'],
-    'description': '작업 분해 프롬프트'
+    'description': 'Task decomposition prompt'
 }
 
 # 프롬프트들을 딕셔너리로 묶어서 export

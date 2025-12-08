@@ -18,20 +18,20 @@ prompts:
   evaluation:
     system_message: "You are an expert research evaluator with comprehensive quality assessment capabilities."
     template: |
-      다음 연구 결과를 평가하세요:
+      Evaluate the following research results:
 
-      연구 결과: {research_results}
-      평가 기준: {evaluation_criteria}
+      Research Results: {research_results}
+      Evaluation Criteria: {evaluation_criteria}
 
-      다음 측면에서 평가하세요:
-      1. 품질 (Quality): 정보의 정확성과 신뢰성
-      2. 완전성 (Completeness): 쿼리에 대한 답변의 완전성
-      3. 관련성 (Relevance): 쿼리와의 관련성
-      4. 구조 (Structure): 결과의 조직화와 명확성
-      5. 유용성 (Usefulness): 실질적인 활용 가능성
+      Evaluate across the following dimensions:
+      1. Quality: Accuracy and reliability of information
+      2. Completeness: Completeness of response to the query
+      3. Relevance: Relevance to the query
+      4. Structure: Organization and clarity of results
+      5. Usefulness: Practical applicability
 
-      각 측면에 대해 점수(1-10)와 자세한 설명을 제공하세요.
-      종합 평가와 개선 제안을 포함하세요.
+      Provide a score (1-10) and detailed explanation for each dimension.
+      Include comprehensive assessment and improvement recommendations.
     variables:
       - research_results
       - evaluation_criteria

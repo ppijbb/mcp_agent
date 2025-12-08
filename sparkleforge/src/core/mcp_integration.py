@@ -1235,7 +1235,7 @@ class UniversalMCPHub:
                     # 타임아웃이어도 세션은 제거 (heartbeat 중지)
                 finally:
                     # 세션 제거 (heartbeat 무한 루프 방지)
-                del self.mcp_sessions[server_name]
+                    del self.mcp_sessions[server_name]
             
             # Exit stack 정리: aclose() 호출하지 않음 (anyio cancel scope 오류 방지)
             # 참조만 제거 - 컨텍스트는 원래 태스크에서 정리됨
@@ -3957,7 +3957,7 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
                 execution_time=execution_time,
                 confidence=0.9 if result.exit_code == 0 else 0.5
                 )
-            finally:
+        finally:
             await era_client.close()
             
     except ImportError as e:

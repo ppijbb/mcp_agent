@@ -19,29 +19,33 @@ prompts:
   planning:
     system_message: "You are an expert research analyst with pattern recognition capabilities."
     template: |
-      다음 연구 작업을 위한 구체적인 연구 계획을 수립하세요.
+      Create a comprehensive research plan for the following research task.
 
-      작업: {task_description}
-      작업 유형: {task_type}
+      Task: {task_description}
+      Task Type: {task_type}
 
-      다음을 포함한 연구 계획을 수립하세요:
-      1. 필요한 정보 유형 식별
-      2. 적절한 정보원 선택
-      3. 검색 전략 수립
-      4. 데이터 수집 방법 결정
-      5. 분석 방법 선택
+      Develop a research plan that includes:
+      1. Identify required information types
+      2. Select appropriate information sources
+      3. Establish search strategies
+      4. Determine data collection methods
+      5. Select analysis methods
 
-      JSON 형태로 응답하세요:
+      Respond in JSON format:
       {{
-          "research_strategy": "전체 연구 전략",
+          "research_strategy": "Overall research strategy",
           "steps": [
               {{
-                  "step": "단계명",
-                  "method": "사용 방법",
-                  "tools": ["도구1", "도구2"],
-                  "expected_output": "예상 결과"
+                  "step_id": "step_1",
+                  "description": "Step description",
+                  "method": "web_search|academic_search|data_analysis|content_analysis",
+                  "query": "Search query",
+                  "sources": ["web", "academic", "database"],
+                  "expected_output": "Expected output"
               }}
-          ]
+          ],
+          "quality_criteria": ["Quality criterion 1", "Quality criterion 2"],
+          "success_metrics": ["Success metric 1", "Success metric 2"]
       }}
     variables:
       - task_description
@@ -50,17 +54,17 @@ prompts:
   google_search:
     system_message: "You are an expert researcher using Google Custom Search API."
     template: |
-      Google Custom Search를 사용하여 다음 쿼리에 대한 검색을 수행하세요.
+      Perform a search using Google Custom Search for the following query.
 
-      쿼리: {query}
-      최대 결과 수: {max_results}
+      Query: {query}
+      Max Results: {max_results}
 
-      검색 전략:
-      1. 쿼리를 효과적으로 구성하여 정확한 결과를 얻으세요
-      2. 다양한 관점에서 검색어를 조합하세요
-      3. 신뢰할 수 있는 출처를 우선시하세요
+      Search Strategy:
+      1. Construct queries effectively to obtain accurate results
+      2. Combine search terms from diverse perspectives
+      3. Prioritize reliable sources
 
-      검색 결과를 구조화하여 반환하세요.
+      Return search results in a structured format.
     variables:
       - query
       - max_results
@@ -68,53 +72,75 @@ prompts:
   bing_search:
     system_message: "You are an expert researcher using Bing Search API."
     template: |
-      Bing Search를 사용하여 다음 쿼리에 대한 검색을 수행하세요.
+      Perform a search using Bing Search for the following query.
 
-      쿼리: {query}
-      최대 결과 수: {max_results}
+      Query: {query}
+      Max Results: {max_results}
 
-      검색 전략:
-      1. Bing의 강점을 활용하여 다양한 결과를 얻으세요
-      2. 뉴스, 학술 자료, 일반 웹을 균형 있게 검색하세요
-      3. 최신 정보를 우선시하세요
+      Search Strategy:
+      1. Leverage Bing's strengths to obtain diverse results
+      2. Balance searches across news, academic sources, and general web
+      3. Prioritize the most recent information
 
-      검색 결과를 구조화하여 반환하세요.
+      Return search results in a structured format.
     variables:
       - query
       - max_results
 
   web_scraping:
-    system_message: "You are an expert web scraper with content extraction capabilities."
+    system_message: "You are an expert web scraper with content extraction capabilities. You ensure URL normalization and avoid duplication."
     template: |
-      다음 URL에서 콘텐츠를 추출하고 분석하세요.
+      Extract and analyze content from the following URL.
 
       URL: {url}
-      추출 목표: {extraction_goal}
+      Extraction Goal: {extraction_goal}
 
-      추출 작업:
-      1. 웹페이지 콘텐츠를 체계적으로 추출하세요
-      2. 텍스트, 이미지, 메타데이터를 포함하세요
-      3. 구조화된 형식으로 정리하세요
+      **Variable Validation:**
+      - Verify that `url` exists and is not None. If missing or None, report explicitly.
+      - Verify that `extraction_goal` exists and is valid.
 
-      추출 결과를 분석하여 핵심 정보를 요약하세요.
+      **URL Management Rules:**
+      - Use full URL notation (no abbreviations).
+      - URL normalization: remove trailing slash, convert to lowercase.
+      - Perform duplicate checks when collecting sources.
+      - Verify if the URL has already been collected.
+
+      Extraction Tasks:
+      1. Systematically extract webpage content
+      2. Include text, images, and metadata
+      3. Organize in structured format
+      4. Record URLs in full notation
+
+      Analyze extraction results and summarize key information.
     variables:
       - url
       - extraction_goal
 
   browser_research:
-    system_message: "You are an expert researcher with browser automation capabilities."
+    system_message: "You are an expert researcher with browser automation capabilities. You ensure URL normalization and avoid duplication."
     template: |
-      브라우저 자동화를 사용하여 다음 연구 작업을 수행하세요.
+      Perform the following research task using browser automation.
 
-      연구 계획: {research_plan}
-      최대 결과 수: {max_results}
+      Research Plan: {research_plan}
+      Max Results: {max_results}
 
-      연구 전략:
-      1. 브라우저를 사용하여 동적 웹사이트에 접근하세요
-      2. JavaScript 기반 콘텐츠를 추출하세요
-      3. 상호작용이 필요한 페이지를 처리하세요
+      **Variable Validation:**
+      - Verify that `research_plan` exists and is not None. If missing or None, report explicitly.
+      - Verify that `max_results` is a valid number.
 
-      연구 결과를 종합하여 반환하세요.
+      **URL Management Rules:**
+      - Use full URL notation for all URLs (no abbreviations).
+      - URL normalization: remove trailing slash, convert to lowercase.
+      - Perform duplicate checks when collecting sources.
+      - Verify if URLs have already been collected.
+
+      Research Strategy:
+      1. Use browser to access dynamic websites
+      2. Extract JavaScript-based content
+      3. Handle pages requiring interaction
+      4. Record all URLs in full notation
+
+      Synthesize and return research results.
     variables:
       - research_plan
       - max_results
@@ -122,17 +148,17 @@ prompts:
   interactive_research:
     system_message: "You are an expert researcher performing interactive web research."
     template: |
-      브라우저 자동화를 사용하여 다음 연구 작업을 수행하세요.
+      Perform the following research task using browser automation.
 
-      연구 계획: {research_plan}
-      최대 결과 수: {max_results}
+      Research Plan: {research_plan}
+      Max Results: {max_results}
 
-      연구 전략:
-      1. 여러 웹사이트를 체계적으로 탐색하세요
-      2. 관련 정보를 종합하세요
-      3. 상호작용을 통해 추가 정보를 수집하세요
+      Research Strategy:
+      1. Systematically explore multiple websites
+      2. Synthesize relevant information
+      3. Collect additional information through interaction
 
-      연구 결과를 구조화하여 반환하세요.
+      Return research results in a structured format.
     variables:
       - research_plan
       - max_results
@@ -140,17 +166,17 @@ prompts:
   analysis:
     system_message: "You are an expert research analyst."
     template: |
-      수집된 연구 데이터를 분석하세요.
+      Analyze the collected research data.
 
-      데이터: {data}
-      분석 유형: {analysis_type}
+      Data: {data}
+      Analysis Type: {analysis_type}
 
-      분석 작업:
-      1. 데이터를 체계적으로 분석하세요
-      2. 패턴과 트렌드를 식별하세요
-      3. 통찰력을 도출하세요
+      Analysis Tasks:
+      1. Systematically analyze the data
+      2. Identify patterns and trends
+      3. Derive insights
 
-      분석 결과를 구조화하여 반환하세요.
+      Return analysis results in a structured format.
     variables:
       - data
       - analysis_type
@@ -158,17 +184,17 @@ prompts:
   insights:
     system_message: "You are an expert research analyst generating insights."
     template: |
-      연구 데이터에서 통찰력을 도출하세요.
+      Derive insights from the research data.
 
-      데이터: {data}
-      분석 유형: {analysis_type}
+      Data: {data}
+      Analysis Type: {analysis_type}
 
-      통찰력 도출:
-      1. 데이터의 의미를 해석하세요
-      2. 숨겨진 패턴을 발견하세요
-      3. 실질적인 통찰력을 제시하세요
+      Insight Generation:
+      1. Interpret the meaning of the data
+      2. Discover hidden patterns
+      3. Present actionable insights
 
-      통찰력을 구조화하여 반환하세요.
+      Return insights in a structured format.
     variables:
       - data
       - analysis_type
@@ -176,53 +202,74 @@ prompts:
   report_writing:
     system_message: "You are an expert research report writer."
     template: |
-      연구 결과를 바탕으로 보고서를 작성하세요.
+      Write a report based on the research results.
 
-      연구 데이터: {data}
-      보고서 유형: {report_type}
+      Research Data: {data}
+      Report Type: {report_type}
 
-      보고서 작성:
-      1. 구조화된 보고서를 작성하세요
-      2. 실행 가능한 권장사항을 포함하세요
-      3. 명확하고 전문적인 언어를 사용하세요
+      Report Writing:
+      1. Create a structured report
+      2. Include actionable recommendations
+      3. Use clear and professional language
 
-      완성된 보고서를 반환하세요.
+      Return the completed report.
     variables:
       - data
       - report_type
 
   synthesis:
-    system_message: "You are an expert research synthesizer."
+    system_message: "You are an expert research synthesizer. You collaborate with other agents (Validation Agent, Synthesis Agent) to ensure quality. IMPORTANT: All internal communication between agents must be in English. Only the final report to the user should be in the user's requested language."
     template: |
-      여러 출처의 연구 데이터를 종합하세요.
+      Synthesize research data from multiple sources.
 
-      데이터: {data}
-      종합 유형: {synthesis_type}
+      Data: {data}
+      Synthesis Type: {synthesis_type}
 
-      데이터 종합:
-      1. 다양한 출처의 정보를 통합하세요
-      2. 일관성과 모순을 분석하세요
-      3. 종합된 결과를 도출하세요
+      **Variable Validation:**
+      - Verify that `data` exists and is not None. If missing or None, report explicitly.
+      - Verify that `synthesis_type` exists and is valid.
 
-      종합 결과를 반환하세요.
+      **URL Management Rules:**
+      - Use full URL notation for all URLs (no abbreviations).
+      - URL normalization: remove trailing slash, convert to lowercase.
+      - Perform duplicate checks when collecting sources.
+
+      Data Synthesis:
+      1. Integrate information from diverse sources
+      2. Analyze consistency and contradictions
+      3. Derive synthesized results
+      4. Record all URLs in full notation
+
+      **Agent Collaboration:**
+      - Request result validation from Validation Agent.
+      - Collaborate with Synthesis Agent to ensure quality.
+      - **IMPORTANT: All internal agent communication must be in English.**
+
+      Return synthesis results.
     variables:
       - data
       - synthesis_type
 
   validation:
-    system_message: "You are an expert research validator."
+    system_message: "You are an expert research validator. You ensure comprehensive validation including URL duplication checks and source verification. IMPORTANT: All internal communication between agents must be in English. Only the final report to the user should be in the user's requested language."
     template: |
-      연구 결과를 검증하세요.
+      Validate the research results.
 
-      결과: {results}
-      검증 기준: {criteria}
+      Results: {results}
+      Validation Criteria: {criteria}
 
-      검증 작업:
-      1. 결과의 정확성을 검증하세요
-      2. 출처의 신뢰성을 확인하세요
-      3. 검증 결과를 정리하세요
+      **Variable Validation:**
+      - Verify that `results` exists and is not None. If missing or None, report explicitly.
+      - Verify that `criteria` exists and is valid.
 
-      검증 결과를 반환하세요.
+      Validation Tasks:
+      1. Verify the accuracy of results
+      2. Confirm the reliability of sources
+      3. **URL Duplication Check**: Verify that all URLs appear only once
+      4. **Source Verification**: Verify that each URL was actually used
+      5. Organize validation results
+
+      Return validation results.
     variables:
       - results
       - criteria
@@ -230,17 +277,17 @@ prompts:
   recommendations:
     system_message: "You are an expert consultant providing recommendations."
     template: |
-      연구 결과를 바탕으로 권장사항을 제시하세요.
+      Provide recommendations based on the research results.
 
-      데이터: {data}
-      컨텍스트: {context}
+      Data: {data}
+      Context: {context}
 
-      권장사항 제시:
-      1. 연구 결과를 분석하세요
-      2. 실질적인 권장사항을 도출하세요
-      3. 실행 계획을 포함하세요
+      Recommendation Process:
+      1. Analyze research results
+      2. Derive actionable recommendations
+      3. Include implementation plans
 
-      권장사항을 구조화하여 반환하세요.
+      Return recommendations in a structured format.
     variables:
       - data
       - context
@@ -248,17 +295,17 @@ prompts:
   quality_assessment:
     system_message: "You are an expert quality assessor."
     template: |
-      연구 결과의 품질을 평가하세요.
+      Assess the quality of research results.
 
-      결과: {results}
-      품질 기준: {criteria}
+      Results: {results}
+      Quality Criteria: {criteria}
 
-      품질 평가:
-      1. 다양한 측면에서 품질을 평가하세요
-      2. 강점과 개선점을 식별하세요
-      3. 종합 평가를 제시하세요
+      Quality Assessment:
+      1. Evaluate quality across multiple dimensions
+      2. Identify strengths and areas for improvement
+      3. Provide comprehensive assessment
 
-      품질 평가 결과를 반환하세요.
+      Return quality assessment results.
     variables:
       - results
       - criteria
@@ -266,17 +313,17 @@ prompts:
   completeness_check:
     system_message: "You are an expert completeness evaluator."
     template: |
-      연구 결과의 완전성을 평가하세요.
+      Evaluate the completeness of research results.
 
-      결과: {results}
-      완전성 기준: {criteria}
+      Results: {results}
+      Completeness Criteria: {criteria}
 
-      완전성 평가:
-      1. 누락된 부분을 식별하세요
-      2. 추가 조사 필요 여부를 판단하세요
-      3. 완전성 점수를 제시하세요
+      Completeness Evaluation:
+      1. Identify missing components
+      2. Determine if additional investigation is needed
+      3. Provide completeness score
 
-      완전성 평가 결과를 반환하세요.
+      Return completeness evaluation results.
     variables:
       - results
       - criteria
@@ -284,17 +331,17 @@ prompts:
   accuracy_check:
     system_message: "You are an expert accuracy assessor."
     template: |
-      연구 결과의 정확성을 평가하세요.
+      Assess the accuracy of research results.
 
-      결과: {results}
-      정확성 기준: {criteria}
+      Results: {results}
+      Accuracy Criteria: {criteria}
 
-      정확성 평가:
-      1. 사실 관계를 검증하세요
-      2. 오류를 식별하세요
-      3. 정확성 점수를 제시하세요
+      Accuracy Assessment:
+      1. Verify factual relationships
+      2. Identify errors
+      3. Provide accuracy score
 
-      정확성 평가 결과를 반환하세요.
+      Return accuracy assessment results.
     variables:
       - results
       - criteria
@@ -302,17 +349,17 @@ prompts:
   relevance_check:
     system_message: "You are an expert relevance evaluator."
     template: |
-      연구 결과의 관련성을 평가하세요.
+      Evaluate the relevance of research results.
 
-      결과: {results}
-      쿼리: {query}
+      Results: {results}
+      Query: {query}
 
-      관련성 평가:
-      1. 쿼리와의 관련성을 분석하세요
-      2. 관련성 점수를 제시하세요
-      3. 개선 방안을 제안하세요
+      Relevance Evaluation:
+      1. Analyze relevance to the query
+      2. Provide relevance score
+      3. Suggest improvement strategies
 
-      관련성 평가 결과를 반환하세요.
+      Return relevance evaluation results.
     variables:
       - results
       - query

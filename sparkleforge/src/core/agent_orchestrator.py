@@ -3647,12 +3647,7 @@ class AgentOrchestrator:
         
         # 백그라운드 메모리 서비스 초기화
         self.memory_service = get_background_memory_service()
-        # 서비스 시작 (이미 시작되어 있으면 무시)
-        try:
-            if not self.memory_service.is_running:
-                await self.memory_service.start()
-        except Exception as e:
-            logger.warning(f"Failed to start memory service: {e}")
+        # 서비스 시작은 execute 메서드에서 비동기로 처리됨
 
         logger.info("AgentOrchestrator initialized with MCP tool auto-discovery, session management, and background memory service")
 
@@ -4299,6 +4294,14 @@ class AgentOrchestrator:
         """
         if session_id is None:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # 백그라운드 메모리 서비스 시작 (이미 시작되어 있으면 무시)
+        try:
+            if not self.memory_service.is_running:
+                await self.memory_service.start()
+                logger.info("Background memory service started")
+        except Exception as e:
+            logger.warning(f"Failed to start memory service: {e}")
         
         logger.info(f"Starting workflow for query: {user_query}, session: {session_id}")
         

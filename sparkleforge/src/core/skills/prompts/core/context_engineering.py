@@ -1,14 +1,14 @@
 """
-Context Engineering 프롬프트 모듈
+Context Engineering Prompt Module
 
-Context Engineer에서 사용되는 모든 프롬프트들을 포함합니다.
+Contains all prompts used by Context Engineer.
 """
 
 # 시스템 프롬프트
 system_prompt = {
     'template': '''{SYSTEM_PROMPT}''',
     'variables': ['SYSTEM_PROMPT'],
-    'description': '시스템 프롬프트 템플릿'
+    'description': 'System prompt template'
 }
 
 # 프롬프트들을 딕셔너리로 묶어서 export

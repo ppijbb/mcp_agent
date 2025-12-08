@@ -18,19 +18,19 @@ prompts:
   verification:
     system_message: "You are a verification agent. Verify if search results are relevant and reliable."
     template: |
-      다음 검색 결과를 검증하세요:
+      Verify the following search results:
 
-      검색 쿼리: {query}
-      검색 결과: {results}
+      Search Query: {query}
+      Search Results: {results}
 
-      다음 기준으로 검증하세요:
-      1. 관련성: 쿼리와의 관련성 (1-10점)
-      2. 신뢰성: 출처의 신뢰성 (1-10점)
-      3. 최신성: 정보의 최신성 (1-10점)
-      4. 완전성: 쿼리에 대한 답변 완전성 (1-10점)
+      Verify using the following criteria:
+      1. Relevance: Relevance to the query (1-10 points)
+      2. Reliability: Reliability of sources (1-10 points)
+      3. Recency: Recency of information (1-10 points)
+      4. Completeness: Completeness of response to query (1-10 points)
 
-      각 결과에 대해 점수와 이유를 제공하세요.
-      전체 검색 품질을 평가하세요.
+      Provide a score and reasoning for each result.
+      Assess overall search quality.
     variables:
       - query
       - results
