@@ -17,6 +17,8 @@ import json
 
 from src.core.memory_types import BaseMemory, MemoryType, SemanticMemory, EpisodicMemory, ProceduralMemory
 from src.core.memory_provenance import get_provenance_tracker
+from src.core.storage.database_driver import Transaction
+from src.core.storage.transaction_manager import get_transaction_manager
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +68,8 @@ class AdaptiveMemory:
         value: Any,
         importance: float = 0.5,
         tags: Optional[Set[str]] = None,
-        memory_type: Optional[str] = None
+        memory_type: Optional[str] = None,
+        tx: Optional[Transaction] = None  # 기본값: None (기존 동작 유지)
     ) -> bool:
         """
         메모리 항목 저장.
@@ -131,6 +134,86 @@ class AdaptiveMemory:
         except Exception as e:
             logger.error(f"Failed to store memory item {key}: {e}")
             return False
+    
+    def store_memory(
+        self,
+        memory: BaseMemory,
+        tx: Optional[Transaction] = None  # 기본값: None (기존 동작 유지)
+    ) -> bool:
+        """
+        BaseMemory 객체를 저장 (memory_service.py 호환).
+        
+        Args:
+            memory: BaseMemory 객체
+            tx: 트랜잭션 (선택사항)
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            # BaseMemory를 일반 메모리 형식으로 변환
+            key = memory.memory_id
+            value = {
+                "content": memory.content,
+                "memory_type": memory.memory_type.value if hasattr(memory.memory_type, 'value') else str(memory.memory_type),
+                "metadata": memory.metadata if hasattr(memory, 'metadata') else {}
+            }
+            importance = memory.importance if hasattr(memory, 'importance') else 0.7
+            tags = set(memory.tags) if hasattr(memory, 'tags') else set()
+            
+            return self.store(key, value, importance, tags, None, tx)
+        except Exception as e:
+            logger.error(f"Failed to store memory object: {e}")
+            return False
+    
+    async def store_memory_async(
+        self,
+        memory: BaseMemory,
+        tx: Optional[Transaction] = None
+    ) -> bool:
+        """
+        BaseMemory 객체를 비동기로 저장 (트랜잭션 지원).
+        
+        Args:
+            memory: BaseMemory 객체
+            tx: 트랜잭션 (None이면 자동으로 트랜잭션 생성)
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            tx_manager = get_transaction_manager()
+            
+            if tx is None:
+                async with tx_manager.transaction() as new_tx:
+                    return await self._store_memory_in_transaction(memory, new_tx)
+            else:
+                return await self._store_memory_in_transaction(memory, tx)
+        except Exception as e:
+            logger.error(f"Failed to store memory object (async): {e}")
+            return False
+    
+    async def _store_memory_in_transaction(
+        self,
+        memory: BaseMemory,
+        tx: Transaction
+    ) -> bool:
+        """트랜잭션 내에서 메모리 저장."""
+        # BaseMemory를 일반 메모리 형식으로 변환
+        key = memory.memory_id
+        value = {
+            "content": memory.content,
+            "memory_type": memory.memory_type.value if hasattr(memory.memory_type, 'value') else str(memory.memory_type),
+            "metadata": memory.metadata if hasattr(memory, 'metadata') else {}
+        }
+        importance = memory.importance if hasattr(memory, 'importance') else 0.7
+        tags = set(memory.tags) if hasattr(memory, 'tags') else set()
+        
+        # 현재는 인메모리 저장이지만, 트랜잭션 로깅
+        result = self.store(key, value, importance, tags, None, tx)
+        if result and tx:
+            logger.debug(f"Memory stored in transaction: {key}")
+        return result
     
     def retrieve(self, key: str, memory_type: Optional[str] = None) -> Optional[Any]:
         """

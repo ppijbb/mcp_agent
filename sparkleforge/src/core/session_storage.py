@@ -3,6 +3,7 @@ Session Storage Backend
 
 세션 데이터의 영구 저장을 위한 백엔드 구현.
 파일 기반 저장소와 선택적 데이터베이스 지원.
+트랜잭션 지원 추가 (Phase 1).
 """
 
 import json
@@ -14,6 +15,9 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, asdict
 import hashlib
+
+from src.core.storage.database_driver import Transaction
+from src.core.storage.transaction_manager import get_transaction_manager
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +48,8 @@ class SessionStorage:
         self,
         storage_path: str = "./storage/sessions",
         use_database: bool = True,
-        compress: bool = True
+        compress: bool = True,
+        enable_transactions: bool = False  # 기본값: False (기존 동작 유지)
     ):
         """
         초기화.
@@ -53,11 +58,13 @@ class SessionStorage:
             storage_path: 저장소 경로
             use_database: SQLite 데이터베이스 사용 여부
             compress: 압축 저장 여부
+            enable_transactions: 트랜잭션 활성화 여부 (기본값: False, 기존 동작 유지)
         """
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.use_database = use_database
         self.compress = compress
+        self.enable_transactions = enable_transactions  # 기본값: False
         
         # 파일 저장 경로
         self.sessions_dir = self.storage_path / "sessions"
@@ -68,7 +75,19 @@ class SessionStorage:
         if self.use_database:
             self._init_database()
         
-        logger.info(f"SessionStorage initialized at {self.storage_path}")
+        # 트랜잭션 관리자 (선택적)
+        self.tx_manager = None
+        if self.enable_transactions:
+            try:
+                from src.core.storage.transaction_manager import get_transaction_manager
+                self.tx_manager = get_transaction_manager()
+            except Exception as e:
+                logger.warning(f"Transaction manager not available: {e}. Continuing without transactions.")
+        
+        logger.info(
+            f"SessionStorage initialized at {self.storage_path} "
+            f"(transactions: {'enabled' if self.enable_transactions else 'disabled'})"
+        )
     
     def _init_database(self):
         """SQLite 데이터베이스 초기화."""
@@ -115,7 +134,8 @@ class SessionStorage:
         state: Dict[str, Any],
         context: Dict[str, Any],
         memory: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        tx: Optional[Transaction] = None
     ) -> bool:
         """
         세션 저장.
@@ -126,6 +146,7 @@ class SessionStorage:
             context: ContextEngineer 상태
             memory: SharedMemory 상태
             metadata: 추가 메타데이터
+            tx: 트랜잭션 (선택사항)
             
         Returns:
             성공 여부
@@ -168,7 +189,11 @@ class SessionStorage:
                 description=metadata.get("description") if metadata else None
             )
             
-            self._save_metadata(session_metadata, str(file_path))
+            # 트랜잭션이 있으면 트랜잭션 내에서 메타데이터 저장
+            if tx:
+                self._save_metadata_in_transaction(session_metadata, str(file_path), tx)
+            else:
+                self._save_metadata(session_metadata, str(file_path))
             
             logger.info(f"Session saved: {session_id}")
             return True
@@ -176,6 +201,105 @@ class SessionStorage:
         except Exception as e:
             logger.error(f"Failed to save session {session_id}: {e}")
             return False
+    
+    async def save_session_async(
+        self,
+        session_id: str,
+        state: Dict[str, Any],
+        context: Dict[str, Any],
+        memory: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+        tx: Optional[Transaction] = None,
+        use_transaction: Optional[bool] = None  # None이면 enable_transactions 설정 사용
+    ) -> bool:
+        """
+        세션 저장 (비동기, 트랜잭션 지원).
+        
+        Args:
+            session_id: 세션 ID
+            state: AgentState 데이터
+            context: ContextEngineer 상태
+            memory: SharedMemory 상태
+            metadata: 추가 메타데이터
+            tx: 트랜잭션 (None이면 자동으로 트랜잭션 생성)
+            use_transaction: 트랜잭션 사용 여부 (None이면 enable_transactions 설정 사용)
+            
+        Returns:
+            성공 여부
+        """
+        try:
+            # 트랜잭션 사용 여부 결정
+            should_use_tx = use_transaction if use_transaction is not None else self.enable_transactions
+            
+            if should_use_tx and self.tx_manager:
+                # 트랜잭션 관리자 가져오기
+                if tx is None:
+                    async with self.tx_manager.transaction() as new_tx:
+                        return await self._save_session_in_transaction(
+                            session_id, state, context, memory, metadata, new_tx
+                        )
+                else:
+                    return await self._save_session_in_transaction(
+                        session_id, state, context, memory, metadata, tx
+                    )
+            else:
+                # 트랜잭션 없이 저장 (기존 동작)
+                return self.save_session(session_id, state, context, memory, metadata, tx=None)
+        except Exception as e:
+            logger.error(f"Failed to save session {session_id} (async): {e}")
+            return False
+    
+    async def _save_session_in_transaction(
+        self,
+        session_id: str,
+        state: Dict[str, Any],
+        context: Dict[str, Any],
+        memory: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]],
+        tx: Transaction
+    ) -> bool:
+        """트랜잭션 내에서 세션 저장."""
+        # 세션 데이터 구성
+        session_data = {
+            "session_id": session_id,
+            "state": state,
+            "context": context,
+            "memory": memory,
+            "saved_at": datetime.now().isoformat(),
+            "metadata": metadata or {}
+        }
+        
+        # 파일 경로 결정
+        file_path = self.sessions_dir / f"{session_id}.json"
+        if self.compress:
+            file_path = self.sessions_dir / f"{session_id}.json.gz"
+        
+        # 저장 (파일 저장은 트랜잭션 밖에서, 하지만 원자성을 위해 시도)
+        json_data = json.dumps(session_data, ensure_ascii=False, indent=2)
+        
+        if self.compress:
+            with gzip.open(file_path, 'wt', encoding='utf-8') as f:
+                f.write(json_data)
+        else:
+            file_path.write_text(json_data, encoding='utf-8')
+        
+        # 메타데이터 업데이트 (트랜잭션 내에서)
+        session_metadata = SessionMetadata(
+            session_id=session_id,
+            user_id=metadata.get("user_id") if metadata else None,
+            created_at=metadata.get("created_at", datetime.now().isoformat()) if metadata else datetime.now().isoformat(),
+            last_accessed=datetime.now().isoformat(),
+            state_version=metadata.get("state_version", 1) if metadata else 1,
+            context_size=len(json.dumps(context, ensure_ascii=False)),
+            memory_size=len(json.dumps(memory, ensure_ascii=False)),
+            tags=metadata.get("tags", []) if metadata else [],
+            description=metadata.get("description") if metadata else None
+        )
+        
+        await self._save_metadata_in_transaction_async(session_metadata, str(file_path), tx)
+        
+        logger.info(f"Session saved (transaction): {session_id}")
+        return True
     
     def load_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -370,7 +494,7 @@ class SessionStorage:
         return sessions[offset:offset + limit]
     
     def _save_metadata(self, metadata: SessionMetadata, file_path: str):
-        """메타데이터 저장."""
+        """메타데이터 저장 (동기, 기존 호환성)."""
         if not self.use_database:
             return
         
@@ -400,6 +524,78 @@ class SessionStorage:
             conn.close()
         except Exception as e:
             logger.error(f"Failed to save metadata: {e}")
+    
+    def _save_metadata_in_transaction(
+        self,
+        metadata: SessionMetadata,
+        file_path: str,
+        tx: Transaction
+    ):
+        """메타데이터 저장 (트랜잭션 내, 동기)."""
+        if not self.use_database:
+            return
+        
+        # 트랜잭션을 통해 실행
+        try:
+            query = """
+                INSERT OR REPLACE INTO session_metadata
+                (session_id, user_id, created_at, last_accessed, state_version,
+                 context_size, memory_size, tags, description, file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            params = {
+                "session_id": metadata.session_id,
+                "user_id": metadata.user_id,
+                "created_at": metadata.created_at,
+                "last_accessed": metadata.last_accessed,
+                "state_version": metadata.state_version,
+                "context_size": metadata.context_size,
+                "memory_size": metadata.memory_size,
+                "tags": json.dumps(metadata.tags),
+                "description": metadata.description,
+                "file_path": file_path
+            }
+            # 동기 트랜잭션은 나중에 구현
+            # 현재는 기존 방식 사용
+            self._save_metadata(metadata, file_path)
+        except Exception as e:
+            logger.error(f"Failed to save metadata in transaction: {e}")
+    
+    async def _save_metadata_in_transaction_async(
+        self,
+        metadata: SessionMetadata,
+        file_path: str,
+        tx: Transaction
+    ):
+        """메타데이터 저장 (트랜잭션 내, 비동기)."""
+        if not self.use_database:
+            return
+        
+        try:
+            query = """
+                INSERT OR REPLACE INTO session_metadata
+                (session_id, user_id, created_at, last_accessed, state_version,
+                 context_size, memory_size, tags, description, file_path)
+                VALUES (:session_id, :user_id, :created_at, :last_accessed, :state_version,
+                 :context_size, :memory_size, :tags, :description, :file_path)
+            """
+            params = {
+                "session_id": metadata.session_id,
+                "user_id": metadata.user_id,
+                "created_at": metadata.created_at,
+                "last_accessed": metadata.last_accessed,
+                "state_version": metadata.state_version,
+                "context_size": metadata.context_size,
+                "memory_size": metadata.memory_size,
+                "tags": json.dumps(metadata.tags),
+                "description": metadata.description,
+                "file_path": file_path
+            }
+            await tx.execute(query, params)
+            logger.debug(f"Metadata saved in transaction: {metadata.session_id}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata in transaction (async): {e}")
+            raise
     
     def _update_last_accessed(self, session_id: str):
         """마지막 접근 시간 업데이트."""
