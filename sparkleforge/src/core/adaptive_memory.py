@@ -17,10 +17,23 @@ import json
 
 from src.core.memory_types import BaseMemory, MemoryType, SemanticMemory, EpisodicMemory, ProceduralMemory
 from src.core.memory_provenance import get_provenance_tracker
-from src.core.storage.database_driver import Transaction
-from src.core.storage.transaction_manager import get_transaction_manager
+from src.core.db.database_driver import Transaction
+from src.core.db.transaction_manager import get_transaction_manager
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MemoryItem:
+    """기존 호환성을 위한 메모리 항목 (deprecated, BaseMemory 사용 권장)."""
+    key: str
+    value: Any
+    importance: float = 0.5
+    tags: Set[str] = field(default_factory=set)
+    memory_type: str = "short_term"
+    created_at: datetime = field(default_factory=datetime.now)
+    last_accessed: datetime = field(default_factory=datetime.now)
+    access_count: int = 0
 
 
 @dataclass

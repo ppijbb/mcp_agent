@@ -16,8 +16,8 @@ from datetime import datetime
 from dataclasses import dataclass, asdict
 import hashlib
 
-from src.core.storage.database_driver import Transaction
-from src.core.storage.transaction_manager import get_transaction_manager
+from src.core.db.database_driver import Transaction
+from src.core.db.transaction_manager import get_transaction_manager
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class SessionStorage:
         self.tx_manager = None
         if self.enable_transactions:
             try:
-                from src.core.storage.transaction_manager import get_transaction_manager
+                from src.core.db.transaction_manager import get_transaction_manager
                 self.tx_manager = get_transaction_manager()
             except Exception as e:
                 logger.warning(f"Transaction manager not available: {e}. Continuing without transactions.")

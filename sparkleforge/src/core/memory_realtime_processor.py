@@ -13,8 +13,8 @@ from datetime import datetime
 from src.core.memory_types import BaseMemory
 from src.core.memory_extraction import get_memory_extractor, get_memory_consolidator
 from src.core.adaptive_memory import get_adaptive_memory
-from src.core.storage.database_driver import Transaction
-from src.core.storage.transaction_manager import get_transaction_manager
+from src.core.db.database_driver import Transaction
+from src.core.db.transaction_manager import get_transaction_manager
 
 logger = logging.getLogger(__name__)
 
