@@ -52,3 +52,6 @@
 [submodule "open_researcher/agentpg"]
 	path = open_researcher/agentpg
 	url = https://github.com/youssefsiam38/agentpg.git
+[submodule "open_researcher/DataDesigner"]
+	path = open_researcher/DataDesigner
+	url = https://github.com/NVIDIA-NeMo/DataDesigner.git
