@@ -4,19 +4,38 @@ Data Generator for the Kimi-K2 Agentic Data Synthesis System
 Generates and exports training data in various formats for model training.
 """
 
-from typing import List, Dict, Any, Optional
-from ..models.data import TrainingData, DataBatch, DataFormat, Metadata
-from ..models.evaluation import EvaluationResult
-from ..models.simulation import SimulationSession
-import logging
+import csv
+from dataclasses import dataclass
 from datetime import datetime
 import json
-import csv
+import logging
 import os
+from pathlib import Path
 import random
+from typing import Any, Dict, List, Optional
 import uuid
 
+import pandas as pd
+
+from ..models.data import DataBatch, DataFormat, Metadata, TrainingData
+from ..models.evaluation import EvaluationResult
+from ..models.simulation import SimulationSession
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DataDesignerRefinementConfig:
+    """Configuration for refining datasets with Data Designer."""
+
+    artifact_path: Path | str
+    dataset_name: Optional[str] = None
+    num_records: Optional[int] = None
+    sampling_strategy: str = "shuffle"
+    llm_prompt: Optional[str] = None
+    model_alias: Optional[str] = None
+    model_configs: Optional[list[Any]] = None
+    provider_env: Optional[Dict[str, str]] = None
 
 
 class DataGenerator:
@@ -316,6 +335,137 @@ class DataGenerator:
         del self.generated_batches[batch_id]
         logger.info(f"Deleted batch: {batch_name}")
         return True
+
+    def refine_with_data_designer(
+        self,
+        training_data: List[TrainingData],
+        refinement_config: DataDesignerRefinementConfig,
+    ) -> Dict[str, Any]:
+        """
+        Use NeMo Data Designer to build a profiled, validated dataset from high-quality simulations.
+
+        This leverages seed sampling plus optional LLM-powered enrichment to turn simulation traces
+        into structured training rows. It raises instead of silently skipping when prerequisites are
+        missing to honor the no-fallback requirement.
+        """
+        if not training_data:
+            raise ValueError("Training data is required for Data Designer refinement.")
+
+        try:
+            from data_designer.essentials import (  # type: ignore[import-not-found]
+                DataDesigner,
+                DataDesignerConfigBuilder,
+                ExpressionColumnConfig,
+                LLMStructuredColumnConfig,
+                SamplingStrategy,
+            )
+        except ImportError as exc:
+            raise ImportError(
+                "Data Designer is required for refinement. Install it with "
+                "`pip install data-designer` or add the local repository to PYTHONPATH."
+            ) from exc
+
+        artifact_root = Path(refinement_config.artifact_path).expanduser().resolve()
+        artifact_root.mkdir(parents=True, exist_ok=True)
+
+        dataset_name = refinement_config.dataset_name or f"k2_refined_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        num_records = refinement_config.num_records or len(training_data)
+
+        seed_rows: list[dict[str, Any]] = []
+        for item in training_data:
+            conversation_text = item.get_conversation_text()
+            tool_sequence = [usage.get("tool", "unknown") for usage in item.tool_usage_log]
+            seed_rows.append(
+                {
+                    "simulation_id": item.metadata.simulation_id,
+                    "domain_id": item.metadata.domain_id,
+                    "scenario_id": item.metadata.scenario_id,
+                    "agent_ids": ",".join(item.metadata.agent_ids),
+                    "quality_score": float(item.quality_metrics.get("overall", 0.0)),
+                    "conversation_text": conversation_text,
+                    "tool_usage_json": json.dumps(item.tool_usage_log, ensure_ascii=False),
+                    "tool_sequence": "|".join(tool_sequence),
+                    "tool_usage_count": len(tool_sequence),
+                    "final_outcome_json": json.dumps(item.final_outcome, ensure_ascii=False),
+                }
+            )
+
+        seed_df = pd.DataFrame(seed_rows)
+        if seed_df.empty:
+            raise ValueError("Seed dataframe is empty; cannot run Data Designer refinement.")
+
+        seed_path = artifact_root / dataset_name / "seed.parquet"
+        seed_path.parent.mkdir(parents=True, exist_ok=True)
+        seed_reference = DataDesigner.make_seed_reference_from_dataframe(seed_df, file_path=seed_path)
+
+        try:
+            sampling_strategy = SamplingStrategy(refinement_config.sampling_strategy)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid sampling strategy '{refinement_config.sampling_strategy}'. "
+                "Allowed values: 'ordered', 'shuffle'."
+            ) from exc
+
+        config_builder = DataDesignerConfigBuilder(model_configs=refinement_config.model_configs)
+        config_builder.with_seed_dataset(seed_reference, sampling_strategy=sampling_strategy)
+
+        config_builder.add_column(
+            ExpressionColumnConfig(
+                name="quality_bucket",
+                expr="{{ 'excellent' if quality_score >= 0.9 else ('high' if quality_score >= 0.8 else ('medium' if quality_score >= 0.7 else 'low')) }}",
+                dtype="str",
+            )
+        )
+
+        if refinement_config.llm_prompt:
+            if not refinement_config.model_alias:
+                raise ValueError("model_alias is required when llm_prompt is provided for Data Designer refinement.")
+            config_builder.add_column(
+                LLMStructuredColumnConfig(
+                    name="refined_trace",
+                    model_alias=refinement_config.model_alias,
+                    prompt=refinement_config.llm_prompt,
+                    output_format={
+                        "type": "object",
+                        "properties": {
+                            "user_request": {"type": "string"},
+                            "assistant_plan": {"type": "string"},
+                            "tool_calls": {"type": "array", "items": {"type": "string"}},
+                            "quality_rationale": {"type": "string"},
+                        },
+                        "required": ["user_request", "assistant_plan", "tool_calls"],
+                    },
+                )
+            )
+
+        if refinement_config.provider_env:
+            for key, value in refinement_config.provider_env.items():
+                if value is None or value == "":
+                    raise ValueError(f"Environment variable value for '{key}' is empty.")
+                os.environ[key] = value
+
+        data_designer = DataDesigner(artifact_path=artifact_root)
+        results = data_designer.create(
+            config_builder=config_builder,
+            num_records=num_records,
+            dataset_name=dataset_name,
+        )
+
+        dataset = results.load_dataset()
+        analysis = results.load_analysis()
+
+        return {
+            "dataset_name": results.artifact_storage.resolved_dataset_name,
+            "artifact_path": str(results.artifact_storage.base_dataset_path),
+            "records": len(dataset),
+            "columns": list(dataset.columns),
+            "quality_buckets": dataset["quality_bucket"].value_counts().to_dict() if "quality_bucket" in dataset else {},
+            "profile": {
+                "num_records": analysis.num_records,
+                "target_num_records": analysis.target_num_records,
+                "column_types": analysis.column_types,
+            },
+        }
     
     def get_batch_statistics(self) -> Dict[str, Any]:
         """Get statistics about all batches"""

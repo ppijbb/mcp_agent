@@ -24,7 +24,7 @@ from .core.environment_manager import EnvironmentManager
 from .core.user_agent_manager import UserAgentManager
 from .evaluation.llm_judge import LLMJudgeSystem
 from .evaluation.quality_filter import QualityFilter
-from .data.data_generator import DataGenerator
+from .data.data_generator import DataDesignerRefinementConfig, DataGenerator
 from .system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
 from .system.agentic_trainer_system import AgenticTrainerSystem
 from .training import OnlineTrainer, DataCollector, DataProcessor, RewardSystem, ModelManager
@@ -40,6 +40,7 @@ __all__ = [
     "LLMJudgeSystem",
     "QualityFilter",
     "DataGenerator",
+    "DataDesignerRefinementConfig",
     "AgenticDataSynthesisSystem",
     "AgenticTrainerSystem",
     "OnlineTrainer",

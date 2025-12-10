@@ -7,7 +7,7 @@ for large-scale agentic data synthesis.
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from pathlib import Path
 import json
 import time
@@ -22,7 +22,7 @@ from ..core.user_agent_manager import UserAgentManager
 from ..evaluation.llm_judge import LLMJudgeSystem
 from ..evaluation.quality_filter import QualityFilter
 from ..evaluation.human_feedback_manager import HumanFeedbackManager
-from ..data.data_generator import DataGenerator
+from ..data.data_generator import DataDesignerRefinementConfig, DataGenerator
 from ..models.domain import Domain, DomainConfig
 from ..models.tool import ToolType, ToolParameter, ParameterType, ToolConfig
 from ..models.agent import Agent, AgentConfig
@@ -89,7 +89,7 @@ class AgenticDataSynthesisSystem:
         )
         self.llm_judge = LLMJudgeSystem()
         self.quality_filter = QualityFilter()
-        self.data_generator = DataGenerator()
+        self.data_generator = DataGenerator(output_directory=str(self.output_dir))
         self.human_feedback_manager = HumanFeedbackManager()
         
         # System state
@@ -465,7 +465,8 @@ class AgenticDataSynthesisSystem:
         evaluation_config: EvaluationConfig,
         export_config: DataExportConfig,
         quality_threshold: float = 0.7,
-        max_concurrent_simulations: int = 5
+        max_concurrent_simulations: int = 5,
+        data_designer_settings: Optional[Union[Dict[str, Any], DataDesignerRefinementConfig]] = None,
     ) -> Dict[str, Any]:
         """
         Run the complete Kimi-K2 pipeline.
@@ -476,6 +477,15 @@ class AgenticDataSynthesisSystem:
             export_config: Export configuration
             quality_threshold: Minimum quality score threshold
             max_concurrent_simulations: Maximum concurrent simulations
+            data_designer_settings: Optional settings dict to enable Data Designer refinement.
+                Supported keys:
+                - artifact_path: str | Path for Data Designer artifacts (default: <output_dir>/data_designer)
+                - dataset_name: Optional[str] dataset name
+                - num_records: Optional[int] number of rows to synthesize
+                - sampling_strategy: "ordered" | "shuffle"
+                - llm_prompt: Optional[str] prompt for LLMStructuredColumn
+                - model_alias: Optional[str] model alias for LLM columns (required if llm_prompt is set)
+                - model_configs: Optional[list[Any]] Data Designer model configs
             
         Returns:
             Pipeline results summary
@@ -512,6 +522,33 @@ class AgenticDataSynthesisSystem:
                 high_quality_data,
                 export_config
             )
+
+            data_designer_summary = None
+            if data_designer_settings:
+                if not high_quality_data:
+                    raise ValueError("Data Designer refinement requested but no high-quality data is available.")
+
+                designer_config = (
+                    data_designer_settings
+                    if isinstance(data_designer_settings, DataDesignerRefinementConfig)
+                    else DataDesignerRefinementConfig(
+                        artifact_path=data_designer_settings.get(
+                            "artifact_path",
+                            self.output_dir / "data_designer"
+                        ),
+                        dataset_name=data_designer_settings.get("dataset_name"),
+                        num_records=data_designer_settings.get("num_records"),
+                        sampling_strategy=data_designer_settings.get("sampling_strategy", "shuffle"),
+                        llm_prompt=data_designer_settings.get("llm_prompt"),
+                        model_alias=data_designer_settings.get("model_alias"),
+                        model_configs=data_designer_settings.get("model_configs"),
+                        provider_env=data_designer_settings.get("provider_env"),
+                    )
+                )
+                data_designer_summary = self.data_generator.refine_with_data_designer(
+                    high_quality_data,
+                    designer_config,
+                )
             
             # Calculate statistics
             total_time = time.time() - start_time
@@ -527,6 +564,7 @@ class AgenticDataSynthesisSystem:
                 "quality_rate": quality_rate,
                 "total_time_seconds": total_time,
                 "export_paths": export_paths,
+                "data_designer": data_designer_summary,
                 "timestamp": datetime.now().isoformat()
             }
             

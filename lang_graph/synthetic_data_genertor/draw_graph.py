@@ -4,13 +4,13 @@ import os
 # Add the parent directory to the path to enable absolute imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainCategory
-from kimi_k2_agentic_data_synthesis.models.tool import ToolConfig, ToolType
-from kimi_k2_agentic_data_synthesis.models.agent import AgentConfig, AgentRole
-from kimi_k2_agentic_data_synthesis.core.domain_manager import DomainManager
-from kimi_k2_agentic_data_synthesis.core.tool_registry import ToolRegistry
-from kimi_k2_agentic_data_synthesis.core.agent_factory import AgentFactory
-from kimi_k2_agentic_data_synthesis.core.simulation_engine import SimulationEngine
+from synthetic_data_genertor.models.domain import DomainConfig, DomainCategory
+from synthetic_data_genertor.models.tool import ToolConfig, ToolType
+from synthetic_data_genertor.models.agent import AgentConfig, AgentRole
+from synthetic_data_genertor.core.domain_manager import DomainManager
+from synthetic_data_genertor.core.tool_registry import ToolRegistry
+from synthetic_data_genertor.core.agent_factory import AgentFactory
+from synthetic_data_genertor.core.simulation_engine import SimulationEngine
 
 # Mock LLM Config (as it's required by AgentFactory and SimulationEngine)
 llm_config = {

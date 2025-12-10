@@ -80,7 +80,7 @@ pip install -r requirements.txt
 
 ```python
 import asyncio
-from lang_graph.kimi_k2_agentic_data_synthesis import AgenticDataSynthesisSystem
+from lang_graph.synthetic_data_genertor import AgenticDataSynthesisSystem
 
 async def main():
     # Initialize the system
@@ -109,7 +109,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from lang_graph.kimi_k2_agentic_data_synthesis import AgenticDataSynthesisSystem
+from lang_graph.synthetic_data_genertor import AgenticDataSynthesisSystem
 
 async def main():
     # Initialize system without any API keys
@@ -176,7 +176,7 @@ python -m example_mcp_usage
 ### Domain Configuration
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainType
+from lang_graph.synthetic_data_genertor.models.domain import DomainConfig, DomainType
 
 domain_config = DomainConfig(
     domain_id="web_development",
@@ -196,7 +196,7 @@ domain_config = DomainConfig(
 ### Tool Configuration
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.tool import ToolConfig, ToolType
+from lang_graph.synthetic_data_genertor.models.tool import ToolConfig, ToolType
 
 tool_config = ToolConfig(
     tool_id="code_editor",
@@ -220,7 +220,7 @@ tool_config = ToolConfig(
 ### Agent Configuration
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.agent import AgentConfig, AgentType, BehaviorPattern
+from lang_graph.synthetic_data_genertor.models.agent import AgentConfig, AgentType, BehaviorPattern
 
 agent_config = AgentConfig(
     agent_id="senior_developer",
@@ -239,7 +239,7 @@ agent_config = AgentConfig(
 ### Simulation Configuration
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.simulation import SimulationConfig, EnvironmentConfig
+from lang_graph.synthetic_data_genertor.models.simulation import SimulationConfig, EnvironmentConfig
 
 simulation_config = SimulationConfig(
     simulation_id="web_dev_collaboration",
@@ -264,7 +264,7 @@ simulation_config = SimulationConfig(
 ### Tool Selection Context
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import ToolSelectionContext
+from lang_graph.synthetic_data_genertor.models.mcp_training_data import ToolSelectionContext
 
 context = ToolSelectionContext(
     user_request="Create a new Python script for data analysis",
@@ -284,7 +284,7 @@ context = ToolSelectionContext(
 ### Tool Selection Decision
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import ToolSelectionDecision
+from lang_graph.synthetic_data_genertor.models.mcp_training_data import ToolSelectionDecision
 
 decision = ToolSelectionDecision(
     selected_tool="code_editor",
@@ -330,6 +330,49 @@ Data can be split into train/validation/test sets and includes:
 - Problem scenarios and solutions
 - Evaluation scores and feedback
 - Metadata and timestamps
+
+## Data Designer Refinement
+
+You can send high-quality simulation outputs into NeMo Data Designer for profiling, validation, and optional LLM-driven enrichment.
+
+```python
+from lang_graph.synthetic_data_genertor import (
+    AgenticDataSynthesisSystem,
+    DataDesignerRefinementConfig,
+)
+
+system = AgenticDataSynthesisSystem(output_dir="generated_data", log_level="INFO")
+
+designer_cfg = DataDesignerRefinementConfig(
+    artifact_path="generated_data/data_designer",
+    num_records=200,
+    sampling_strategy="shuffle",
+    provider_env={
+        # Example: pass provider keys at runtime (no hardcoding)
+        "NVIDIA_API_KEY": os.environ["NVIDIA_API_KEY"],
+        "OPENAI_API_KEY": os.environ["OPENAI_API_KEY"],
+    },
+    # Optional LLM enrichment (requires model configs that expose this alias)
+    llm_prompt=(
+        "Given the conversation {{ conversation_text }}, create a structured training "
+        "trace with a concise user request, assistant plan, and the ordered tool calls."
+    ),
+    model_alias="gemini-2.0-flash-lite",
+)
+
+results = await system.run_full_pipeline(
+    simulation_configs=simulations,
+    evaluation_config=evaluation_config,
+    export_config=export_config,
+    quality_threshold=0.8,
+    data_designer_settings=designer_cfg,
+)
+
+print(results["data_designer"])
+```
+
+- Install Data Designer in your conda/uv environment (e.g., `pip install data-designer`).
+- When `llm_prompt` is provided, ensure your Data Designer model configs include the specified `model_alias`. Without it, refinement uses seed sampling plus deterministic expressions only.
 
 ### NEW: MCP Training Data Structure
 
@@ -416,8 +459,8 @@ system.tool_registry.register_tool(custom_tool)
 ### NEW: Custom MCP Servers
 
 ```python
-from lang_graph.kimi_k2_agentic_data_synthesis.core import MCPCommunicationSimulator
-from lang_graph.kimi_k2_agentic_data_synthesis.models.mcp_training_data import MCPToolType
+from lang_graph.synthetic_data_genertor.core import MCPCommunicationSimulator
+from lang_graph.synthetic_data_genertor.models.mcp_training_data import MCPToolType
 
 mcp_simulator = MCPCommunicationSimulator()
 

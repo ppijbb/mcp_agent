@@ -31,7 +31,7 @@ def main():
         page_type="kimi_k2",
         title="Kimi K2 Agentic Data Synthesis",
         subtitle="LangGraph 기반 에이전트식 데이터 합성 시스템",
-        module_path="lang_graph.kimi_k2_agentic_data_synthesis"
+        module_path="lang_graph.synthetic_data_genertor"
     )
 
     result_placeholder = st.empty()
@@ -79,7 +79,7 @@ def main():
                 placeholder=result_placeholder,
                 agent_id="kimi_k2_agentic_data_synthesis",
                 agent_name="Kimi K2 Agentic Data Synthesis",
-                entry_point="lang_graph.kimi_k2_agentic_data_synthesis",
+                entry_point="lang_graph.synthetic_data_genertor",
                 agent_type=AgentType.LANGGRAPH_AGENT,
                 capabilities=["data_synthesis", "time_series_generation", "tabular_data_generation"],
                 description="LangGraph 기반 에이전트식 데이터 합성 시스템",

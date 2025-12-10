@@ -13,13 +13,13 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from kimi_k2_agentic_data_synthesis.system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
-from kimi_k2_agentic_data_synthesis.models.domain import DomainConfig, DomainCategory
-from kimi_k2_agentic_data_synthesis.models.tool import ToolConfig, ToolType
-from kimi_k2_agentic_data_synthesis.models.agent import AgentConfig, AgentType, BehaviorPattern
-from kimi_k2_agentic_data_synthesis.models.simulation import SimulationConfig, EnvironmentConfig
-from kimi_k2_agentic_data_synthesis.models.evaluation import EvaluationConfig, EvaluationRubric
-from kimi_k2_agentic_data_synthesis.models.data import DataExportConfig
+from synthetic_data_genertor.system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
+from synthetic_data_genertor.models.domain import DomainConfig, DomainCategory
+from synthetic_data_genertor.models.tool import ToolConfig, ToolType
+from synthetic_data_genertor.models.agent import AgentConfig, AgentType, BehaviorPattern
+from synthetic_data_genertor.models.simulation import SimulationConfig, EnvironmentConfig
+from synthetic_data_genertor.models.evaluation import EvaluationConfig, EvaluationRubric
+from synthetic_data_genertor.models.data import DataExportConfig
 
 
 def test_system_initialization():
@@ -217,7 +217,7 @@ async def test_simulation_creation():
         domain_id="test_domain",
         name="Test Domain",
         description="A test domain",
-        domain_type=DomainType.TECHNICAL,
+        domain_type=DomainCategory.TECHNICAL,
         scenarios=["Test scenario"],
         complexity_levels=["easy"],
         required_tools=["test_tool"]
