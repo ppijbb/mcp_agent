@@ -1471,53 +1471,93 @@ class UniversalMCPHub:
             logger.error(f"Tool {tool_name} not found in server {server_name}. Available tools: {available_tools}")
             return None
         
-        try:
-            session = self.mcp_sessions[server_name]
-            logger.debug(f"Calling tool {tool_name} on server {server_name} with params: {params}")
-            result = await session.call_tool(tool_name, params)
-            
-            # 결과를 TextContent에서 추출
-            if result and result.content:
-                content_parts = []
-                for item in result.content:
-                    if isinstance(item, TextContent):
-                        content_parts.append(item.text)
-                    else:
-                        # 다른 타입의 content도 처리
-                        content_parts.append(str(item))
+        # 재시도 + 재연결(ClosedResource/429) + 간단한 백오프
+        max_attempts = 3
+        backoff_seconds = [0.5, 1.5, 3.0]
+        
+        for attempt in range(max_attempts):
+            try:
+                session = self.mcp_sessions[server_name]
+                logger.debug(f"Calling tool {tool_name} on server {server_name} (attempt {attempt+1}/{max_attempts}) with params: {params}")
+                result = await session.call_tool(tool_name, params)
                 
-                content_str = " ".join(content_parts)
-                logger.debug(f"Tool {tool_name} returned content length: {len(content_str)}")
-                return content_str
-            else:
-                logger.warning(f"Tool {tool_name} returned empty result")
+                # 결과를 TextContent에서 추출
+                if result and result.content:
+                    content_parts = []
+                    for item in result.content:
+                        if isinstance(item, TextContent):
+                            content_parts.append(item.text)
+                        else:
+                            # 다른 타입의 content도 처리
+                            content_parts.append(str(item))
+                    
+                    content_str = " ".join(content_parts)
+                    logger.debug(f"Tool {tool_name} returned content length: {len(content_str)}")
+                    return content_str
+                else:
+                    logger.warning(f"Tool {tool_name} returned empty result")
+                    return None
+            
+            except McpError as e:
+                error_msg = str(e) if e else "Unknown MCP error"
+                error_code = getattr(e.error, 'code', None) if hasattr(e, 'error') else None
+                error_data = getattr(e.error, 'data', None) if hasattr(e, 'error') else None
+                
+                # 레이트리밋 / 토큰 오류 감지
+                is_rate_limit = "Too Many Requests" in error_msg or (error_code == 429)
+                is_auth_error = "invalid_token" in error_msg.lower() or (error_code == 401)
+                
+                error_details = f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool"
+                if error_code:
+                    error_details += f" code={error_code}"
+                if error_data:
+                    error_details += f" data={error_data}"
+                error_details += f" error={error_msg}"
+                logger.error(error_details)
+                
+                if is_rate_limit and attempt < max_attempts - 1:
+                    wait = backoff_seconds[attempt]
+                    logger.warning(f"[MCP][exec.retry] Rate limit hit, retrying in {wait}s (attempt {attempt+2}/{max_attempts})")
+                    await asyncio.sleep(wait)
+                    continue
+                
+                if is_auth_error:
+                    logger.error("[MCP][auth] invalid or expired token; refresh credentials and re-init MCP")
                 return None
             
-        except McpError as e:
-            # MCP 프로토콜 에러 - 명확한 에러 메시지 출력
-            error_msg = str(e) if e else "Unknown MCP error"
-            error_code = getattr(e.error, 'code', None) if hasattr(e, 'error') else None
-            error_data = getattr(e.error, 'data', None) if hasattr(e, 'error') else None
+            except (RuntimeError, ConnectionError, OSError) as e:
+                # ClosedResourceError, connection reset 등
+                error_type = type(e).__name__
+                error_msg = str(e)
+                closed_like = "closed" in error_msg.lower() or "connection reset" in error_msg.lower()
+                
+                if closed_like and server_name in self.mcp_server_configs and attempt < max_attempts - 1:
+                    logger.warning(f"[MCP][exec.retry] server={server_name} tool={tool_name} connection closed, reconnecting (attempt {attempt+2}/{max_attempts})")
+                    try:
+                        await self._disconnect_from_mcp_server(server_name)
+                    except Exception:
+                        pass
+                    server_config = self.mcp_server_configs[server_name]
+                    reconnected = await self._connect_to_mcp_server(server_name, server_config)
+                    if reconnected:
+                        wait = backoff_seconds[attempt]
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.error(f"[MCP][exec.error] Reconnect failed for {server_name}")
+                    return None
+                
+                logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
+                import traceback
+                logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
+                return None
             
-            # 에러 메시지 구성
-            error_details = f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool"
-            if error_code:
-                error_details += f" code={error_code}"
-            if error_data:
-                error_details += f" data={error_data}"
-            error_details += f" error={error_msg}"
-            
-            logger.error(error_details)
-            return None
-        except Exception as e:
-            # 기타 예외 - 명확한 에러 메시지 출력
-            error_type = type(e).__name__
-            error_msg = str(e)
-            
-            logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
-            import traceback
-            logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
-            return None
+            except Exception as e:
+                error_type = type(e).__name__
+                error_msg = str(e)
+                logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
+                import traceback
+                logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
+                return None
     
     async def _validate_essential_tools(self):
         """필수 MCP 도구 검증 - Tool이 등록되어 있는지 확인만 (실제 실행은 선택적)."""
