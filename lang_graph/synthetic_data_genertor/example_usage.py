@@ -6,11 +6,13 @@ for generating high-quality training data through multi-agent simulations.
 """
 
 import asyncio
+import os
 import json
 from pathlib import Path
 from typing import List
 
 from .system.agentic_data_synthesis_system import AgenticDataSynthesisSystem
+from .data.data_generator import DataDesignerRefinementConfig
 from .models.domain import DomainConfig, DomainCategory, ComplexityLevel
 from .models.tool import ToolConfig, ToolType
 from .models.agent import AgentConfig # BehaviorPattern will be string in config
@@ -564,6 +566,96 @@ async def demonstrate_deterministic_tool_selection():
         traceback.print_exc()
 
 
+def _load_env_from_file(dotenv_path: str = ".env") -> dict[str, str]:
+    """Load provider env values from a .env file if present."""
+    path = Path(dotenv_path)
+    if not path.is_file():
+        return {}
+    try:
+        from dotenv import dotenv_values, load_dotenv  # type: ignore
+    except ImportError:
+        print(f"⚠️ python-dotenv not installed; skipping {dotenv_path}")
+        return {}
+    load_dotenv(dotenv_path)
+    return {k: v for k, v in dotenv_values(dotenv_path).items() if v}
+
+
+async def run_data_designer_generation():
+    """Generate data and refine with Data Designer using provider env variables."""
+    print("\n🎨 Data Designer refinement demo")
+    print("=" * 40)
+
+    required_env = [
+        "NVIDIA_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GROQ_API_KEY",
+        "CEREBRAS_API_KEY",
+    ]
+    file_env = _load_env_from_file()
+    provider_env = {}
+    for key in required_env:
+        if os.environ.get(key):
+            provider_env[key] = os.environ[key]
+        elif key in file_env:
+            provider_env[key] = file_env[key]
+    if not provider_env:
+        raise ValueError(
+            "Set at least one provider key (NVIDIA_API_KEY, OPENAI_API_KEY, "
+            "OPENROUTER_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY) before running Data Designer refinement."
+        )
+
+    domains, tools, agents = await create_example_configs()
+    simulations = await create_simulation_configs()
+    evaluation_config = await create_evaluation_config()
+    export_config = await create_export_config()
+
+    model_alias = (
+        os.environ.get("OPENAI_MODEL")
+        or os.environ.get("NVIDIA_MODEL")
+        or os.environ.get("OPENROUTER_MODEL")
+        or os.environ.get("GROQ_MODEL")
+        or os.environ.get("CEREBRAS_MODEL")
+        or "gemini-2.0-flash-lite"
+    )
+
+    llm_model_for_system = os.environ.get("LLM_MODEL") or model_alias
+
+    system = AgenticDataSynthesisSystem(
+        output_dir="designer_output",
+        log_level="INFO",
+        llm_config={"model": llm_model_for_system},
+    )
+
+    system.setup_domains(domains)
+    system.setup_tools(tools)
+    system.setup_agents(agents)
+
+    designer_cfg = DataDesignerRefinementConfig(
+        artifact_path="designer_output/data_designer",
+        num_records=20,
+        sampling_strategy="shuffle",
+        provider_env=provider_env,
+        llm_prompt=(
+            "Given the conversation {{ conversation_text }}, summarize the user request, "
+            "assistant plan, and the ordered tool calls."
+        ),
+        model_alias=model_alias,
+    )
+
+    results = await system.run_full_pipeline(
+        simulation_configs=simulations,
+        evaluation_config=evaluation_config,
+        export_config=export_config,
+        quality_threshold=0.8,
+        max_concurrent_simulations=1,
+        data_designer_settings=designer_cfg,
+    )
+
+    print("Refinement summary:")
+    print(json.dumps(results.get("data_designer", {}), indent=2))
+
+
 async def main():
     """Main function to run the example."""
     await run_example_pipeline()
@@ -573,6 +665,9 @@ async def main():
     
     # Run deterministic tool selection demo
     await demonstrate_deterministic_tool_selection()
+
+    # Run Data Designer refinement demo (requires provider env)
+    await run_data_designer_generation()
 
 
 if __name__ == "__main__":
