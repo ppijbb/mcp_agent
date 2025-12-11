@@ -58,3 +58,21 @@
 [submodule "open_researcher/Guardrails"]
 	path = open_researcher/Guardrails
 	url = https://github.com/NVIDIA-NeMo/Guardrails.git
+[submodule "open_researcher/Alibaba_DeepResearch"]
+	path = open_researcher/Alibaba_DeepResearch
+	url = https://github.com/Alibaba-NLP/DeepResearch.git
+[submodule "open_researcher/DeepResearchAgent"]
+	path = open_researcher/DeepResearchAgent
+	url = https://github.com/SkyworkAI/DeepResearchAgent.git
+[submodule "open_researcher/deepagent_tutorial"]
+	path = open_researcher/deepagent_tutorial
+	url = https://github.com/langchain-ai/deepagents-quickstarts.git
+[submodule "open_researcher/deepagent_ui_example"]
+	path = open_researcher/deepagent_ui_example
+	url = https://github.com/langchain-ai/deep-agents-ui.git
+[submodule "open_researcher/crewAI"]
+	path = open_researcher/crewAI
+	url = https://github.com/crewAIInc/crewAI.git
+[submodule "open_researcher/autogen"]
+	path = open_researcher/autogen
+	url = https://github.com/microsoft/autogen.git
