@@ -943,15 +943,32 @@ class UniversalMCPHub:
                     logger.error(f"No URL provided for HTTP MCP server {server_name}")
                     return False
                 
-                # URL 파라미터 구성 (api_key, profile 등)
-                params = server_config.get("params", {})
-                if params and urlencode:
-                    url = f"{base_url}?{urlencode(params)}"
-                else:
-                    url = base_url
+                # MCP Authorization 명세 준수: URL 파라미터에 토큰 포함 금지
+                # Access tokens MUST NOT be included in the URI query string
+                # https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+                url = base_url  # URL 파라미터 제거 (명세 준수)
                 
-                # Headers 구성 (exa 서버 등에서 사용)
+                # Headers 구성 (MCP Authorization 명세 준수)
                 headers = server_config.get("headers", {}).copy()  # 원본 수정 방지
+                
+                # Smithery 서버의 경우: params의 api_key를 Authorization 헤더로 변환
+                # MCP Authorization 명세: "Authorization: Bearer <access-token>" 헤더 사용 필수
+                params = server_config.get("params", {})
+                if params:
+                    api_key = params.get("api_key") or params.get("apiKey")
+                    if api_key:
+                        # 환경 변수 치환
+                        if isinstance(api_key, str) and api_key.startswith("${") and api_key.endswith("}"):
+                            env_var = api_key[2:-1]
+                            api_key = os.getenv(env_var, "")
+                        
+                        if api_key:
+                            # MCP Authorization 명세 준수: Authorization 헤더 사용
+                            headers["Authorization"] = f"Bearer {api_key}"
+                            logger.debug(f"[MCP][auth.header] server={server_name} Using Authorization header (MCP spec compliant)")
+                    
+                    # profile은 헤더로 전달하지 않음 (Smithery CLI가 처리)
+                    # 또는 X-Profile 같은 커스텀 헤더로 전달할 수 있지만, 명세서에는 없음
                 
                 # Skyvern 스타일: User-Agent 로테이션 (봇 감지 우회)
                 # DuckDuckGo 검색 서버의 경우 User-Agent 추가
@@ -989,14 +1006,29 @@ class UniversalMCPHub:
                     # (이미 self.mcp_sessions에 있으면 재사용, 없으면 새로 생성)
                     
                     # HTTP transport 사용 (streamablehttp_client는 MCP 프로토콜 전송용)
+                    # MCP Authorization 명세 준수: headers 파라미터로 Authorization 헤더 전달
                     # streamablehttp_client는 내부적으로 HTTP 연결을 관리하므로 별도 세션 풀 불필요
-                    http_transport = await exit_stack.enter_async_context(streamablehttp_client(url))
+                    http_transport = await exit_stack.enter_async_context(
+                        streamablehttp_client(url, headers=headers if headers else None)
+                    )
                     read, write, _ = http_transport
                     session = await exit_stack.enter_async_context(ClientSession(read, write))
                     
-                    # headers가 있는 경우 로그에 기록 (실제 적용은 서버/클라이언트 구현에 따라 다름)
+                    # headers가 있는 경우 로그에 기록
                     if headers:
-                        logger.debug(f"[MCP][http.headers] server={server_name} headers={headers}")
+                        # Authorization 헤더는 보안상 일부만 표시
+                        safe_headers = {}
+                        for k, v in headers.items():
+                            if k.lower() == "authorization":
+                                # Bearer 토큰의 일부만 표시
+                                if v.startswith("Bearer "):
+                                    token = v[7:]
+                                    safe_headers[k] = f"Bearer {token[:10]}...{token[-4:]}" if len(token) > 14 else "Bearer ***"
+                                else:
+                                    safe_headers[k] = "***"
+                            else:
+                                safe_headers[k] = v
+                        logger.debug(f"[MCP][http.headers] server={server_name} headers={safe_headers}")
                 except Exception as e:
                     logger.exception(f"[MCP][connect.error] create-http-transport server={server_name} err={e}")
                     di = self.connection_diagnostics.get(server_name, {})

@@ -328,6 +328,7 @@ class PlannerAgent:
         logger.info(f"[{self.name}] ✅ Domain analysis completed: {domain_analysis_result.get('domain', 'unknown')}")
         
         # Format previous_plans for prompt - only include if from current session
+        # CRITICAL: Previous context is for REFERENCE ONLY - current task must be planned independently
         if previous_plans:
             # Filter to ensure only current session plans are included
             current_session_plans = [
@@ -335,14 +336,19 @@ class PlannerAgent:
                 if p.get("session_id") == current_session_id
             ]
             if current_session_plans:
-                previous_plans_text = "\n".join([
-                    f"- {p.get('key', 'plan')}: {str(p.get('value', ''))[:200]}"
-                    for p in current_session_plans
-                ])
+                # Format previous plans with STRONG warning that they are REFERENCE ONLY
+                previous_plans_text = f"""
+⚠️ REFERENCE ONLY - DO NOT REUSE ⚠️
+Previous research context (for domain understanding ONLY - NOT for task execution):
+{chr(10).join([f"- {p.get('key', 'plan')}: {str(p.get('value', ''))[:200]}" for p in current_session_plans])}
+
+CRITICAL: The above is for CONTEXT REFERENCE ONLY. You MUST create a NEW plan specifically for the CURRENT task: "{state['user_query']}".
+DO NOT reuse previous task queries, search terms, or plan structures.
+"""
             else:
-                previous_plans_text = "No previous research found in current session. This is a NEW task - focus only on the current query."
+                previous_plans_text = "No previous research found in current session. This is a COMPLETELY NEW task - create a fresh plan for the current query only."
         else:
-            previous_plans_text = "No previous research found in current session. This is a NEW task - focus only on the current query."
+            previous_plans_text = "No previous research found in current session. This is a COMPLETELY NEW task - create a fresh plan for the current query only."
         
         # 도메인 분석 결과를 프롬프트에 포함
         domain_context = ""
@@ -872,9 +878,23 @@ class ExecutorAgent:
                 logger.info(f"[{self.name}] MCP Hub initialized: {len(hub.mcp_sessions)} servers")
             
             # 작업 할당이 있으면 해당 작업의 검색 쿼리 사용
+            # CRITICAL: Verify that assigned_task is for the CURRENT query
             search_queries = []
             if assigned_task:
+                task_id = assigned_task.get('task_id', 'unknown')
+                task_description = assigned_task.get('description', '')
                 raw_queries = assigned_task.get('search_queries', [])
+                
+                logger.info(f"[{self.name}] ⚠️ TASK VERIFICATION:")
+                logger.info(f"[{self.name}]   - Current User Query: '{query}'")
+                logger.info(f"[{self.name}]   - Assigned Task ID: {task_id}")
+                logger.info(f"[{self.name}]   - Task Description: {task_description[:100]}...")
+                logger.info(f"[{self.name}]   - Raw queries count: {len(raw_queries)}")
+                
+                # Verify that assigned_task queries are related to current query
+                # Extract key terms from current query for validation
+                current_query_terms = set(query.lower().split())
+                query_relevance_check = False
                 
                 # 잘못된 검색 쿼리 필터링 (메타 정보 관련)
                 invalid_keywords = [
@@ -890,23 +910,37 @@ class ExecutorAgent:
                     
                     # {query} 플레이스홀더가 포함된 쿼리 완전 제외
                     if "{query}" in q_str or "{query}" in q_lower:
-                        logger.warning(f"[{self.name}] Filtered out query with placeholder: '{q_str[:50]}...'")
+                        logger.warning(f"[{self.name}] ❌ Filtered out query with placeholder: '{q_str[:50]}...'")
                         continue
+                    
+                    # Verify query relevance to current user query
+                    query_terms = set(q_lower.split())
+                    # Check if query contains at least one key term from current query (for relevance)
+                    if len(current_query_terms) > 0:
+                        common_terms = query_terms.intersection(current_query_terms)
+                        if len(common_terms) > 0:
+                            query_relevance_check = True
                     
                     is_invalid = any(keyword in q_lower for keyword in invalid_keywords)
                     is_too_generic = len(q_str) < 10
                     
                     if not is_invalid and not is_too_generic:
                         search_queries.append(q_str)
+                        logger.info(f"[{self.name}] ✅ Valid query added: '{q_str[:80]}...'")
                     else:
-                        logger.warning(f"[{self.name}] Filtered out invalid query: '{q_str[:50]}...' (invalid={is_invalid}, generic={is_too_generic})")
+                        logger.warning(f"[{self.name}] ❌ Filtered out invalid query: '{q_str[:50]}...' (invalid={is_invalid}, generic={is_too_generic})")
+                
+                # Verify task relevance
+                if not query_relevance_check and len(current_query_terms) > 0:
+                    logger.warning(f"[{self.name}] ⚠️ WARNING: Assigned task queries may not be related to current query: '{query}'")
+                    logger.warning(f"[{self.name}] ⚠️ This might be a previous task's queries. Verifying task assignment...")
                 
                 # 유효한 쿼리가 없으면 사용자 쿼리 사용
                 if not search_queries:
-                    logger.warning(f"[{self.name}] No valid queries in assigned task, using user query")
+                    logger.warning(f"[{self.name}] ⚠️ No valid queries in assigned task, using CURRENT user query: '{query}'")
                     search_queries = [query]
                 else:
-                    logger.info(f"[{self.name}] Using {len(search_queries)} valid queries from task {assigned_task.get('task_id', 'unknown')}")
+                    logger.info(f"[{self.name}] ✅ Using {len(search_queries)} valid queries from task {task_id} (for current query: '{query}')")
             
             # 작업 할당이 없거나 쿼리가 없으면 기존 로직 사용
             if not search_queries:
