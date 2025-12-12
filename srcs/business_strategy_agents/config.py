@@ -140,7 +140,7 @@ class Config:
         database_id = os.getenv('NOTION_DATABASE_ID', '')
         workspace_id = os.getenv('NOTION_WORKSPACE_ID', '')
         
-        if api_key and database_id:
+        if bool(api_key) and database_id:
             self.notion = NotionConfig(
                 api_key=api_key,
                 database_id=database_id,

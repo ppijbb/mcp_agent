@@ -24,6 +24,16 @@ from src.core.prompt_refiner_wrapper import refine_llm_call
 
 logger = logging.getLogger(__name__)
 
+# Safety settings to block nothing (allow all content)
+# This is required for the research agent to function without being blocked by safety filters
+# for harmless queries or research topics.
+SAFETY_SETTINGS_BLOCK_NONE = {
+    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"
+}
+
 
 class TaskType(Enum):
     """작업 유형."""
@@ -521,7 +531,8 @@ class MultiModelOrchestrator:
                         model=model_config.model_id,
                         temperature=model_config.temperature,
                         max_tokens=model_config.max_tokens,
-                        google_api_key=self.llm_config.api_key
+                        google_api_key=self.llm_config.api_key,
+                        safety_settings=SAFETY_SETTINGS_BLOCK_NONE
                     )
                 
                 elif model_config.provider == "openrouter":
@@ -823,7 +834,8 @@ class MultiModelOrchestrator:
                         generation_config=genai.types.GenerationConfig(
                             temperature=model_config.temperature,
                             max_output_tokens=model_config.max_tokens
-                        )
+                        ),
+                        safety_settings=SAFETY_SETTINGS_BLOCK_NONE
                     )
                 )
                 break  # 성공 시 루프 종료

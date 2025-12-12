@@ -64,6 +64,14 @@ except ImportError:
     print("❌ MCP 패키지가 설치되지 않았습니다. 'pip install mcp' 실행하세요.")
     sys.exit(1)
 
+# HTTP client imports for error handling
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
+    httpx = None
+
 # LangChain imports (선택적)
 try:
     from langchain_core.tools import Tool
@@ -257,14 +265,29 @@ class SmitheryMCPTester:
             params = config.get("params", {})
             if params:
                 api_key = params.get("api_key") or params.get("apiKey")
-                if api_key:
+                if bool(api_key):
                     api_key = self._resolve_env_vars(api_key)
-                    if api_key:
+                    if bool(api_key):
+                        # 큰따옴표(") 사용 - Python f-string 표준 (작은따옴표 아님)
+                        # 헤더 값에 따옴표가 포함되지 않도록 f-string 사용
                         headers["Authorization"] = f"Bearer {api_key}"
                         logger.info(f"   Authorization 헤더 설정됨 (Bearer token)")
+                        # 헤더 값 검증: 따옴표가 포함되어 있는지 확인
+                        header_value = headers["Authorization"]
+                        has_quotes = '"' in header_value or "'" in header_value
+                        if has_quotes:
+                            logger.warning(f"   ⚠️ 헤더 값에 따옴표가 포함되어 있습니다: {header_value[:30]}...")
+                        # 헤더 값 미리보기 (보안상 일부만 표시)
+                        if len(header_value) > 20:
+                            logger.debug(f"   헤더 값 미리보기: {header_value[:15]}...{header_value[-5:]}")
+                        else:
+                            logger.debug(f"   헤더 값: {header_value[:10]}...")
+                        logger.debug(f"   헤더 키 타입: {type('Authorization')}, 헤더 값 타입: {type(header_value)}")
             
             # streamable HTTP 클라이언트로 연결
-            async with streamablehttp_client(url, headers=headers if headers else None) as (read, write):
+            # unpacking 3 values (read, write, initialization_options) as per mcp library update
+            # headers 파라미터는 dict 또는 None을 받음 (큰따옴표 사용 확인됨)
+            async with streamablehttp_client(url, headers=headers if headers else None) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     # 초기화
                     await asyncio.wait_for(session.initialize(), timeout=timeout)
@@ -300,7 +323,7 @@ class SmitheryMCPTester:
                     
                     result["success"] = True
                     
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             result["success"] = False
             result["error"] = f"Connection timeout after {timeout}s"
             result["error_type"] = "timeout"
@@ -313,11 +336,45 @@ class SmitheryMCPTester:
             if error_code:
                 result["error"] += f" (code: {error_code})"
             logger.error(f"❌ HTTP 서버 MCP 오류: {e}")
+        except ExceptionGroup as eg:
+            # Unwrap ExceptionGroup to get the actual exception
+            actual_error = None
+            if HTTPX_AVAILABLE and httpx:
+                for exc in (eg.exceptions if hasattr(eg, 'exceptions') else []):
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        actual_error = exc
+                        break
+                    elif isinstance(exc, Exception):
+                        actual_error = exc
+            else:
+                # If httpx not available, just use first exception
+                if hasattr(eg, 'exceptions') and eg.exceptions:
+                    actual_error = eg.exceptions[0]
+            
+            if actual_error:
+                if HTTPX_AVAILABLE and httpx and isinstance(actual_error, httpx.HTTPStatusError):
+                    result["success"] = False
+                    result["error"] = f"HTTP {actual_error.response.status_code}: {actual_error.response.reason_phrase}"
+                    result["error_type"] = "http_status_error"
+                    result["status_code"] = actual_error.response.status_code
+                    logger.error(f"❌ HTTP 서버 연결 실패: {result['error']}")
+                else:
+                    result["success"] = False
+                    result["error"] = str(actual_error)
+                    result["error_type"] = type(actual_error).__name__
+                    logger.error(f"❌ HTTP 서버 연결 실패: {actual_error}")
+            else:
+                result["success"] = False
+                result["error"] = str(eg)
+                result["error_type"] = "exception_group"
+                logger.error(f"❌ HTTP 서버 연결 실패 (ExceptionGroup): {eg}")
         except Exception as e:
             result["success"] = False
             result["error"] = str(e)
             result["error_type"] = type(e).__name__
             logger.error(f"❌ HTTP 서버 연결 실패: {e}")
+            import traceback
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
         
         connection_time = (datetime.now() - start_time).total_seconds()
         result["connection_time"] = connection_time
@@ -391,7 +448,8 @@ class SmitheryMCPTester:
                 args=resolved_args
             )
             
-            async with stdio_client(server_params) as (read, write):
+            # unpacking 3 values (read, write, initialization_options) as per mcp library update
+            async with stdio_client(server_params) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     # 초기화
                     await asyncio.wait_for(session.initialize(), timeout=timeout)
@@ -440,6 +498,22 @@ class SmitheryMCPTester:
             if error_code:
                 result["error"] += f" (code: {error_code})"
             logger.error(f"❌ STDIO 서버 MCP 오류: {e}")
+        except ExceptionGroup as eg:
+            # Unwrap ExceptionGroup to get the actual exception
+            actual_error = None
+            if hasattr(eg, 'exceptions') and eg.exceptions:
+                actual_error = eg.exceptions[0]
+            
+            if actual_error:
+                result["success"] = False
+                result["error"] = str(actual_error)
+                result["error_type"] = type(actual_error).__name__
+                logger.error(f"❌ STDIO 서버 연결 실패: {actual_error}")
+            else:
+                result["success"] = False
+                result["error"] = str(eg)
+                result["error_type"] = "exception_group"
+                logger.error(f"❌ STDIO 서버 연결 실패 (ExceptionGroup): {eg}")
         except Exception as e:
             result["success"] = False
             result["error"] = str(e)

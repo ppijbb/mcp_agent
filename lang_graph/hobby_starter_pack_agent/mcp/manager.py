@@ -218,7 +218,7 @@ class MCPServerManager:
             elif auth_type == "api_key":
                 # API 키 인증
                 api_key = await self._get_api_key(server_name)
-                if api_key:
+                if bool(api_key):
                     # 서버에 따라 다른 헤더 형식 사용
                     if server_name == "google_maps":
                         headers["X-API-Key"] = api_key

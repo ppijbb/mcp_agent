@@ -45,7 +45,7 @@ class LLMConfig(BaseModel):
     openrouter_api_key: str = Field(description="OpenRouter API key")
     
     # Cost optimization - NO DEFAULTS
-    budget_limit: float = Field(gt=0, description="Budget limit")
+    budget_limit: float = Field(ge=0.0, description="Budget limit")
     enable_cost_optimization: bool = Field(description="Enable cost optimization")
     
     @field_validator('openrouter_api_key')
@@ -87,7 +87,7 @@ class LLMConfig(BaseModel):
         
         # OpenRouter API 키 형식 검증
         api_key = os.getenv('OPENROUTER_API_KEY')
-        if api_key and not api_key.startswith('sk-or-'):
+        if bool(api_key) and not api_key.startswith('sk-or-'):
             raise ValueError("OPENROUTER_API_KEY must start with 'sk-or-'")
         
         return True
@@ -655,7 +655,8 @@ def load_config_from_env() -> ResearcherSystemConfig:
         max_tokens=get_required_env("MAX_TOKENS", int),
         importance_based_preservation=get_required_env("IMPORTANCE_BASED_PRESERVATION", bool),
         enable_auto_compression=get_required_env("ENABLE_AUTO_COMPRESSION", bool),
-        enable_long_term_memory=get_required_env("ENABLE_LONG_TERM_MEMORY", bool),
+        # Force disable long term memory to prevent stale context issues
+        enable_long_term_memory=False, # get_required_env("ENABLE_LONG_TERM_MEMORY", bool),
         memory_refresh_interval=get_required_env("MEMORY_REFRESH_INTERVAL", int)
     )
     
@@ -664,7 +665,8 @@ def load_config_from_env() -> ResearcherSystemConfig:
         enabled=get_required_env("ENABLE_PRODUCTION_RELIABILITY", bool),
         enable_circuit_breaker=get_required_env("ENABLE_CIRCUIT_BREAKER", bool),
         enable_exponential_backoff=get_required_env("ENABLE_EXPONENTIAL_BACKOFF", bool),
-        enable_state_persistence=get_required_env("ENABLE_STATE_PERSISTENCE", bool),
+        # Force disable state persistence
+        enable_state_persistence=False, # get_required_env("ENABLE_STATE_PERSISTENCE", bool),
         enable_health_check=get_required_env("ENABLE_HEALTH_CHECK", bool),
         enable_graceful_degradation=get_required_env("ENABLE_GRACEFUL_DEGRADATION", bool),
         enable_detailed_logging=get_required_env("ENABLE_DETAILED_LOGGING", bool),

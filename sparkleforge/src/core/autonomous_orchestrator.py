@@ -1403,13 +1403,16 @@ class AutonomousOrchestrator:
             "dependencies": ["task_0"],
             "estimated_complexity": 1-10,
             "priority": "high|medium|low",
-            "estimated_time": 30,
-            "success_criteria": ["specific measurable criteria"]
+                        "success_criteria": ["specific measurable criteria"]
         }}
         
         Ensure tasks cover all research objectives and have logical dependencies.
         Return as JSON array of task objects.
         """
+        
+        # DEBUG LOG: Verify what Planner sees
+        logger.info(f"📋 Decomposition Context - Request: '{state.get('user_request', 'N/A')}'")
+        logger.info(f"📋 Decomposition Prompt Head:\n{decomposition_prompt[:500]}...")
         
         result = await execute_llm_task(
             prompt=decomposition_prompt,

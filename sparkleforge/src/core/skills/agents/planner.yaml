@@ -49,6 +49,7 @@ prompts:
 
       ⚠️ **CRITICAL: CURRENT TASK FOCUS** ⚠️
       You are planning for THIS CURRENT TASK ONLY: "{user_query}"
+      Current Time: {current_time}
       
       **TASK IDENTIFICATION & PRIORITY:**
       - Current Task: "{user_query}"
@@ -64,6 +65,7 @@ prompts:
       3. Previous context is ONLY for understanding domain/context - NOT for task execution
       4. If previous_plans shows "No previous research found" or is empty, this is a COMPLETELY NEW task
       5. Every search query and plan element MUST be directly related to the CURRENT task: "{user_query}"
+      6. **Extract only relevant context from history, but GENERATE NEW PLANS.** Do not copy-paste.
 
       **DEEP ANALYSIS PHASE - Think deeply before planning:**
       
@@ -129,12 +131,14 @@ prompts:
       - instruction
       - user_query
       - previous_plans
+      - current_time
 
   task_decomposition:
     system_message: "You are a task decomposition agent. Split research plans into independent parallel tasks with detailed verification strategies."
     template: |
       ⚠️ **CRITICAL: CURRENT TASK DECOMPOSITION** ⚠️
       You are decomposing tasks for THIS CURRENT QUERY ONLY: "{query}"
+      Current Time: {current_time}
       
       **TASK IDENTIFICATION:**
       - Current Query: "{query}"
@@ -249,6 +253,7 @@ prompts:
       - plan
       - query
       - domain_analysis
+      - current_time
 
   query_generation:
     system_message: "You are a research query generator. Generate specific search queries based on research plans."
@@ -257,6 +262,7 @@ prompts:
       {plan}
 
       Original Query: {query}
+      Current Time: {current_time}
 
       Generate 3-5 specific search queries based on the above research plan.
       Each query should address different perspectives or aspects.
@@ -264,6 +270,7 @@ prompts:
     variables:
       - plan
       - query
+      - current_time
 
   domain_analysis:
     system_message: "You are a domain analysis expert. Analyze the research domain to understand its characteristics, terminology, and requirements."

@@ -47,7 +47,6 @@ class HTTPErrorFilter(logging.Filter):
         # HTML 에러 페이지 감지 및 필터링
         if '<!DOCTYPE html>' in message or '<html' in message.lower():
             # HTML에서 에러 메시지 추출 시도
-            import re
             
             # HTTP 상태 코드 추출
             status_match = re.search(r'HTTP (\d{3})', message)
@@ -209,7 +208,6 @@ class PlannerAgent:
             
             # JSON 파싱 시도
             import json
-            import re
             
             domain_text = domain_result.content or "{}"
             
@@ -363,10 +361,17 @@ Domain Analysis Results:
 - Verification Criteria: {', '.join(domain_analysis_result.get('verification_criteria', []))}
 """
         
+        # prompt는 execute_llm_task의 decorator에서 자동으로 최적화됨
+        logger.info(f"[{self.name}] Calling LLM for planning...")
+        
+        # Current time calculation for prompt
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S (%A)')
+        
         prompt = get_prompt("planner", "planning",
                            instruction=self.instruction,
                            user_query=state['user_query'],
-                           previous_plans=previous_plans_text)
+                           previous_plans=previous_plans_text,
+                           current_time=current_time)
         
         # 도메인 분석 결과를 프롬프트에 추가
         if domain_context:
@@ -457,7 +462,8 @@ Provide an improved version of the plan that addresses any gaps or issues you id
             "task_decomposition",
             plan=plan,
             query=state['user_query'],
-            domain_analysis=domain_analysis_text
+            domain_analysis=domain_analysis_text,
+            current_time=current_time
         )
 
         try:
@@ -471,7 +477,6 @@ Provide an improved version of the plan that addresses any gaps or issues you id
             task_split_text = task_split_result.content or ""
             
             # JSON 파싱 시도
-            import re
             
             # JSON 블록 추출
             json_match = re.search(r'\{[\s\S]*\}', task_split_text)
@@ -681,7 +686,8 @@ class ExecutorAgent:
         self,
         search_results: List[Dict[str, Any]],
         user_query: str,
-        search_queries: List[str]
+        search_queries: List[str],
+        current_time: str = ""
     ) -> List[Dict[str, Any]]:
         """
         검색 결과를 관련성 기준으로 사전 필터링합니다.
@@ -716,6 +722,7 @@ class ExecutorAgent:
             # 배치 평가 프롬프트
             batch_evaluation_prompt = f"""다음 검색 결과들을 원래 쿼리와의 관련성에 따라 평가하세요.
 
+현재 시각: {current_time}
 원래 쿼리: {user_query}
 검색 쿼리: {', '.join(search_queries[:3])}
 
@@ -757,7 +764,6 @@ class ExecutorAgent:
                 
                 # JSON 파싱
                 import json
-                import re
                 
                 evaluation_text = evaluation_result.content or "{}"
                 json_match = re.search(r'\{[\s\S]*\}', evaluation_text)
@@ -863,6 +869,10 @@ class ExecutorAgent:
         
         # 실제 연구 실행 - MCP Hub를 통한 병렬 검색 수행
         query = state['user_query']
+        
+        # Current time calculation for prompt and context
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S (%A)')
+        
         results = []
         
         try:
@@ -953,7 +963,8 @@ class ExecutorAgent:
                     from src.core.skills.agent_loader import get_prompt
                     query_generation_prompt = get_prompt("planner", "query_generation",
                                                         plan=plan,
-                                                        query=query)
+                                                        query=query,
+                                                        current_time=current_time)
 
                     try:
                         system_message = self.config.prompts["query_generation"]["system_message"]
@@ -991,7 +1002,7 @@ class ExecutorAgent:
                 # 다양한 관점의 쿼리 생성
                 query_variations = [
                     f"{base_query} 분석",
-                    f"{base_query} 전망",
+                    f"{base_query} 전망 {datetime.now().year}",
                     f"{base_query} 동향",
                     f"{base_query} 현황",
                     f"{base_query} 전문가 의견"
@@ -1007,7 +1018,31 @@ class ExecutorAgent:
             
             # 병렬 검색 실행
             logger.info(f"[{self.name}] Executing {len(search_queries)} searches in parallel...")
-            logger.info(f"[{self.name}] Search queries: {search_queries}")
+            
+            # 검색 쿼리 중복 제거 (Strict Deduplication)
+            unique_search_queries = []
+            seen_queries = set()
+            normalized_base_query = re.sub(r'\s+', ' ', query.lower().strip())
+            
+            for q in search_queries:
+                q_normalized = re.sub(r'\s+', ' ', q.lower().strip())
+                
+                # 1. 이미 처리된 쿼리인지 확인
+                if q_normalized in seen_queries:
+                    logger.warning(f"[{self.name}] ⚠️ Duplicate query removed: '{q}'")
+                    continue
+                
+                # 2. Base 쿼리와 완전히 동일한 경우 (이미 포함되어 있을 수 있으므로)
+                # 단, 첫 번째 쿼리가 Base 쿼리인 경우는 허용
+                if q_normalized == normalized_base_query and seen_queries:
+                    logger.warning(f"[{self.name}] ⚠️ Query identical to user query removed (redundant): '{q}'")
+                    continue
+                    
+                seen_queries.add(q_normalized)
+                unique_search_queries.append(q)
+            
+            search_queries = unique_search_queries
+            logger.info(f"[{self.name}] Unique search queries ({len(search_queries)}): {search_queries}")
             
             async def execute_single_search(search_query: str, query_index: int) -> Dict[str, Any]:
                 """단일 검색 실행 (여러 검색 도구 fallback 지원)."""
@@ -1243,7 +1278,8 @@ Return only the queries, one per line, without numbering or bullets."""
                     filtered_results = await self._filter_results_by_relevance(
                         search_results, 
                         state['user_query'],
-                        assigned_task.get('search_queries', [state['user_query']]) if assigned_task else [state['user_query']]
+                        assigned_task.get('search_queries', [state['user_query']]) if assigned_task else [state['user_query']],
+                        current_time
                     )
                     search_results = filtered_results
                     logger.info(f"[{self.name}] ✅ Relevance filtering completed: {len(search_results)} relevant results (from {len(search_results) + (len(search_results) - len(filtered_results)) if len(filtered_results) < len(search_results) else 0} total)")
@@ -1269,7 +1305,6 @@ Return only the queries, one per line, without numbering or bullets."""
                             # snippet에 마크다운 형식의 여러 결과가 들어있는 경우 파싱
                             if snippet and ("Found" in snippet or "search results" in snippet.lower() or "\n1." in snippet):
                                 logger.info(f"[{self.name}] Detected markdown format in snippet, parsing...")
-                                import re
                                 parsed_results = []
                                 lines = snippet.split('\n')
                                 current_result = None
@@ -1388,7 +1423,6 @@ Return only the queries, one per line, without numbering or bullets."""
                             logger.debug(f"[{self.name}] Result {i}: title={title[:50] if title else 'N/A'}, url={url[:50] if url else 'N/A'}")
                         elif isinstance(result, str):
                             # 문자열 형식인 경우 파싱 시도 (마크다운 링크 형식)
-                            import re
                             link_match = re.match(r'^\d+\.\s*\[([^\]]+)\]\(([^\)]+)\)', result.strip())
                             if link_match:
                                 title = link_match.group(1)
@@ -1601,7 +1635,6 @@ Return only the queries, one per line, without numbering or bullets."""
                                     content = fetch_result.get('data', {}).get('content', '')
                                     if content:
                                         # HTML 태그 제거 및 텍스트 정리
-                                        import re
                                         from bs4 import BeautifulSoup
                                         
                                         try:
@@ -1640,7 +1673,6 @@ Return only the queries, one per line, without numbering or bullets."""
                                                 matches = re.findall(pattern, full_text[:5000])  # 처음 5000자만 검색
                                                 if matches:
                                                     try:
-                                                        from datetime import datetime
                                                         match = matches[-1]  # 가장 최근 날짜
                                                         if len(match) == 3:
                                                             if '년' in full_text[:5000]:
@@ -1662,7 +1694,6 @@ Return only the queries, one per line, without numbering or bullets."""
                                                 logger.info(f"[{self.name}] 📅 Found date: {date_found.strftime('%Y-%m-%d')} for {url[:50]}...")
                                             else:
                                                 # 날짜를 찾지 못한 경우 현재 시간으로 설정 (최신 정보 우선)
-                                                from datetime import datetime
                                                 result['published_date'] = datetime.now().isoformat()
                                                 logger.info(f"[{self.name}] ⚠️ No date found, using current time for {url[:50]}...")
                                             
@@ -1682,7 +1713,6 @@ Return only the queries, one per line, without numbering or bullets."""
                             enriched_results.append(result)
                         
                         # 최신 정보 우선순위로 정렬
-                        from datetime import datetime
                         enriched_results.sort(key=lambda x: (
                             datetime.fromisoformat(x.get('published_date', datetime.now().isoformat())) if x.get('published_date') else datetime.min,
                             x.get('content_length', 0)
@@ -2154,14 +2184,18 @@ class VerifierAgent:
                 date_info = ""
                 if published_date:
                     try:
-                        from datetime import datetime
                         date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
                         date_info = f"\n- 발행일: {date_obj.strftime('%Y-%m-%d')}"
                     except:
                         date_info = f"\n- 발행일: {published_date[:10]}"
                 
                 # LLM으로 검증 (점검 및 제언 중심) - 강화된 버전
+                # Current time for verification context
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S (%A)')
+                
                 verification_prompt = f"""다음 검색 결과를 엄격하게 점검하고 제언하세요:
+                
+현재 시각: {current_time}
 
 **검색 결과 정보:**
 - 제목: {title}
@@ -2248,7 +2282,6 @@ REASON: 최종 판단 이유 (한 줄, 구체적으로)
                             # 주요 주장 추출 (숫자, 날짜, 통계 등)
                             claims = []
                             # 숫자 패턴 찾기
-                            import re
                             numbers = re.findall(r'\d+[.,]\d+[조억만원%]|\d+[조억만원%]', verification_content)
                             if numbers:
                                 claims.extend([f"숫자/통계: {num}" for num in numbers[:3]])
@@ -2798,7 +2831,6 @@ class GeneratorAgent:
         Returns:
             출처 인용이 보완된 보고서
         """
-        import re
         
         # 본문에서 인용된 출처 번호 추출
         body_text = report
@@ -3032,7 +3064,6 @@ class GeneratorAgent:
                 date_str = ""
                 if published_date:
                     try:
-                        from datetime import datetime
                         date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
                         date_str = f" (발행일: {date_obj.strftime('%Y-%m-%d')})"
                     except:
@@ -3103,8 +3134,7 @@ class GeneratorAgent:
                 except Exception as e:
                     logger.warning(f"[{self.name}] Failed to get discussion summary: {e}")
         
-        # 현재 시간 가져오기
-        from datetime import datetime
+        # 현재 시간 가져오기 (모듈 레벨 import 사용)
         current_time = datetime.now()
         current_date_str = current_time.strftime('%Y년 %m월 %d일')
         current_datetime_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -3138,6 +3168,8 @@ class GeneratorAgent:
         
         # 사용자 요청을 그대로 전달 - LLM이 형식을 결정하도록
         generation_prompt = f"""사용자 요청: {state['user_query']}
+
+현재 시각: {current_datetime_str} (모든 시점 기준은 이 시각을 따름)
 
 검증된 연구 결과 (실제 웹 페이지 전체 내용 포함):
 {verified_text}
@@ -3484,7 +3516,6 @@ Provide a review with:
             )
             
             import json
-            import re
             
             # JSON 추출 시도
             content = validation_result.content

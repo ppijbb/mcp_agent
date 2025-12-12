@@ -44,6 +44,22 @@ except ImportError:
     TextContent = None
     McpError = Exception  # Fallback
 
+# FastMCP imports
+try:
+    from fastmcp import Client as FastMCPClient
+    import logging as fastmcp_logging
+    # FastMCP 로거 레벨을 warning으로 설정
+    fastmcp_logger = fastmcp_logging.getLogger("fastmcp")
+    fastmcp_logger.setLevel(fastmcp_logging.WARNING)
+    # fastmcp 관련 모든 로거에 대해 warning 레벨 적용
+    for logger_name in ["fastmcp", "fastmcp.client", "fastmcp.runner"]:
+        logger_instance = fastmcp_logging.getLogger(logger_name)
+        logger_instance.setLevel(fastmcp_logging.WARNING)
+    FASTMCP_AVAILABLE = True
+except ImportError:
+    FastMCPClient = None
+    FASTMCP_AVAILABLE = False
+
 # LangChain imports
 try:
     from langchain_core.tools import BaseTool, StructuredTool
@@ -297,6 +313,8 @@ class UniversalMCPHub:
         self.fastmcp_servers: Dict[str, HTTPServerSpec] = {}  # 자동 발견용 서버 설정
         self.fastmcp_multi: Optional[FastMCPMulti] = None
         self.fastmcp_tool_loader: Optional[MCPToolLoader] = None
+        # FastMCP 클라이언트 저장소 (서버별)
+        self.fastmcp_clients: Dict[str, Any] = {}  # server_name -> FastMCPClient
         self.auto_discovered_tools: Dict[str, BaseTool] = {}  # 자동 발견된 도구들
         self.auto_discovered_tool_infos: Dict[str, MCPToolInfo] = {}  # 도구 메타데이터
 
@@ -523,11 +541,23 @@ class UniversalMCPHub:
         self._initialize_manual_tools()
 
         # 2. FastMCP 자동 발견 도구 초기화 (비동기)
-        # 메인 스레드에서 호출되므로 동기 래퍼 사용
+        # 이미 실행 중인 이벤트 루프가 있으면 태스크로 실행, 없으면 새로 생성
         try:
-            asyncio.run(self._initialize_auto_discovered_tools())
+            # 실행 중인 이벤트 루프 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 실행 중인 루프가 있으면 태스크로 실행 (asyncio.run() 사용 금지)
+                # 태스크를 생성하지만 await하지 않음 (백그라운드 실행)
+                task = loop.create_task(self._initialize_auto_discovered_tools())
+                # 태스크가 완료될 때까지 기다리지 않음 (비동기 초기화)
+                logger.debug("Auto-discovered MCP tools initialization started as background task")
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새 루프에서 실행
+                asyncio.run(self._initialize_auto_discovered_tools())
         except Exception as e:
             logger.warning(f"Failed to initialize auto-discovered MCP tools: {e}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
             # 자동 발견 실패 시에도 계속 진행
 
         # 3. 도구 통합 및 충돌 해결
@@ -582,6 +612,51 @@ class UniversalMCPHub:
                 logger.warning(f"⚠️ Failed to create LangChain wrapper for {tool_name}, registering without wrapper")
                 self.registry.tools[tool_name] = tool_info
                 self.tools[tool_name] = tool_info
+
+        # ========================================================================
+        # NATIVE TOOLS REGISTRATION (Overrides/Fallbacks)
+        # ========================================================================
+        try:
+            from src.core.tools.native_search import search_duckduckgo_json
+            from langchain_core.tools import Tool
+            
+            native_tool_name = "ddg_search"
+            logger.info(f"🛠️ Registering Native Tool: {native_tool_name}")
+            
+            native_tool_info = ToolInfo(
+                name=native_tool_name,
+                category=ToolCategory.SEARCH,
+                description="Robust native DuckDuckGo search (No MCP required)",
+                parameters={"query": {"type": "string", "description": "Search query"}, "max_results": {"type": "integer", "description": "Max results"}},
+                mcp_server="" 
+            )
+            
+            def native_search_wrapper(query: str, max_results: int = 5):
+                # Handler for both string input (query only) and structured input
+                if isinstance(query, dict):
+                    q = query.get("query", "")
+                    m = query.get("max_results", 5)
+                    return search_duckduckgo_json(q, m)
+                return search_duckduckgo_json(query, max_results)
+
+            native_langchain_tool = Tool(
+                name=native_tool_name,
+                func=native_search_wrapper,
+                description="Search DuckDuckGo natively"
+            )
+            
+            self.registry.register_local_tool(native_tool_info, native_langchain_tool)
+            self.tools[native_tool_name] = native_tool_info
+            
+            # Also alias 'search' and 'g-search' to this if not present
+            for alias in ["search", "g-search"]:
+                if alias not in self.tools and alias not in self.registry.tools:
+                    self.tools[alias] = native_tool_info
+                    self.registry.register_local_tool(native_tool_info, native_langchain_tool) # Re-registering with same object might verify alias support? No, straightforward.
+                    logger.info(f"✅ Aliased '{alias}' to native {native_tool_name}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Failed to register native tools: {e}")
 
         # Registry의 tools를 self.tools와 동기화
         self.tools.update(self.registry.tools)
@@ -795,6 +870,20 @@ class UniversalMCPHub:
                     }
                 }
                 logger.info("✅ Using default MCP server config for ddg_search")
+            
+            # FORCE DISABLE FLAKY SERVERS (DDG, Tavily) to use native fallbacks
+            if "ddg_search" in self.mcp_server_configs:
+                logger.info("🚫 Disabling flaky 'ddg_search' MCP server to use Native Tool fallback")
+                del self.mcp_server_configs["ddg_search"]
+                
+            if "tavily-mcp" in self.mcp_server_configs:
+                logger.info("🚫 Disabling flaky 'tavily-mcp' MCP server")
+                del self.mcp_server_configs["tavily-mcp"]
+                
+            # Ensure we don't default to them either
+            keys_to_remove = [k for k in self.mcp_server_configs if k in ["ddg_search", "tavily-mcp"]]
+            for k in keys_to_remove:
+                del self.mcp_server_configs[k]
                 
         except Exception as e:
             logger.warning(f"Failed to load MCP server configs: {e}")
@@ -931,270 +1020,103 @@ class UniversalMCPHub:
             exit_stack = AsyncExitStack()
             self.exit_stacks[server_name] = exit_stack
             
-            # HTTP 기반 서버인지 확인
-            if "httpUrl" in server_config or "url" in server_config or server_config.get("type") == "http":
-                # HTTP 기반 MCP 서버 연결
-                if not HTTP_CLIENT_AVAILABLE or streamablehttp_client is None:
-                    logger.error(f"HTTP MCP client not available for server {server_name}")
-                    return False
-                
-                base_url = server_config.get("httpUrl") or server_config.get("url")
-                if not base_url:
-                    logger.error(f"No URL provided for HTTP MCP server {server_name}")
-                    return False
-                
-                # MCP Authorization 명세 준수: URL 파라미터에 토큰 포함 금지
-                # Access tokens MUST NOT be included in the URI query string
-                # https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
-                url = base_url  # URL 파라미터 제거 (명세 준수)
-                
-                # Headers 구성 (MCP Authorization 명세 준수)
-                headers = server_config.get("headers", {}).copy()  # 원본 수정 방지
-                
-                # Smithery 서버의 경우: params의 api_key를 Authorization 헤더로 변환
-                # MCP Authorization 명세: "Authorization: Bearer <access-token>" 헤더 사용 필수
-                params = server_config.get("params", {})
-                if params:
-                    api_key = params.get("api_key") or params.get("apiKey")
-                    if api_key:
-                        # 환경 변수 치환
-                        if isinstance(api_key, str) and api_key.startswith("${") and api_key.endswith("}"):
-                            env_var = api_key[2:-1]
-                            api_key = os.getenv(env_var, "")
-                        
-                        if api_key:
-                            # MCP Authorization 명세 준수: Authorization 헤더 사용
-                            headers["Authorization"] = f"Bearer {api_key}"
-                            logger.debug(f"[MCP][auth.header] server={server_name} Using Authorization header (MCP spec compliant)")
-                    
-                    # profile은 헤더로 전달하지 않음 (Smithery CLI가 처리)
-                    # 또는 X-Profile 같은 커스텀 헤더로 전달할 수 있지만, 명세서에는 없음
-                
-                # Skyvern 스타일: User-Agent 로테이션 (봇 감지 우회)
-                # DuckDuckGo 검색 서버의 경우 User-Agent 추가
-                if server_name == "ddg_search" or "duckduckgo" in server_name.lower():
-                    if "User-Agent" not in headers:
-                        # User-Agent 풀에서 랜덤 선택
-                        user_agent = random.choice(self.user_agents)
-                        headers["User-Agent"] = user_agent
-                        logger.debug(f"[MCP][anti-bot] Using User-Agent: {user_agent[:50]}...")
-                    
-                    # 추가 헤더 (Skyvern 스타일: 자연스러운 브라우저 헤더)
-                    if "Accept" not in headers:
-                        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-                    if "Accept-Language" not in headers:
-                        headers["Accept-Language"] = random.choice([
-                            "en-US,en;q=0.9",
-                            "en-US,en;q=0.9,ko;q=0.8",
-                            "en-GB,en;q=0.9",
-                            "en-US,en;q=0.9,ja;q=0.8"
-                        ])
-                    if "Accept-Encoding" not in headers:
-                        headers["Accept-Encoding"] = "gzip, deflate, br"
-                    if "DNT" not in headers:
-                        headers["DNT"] = "1"
-                    if "Connection" not in headers:
-                        headers["Connection"] = "keep-alive"
-                    if "Upgrade-Insecure-Requests" not in headers:
-                        headers["Upgrade-Insecure-Requests"] = "1"
-                
-                logger.info(f"Connecting to HTTP MCP server: {server_name} ({url})")
-                
-                try:
-                    # HTTP Connection Pooling: streamablehttp_client는 내부적으로 연결을 재사용
-                    # MCP ClientSession 자체가 연결 풀 역할을 하므로, 같은 서버에 대한 연결은 재사용됨
-                    # (이미 self.mcp_sessions에 있으면 재사용, 없으면 새로 생성)
-                    
-                    # HTTP transport 사용 (streamablehttp_client는 MCP 프로토콜 전송용)
-                    # MCP Authorization 명세 준수: headers 파라미터로 Authorization 헤더 전달
-                    # streamablehttp_client는 내부적으로 HTTP 연결을 관리하므로 별도 세션 풀 불필요
-                    http_transport = await exit_stack.enter_async_context(
-                        streamablehttp_client(url, headers=headers if headers else None)
-                    )
-                    read, write, _ = http_transport
-                    session = await exit_stack.enter_async_context(ClientSession(read, write))
-                    
-                    # headers가 있는 경우 로그에 기록
-                    if headers:
-                        # Authorization 헤더는 보안상 일부만 표시
-                        safe_headers = {}
-                        for k, v in headers.items():
-                            if k.lower() == "authorization":
-                                # Bearer 토큰의 일부만 표시
-                                if v.startswith("Bearer "):
-                                    token = v[7:]
-                                    safe_headers[k] = f"Bearer {token[:10]}...{token[-4:]}" if len(token) > 14 else "Bearer ***"
-                                else:
-                                    safe_headers[k] = "***"
-                            else:
-                                safe_headers[k] = v
-                        logger.debug(f"[MCP][http.headers] server={server_name} headers={safe_headers}")
-                except Exception as e:
-                    logger.exception(f"[MCP][connect.error] create-http-transport server={server_name} err={e}")
-                    di = self.connection_diagnostics.get(server_name, {})
-                    di.update({"stage": "create_http_transport", "error": str(e)})
-                    self.connection_diagnostics[server_name] = di
-                    return False
-                
-            else:
-                # stdio 기반 서버 (기존 방식)
-                command = server_config.get("command")
-                args = server_config.get("args", [])
-                
-                if not command:
-                    logger.error(f"No command or URL provided for MCP server {server_name}")
-                    return False
-                
-                logger.info(f"Connecting to stdio MCP server: {server_name} ({command})")
-                
-                try:
-                    # stdio transport 사용
-                    server_params = StdioServerParameters(command=command, args=args)
-                    stdio_transport = await exit_stack.enter_async_context(stdio_client(server_params))
-                    read, write = stdio_transport
-                    session = await exit_stack.enter_async_context(ClientSession(read, write))
-                except Exception as e:
-                    logger.exception(f"[MCP][connect.error] create-stdio-transport server={server_name} err={e}")
-                    di = self.connection_diagnostics.get(server_name, {})
-                    di.update({"stage": "create_stdio_transport", "error": str(e)})
-                    self.connection_diagnostics[server_name] = di
-                    return False
+            # FastMCP 기반 연결 (모든 서버를 HTTP로 처리)
+            # Smithery 기반 서버는 모두 HTTP로 연결
+            if not FASTMCP_AVAILABLE or FastMCPClient is None:
+                logger.error(f"FastMCP client not available for server {server_name}")
+                return False
             
-            # 세션 초기화 및 도구 목록 가져오기 (서버별 설정 적용)
-            # 초기화 성공 후에만 mcp_sessions에 추가 (heartbeat 무한 루프 방지)
+            # 서버 설정을 FastMCP 형식으로 변환
+            base_url = server_config.get("httpUrl") or server_config.get("url")
+            if not base_url:
+                logger.error(f"No URL provided for MCP server {server_name}")
+                return False
+            
+            # Headers 구성 (환경 변수 치환 포함)
+            headers = server_config.get("headers", {}).copy()
+            
+            # 환경 변수 치환 (${VAR} 형식)
+            resolved_headers = {}
+            for k, v in headers.items():
+                if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
+                    env_var = v[2:-1]
+                    resolved_value = os.getenv(env_var, "")
+                    if resolved_value:
+                        resolved_headers[k] = resolved_value
+                        logger.debug(f"[MCP][auth.env] server={server_name} Resolved {k} from {env_var}")
+                    else:
+                        logger.warning(f"[MCP][auth.env] server={server_name} {env_var} not found in environment")
+                else:
+                    resolved_headers[k] = v
+            
+            # Authorization 헤더가 없으면 SMITHERY_API_KEY에서 가져오기
+            if "Authorization" not in resolved_headers:
+                api_key = os.getenv("SMITHERY_API_KEY", "")
+                if api_key:
+                    resolved_headers["Authorization"] = f"Bearer {api_key}"
+                    logger.info(f"[MCP][auth.header] server={server_name} Authorization header set from SMITHERY_API_KEY (length: {len(api_key)})")
+                else:
+                    logger.warning(f"[MCP][auth.header] server={server_name} No API key found")
+            
+            # FastMCP 설정 구성
+            mcp_config = {
+                "mcpServers": {
+                    server_name: {
+                        "httpUrl": base_url,
+                        "headers": resolved_headers if resolved_headers else None
+                    }
+                }
+            }
+            
+            logger.info(f"[MCP][fastmcp.connect] server={server_name} url={base_url} headers={list(resolved_headers.keys()) if resolved_headers else 'None'}")
+            
             try:
-                t0 = asyncio.get_running_loop().time()
+                # FastMCP Client 생성 및 연결
+                fastmcp_client = FastMCPClient(mcp_config)
+                self.fastmcp_clients[server_name] = fastmcp_client
                 
-                # 서버별 pre_init_delay 적용
-                if server_settings["pre_init_delay"] > 0:
-                    logger.debug(f"[MCP][pre_init_delay] server={server_name} delay={server_settings['pre_init_delay']}s")
-                    await asyncio.sleep(server_settings["pre_init_delay"])
-                
-                await asyncio.wait_for(session.initialize(), timeout=timeout)
-                t1 = asyncio.get_running_loop().time()
-                
-                # 서버별 post_init_delay 적용
-                if server_settings["post_init_delay"] > 0:
-                    logger.debug(f"[MCP][post_init_delay] server={server_name} delay={server_settings['post_init_delay']}s")
-                    await asyncio.sleep(server_settings["post_init_delay"])
-                
-                response = await asyncio.wait_for(session.list_tools(), timeout=timeout)
-                t2 = asyncio.get_running_loop().time()
-                di = self.connection_diagnostics.get(server_name, {})
-                di.update({
-                    "stage": "list_tools_ok",
-                    "ok": True,
-                    "init_ms": (t1 - t0) * 1000.0,
-                    "list_ms": (t2 - t1) * 1000.0,
-                })
-                self.connection_diagnostics[server_name] = di
-                
-                # 초기화 성공 후에만 세션 등록 (heartbeat 무한 루프 방지)
-                self.mcp_sessions[server_name] = session
-            except asyncio.CancelledError:
-                # 작업이 취소된 경우 (종료 신호 등) - 정상적인 동작
-                logger.info(f"[MCP][connect.cancelled] server={server_name} stage=initialize_or_list (shutdown in progress)")
-                # 세션이 아직 mcp_sessions에 등록되지 않았으므로 정리만 수행
-                if server_name in self.exit_stacks:
-                    del self.exit_stacks[server_name]
-                try:
-                    # 세션이 생성되었지만 등록되지 않은 경우 정리
-                    if hasattr(session, 'shutdown'):
-                        try:
-                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
-                        except:
-                            pass
-                except:
-                    pass
-                di = self.connection_diagnostics.get(server_name, {})
-                di.update({"stage": "cancelled_initialize_or_list", "error": "cancelled"})
-                self.connection_diagnostics[server_name] = di
-                return False  # raise하지 않고 False 반환
-            except asyncio.TimeoutError:
-                logger.error(f"[MCP][connect.timeout] server={server_name} after={timeout}s stage=initialize_or_list")
-                di = self.connection_diagnostics.get(server_name, {})
-                di.update({"stage": "timeout_initialize_or_list", "error": f"timeout_{timeout}s"})
-                self.connection_diagnostics[server_name] = di
-                # 연결은 되었지만 초기화 실패 - 세션 정리
-                # 타임아웃 발생 시 exit_stack 참조만 제거 (aclose() 호출하지 않음 - anyio 오류 방지)
-                if server_name in self.exit_stacks:
-                    del self.exit_stacks[server_name]
-                # 세션이 아직 mcp_sessions에 등록되지 않았으므로 직접 정리
-                try:
-                    if hasattr(session, 'shutdown'):
-                        try:
-                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
-                        except:
-                            pass
-                except:
-                    pass
-                return False
-            except McpError as e:
-                # MCP 프로토콜 에러 - 명확한 에러 메시지 출력
-                error_msg = str(e) if e else "Unknown MCP error"
-                error_code = getattr(e.error, 'code', None) if hasattr(e, 'error') else None
-                error_data = getattr(e.error, 'data', None) if hasattr(e, 'error') else None
-                
-                # 에러 메시지 구성
-                error_details = f"[MCP][connect.error] server={server_name} operation=initialize"
-                if error_code:
-                    error_details += f" code={error_code}"
-                if error_data:
-                    error_details += f" data={error_data}"
-                error_details += f" error={error_msg}"
-                
-                logger.error(error_details)
-                
-                # 연결 진단 정보 업데이트
-                di = self.connection_diagnostics.get(server_name, {})
-                di.update({
-                    "stage": "mcp_error_initialize",
-                    "error": error_msg,
-                    "error_code": error_code,
-                    "error_data": str(error_data) if error_data else None
-                })
-                self.connection_diagnostics[server_name] = di
-                
-                # 세션 정리 (아직 mcp_sessions에 등록되지 않았으므로 직접 정리)
-                if server_name in self.exit_stacks:
-                    del self.exit_stacks[server_name]
-                try:
-                    if hasattr(session, 'shutdown'):
-                        try:
-                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
-                        except:
-                            pass
-                except:
-                    pass
-                return False
+                # FastMCP Client는 context manager로 사용되므로, 연결 테스트를 위해 사용
+                async with fastmcp_client:
+                    # 도구 목록 가져오기 (연결 확인)
+                    tools = await fastmcp_client.list_tools()
+                    if tools is None:
+                        logger.error(f"[MCP][fastmcp.error] server={server_name} Failed to list tools")
+                        return False
+                    
+                    # 도구 정보 저장
+                    tools_dict = {}
+                    for tool in tools:
+                        tools_dict[tool.name] = {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                            "inputSchema": tool.inputSchema or {}
+                        }
+                    
+                    self.mcp_tools_map[server_name] = tools_dict
+                    logger.info(f"[MCP][fastmcp.success] server={server_name} Connected, {len(tools_dict)} tools available")
+                    
+                    # 연결 진단 정보 업데이트
+                    di = self.connection_diagnostics.get(server_name, {})
+                    di.update({
+                        "ok": True,
+                        "tools_count": len(tools_dict)
+                    })
+                    self.connection_diagnostics[server_name] = di
+                    
+                    # 세션 정보 저장 (FastMCP Client를 세션으로 사용)
+                    # FastMCP Client는 context manager이므로, 실제 사용 시마다 async with로 사용
+                    # 여기서는 설정만 저장
+                    self.mcp_sessions[server_name] = fastmcp_client
+                    
+                    return True
+                    
             except Exception as e:
-                # 기타 예외 - 명확한 에러 메시지 출력
-                error_type = type(e).__name__
-                error_msg = str(e)
-                
-                logger.error(f"[MCP][connect.error] server={server_name} operation=initialize_or_list type={error_type} error={error_msg}")
-                logger.exception(f"[MCP][connect.exception] server={server_name} - Full traceback:")
-                
-                # 연결 진단 정보 업데이트
+                logger.exception(f"[MCP][fastmcp.error] server={server_name} err={e}")
                 di = self.connection_diagnostics.get(server_name, {})
-                di.update({
-                    "stage": "exception_initialize_or_list",
-                    "error": f"{error_type}: {error_msg}",
-                    "error_type": error_type
-                })
+                di.update({"stage": "fastmcp_connect", "error": str(e)})
                 self.connection_diagnostics[server_name] = di
-                
-                # 세션 정리 (아직 mcp_sessions에 등록되지 않았으므로 직접 정리)
-                if server_name in self.exit_stacks:
-                    del self.exit_stacks[server_name]
-                try:
-                    if hasattr(session, 'shutdown'):
-                        try:
-                            await asyncio.wait_for(session.shutdown(), timeout=0.5)
-                        except:
-                            pass
-                except:
-                    pass
+                if server_name in self.fastmcp_clients:
+                    del self.fastmcp_clients[server_name]
                 return False
             
             # 도구 맵 생성 및 Registry에 동적 등록
@@ -1576,9 +1498,17 @@ class UniversalMCPHub:
                         await asyncio.sleep(wait)
                         continue
                     logger.error(f"[MCP][exec.error] Reconnect failed for {server_name}")
+                    # Reconnect failed, session is bad or gone
+                    if server_name in self.mcp_sessions:
+                        del self.mcp_sessions[server_name]
                     return None
                 
                 logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
+                # Invalidate session on fatal error if it looks like a connection issue
+                if (closed_like or "broken pipe" in error_msg.lower()) and server_name in self.mcp_sessions:
+                    logger.warning(f"[MCP][session.invalidate] Removing dead session for {server_name}")
+                    del self.mcp_sessions[server_name]
+                
                 import traceback
                 logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
                 return None

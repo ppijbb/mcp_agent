@@ -90,8 +90,10 @@ class SessionManager:
             redacted_context, pii_matches_context = pii_redactor.redact_session_data(context_data)
             redacted_memory, pii_matches_memory = pii_redactor.redact_session_data(memory_data)
             
-            if pii_matches_state or pii_matches_context or pii_matches_memory:
-                total_pii = len(pii_matches_state) + len(pii_matches_context) + len(pii_matches_memory)
+            # Calculate total PII matches
+            total_pii = len(pii_matches_state) + len(pii_matches_context) + len(pii_matches_memory)
+            
+            if total_pii > 0:
                 logger.warning(f"PII redaction: {total_pii} PII matches removed from session {session_id}")
             
             # 메타데이터 구성

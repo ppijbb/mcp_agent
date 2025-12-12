@@ -297,7 +297,7 @@ class DecisionAgentMCP:
         request_metadata = {}
         if base_url:
             request_metadata["base_url"] = base_url
-        if api_key:
+        if bool(api_key):
             request_metadata["api_key"] = api_key
         
         # ReAct Loop - Following Priyanthan's pattern
@@ -473,7 +473,7 @@ class DecisionAgentMCP:
         request_metadata = {}
         if base_url:
             request_metadata["base_url"] = base_url
-        if api_key:
+        if bool(api_key):
             request_metadata["api_key"] = api_key
             
         decision_task = f"""

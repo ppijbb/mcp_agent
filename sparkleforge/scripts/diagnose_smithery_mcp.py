@@ -141,7 +141,7 @@ class SmitheryDiagnostic:
         api_key = os.getenv("SMITHERY_API_KEY", "")
         profile = os.getenv("SMITHERY_PROFILE", "")
         
-        if api_key:
+        if bool(api_key):
             logger.info(f"✅ SMITHERY_API_KEY: 설정됨 (길이: {len(api_key)}, 앞 10자: {api_key[:10]}...)")
         else:
             logger.error("❌ SMITHERY_API_KEY: 설정되지 않음")
@@ -191,7 +191,7 @@ class SmitheryDiagnostic:
             key_idx = args.index("--key")
             if key_idx + 1 < len(args):
                 api_key = args[key_idx + 1]
-                if api_key:
+                if bool(api_key):
                     logger.info(f"  ✅ API 키 발견 (길이: {len(api_key)})")
                     result["stages"]["api_key_check"] = {"success": True, "key_length": len(api_key)}
                 else:

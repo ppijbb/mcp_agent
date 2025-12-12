@@ -1,49 +1,32 @@
 {
   "mcpServers": {
     "ddg_search": {
-      "command": "uvx",
-      "args": [
-        "duckduckgo-mcp-server"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@modelcontextprotocol/server-duckduckgo-search/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "fetch": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@smithery-ai/fetch",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@smithery-ai/fetch/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
-  "docfork": {
-        "command": "npx",
-        "args": [
-          "-y",
-          "@smithery/cli@latest",
-          "run",
-          "@docfork/mcp",
-          "--key",
-          "${SMITHERY_API_KEY}",
-          "--profile",
-          "${SMITHERY_PROFILE}"
-        ]
-      },
+    "docfork": {
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@docfork/mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
+    },
     "context7-mcp": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@upstash/context7-mcp",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@upstash/context7-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "exa": {
       "type": "http",
@@ -55,49 +38,30 @@
     "semantic_scholar": {
       "type": "http",
       "httpUrl": "https://server.smithery.ai/@hamid-vakilzadeh/mcpsemanticscholar/mcp",
-      "params": {
-        "api_key": "${SMITHERY_API_KEY}",
-        "profile": "${SMITHERY_PROFILE}"
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
       }
     },
     "parallel-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@parallel/search",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@parallel/search/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "tavily-mcp": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@Jeetanshu18/tavily-mcp",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@Jeetanshu18/tavily-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "WebSearch-MCP": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@mnhlt/WebSearch-MCP",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@mnhlt/WebSearch-MCP/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     }
   }
 }

@@ -23,6 +23,7 @@ prompts:
       Task: {task_description}
 
       Context: {context}
+      Current Time: {current_time}
 
       Execute this research task using available tools. Focus on:
       1. Comprehensive data collection
@@ -35,6 +36,7 @@ prompts:
       - instruction
       - task_description
       - context
+      - current_time
 
 configuration:
   default_model: null

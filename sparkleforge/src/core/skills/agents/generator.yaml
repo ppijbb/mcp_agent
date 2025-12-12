@@ -19,6 +19,7 @@ prompts:
     system_message: "You are an expert assistant. Generate results in the exact format requested by the user. If they ask for a report, create a report. If they ask for code, create executable code. Follow the user's request precisely without adding unnecessary templates or structures."
     template: |
       User Request: {user_query}
+      Current Time: {current_time}
 
       Research Data: {research_data}
 
@@ -27,6 +28,7 @@ prompts:
     variables:
       - user_query
       - research_data
+      - current_time
 
 configuration:
   default_model: null

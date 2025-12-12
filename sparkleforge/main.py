@@ -108,21 +108,35 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(level
 console_handler.addFilter(HTTPErrorFilter())  # HTTP 에러 필터 추가
 logger.addHandler(console_handler)
 
-# FastMCP Runner 로거에도 필터 추가 (외부 라이브러리 로깅 필터링)
-# Runner 로거는 나중에 생성될 수 있으므로, propagate를 활성화하고 root logger의 필터 사용
+# ============================================================================
+# MCP / Runner / HTTP 관련 로거 억제 (과도한 로그 출력 방지)
+# ============================================================================
+# FastMCP Runner 로거 - WARNING 이상만 출력
 runner_logger = logging.getLogger("Runner")
-if runner_logger:
-    runner_logger.propagate = True  # Root logger로 전파하여 필터 적용
-    # 기존 handler에도 필터 추가 (혹시 직접 handler가 있는 경우)
-    for handler in runner_logger.handlers:
-        if not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
-            handler.addFilter(HTTPErrorFilter())
+runner_logger.setLevel(logging.WARNING)
+runner_logger.propagate = False  # 상위로 전파 차단
+
+# MCP 관련 로거들
+logging.getLogger("mcp").setLevel(logging.WARNING)
+logging.getLogger("fastmcp").setLevel(logging.WARNING)
+logging.getLogger("mcp.client").setLevel(logging.WARNING)
+logging.getLogger("mcp.server").setLevel(logging.WARNING)
+
+# HTTP 클라이언트 로거들
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
+
+# asyncio 관련 로거
+logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 # Root logger에도 필터 추가
 root_logger = logging.getLogger()
 for handler in root_logger.handlers:
     if isinstance(handler, logging.StreamHandler) and not any(isinstance(f, HTTPErrorFilter) for f in handler.filters):
         handler.addFilter(HTTPErrorFilter())
+
 
 
 class WebAppManager:
