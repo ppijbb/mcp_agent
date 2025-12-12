@@ -76,3 +76,9 @@
 [submodule "open_researcher/autogen"]
 	path = open_researcher/autogen
 	url = https://github.com/microsoft/autogen.git
+[submodule "open_researcher/cline"]
+	path = open_researcher/cline
+	url = https://github.com/cline/cline.git
+[submodule "open_researcher/dspydantic"]
+	path = open_researcher/dspydantic
+	url = https://github.com/davidberenstein1957/dspydantic.git
