@@ -235,6 +235,60 @@ class AutonomousResearchSystem:
             logger.error(f"❌ MCP Hub initialization failed: {e}")
             raise
         
+        # 새로운 기능 모듈 선택적 활성화 (기존 코드 수정 없음)
+        try:
+            from src.core.feature_flags import FeatureFlags
+            FeatureFlags.log_status()
+            
+            # MCP 안정성 서비스 (선택적)
+            if FeatureFlags.ENABLE_MCP_STABILITY:
+                from src.core.mcp_stability_service import MCPStabilityService
+                self.mcp_stability_service = MCPStabilityService()
+                logger.info("✅ MCP Stability Service enabled")
+            else:
+                self.mcp_stability_service = None
+            
+            # MCP 백그라운드 헬스체크 (선택적)
+            if FeatureFlags.ENABLE_MCP_HEALTH_BACKGROUND:
+                from src.core.mcp_health_background import MCPHealthBackgroundService
+                self.mcp_health_service = MCPHealthBackgroundService(self.mcp_hub, interval=60)
+                # 백그라운드 서비스는 나중에 시작 (execute 시점)
+                logger.info("✅ MCP Health Background Service enabled (will start on first execution)")
+            else:
+                self.mcp_health_service = None
+            
+            # Guardrails 검증 (선택적)
+            if FeatureFlags.ENABLE_GUARDRAILS:
+                from src.core.guardrails_validator import GuardrailsValidator
+                self.guardrails_validator = GuardrailsValidator()
+                logger.info("✅ Guardrails Validator enabled")
+            else:
+                self.guardrails_validator = None
+            
+            # Agent Tool Wrapper (선택적)
+            if FeatureFlags.ENABLE_AGENT_TOOLS:
+                from src.core.agent_tool_wrapper import AgentToolWrapper
+                # 에이전트는 나중에 할당 (execute 시점)
+                self.agent_tool_wrapper = None
+                logger.info("✅ Agent Tool Wrapper enabled (will be initialized on first execution)")
+            else:
+                self.agent_tool_wrapper = None
+            
+            # YAML 설정 로더 (선택적)
+            if FeatureFlags.ENABLE_YAML_CONFIG:
+                from src.core.yaml_config_loader import YAMLConfigLoader
+                self.yaml_config_loader = YAMLConfigLoader()
+                logger.info("✅ YAML Config Loader enabled")
+            else:
+                self.yaml_config_loader = None
+        except Exception as e:
+            logger.warning(f"⚠️ Feature flags initialization failed: {e} - continuing without new features")
+            self.mcp_stability_service = None
+            self.mcp_health_service = None
+            self.guardrails_validator = None
+            self.agent_tool_wrapper = None
+            self.yaml_config_loader = None
+        
         try:
             self.web_manager = WebAppManager()
             logger.info("✅ Web Manager initialized")
@@ -404,6 +458,14 @@ class AutonomousResearchSystem:
             if self.config.mcp.enabled:
                 try:
                     await self.mcp_hub.initialize_mcp()
+                    
+                    # MCP 백그라운드 헬스체크 시작 (선택적)
+                    if hasattr(self, 'mcp_health_service') and self.mcp_health_service:
+                        try:
+                            await self.mcp_health_service.start()
+                            logger.info("✅ MCP Health Background Service started")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to start MCP health service: {e}")
                 except asyncio.CancelledError:
                     # 초기화 중 취소된 경우 - 상위로 전파하여 종료
                     logger.warning("MCP initialization was cancelled")
@@ -413,8 +475,53 @@ class AutonomousResearchSystem:
             if streaming:
                 result = await self._run_streaming_research(request)
             else:
+                # Guardrails Input 검증 (선택적)
+                if hasattr(self, 'guardrails_validator') and self.guardrails_validator:
+                    try:
+                        from src.core.agent_orchestrator import AgentState
+                        initial_state: AgentState = {
+                            'messages': [],
+                            'user_query': request,
+                            'research_plan': None,
+                            'research_tasks': [],
+                            'research_results': [],
+                            'verified_results': [],
+                            'final_report': None,
+                            'current_agent': None,
+                            'iteration': 0,
+                            'session_id': None,
+                            'research_failed': False,
+                            'verification_failed': False,
+                            'report_failed': False,
+                            'error': None
+                        }
+                        validated_state = await self.guardrails_validator.validate_input(initial_state)
+                        # 검증 통과 시 request 그대로 사용 (기존 코드 수정 없음)
+                        request = validated_state.get('user_query', request)
+                    except ValueError as e:
+                        logger.error(f"❌ Input validation failed: {e}")
+                        return {
+                            'success': False,
+                            'error': str(e),
+                            'final_report': f"Input validation failed: {str(e)}"
+                        }
+                    except Exception as e:
+                        logger.warning(f"⚠️ Guardrails validation error: {e} - continuing without validation")
+                
                 # Use new multi-agent orchestrator (no fallback - fail clearly)
                 workflow_result = await self.orchestrator.execute(request)
+                
+                # Guardrails Output 검증 (선택적)
+                if hasattr(self, 'guardrails_validator') and self.guardrails_validator:
+                    try:
+                        validated_result = await self.guardrails_validator.validate_output(workflow_result)
+                        workflow_result = validated_result
+                    except ValueError as e:
+                        logger.error(f"❌ Output validation failed: {e}")
+                        workflow_result['error'] = str(e)
+                        workflow_result['final_report'] = f"Output validation failed: {str(e)}"
+                    except Exception as e:
+                        logger.warning(f"⚠️ Guardrails validation error: {e} - continuing without validation")
                 
                 # 실패 상태 확인 - fallback 없이 명확한 오류 반환
                 research_failed = workflow_result.get('research_failed', False)
@@ -1260,6 +1367,14 @@ Examples:
                 if system.mcp_hub.mcp_sessions:
                     logger.info("Final cleanup of MCP connections...")
                     await system.mcp_hub.cleanup()
+                
+                # MCP 백그라운드 헬스체크 서비스 종료 (선택적)
+                if hasattr(system, 'mcp_health_service') and system.mcp_health_service:
+                    try:
+                        await system.mcp_health_service.stop()
+                        logger.info("✅ MCP Health Background Service stopped")
+                    except Exception as e:
+                        logger.debug(f"Error stopping MCP health service: {e}")
             except Exception as e:
                 logger.debug(f"Error in final cleanup: {e}")
 
