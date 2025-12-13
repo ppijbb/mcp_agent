@@ -27,12 +27,10 @@ logger = logging.getLogger(__name__)
 # Safety settings to block nothing (allow all content)
 # This is required for the research agent to function without being blocked by safety filters
 # for harmless queries or research topics.
-SAFETY_SETTINGS_BLOCK_NONE = {
-    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"
-}
+# Note: ChatGoogleGenerativeAI does not support safety_settings parameter directly.
+# Safety settings are handled at the genai.GenerativeModel level, not in LangChain wrapper.
+# Setting to None to avoid validation errors.
+SAFETY_SETTINGS_BLOCK_NONE = None
 
 
 class TaskType(Enum):
@@ -527,12 +525,13 @@ class MultiModelOrchestrator:
                     self.model_clients[model_name] = genai.GenerativeModel(model_config.model_id)
                     
                     # LangChain 클라이언트 (선택적)
+                    # Note: ChatGoogleGenerativeAI does not support safety_settings parameter
+                    # Safety settings are handled at the genai.GenerativeModel level
                     self.model_clients[f"{model_name}_langchain"] = ChatGoogleGenerativeAI(
                         model=model_config.model_id,
                         temperature=model_config.temperature,
                         max_tokens=model_config.max_tokens,
-                        google_api_key=self.llm_config.api_key,
-                        safety_settings=SAFETY_SETTINGS_BLOCK_NONE
+                        google_api_key=self.llm_config.api_key
                     )
                 
                 elif model_config.provider == "openrouter":
@@ -835,7 +834,6 @@ class MultiModelOrchestrator:
                             temperature=model_config.temperature,
                             max_output_tokens=model_config.max_tokens
                         ),
-                        safety_settings=SAFETY_SETTINGS_BLOCK_NONE
                     )
                 )
                 break  # 성공 시 루프 종료
