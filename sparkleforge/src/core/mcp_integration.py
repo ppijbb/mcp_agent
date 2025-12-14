@@ -1137,6 +1137,7 @@ class UniversalMCPHub:
                 
                 # streamablehttp_client를 직접 사용 (FastMCP 대신)
                 # test_smithery_mcp.py에서 작동하는 방식과 동일하게 headers 파라미터 직접 사용
+                # exit_stack을 async with로 감싸서 context manager 생명주기 관리
                 # #region agent log
                 with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
                     f.write(json.dumps({
@@ -1147,12 +1148,37 @@ class UniversalMCPHub:
                             "url": base_url,
                             "has_headers": resolved_headers is not None,
                             "headers_keys": list(resolved_headers.keys()) if resolved_headers else [],
-                            "authorization_present": "Authorization" in (resolved_headers or {})
+                            "authorization_present": "Authorization" in (resolved_headers or {}),
+                            "authorization_value_preview": resolved_headers.get("Authorization", "")[:20] + "..." if resolved_headers.get("Authorization") else None
                         },
                         "timestamp": int(time.time() * 1000),
                         "sessionId": "debug-session",
                         "runId": "run1",
                         "hypothesisId": "H"
+                    }) + "\n")
+                # #endregion
+                
+                # streamablehttp_client를 exit_stack에 등록하여 context manager 생명주기 관리
+                # exit_stack은 나중에 cleanup에서 닫을 때까지 활성화 상태 유지
+                # Authorization 헤더가 제대로 전달되는지 확인
+                auth_header_value = resolved_headers.get("Authorization", "") if resolved_headers else ""
+                # #region agent log
+                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({
+                        "location": f"mcp_integration.py:{1159}",
+                        "message": "About to create streamablehttp_client",
+                        "data": {
+                            "server_name": server_name,
+                            "url": base_url,
+                            "headers_count": len(resolved_headers) if resolved_headers else 0,
+                            "has_authorization": "Authorization" in (resolved_headers or {}),
+                            "authorization_preview": auth_header_value[:30] + "..." if len(auth_header_value) > 30 else auth_header_value,
+                            "authorization_length": len(auth_header_value)
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B"
                     }) + "\n")
                 # #endregion
                 
