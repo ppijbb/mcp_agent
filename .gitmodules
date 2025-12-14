@@ -82,3 +82,6 @@
 [submodule "open_researcher/dspydantic"]
 	path = open_researcher/dspydantic
 	url = https://github.com/davidberenstein1957/dspydantic.git
+[submodule "open_researcher/mdflow"]
+	path = open_researcher/mdflow
+	url = https://github.com/johnlindquist/mdflow.git
