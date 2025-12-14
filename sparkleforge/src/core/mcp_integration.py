@@ -1182,19 +1182,92 @@ class UniversalMCPHub:
                     }) + "\n")
                 # #endregion
                 
-                http_transport = await exit_stack.enter_async_context(
-                    streamablehttp_client(base_url, headers=resolved_headers if resolved_headers else None)
-                )
+                # #region agent log
+                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({
+                        "location": f"mcp_integration.py:{1185}",
+                        "message": "About to enter streamablehttp_client context",
+                        "data": {
+                            "server_name": server_name,
+                            "url": base_url,
+                            "headers_count": len(resolved_headers) if resolved_headers else 0
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "J"
+                    }) + "\n")
+                # #endregion
+                
+                try:
+                    http_transport = await exit_stack.enter_async_context(
+                        streamablehttp_client(base_url, headers=resolved_headers if resolved_headers else None)
+                    )
+                except Exception as transport_error:
+                    # #region agent log
+                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                        f.write(json.dumps({
+                            "location": f"mcp_integration.py:{1202}",
+                            "message": "exit_stack.enter_async_context(streamablehttp_client) failed",
+                            "data": {
+                                "server_name": server_name,
+                                "error_type": type(transport_error).__name__,
+                                "error_msg": str(transport_error)
+                            },
+                            "timestamp": int(time.time() * 1000),
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "J"
+                        }) + "\n")
+                    # #endregion
+                    raise
+                
+                # #region agent log
+                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({
+                        "location": f"mcp_integration.py:{1206}",
+                        "message": "streamablehttp_client context entered",
+                        "data": {
+                            "server_name": server_name,
+                            "http_transport_type": str(type(http_transport))
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "J"
+                    }) + "\n")
+                # #endregion
+                
                 read, write, _ = http_transport
+                
+                # #region agent log
+                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps({
+                        "location": f"mcp_integration.py:{1189}",
+                        "message": "About to enter ClientSession context",
+                        "data": {
+                            "server_name": server_name,
+                            "read_type": str(type(read)),
+                            "write_type": str(type(write))
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "J"
+                    }) + "\n")
+                # #endregion
+                
                 session = await exit_stack.enter_async_context(ClientSession(read, write))
                 
                 # #region agent log
                 with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
                     f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1125}",
-                        "message": "streamablehttp_client connected, initializing session",
+                        "location": f"mcp_integration.py:{1205}",
+                        "message": "ClientSession context entered, about to initialize",
                         "data": {
-                            "server_name": server_name
+                            "server_name": server_name,
+                            "session_type": str(type(session)),
+                            "has_initialize": hasattr(session, "initialize")
                         },
                         "timestamp": int(time.time() * 1000),
                         "sessionId": "debug-session",
@@ -1205,6 +1278,22 @@ class UniversalMCPHub:
                 
                 # 세션 초기화
                 try:
+                    # #region agent log
+                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
+                        f.write(json.dumps({
+                            "location": f"mcp_integration.py:{1208}",
+                            "message": "Calling session.initialize()",
+                            "data": {
+                                "server_name": server_name,
+                                "timeout": timeout
+                            },
+                            "timestamp": int(time.time() * 1000),
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "H"
+                        }) + "\n")
+                    # #endregion
+                    
                     await asyncio.wait_for(session.initialize(), timeout=timeout)
                     # #region agent log
                     with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
