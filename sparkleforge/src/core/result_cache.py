@@ -436,7 +436,8 @@ class ResultCache:
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _get_stats())
-                    return future.result()
+                    # timeout 설정으로 무한 대기 방지
+                    return future.result(timeout=30)  # 최대 30초
             else:
                 return loop.run_until_complete(_get_stats())
         except RuntimeError:

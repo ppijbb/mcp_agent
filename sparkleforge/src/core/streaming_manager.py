@@ -467,8 +467,25 @@ class StreamingManager:
                     logger.warning(f"Error closing connection: {e}")
             self.connections.clear()
         
-        # 스레드 풀 종료
-        self.executor.shutdown(wait=True)
+        # 스레드 풀 종료 (timeout 설정으로 무한 대기 방지)
+        try:
+            # shutdown(wait=False)로 즉시 반환하고, 별도로 종료 대기
+            self.executor.shutdown(wait=False)
+            # 최대 5초만 대기 (더 안전한 방법)
+            import time
+            import threading
+            start_time = time.time()
+            while time.time() - start_time < 5.0:
+                # 활성 스레드 수 확인
+                active_threads = threading.active_count()
+                # executor의 스레드가 종료되었는지 간접적으로 확인
+                # (executor 내부 스레드 추적이 어려우므로 짧은 대기 후 종료)
+                if time.time() - start_time >= 2.0:  # 최소 2초 대기
+                    break
+                time.sleep(0.1)
+            logger.debug("ThreadPoolExecutor shutdown completed")
+        except Exception as e:
+            logger.warning(f"Error shutting down ThreadPoolExecutor: {e}")
         
         logger.info("StreamingManager shutdown complete")
 

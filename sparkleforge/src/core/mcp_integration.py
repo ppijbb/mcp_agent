@@ -2876,7 +2876,8 @@ def _execute_search_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> str
                 # 실행 중인 루프가 있으면 새 스레드에서 실행
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _execute_search_tool(tool_name, parameters))
-                    result = future.result()
+                    # timeout 설정으로 무한 대기 방지
+                    result = future.result(timeout=300)  # 최대 5분
             else:
                 result = loop.run_until_complete(_execute_search_tool(tool_name, parameters))
         except RuntimeError:
@@ -2900,7 +2901,8 @@ def _execute_academic_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> s
             if loop.is_running():
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _execute_academic_tool(tool_name, parameters))
-                    result = future.result()
+                    # timeout 설정으로 무한 대기 방지
+                    result = future.result(timeout=300)  # 최대 5분
             else:
                 result = loop.run_until_complete(_execute_academic_tool(tool_name, parameters))
         except RuntimeError:
@@ -2923,7 +2925,8 @@ def _execute_data_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> str:
             if loop.is_running():
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _execute_data_tool(tool_name, parameters))
-                    result = future.result()
+                    # timeout 설정으로 무한 대기 방지
+                    result = future.result(timeout=300)  # 최대 5분
             else:
                 result = loop.run_until_complete(_execute_data_tool(tool_name, parameters))
         except RuntimeError:
@@ -2946,7 +2949,8 @@ def _execute_code_tool_sync(tool_name: str, parameters: Dict[str, Any]) -> str:
             if loop.is_running():
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, _execute_code_tool(tool_name, parameters))
-                    result = future.result()
+                    # timeout 설정으로 무한 대기 방지
+                    result = future.result(timeout=300)  # 최대 5분
             else:
                 result = loop.run_until_complete(_execute_code_tool(tool_name, parameters))
         except RuntimeError:

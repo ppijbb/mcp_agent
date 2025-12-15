@@ -2624,7 +2624,8 @@ REASON: 최종 판단 이유 (한 줄, 구체적으로)
                     confidence=1.0 if verified_result.get('status') == 'verified' else 0.5
                 )
                 shared_verification_count += 1
-                logger.info(f"[{self.name}] 🔗 Shared verification result {verified_result.get('index', 0)} (result_id: {result_id[:8]}..., status: {verified_result.get('status', 'unknown')})")
+                # 개별 로그는 debug 레벨로 변경 (너무 많은 로그 방지)
+                logger.debug(f"[{self.name}] 🔗 Shared verification result {verified_result.get('index', 0)} (result_id: {result_id[:8]}..., status: {verified_result.get('status', 'unknown')})")
 
             logger.info(f"[{self.name}] 📤 Shared {shared_verification_count} verification results with other agents")
 

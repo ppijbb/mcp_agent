@@ -324,9 +324,12 @@ class MultiModelOrchestrator:
         
         # 사용 중단된 모델 필터링
         deprecated_models = [
-            "kwaipilot-kat-coder-pro-free",
             "kwaipilot/kat-coder-pro:free",
-            "kat-coder-pro-free"
+            "mistralai/mistral-7b-instruct:free",
+            "qwen/qwen3-4b:free",
+            "google/gemma-3n-e2b-it:free",
+            "google/gemma-3-4b-it:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
         ]
         if any(deprecated in model_id for deprecated in deprecated_models):
             logger.debug(f"Skipping deprecated model: {model_id}")
@@ -424,22 +427,29 @@ class MultiModelOrchestrator:
         # llama-3.1-70b-versatile 대체: mixtral-8x7b-32768 사용 (더 안정적)
         groq_models = [
             {
-                "name": "groq-llama3-70b",
-                "model_id": "llama-3.1-8b-instant",  # llama-3.1-70b-versatile은 decommissioned, 8b-instant 사용
+                "name": "meta-llama/llama-4-maverick-17b-128e-instruct",
+                "model_id": "meta-llama/llama-4-maverick-17b-128e-instruct",  # llama-3.1-70b-versatile은 decommissioned, 8b-instant 사용
                 "speed_rating": 9.5,
-                "quality_rating": 7.5,
+                "quality_rating": 8.5,
                 "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS]
             },
             {
-                "name": "groq-llama3-8b",
-                "model_id": "llama-3.1-8b-instant",
+                "name": "moonshotai/kimi-k2-instruct-0905",
+                "model_id": "moonshotai/kimi-k2-instruct-0905",
                 "speed_rating": 9.5,
-                "quality_rating": 7.5,
+                "quality_rating": 8.5,
                 "capabilities": [TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
             },
             {
-                "name": "groq-mixtral",
-                "model_id": "mixtral-8x7b-32768",
+                "name": "openai/gpt-oss-120b",
+                "model_id": "openai/gpt-oss-120b",
+                "speed_rating": 8.5,
+                "quality_rating": 8.0,
+                "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
+            },
+            {
+                "name": "groq/compound",
+                "model_id": "groq/compound",
                 "speed_rating": 8.5,
                 "quality_rating": 8.0,
                 "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
@@ -465,22 +475,22 @@ class MultiModelOrchestrator:
         # 주요 GPT 모델들
         gpt_models = [
             {
-                "name": "gpt-5-mini",
-                "model_id": "gpt-5-mini",
+                "name": "gpt-5.2-mini",
+                "model_id": "gpt-5.2-mini",
                 "speed_rating": 8.0,
                 "quality_rating": 8.5,
                 "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
             },
             {
-                "name": "gpt-5-mini",
-                "model_id": "gpt-5-mini",
+                "name": "gpt-5-nano",
+                "model_id": "gpt-5-nano",
                 "speed_rating": 7.0,
                 "quality_rating": 9.5,
                 "capabilities": [TaskType.DEEP_REASONING, TaskType.ANALYSIS, TaskType.SYNTHESIS]
             },
             {
-                "name": "gpt-3.5-turbo",
-                "model_id": "gpt-3.5-turbo",
+                "name": "gpt-4o-mini",
+                "model_id": "gpt-4o-mini",
                 "speed_rating": 9.0,
                 "quality_rating": 7.0,
                 "capabilities": [TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
@@ -612,12 +622,18 @@ class MultiModelOrchestrator:
         ]
         if groq_models:
             # 복잡도에 따라 Groq 모델 선택
-            if complexity > 7.0 and "groq-llama3-70b" in groq_models:
-                logger.info(f"Selected Groq model: groq-llama3-70b")
-                return "groq-llama3-70b"
-            elif complexity > 5.0 and "groq-mixtral" in groq_models:
-                logger.info(f"Selected Groq model: groq-mixtral")
-                return "groq-mixtral"
+            if complexity > 7.0 and "meta-llama/llama-4-maverick-17b-128e-instruct" in groq_models:
+                logger.info(f"Selected Groq model: meta-ll ama/llama-4-maverick-17b-128e-instruct")
+                return "meta-llama/llama-4-maverick-17b-128e-instruct"
+            elif complexity > 5.0 and "moonshotai/kimi-k2-instruct-0905" in groq_models:
+                logger.info(f"Selected Groq model: moonshotai/kimi-k2-instruct-0905")
+                return "moonshotai/kimi-k2-instruct-0905"
+            elif complexity > 5.0 and "openai/gpt-oss-120b" in groq_models:
+                logger.info(f"Selected Groq model: openai/gpt-oss-120b")
+                return "openai/gpt-oss-120b"
+            elif complexity > 5.0 and "groq/compound" in groq_models:
+                logger.info(f"Selected Groq model: groq/compound")
+                return "groq/compound"
             else:
                 logger.info(f"Selected Groq model: {groq_models[0]}")
                 return groq_models[0]
@@ -641,12 +657,15 @@ class MultiModelOrchestrator:
             if self.models[name].provider == "openai"
         ]
         if gpt_models:
-            if complexity > 7.0 and "gpt-5-mini" in gpt_models:
-                logger.info(f"Selected GPT model: gpt-5-mini")
-                return "gpt-5-mini"
-            elif "gpt-5-mini" in gpt_models:
-                logger.info(f"Selected GPT model: gpt-5-mini")
-                return "gpt-5-mini"
+            if complexity > 7.0 and "gpt-5.2-mini" in gpt_models:
+                logger.info(f"Selected GPT model: gpt-5.2-mini")
+                return "gpt-5.2-mini"
+            elif "gpt-5-nano" in gpt_models:
+                logger.info(f"Selected GPT model: gpt-5-nano")
+                return "gpt-5-nano"
+            elif "gpt-4o-mini" in gpt_models:
+                logger.info(f"Selected GPT model: gpt-4o-mini")
+                return "gpt-4o-mini"
             else:
                 logger.info(f"Selected GPT model: {gpt_models[0]}")
                 return gpt_models[0]
@@ -1786,13 +1805,12 @@ async def execute_llm_task(
 ) -> ModelResult:
     """LLM 작업 실행."""
     try:
-        llm_orchestrator = get_llm_orchestrator()
         if use_ensemble:
-            return await llm_orchestrator.weighted_ensemble(
+            return await get_llm_orchestrator().weighted_ensemble(
                 prompt, task_type, model_name, system_message, **kwargs
             )
         else:
-            return await llm_orchestrator.execute_with_model(
+            return await get_llm_orchestrator().execute_with_model(
                 prompt, task_type, model_name, system_message, **kwargs
             )
     except Exception as e:
@@ -1802,11 +1820,9 @@ async def execute_llm_task(
 
 def get_best_model_for_task(task_type: TaskType) -> str:
     """작업에 최적 모델 반환."""
-    llm_orchestrator = get_llm_orchestrator()
-    return llm_orchestrator.get_best_model_for_task(task_type)
+    return get_llm_orchestrator().get_best_model_for_task(task_type)
 
 
 def get_model_performance_stats() -> Dict[str, Any]:
     """모델 성능 통계 반환."""
-    llm_orchestrator = get_llm_orchestrator()
-    return llm_orchestrator.get_model_performance_stats()
+    return get_llm_orchestrator().get_model_performance_stats()
