@@ -287,6 +287,9 @@ class UniversalMCPHub:
         # 종료/차단 플래그 (종료 중 신규 연결 방지)
         self.stopping: bool = False
         
+        # FastMCP Client 인스턴스 저장 (연결 풀링)
+        self.fastmcp_clients: Dict[str, Any] = {}  # server_name -> FastMCPClient
+        
         # Anti-bot 우회를 위한 User-Agent 풀 (Skyvern 스타일)
         self.user_agents = [
             # Chrome (Windows)
@@ -913,38 +916,38 @@ class UniversalMCPHub:
         
         # npx 기반 stdio 서버는 더 긴 시간 필요
         if is_npx:
-            settings["timeout"] = 45.0  # npx 다운로드 및 실행 시간 고려
-            settings["pre_init_delay"] = 2.0  # npx 프로세스 시작 대기
+            settings["timeout"] = 60.0  # npx 다운로드 및 실행 시간 고려 (45초 -> 60초로 증가)
+            settings["pre_init_delay"] = 3.0  # npx 프로세스 시작 대기 (2초 -> 3초로 증가)
             settings["post_init_delay"] = 1.0  # 초기화 후 안정화 대기
         
-        # 특정 서버별 커스텀 설정 - 타임아웃을 10초로 단축 (빠른 실패)
+        # 특정 서버별 커스텀 설정 - 타임아웃 증가 (안정성 우선)
         if server_name == "exa":
-            settings["timeout"] = 10.0  # HTTP 서버는 빠름
+            settings["timeout"] = 15.0  # HTTP 서버는 빠르지만 여유 시간 확보
         elif server_name == "semantic_scholar":
-            settings["timeout"] = 10.0  # HTTP 서버지만 인증 처리 필요
+            settings["timeout"] = 20.0  # HTTP 서버지만 인증 처리 시간 필요
         elif server_name == "context7-mcp":
-            settings["timeout"] = 10.0  # Upstash 서버는 초기화 시간 필요하지만 빠른 실패 우선
-            settings["pre_init_delay"] = 0.5
+            settings["timeout"] = 60.0  # Upstash 서버는 초기화 시간 필요 (npx 기반)
+            settings["pre_init_delay"] = 3.0
         elif server_name == "parallel-search":
-            settings["timeout"] = 10.0
-            settings["pre_init_delay"] = 0.5
+            settings["timeout"] = 60.0  # npx 기반 서버
+            settings["pre_init_delay"] = 3.0
         elif server_name == "unified-search-mcp-server":
-            settings["timeout"] = 10.0
-            settings["pre_init_delay"] = 0.5
+            settings["timeout"] = 60.0
+            settings["pre_init_delay"] = 3.0
         elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
-            settings["timeout"] = 10.0  # API 키 검증 시간 필요하지만 빠른 실패 우선
-            settings["pre_init_delay"] = 0.5
+            settings["timeout"] = 60.0  # npx 기반 서버, API 키 검증 시간 필요
+            settings["pre_init_delay"] = 3.0
         elif server_name == "ddg_search":
-            settings["timeout"] = 10.0  # uvx 기반 서버는 초기화 시간 필요하지만 빠른 실패 우선
-            settings["pre_init_delay"] = 1.0  # uvx 패키지 다운로드 시간 고려
-            settings["post_init_delay"] = 0.5
+            settings["timeout"] = 45.0  # uvx 기반 서버는 초기화 시간 필요
+            settings["pre_init_delay"] = 2.0  # uvx 패키지 다운로드 시간 고려
+            settings["post_init_delay"] = 1.0
         elif server_name in ["fetch", "docfork"]:
-            settings["timeout"] = 10.0  # smithery 서버는 안정적이지만 빠른 실패 우선
-            settings["pre_init_delay"] = 0.5
+            settings["timeout"] = 60.0  # npx 기반 smithery 서버
+            settings["pre_init_delay"] = 3.0
         
-        # HTTP 서버는 빠르게
+        # HTTP 서버는 빠르지만 여유 시간 확보
         if not is_stdio:
-            settings["timeout"] = min(settings["timeout"], 10.0)
+            settings["timeout"] = max(settings["timeout"], 20.0)  # 최소 20초
             settings["pre_init_delay"] = 0.0
             settings["post_init_delay"] = 0.0
         
@@ -960,6 +963,19 @@ class UniversalMCPHub:
         Returns:
             True if connection is healthy, False otherwise
         """
+        # FastMCP Client 확인
+        if server_name in self.fastmcp_clients:
+            try:
+                fastmcp_client = self.fastmcp_clients[server_name]
+                # FastMCP Client는 context manager이므로 간단한 health check
+                # 실제로는 연결 테스트를 위해 list_tools를 호출할 수 있지만, 
+                # 여기서는 클라이언트 존재 여부만 확인 (성능 고려)
+                return fastmcp_client is not None
+            except Exception as e:
+                logger.debug(f"FastMCP connection health check failed for {server_name}: {e}")
+                return False
+        
+        # 기존 ClientSession 방식 확인
         if server_name not in self.mcp_sessions:
             return False
         
@@ -1110,326 +1126,99 @@ class UniversalMCPHub:
             logger.info(f"[MCP][fastmcp.connect] server={server_name} url={base_url} headers={list(resolved_headers.keys()) if resolved_headers else 'None'}")
             
             try:
-                # FastMCP는 headers를 지원하지만 실제 HTTP 요청에 포함하지 않을 수 있음
-                # 따라서 streamablehttp_client를 직접 사용하는 방식으로 전환
-                # (test_smithery_mcp.py에서 작동하는 방식과 동일)
-                if not HTTP_CLIENT_AVAILABLE or streamablehttp_client is None:
-                    logger.error(f"HTTP MCP client not available for server {server_name}")
-                    return False
+                # FastMCP Client 직접 사용 (가이드에 따른 올바른 사용법)
+                # 기존 클라이언트가 있으면 재사용, 없으면 새로 생성
+                if server_name in self.fastmcp_clients:
+                    fastmcp_client = self.fastmcp_clients[server_name]
+                    logger.debug(f"[MCP][fastmcp.reuse] server={server_name} Reusing existing FastMCP client")
+                else:
+                    # FastMCP Client 생성
+                    fastmcp_client = FastMCPClient(mcp_config)
+                    self.fastmcp_clients[server_name] = fastmcp_client
+                    logger.debug(f"[MCP][fastmcp.create] server={server_name} Created new FastMCP client")
                 
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1102}",
-                        "message": "Using streamablehttp_client directly (FastMCP fallback)",
-                        "data": {
-                            "server_name": server_name,
-                            "url": base_url,
-                            "headers_in_config": "Authorization" in (resolved_headers or {}),
-                            "headers_keys": list(resolved_headers.keys()) if resolved_headers else []
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "H"
-                    }) + "\n")
-                # #endregion
+                # pre_init_delay 적용 (npx 서버 등 프로세스 시작 대기)
+                pre_init_delay = server_settings.get("pre_init_delay", 0.0)
+                if pre_init_delay > 0:
+                    logger.debug(f"[MCP][init.delay] server={server_name} waiting {pre_init_delay}s before initialize...")
+                    await asyncio.sleep(pre_init_delay)
                 
-                # streamablehttp_client를 직접 사용 (FastMCP 대신)
-                # test_smithery_mcp.py에서 작동하는 방식과 동일하게 headers 파라미터 직접 사용
-                # exit_stack을 async with로 감싸서 context manager 생명주기 관리
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1128}",
-                        "message": "Calling streamablehttp_client with headers",
-                        "data": {
-                            "server_name": server_name,
-                            "url": base_url,
-                            "has_headers": resolved_headers is not None,
-                            "headers_keys": list(resolved_headers.keys()) if resolved_headers else [],
-                            "authorization_present": "Authorization" in (resolved_headers or {}),
-                            "authorization_value_preview": resolved_headers.get("Authorization", "")[:20] + "..." if resolved_headers.get("Authorization") else None
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "H"
-                    }) + "\n")
-                # #endregion
-                
-                # streamablehttp_client를 exit_stack에 등록하여 context manager 생명주기 관리
-                # exit_stack은 나중에 cleanup에서 닫을 때까지 활성화 상태 유지
-                # Authorization 헤더가 제대로 전달되는지 확인
-                auth_header_value = resolved_headers.get("Authorization", "") if resolved_headers else ""
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1159}",
-                        "message": "About to create streamablehttp_client",
-                        "data": {
-                            "server_name": server_name,
-                            "url": base_url,
-                            "headers_count": len(resolved_headers) if resolved_headers else 0,
-                            "has_authorization": "Authorization" in (resolved_headers or {}),
-                            "authorization_preview": auth_header_value[:30] + "..." if len(auth_header_value) > 30 else auth_header_value,
-                            "authorization_length": len(auth_header_value)
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "B"
-                    }) + "\n")
-                # #endregion
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1185}",
-                        "message": "About to enter streamablehttp_client context",
-                        "data": {
-                            "server_name": server_name,
-                            "url": base_url,
-                            "headers_count": len(resolved_headers) if resolved_headers else 0
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "J"
-                    }) + "\n")
-                # #endregion
-                
+                # FastMCP Client를 Context Manager로 사용 (가이드에 따른 올바른 사용법)
                 try:
-                    http_transport = await exit_stack.enter_async_context(
-                        streamablehttp_client(base_url, headers=resolved_headers if resolved_headers else None)
-                    )
-                except Exception as transport_error:
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1202}",
-                            "message": "exit_stack.enter_async_context(streamablehttp_client) failed",
-                            "data": {
-                                "server_name": server_name,
-                                "error_type": type(transport_error).__name__,
-                                "error_msg": str(transport_error)
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "J"
-                        }) + "\n")
-                    # #endregion
-                    raise
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1206}",
-                        "message": "streamablehttp_client context entered",
-                        "data": {
-                            "server_name": server_name,
-                            "http_transport_type": str(type(http_transport))
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "J"
-                    }) + "\n")
-                # #endregion
-                
-                read, write, _ = http_transport
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1189}",
-                        "message": "About to enter ClientSession context",
-                        "data": {
-                            "server_name": server_name,
-                            "read_type": str(type(read)),
-                            "write_type": str(type(write))
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "J"
-                    }) + "\n")
-                # #endregion
-                
-                session = await exit_stack.enter_async_context(ClientSession(read, write))
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1205}",
-                        "message": "ClientSession context entered, about to initialize",
-                        "data": {
-                            "server_name": server_name,
-                            "session_type": str(type(session)),
-                            "has_initialize": hasattr(session, "initialize")
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "H"
-                    }) + "\n")
-                # #endregion
-                
-                # 세션 초기화
-                try:
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1208}",
-                            "message": "Calling session.initialize()",
-                            "data": {
-                                "server_name": server_name,
-                                "timeout": timeout
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "H"
-                        }) + "\n")
-                    # #endregion
+                    # stopping 플래그 재확인
+                    if self.stopping:
+                        logger.warning(f"[MCP][skip.stopping] server={server_name} stopping flag is set")
+                        raise asyncio.CancelledError("Stopping flag is set")
                     
-                    await asyncio.wait_for(session.initialize(), timeout=timeout)
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1150}",
-                            "message": "session.initialize() completed",
-                            "data": {
-                                "server_name": server_name
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "H"
-                        }) + "\n")
-                    # #endregion
-                except Exception as init_error:
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1150}",
-                            "message": "session.initialize() failed",
-                            "data": {
-                                "server_name": server_name,
-                                "error_type": type(init_error).__name__,
-                                "error_msg": str(init_error)
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "H"
-                        }) + "\n")
-                    # #endregion
-                    raise
-                
-                # 도구 목록 가져오기
-                try:
-                    tools_result: ListToolsResult = await asyncio.wait_for(
-                        session.list_tools(),
-                        timeout=timeout
-                    )
-                except Exception as list_tools_error:
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1153}",
-                            "message": "session.list_tools() failed",
-                            "data": {
-                                "server_name": server_name,
-                                "error_type": type(list_tools_error).__name__,
-                                "error_msg": str(list_tools_error)
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "H"
-                        }) + "\n")
-                    # #endregion
-                    raise
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1140}",
-                        "message": "list_tools completed",
-                        "data": {
-                            "server_name": server_name,
-                            "tools_count": len(tools_result.tools) if tools_result else 0
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "H"
-                    }) + "\n")
-                # #endregion
-                
-                # 도구 정보 저장
-                tools_dict = {}
-                for tool in tools_result.tools:
-                    tools_dict[tool.name] = {
-                        "name": tool.name,
-                        "description": tool.description or "",
-                        "inputSchema": tool.inputSchema or {}
-                    }
-                
-                self.mcp_tools_map[server_name] = tools_dict
-                logger.info(f"[MCP][http.success] server={server_name} Connected, {len(tools_dict)} tools available")
-                
-                # 연결 진단 정보 업데이트
-                di = self.connection_diagnostics.get(server_name, {})
-                di.update({
-                    "ok": True,
-                    "tools_count": len(tools_dict)
-                })
-                self.connection_diagnostics[server_name] = di
-                
-                # 세션 정보 저장 (ClientSession 사용)
-                # streamablehttp_client를 사용하므로 ClientSession 객체 저장
-                self.mcp_sessions[server_name] = session
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1254}",
-                        "message": "Session stored in mcp_sessions",
-                        "data": {
-                            "server_name": server_name,
-                            "session_type": str(type(session)),
-                            "has_call_tool": hasattr(session, "call_tool"),
-                            "sessions_count": len(self.mcp_sessions),
-                            "tools_count": len(tools_dict)
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "C"
-                    }) + "\n")
-                # #endregion
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1165}",
-                        "message": "Connection success using streamablehttp_client",
-                        "data": {
-                            "server_name": server_name,
-                            "tools_count": len(tools_dict),
-                            "session_type": str(type(session))
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "H"
-                    }) + "\n")
-                # #endregion
-                
-                return True
+                    # Context Manager로 사용하여 연결 테스트 및 도구 목록 가져오기
+                    async with fastmcp_client:
+                        # 도구 목록 가져오기 (타임아웃 설정)
+                        try:
+                            tools = await asyncio.shield(
+                                asyncio.wait_for(
+                                    fastmcp_client.list_tools(),
+                                    timeout=timeout
+                                )
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(f"[MCP][list_tools.timeout] server={server_name} list_tools timeout after {timeout}s")
+                            raise
+                        except asyncio.CancelledError as e:
+                            if self.stopping:
+                                logger.info(f"[MCP][list_tools.cancelled] server={server_name} cancelled due to stopping flag")
+                                raise asyncio.CancelledError("Stopping flag is set")
+                            else:
+                                logger.warning(f"[MCP][list_tools.cancelled] server={server_name} list_tools was cancelled unexpectedly")
+                                raise asyncio.TimeoutError(f"List tools cancelled (timeout: {timeout}s)")
+                    
+                    # 도구 정보 저장
+                    tools_dict = {}
+                    if tools:
+                        for tool in tools:
+                            tools_dict[tool.name] = {
+                                "name": tool.name,
+                                "description": getattr(tool, "description", "") or "",
+                                "inputSchema": getattr(tool, "inputSchema", {}) or {}
+                            }
+                    
+                    self.mcp_tools_map[server_name] = tools_dict
+                    logger.info(f"[MCP][fastmcp.success] server={server_name} Connected, {len(tools_dict)} tools available")
+                    
+                    # 연결 진단 정보 업데이트
+                    di = self.connection_diagnostics.get(server_name, {})
+                    di.update({
+                        "ok": True,
+                        "tools_count": len(tools_dict),
+                        "client_type": "FastMCP"
+                    })
+                    self.connection_diagnostics[server_name] = di
+                    
+                    # FastMCP Client 인스턴스 저장 (나중에 도구 호출 시 사용)
+                    # 주의: FastMCP Client는 context manager이므로, 도구 호출 시마다 async with로 사용해야 함
+                    # 세션은 저장하지 않고 클라이언트만 저장
+                    self.mcp_sessions[server_name] = fastmcp_client  # FastMCP Client 저장
+                    
+                    return True
+                    
+                except Exception as fastmcp_error:
+                    error_msg = str(fastmcp_error)
+                    error_type = type(fastmcp_error).__name__
+                    logger.error(f"[MCP][fastmcp.error] server={server_name} err={error_type}: {error_msg}")
+                    logger.exception(f"[MCP][fastmcp.error] server={server_name} full traceback:")
+                    
+                    # 연결 실패 시 클라이언트 제거
+                    if server_name in self.fastmcp_clients:
+                        del self.fastmcp_clients[server_name]
+                    
+                    di = self.connection_diagnostics.get(server_name, {})
+                    di.update({
+                        "stage": "fastmcp_connect",
+                        "error": error_msg,
+                        "error_type": error_type,
+                        "ok": False
+                    })
+                    self.connection_diagnostics[server_name] = di
+                    return False
                     
             except Exception as e:
                 error_msg = str(e)
@@ -1499,21 +1288,34 @@ class UniversalMCPHub:
     async def _disconnect_from_mcp_server(self, server_name: str):
         """MCP 서버 연결 해제 - 안전한 비동기 정리."""
         try:
+            # FastMCP Client 정리
+            if server_name in self.fastmcp_clients:
+                try:
+                    # FastMCP Client는 context manager이므로 명시적 정리 불필요
+                    # 참조만 제거하면 됨
+                    del self.fastmcp_clients[server_name]
+                    logger.debug(f"Removed FastMCP client for {server_name}")
+                except Exception as e:
+                    logger.debug(f"Error removing FastMCP client for {server_name}: {e}")
+            
             # 세션 먼저 제거 및 종료 (heartbeat 무한 루프 방지)
             if server_name in self.mcp_sessions:
                 session = self.mcp_sessions[server_name]
-                try:
-                    # 세션 종료 시도 (안전하게) - heartbeat 중지
-                    if hasattr(session, 'shutdown'):
-                        await asyncio.wait_for(session.shutdown(), timeout=1.0)
-                    elif hasattr(session, 'close'):
-                        await asyncio.wait_for(session.close(), timeout=1.0)
-                except (asyncio.TimeoutError, AttributeError, Exception) as e:
-                    logger.debug(f"Session shutdown timeout/error for {server_name}: {e}")
-                    # 타임아웃이어도 세션은 제거 (heartbeat 중지)
-                finally:
-                    # 세션 제거 (heartbeat 무한 루프 방지)
-                    del self.mcp_sessions[server_name]
+                # FastMCP Client인 경우 context manager이므로 명시적 shutdown 불필요
+                is_fastmcp_client = session and FASTMCP_AVAILABLE and isinstance(session, FastMCPClient)
+                if not is_fastmcp_client:
+                    # 기존 ClientSession 방식
+                    try:
+                        # 세션 종료 시도 (안전하게) - heartbeat 중지
+                        if hasattr(session, 'shutdown'):
+                            await asyncio.wait_for(session.shutdown(), timeout=1.0)
+                        elif hasattr(session, 'close'):
+                            await asyncio.wait_for(session.close(), timeout=1.0)
+                    except (asyncio.TimeoutError, AttributeError, Exception) as e:
+                        logger.debug(f"Session shutdown timeout/error for {server_name}: {e}")
+                        # 타임아웃이어도 세션은 제거 (heartbeat 중지)
+                # 세션 제거 (heartbeat 무한 루프 방지)
+                del self.mcp_sessions[server_name]
             
             # Exit stack 정리: aclose() 호출하지 않음 (anyio cancel scope 오류 방지)
             # 참조만 제거 - 컨텍스트는 원래 태스크에서 정리됨
@@ -1527,10 +1329,15 @@ class UniversalMCPHub:
             
         except Exception as e:
             logger.debug(f"Error disconnecting from MCP server {server_name}: {e}")
-            # 예외가 발생해도 세션은 제거 시도 (heartbeat 무한 루프 방지)
+            # 예외가 발생해도 세션/클라이언트는 제거 시도 (heartbeat 무한 루프 방지)
             if server_name in self.mcp_sessions:
                 try:
                     del self.mcp_sessions[server_name]
+                except:
+                    pass
+            if server_name in self.fastmcp_clients:
+                try:
+                    del self.fastmcp_clients[server_name]
                 except:
                     pass
     
@@ -1557,9 +1364,10 @@ class UniversalMCPHub:
             logger.info("Initializing MCP Hub with MCP servers (no OpenRouter)...")
             
             # MCP 서버 연결 (모든 서버) - 병렬 + 타임아웃 적용
-            timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "30"))  # 서버당 최대 30초(환경변수로 조정)
-            max_concurrency = 4
+            timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "60"))  # 서버당 최대 60초(환경변수로 조정, npx 서버 고려)
+            max_concurrency = int(os.getenv("MCP_MAX_CONCURRENCY", "3"))  # 동시 연결 수 제한 (기본 3개)
             semaphore = asyncio.Semaphore(max_concurrency)
+            logger.info(f"[MCP][init] max_concurrency={max_concurrency}, timeout_per_server={timeout_per_server}s")
 
 
             # disabled=true 설정된 서버는 건너뛰기 + 허용 서버 화이트리스트 적용
@@ -1578,7 +1386,17 @@ class UniversalMCPHub:
             # 서버별 타임아웃 설정 적용 (재시도 로직 포함)
             async def connect_one_with_settings(name: str, cfg: Dict[str, Any]) -> tuple[str, bool]:
                 try:
+                    # stopping 플래그 체크
+                    if self.stopping:
+                        logger.info(f"[MCP][skip.stopping] server={name} stopping flag is set")
+                        return name, False
+                    
                     async with semaphore:
+                        # semaphore 획득 후 다시 체크
+                        if self.stopping:
+                            logger.info(f"[MCP][skip.stopping] server={name} stopping flag is set after semaphore")
+                            return name, False
+                        
                         if cfg.get("disabled"):
                             logger.warning(f"[MCP][skip.disabled] server={name}")
                             return name, False
@@ -1592,9 +1410,17 @@ class UniversalMCPHub:
                         connection_success = False
                         
                         for retry_attempt in range(max_connection_retries):
+                            # 재시도 전 stopping 플래그 체크
+                            if self.stopping:
+                                logger.info(f"[MCP][skip.stopping] server={name} stopping flag is set before retry {retry_attempt + 1}")
+                                return name, False
+                            
                             try:
                                 logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
-                                ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
+                                # shield로 보호하여 외부 취소 방지
+                                ok = await asyncio.shield(
+                                    self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
+                                )
                                 if ok:
                                     connection_success = True
                                     if retry_attempt > 0:
@@ -1758,8 +1584,8 @@ class UniversalMCPHub:
                     logger.error(f"Cannot reconnect to {server_name}: no config found")
                     return None
         
-        if server_name not in self.mcp_sessions:
-            logger.error(f"Server {server_name} still not in mcp_sessions after connection attempt")
+        if server_name not in self.mcp_sessions and server_name not in self.fastmcp_clients:
+            logger.error(f"Server {server_name} still not in mcp_sessions or fastmcp_clients after connection attempt")
             return None
         
         if server_name not in self.mcp_tools_map:
@@ -1777,148 +1603,110 @@ class UniversalMCPHub:
         
         for attempt in range(max_attempts):
             try:
-                session = self.mcp_sessions[server_name]
-                
-                # #region agent log
-                import json
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1434}",
-                        "message": "About to call tool",
-                        "data": {
-                            "server_name": server_name,
-                            "tool_name": tool_name,
-                            "attempt": attempt + 1,
-                            "session_type": str(type(session)),
-                            "has_call_tool": hasattr(session, "call_tool"),
-                            "is_fastmcp": isinstance(session, FastMCPClient) if FASTMCP_AVAILABLE else False
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "B"
-                    }) + "\n")
-                # #endregion
-                
-                logger.debug(f"Calling tool {tool_name} on server {server_name} (attempt {attempt+1}/{max_attempts}) with params: {params}")
-                
-                # streamablehttp_client를 사용하므로 ClientSession 객체를 직접 사용
-                # FastMCP Client는 사용하지 않음 (모든 서버가 streamablehttp_client로 연결됨)
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1648}",
-                        "message": "About to call tool with ClientSession",
-                        "data": {
-                            "server_name": server_name,
-                            "tool_name": tool_name,
-                            "session_type": str(type(session)),
-                            "has_call_tool": hasattr(session, "call_tool"),
-                            "session_is_none": session is None
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "D"
-                    }) + "\n")
-                # #endregion
-                
-                # 기존 ClientSession 방식 사용 (streamablehttp_client로 연결된 세션)
-                if session is None:
-                    logger.error(f"[MCP][exec.error] Session is None for {server_name}")
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1712}",
-                            "message": "Session is None",
-                            "data": {
-                                "server_name": server_name,
-                                "tool_name": tool_name
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "E"
-                        }) + "\n")
-                    # #endregion
-                    return None
-                
-                if not hasattr(session, "call_tool"):
-                    logger.error(f"[MCP][exec.error] Session does not have call_tool method: {type(session)}")
-                    # #region agent log
-                    with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                        f.write(json.dumps({
-                            "location": f"mcp_integration.py:{1712}",
-                            "message": "Session does not have call_tool",
-                            "data": {
-                                "server_name": server_name,
-                                "tool_name": tool_name,
-                                "session_type": str(type(session)),
-                                "session_dir": [attr for attr in dir(session) if not attr.startswith('_')][:10]
-                            },
-                            "timestamp": int(time.time() * 1000),
-                            "sessionId": "debug-session",
-                            "runId": "run1",
-                            "hypothesisId": "E"
-                        }) + "\n")
-                    # #endregion
-                    return None
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1714}",
-                        "message": "Calling session.call_tool",
-                        "data": {
-                            "server_name": server_name,
-                            "tool_name": tool_name,
-                            "params_keys": list(params.keys()),
-                            "session_type": str(type(session))
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "F"
-                    }) + "\n")
-                # #endregion
-                
-                # 기존 ClientSession 방식
-                result = await session.call_tool(tool_name, params)
-                
-                # #region agent log
-                with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                    f.write(json.dumps({
-                        "location": f"mcp_integration.py:{1714}",
-                        "message": "session.call_tool completed",
-                        "data": {
-                            "server_name": server_name,
-                            "tool_name": tool_name,
-                            "result_type": str(type(result)),
-                            "has_content": hasattr(result, "content") if result else False,
-                            "content_length": len(result.content) if result and hasattr(result, "content") else 0
-                        },
-                        "timestamp": int(time.time() * 1000),
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "F"
-                    }) + "\n")
-                # #endregion
-                
-                # 결과를 TextContent에서 추출
-                if result and result.content:
-                    content_parts = []
-                    for item in result.content:
-                        if isinstance(item, TextContent):
-                            content_parts.append(item.text)
-                        else:
-                            # 다른 타입의 content도 처리
-                            content_parts.append(str(item))
+                # FastMCP Client 사용 (가이드에 따른 올바른 사용법)
+                if server_name in self.fastmcp_clients:
+                    fastmcp_client = self.fastmcp_clients[server_name]
+                    logger.debug(f"Calling tool {tool_name} on server {server_name} using FastMCP Client (attempt {attempt+1}/{max_attempts})")
                     
-                    content_str = " ".join(content_parts)
-                    logger.debug(f"Tool {tool_name} returned content length: {len(content_str)}")
-                    return content_str
+                    # Context Manager로 사용 (가이드에 따른 올바른 사용법)
+                    try:
+                        async with fastmcp_client:
+                            # 타임아웃 설정
+                            from src.core.researcher_config import get_agent_tool_config
+                            tool_config = get_agent_tool_config()
+                            tool_timeout = tool_config.mcp_command_timeout
+                            
+                            result = await asyncio.shield(
+                                asyncio.wait_for(
+                                    fastmcp_client.call_tool(tool_name, params),
+                                    timeout=tool_timeout
+                                )
+                            )
+                            
+                            # FastMCP Client의 결과 처리
+                            # FastMCP는 결과를 직접 반환하지만, 형식이 다를 수 있음
+                            logger.debug(f"Tool {tool_name} returned result type: {type(result)}")
+                            
+                            # 결과가 dict이고 content 키가 있으면 추출
+                            if isinstance(result, dict):
+                                # MCP 표준 형식: {"content": [...]}
+                                if "content" in result:
+                                    content_items = result["content"]
+                                    if content_items:
+                                        # TextContent 형식인지 확인
+                                        if isinstance(content_items, list):
+                                            content_parts = []
+                                            for item in content_items:
+                                                if isinstance(item, dict) and "text" in item:
+                                                    content_parts.append(item["text"])
+                                                elif isinstance(item, str):
+                                                    content_parts.append(item)
+                                                else:
+                                                    content_parts.append(str(item))
+                                            return " ".join(content_parts) if content_parts else None
+                                        elif isinstance(content_items, str):
+                                            return content_items
+                                # 그 외의 경우 dict 그대로 반환
+                                return result
+                            elif isinstance(result, str):
+                                return result
+                            else:
+                                # 기타 타입은 문자열로 변환
+                                return str(result) if result is not None else None
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[MCP][exec.timeout] server={server_name} tool={tool_name} timeout after {tool_timeout}s")
+                        if attempt < max_attempts - 1:
+                            wait = backoff_seconds[attempt]
+                            logger.info(f"[MCP][exec.retry] Retrying in {wait}s (attempt {attempt+2}/{max_attempts})")
+                            await asyncio.sleep(wait)
+                            continue
+                        return None
+                    except asyncio.CancelledError as e:
+                        if self.stopping:
+                            logger.info(f"[MCP][exec.cancelled] server={server_name} tool={tool_name} cancelled due to stopping flag")
+                            return None
+                        else:
+                            logger.warning(f"[MCP][exec.cancelled] server={server_name} tool={tool_name} was cancelled unexpectedly")
+                            if attempt < max_attempts - 1:
+                                wait = backoff_seconds[attempt]
+                                await asyncio.sleep(wait)
+                                continue
+                            return None
+                
+                # Fallback: 기존 ClientSession 방식 (하위 호환성)
+                elif server_name in self.mcp_sessions:
+                    session = self.mcp_sessions[server_name]
+                    logger.debug(f"Calling tool {tool_name} on server {server_name} using ClientSession (attempt {attempt+1}/{max_attempts})")
+                    
+                    if session is None:
+                        logger.error(f"[MCP][exec.error] Session is None for {server_name}")
+                        return None
+                    
+                    if not hasattr(session, "call_tool"):
+                        logger.error(f"[MCP][exec.error] Session does not have call_tool method: {type(session)}")
+                        return None
+                    
+                    # 기존 ClientSession 방식
+                    result = await session.call_tool(tool_name, params)
+                    
+                    # 결과를 TextContent에서 추출 (ClientSession 방식)
+                    if result and hasattr(result, "content") and result.content:
+                        content_parts = []
+                        for item in result.content:
+                            if isinstance(item, TextContent):
+                                content_parts.append(item.text)
+                            else:
+                                # 다른 타입의 content도 처리
+                                content_parts.append(str(item))
+                        
+                        content_str = " ".join(content_parts)
+                        logger.debug(f"Tool {tool_name} returned content length: {len(content_str)}")
+                        return content_str
+                    else:
+                        logger.warning(f"Tool {tool_name} returned empty result")
+                        return None
                 else:
-                    logger.warning(f"Tool {tool_name} returned empty result")
+                    logger.error(f"[MCP][exec.error] Server {server_name} not found in fastmcp_clients or mcp_sessions")
                     return None
             
             except McpError as e:
@@ -1967,16 +1755,22 @@ class UniversalMCPHub:
                         await asyncio.sleep(wait)
                         continue
                     logger.error(f"[MCP][exec.error] Reconnect failed for {server_name}")
-                    # Reconnect failed, session is bad or gone
+                    # Reconnect failed, session/client is bad or gone
                     if server_name in self.mcp_sessions:
                         del self.mcp_sessions[server_name]
+                    if server_name in self.fastmcp_clients:
+                        del self.fastmcp_clients[server_name]
                     return None
                 
                 logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} operation=call_tool type={error_type} error={error_msg}")
-                # Invalidate session on fatal error if it looks like a connection issue
-                if (closed_like or "broken pipe" in error_msg.lower()) and server_name in self.mcp_sessions:
-                    logger.warning(f"[MCP][session.invalidate] Removing dead session for {server_name}")
-                    del self.mcp_sessions[server_name]
+                # Invalidate session/client on fatal error if it looks like a connection issue
+                if closed_like or "broken pipe" in error_msg.lower():
+                    if server_name in self.mcp_sessions:
+                        logger.warning(f"[MCP][session.invalidate] Removing dead session for {server_name}")
+                        del self.mcp_sessions[server_name]
+                    if server_name in self.fastmcp_clients:
+                        logger.warning(f"[MCP][client.invalidate] Removing dead FastMCP client for {server_name}")
+                        del self.fastmcp_clients[server_name]
                 
                 import traceback
                 logger.debug(f"[MCP][exec.exception] server={server_name} tool={tool_name} - Full traceback:\n{traceback.format_exc()}")
@@ -2052,6 +1846,16 @@ class UniversalMCPHub:
         # OpenRouter 클라이언트 사용 안 함
         self.openrouter_client = None
         
+        # FastMCP Client 정리
+        for server_name in list(self.fastmcp_clients.keys()):
+            try:
+                # FastMCP Client는 context manager이므로 명시적 정리 불필요
+                # 하지만 참조는 제거
+                del self.fastmcp_clients[server_name]
+                logger.debug(f"Removed FastMCP client for {server_name}")
+            except Exception as e:
+                logger.debug(f"Error removing FastMCP client for {server_name}: {e}")
+        
         # 모든 MCP 서버 연결 해제 (역순으로 정리)
         server_names = list(self.mcp_sessions.keys())
         for server_name in reversed(server_names):
@@ -2059,8 +1863,12 @@ class UniversalMCPHub:
                 # 세션 제거
                 if server_name in self.mcp_sessions:
                     session = self.mcp_sessions.get(server_name)
-                    # 세션 종료 시도 (안전하게)
-                    if session and hasattr(session, 'shutdown'):
+                    # FastMCP Client인 경우 context manager이므로 명시적 shutdown 불필요
+                    if session and isinstance(session, FastMCPClient) if FASTMCP_AVAILABLE else False:
+                        # FastMCP Client는 context manager로만 사용되므로 참조만 제거
+                        pass
+                    elif session and hasattr(session, 'shutdown'):
+                        # 기존 ClientSession 방식
                         try:
                             await asyncio.wait_for(session.shutdown(), timeout=1.0)
                         except:
@@ -4301,11 +4109,34 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
     code = parameters.get("code", "")
     language = parameters.get("language", "python")
     
+    # 1. 리소스 제한 체크
+    try:
+        from src.core.resource_limits import ResourceLimits, CodeSizeLimitError
+        
+        code_bytes = code.encode('utf-8')
+        if ResourceLimits.exceeds_code_limit(len(code_bytes)):
+            error_msg = (
+                f"Code size ({ResourceLimits.format_bytes(len(code_bytes))}) exceeds limit "
+                f"({ResourceLimits.MAX_CODE_SIZE_HUMAN}). "
+                f"Please reduce the code size or split into smaller chunks."
+            )
+            logger.error(error_msg)
+            return ToolResult(
+                success=False,
+                data=None,
+                error=error_msg,
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+    except ImportError:
+        # ResourceLimits 모듈이 없으면 경고만 하고 계속 진행
+        logger.debug("ResourceLimits module not available, skipping size check")
+    
     # ERA 설정 확인 - 필수
     try:
         from src.core.researcher_config import get_era_config
         from src.core.era_client import ERAClient
-        from src.core.era_server_manager import ERAServerManager
+        from src.core.era_server_manager import get_era_server_manager
         
         era_config = get_era_config()
         
@@ -4321,17 +4152,16 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
                 confidence=0.0
             )
         
-        # ERA 서버 관리자 초기화
-        server_manager = ERAServerManager(
-            agent_binary_path=era_config.agent_binary_path,
-            server_url=era_config.server_url,
-            server_addr=f":{era_config.server_url.split(':')[-1]}" if ':' in era_config.server_url else ":8080",
-            auto_start=era_config.auto_start
-        )
+        # 싱글톤 ERA 서버 관리자 사용
+        server_manager = get_era_server_manager()
         
-        # 서버가 실행 중인지 확인하고 필요시 시작
-        if not await server_manager.ensure_server_running():
-            error_msg = "ERA server is not available. Please ensure ERA Agent is installed and running."
+        # 강화된 서버 시작 (재시도 포함)
+        if not await server_manager.ensure_server_running_with_retry():
+            error_msg = (
+                f"ERA server is not available after {server_manager.max_retries} retries. "
+                f"Please ensure ERA Agent is installed and running. "
+                f"Binary path: {server_manager.agent_binary_path or 'not found'}"
+            )
             logger.error(error_msg)
             return ToolResult(
                 success=False,

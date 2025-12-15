@@ -2,6 +2,7 @@
 ERA Agent 서버 자동 관리 모듈
 
 ERA Agent 서버의 자동 시작, 종료, 상태 모니터링을 담당합니다.
+mdflow 패턴을 적용하여 프로세스 관리 및 재시도 로직을 강화했습니다.
 """
 
 import asyncio
@@ -18,6 +19,44 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# 싱글톤 인스턴스
+_era_server_manager_instance: Optional['ERAServerManager'] = None
+
+
+def get_era_server_manager() -> 'ERAServerManager':
+    """
+    ERA 서버 관리자 싱글톤 반환
+    
+    Returns:
+        ERAServerManager 인스턴스
+    """
+    global _era_server_manager_instance
+    if _era_server_manager_instance is None:
+        from src.core.researcher_config import get_era_config
+        era_config = get_era_config()
+        
+        # 서버 주소 파싱
+        server_addr = ":8080"  # 기본값
+        if ':' in era_config.server_url:
+            try:
+                port = era_config.server_url.split(':')[-1]
+                server_addr = f":{port}"
+            except Exception:
+                pass
+        
+        _era_server_manager_instance = ERAServerManager(
+            agent_binary_path=era_config.agent_binary_path,
+            server_url=era_config.server_url,
+            server_addr=server_addr,
+            auto_start=era_config.auto_start,
+            start_timeout=era_config.start_timeout,
+            max_retries=era_config.max_retries,
+            retry_backoff=era_config.retry_backoff
+        )
+        logger.debug("ERA server manager singleton created")
+    
+    return _era_server_manager_instance
+
 
 class ERAServerManager:
     """ERA Agent 서버 자동 관리 클래스"""
@@ -27,7 +66,10 @@ class ERAServerManager:
         agent_binary_path: Optional[str] = None,
         server_url: str = "http://localhost:8080",
         server_addr: str = ":8080",
-        auto_start: bool = True
+        auto_start: bool = True,
+        start_timeout: int = 30,
+        max_retries: int = 3,
+        retry_backoff: float = 2.0
     ):
         """
         ERA 서버 관리자 초기화
@@ -37,18 +79,32 @@ class ERAServerManager:
             server_url: 서버 URL
             server_addr: 서버 주소 (예: ":8080")
             auto_start: 자동 시작 여부
+            start_timeout: 서버 시작 타임아웃 (초)
+            max_retries: 최대 재시도 횟수
+            retry_backoff: 재시도 백오프 배수
         """
         self.agent_binary_path = agent_binary_path or self._find_agent_binary()
         self.server_url = server_url
         self.server_addr = server_addr
         self.auto_start = auto_start
+        self.start_timeout = start_timeout
+        self.max_retries = max_retries
+        self.retry_backoff = retry_backoff
         self._process: Optional[subprocess.Popen] = None
         self._started_by_us = False
         
-        # 종료 시 정리
-        atexit.register(self.cleanup)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
+        # ProcessManager 통합
+        try:
+            from src.core.process_manager import get_process_manager
+            self.process_manager = get_process_manager()
+            self.process_manager.initialize()
+        except ImportError:
+            logger.warning("ProcessManager not available, using basic signal handling")
+            self.process_manager = None
+            # 종료 시 정리 (fallback)
+            atexit.register(self.cleanup)
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGINT, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
         """시그널 핸들러"""
@@ -270,8 +326,12 @@ class ERAServerManager:
             
             self._started_by_us = True
             
-            # 서버 시작 대기 (최대 10초)
-            max_wait = 10
+            # ProcessManager에 등록
+            if self.process_manager:
+                self.process_manager.register(self._process, "ERA server")
+            
+            # 서버 시작 대기 (설정된 타임아웃 사용)
+            max_wait = self.start_timeout
             for i in range(max_wait):
                 await asyncio.sleep(1)
                 if self.is_server_running():
@@ -282,8 +342,10 @@ class ERAServerManager:
                 if self._process.poll() is not None:
                     stdout, stderr = self._process.communicate()
                     logger.error(f"ERA server process exited with code {self._process.returncode}")
-                    logger.error(f"stdout: {stdout.decode('utf-8', errors='ignore')}")
-                    logger.error(f"stderr: {stderr.decode('utf-8', errors='ignore')}")
+                    if stdout:
+                        logger.error(f"stdout: {stdout.decode('utf-8', errors='ignore')[:500]}")
+                    if stderr:
+                        logger.error(f"stderr: {stderr.decode('utf-8', errors='ignore')[:500]}")
                     self._process = None
                     self._started_by_us = False
                     return False
@@ -309,6 +371,11 @@ class ERAServerManager:
         
         try:
             logger.info("Stopping ERA server...")
+            
+            # ProcessManager에서 등록 해제
+            if self.process_manager:
+                self.process_manager.unregister(self._process)
+            
             self._process.terminate()
             
             # 최대 5초 대기
@@ -345,6 +412,51 @@ class ERAServerManager:
             return False
         
         return await self.start_server()
+    
+    async def ensure_server_running_with_retry(self) -> bool:
+        """
+        재시도 로직이 포함된 서버 시작
+        
+        최대 max_retries 회 재시도하며, 각 재시도마다 지수 백오프를 적용합니다.
+        
+        Returns:
+            서버가 실행 중이면 True
+        """
+        # 이미 실행 중이면 성공
+        if self.is_server_running():
+            logger.debug("ERA server is already running")
+            return True
+        
+        if not self.auto_start:
+            logger.warning("ERA server is not running and auto_start is disabled")
+            return False
+        
+        # 재시도 로직
+        for attempt in range(self.max_retries):
+            logger.info(f"Attempting to start ERA server (attempt {attempt + 1}/{self.max_retries})...")
+            
+            # 바이너리 경로 재확인 (첫 번째 시도가 아닌 경우)
+            if attempt > 0:
+                logger.debug("Re-checking ERA Agent binary path...")
+                self.agent_binary_path = self.agent_binary_path or self._find_agent_binary()
+                if not self.agent_binary_path:
+                    logger.error("ERA Agent binary not found, cannot retry")
+                    return False
+            
+            # 서버 시작 시도
+            if await self.start_server():
+                logger.info(f"ERA server started successfully on attempt {attempt + 1}")
+                return True
+            
+            # 마지막 시도가 아니면 백오프 대기
+            if attempt < self.max_retries - 1:
+                wait_time = self.retry_backoff ** attempt
+                logger.info(f"ERA server start failed, retrying in {wait_time:.1f}s... (attempt {attempt + 1}/{self.max_retries})")
+                await asyncio.sleep(wait_time)
+        
+        # 모든 재시도 실패
+        logger.error(f"Failed to start ERA server after {self.max_retries} attempts")
+        return False
     
     def get_server_info(self) -> Dict[str, Any]:
         """

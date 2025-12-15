@@ -1229,6 +1229,29 @@ Examples:
 
     progress_tracker.add_progress_callback(progress_callback)
     
+    # ERA 서버 초기화 및 시작 (모든 모드에서)
+    try:
+        from src.core.researcher_config import get_era_config
+        from src.core.era_server_manager import get_era_server_manager
+        
+        era_config = get_era_config()
+        if era_config.enabled:
+            logger.info("🚀 Initializing ERA server...")
+            era_manager = get_era_server_manager()
+            if await era_manager.ensure_server_running_with_retry():
+                logger.info("✅ ERA server is ready")
+            else:
+                logger.error("❌ Failed to start ERA server - code execution will fail")
+                logger.error(f"   Binary path: {era_manager.agent_binary_path or 'not found'}")
+                logger.error(f"   Server URL: {era_config.server_url}")
+        else:
+            logger.debug("ERA is disabled in configuration")
+    except ImportError as e:
+        logger.debug(f"ERA modules not available: {e}")
+    except Exception as e:
+        logger.warning(f"⚠️ ERA initialization failed: {e}")
+        logger.debug("Code execution features may be limited", exc_info=True)
+    
     # Initialize system
     system = AutonomousResearchSystem()
     

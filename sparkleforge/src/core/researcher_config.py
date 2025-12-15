@@ -339,6 +339,9 @@ class ERAConfig(BaseModel):
     default_timeout: int = Field(default=30, gt=0, description="Default timeout in seconds")
     network_mode: str = Field(default="none", description="Network policy (none, allow_all)")
     api_key: Optional[str] = Field(default=None, description="ERA API key (optional)")
+    start_timeout: int = Field(default=30, gt=0, description="서버 시작 타임아웃 (초)")
+    max_retries: int = Field(default=3, ge=1, le=10, description="최대 재시도 횟수")
+    retry_backoff: float = Field(default=2.0, gt=1.0, le=10.0, description="재시도 백오프 배수")
     
     @classmethod
     def from_env(cls) -> "ERAConfig":
@@ -352,7 +355,10 @@ class ERAConfig(BaseModel):
             default_memory=int(os.getenv("ERA_DEFAULT_MEMORY", "256")),
             default_timeout=int(os.getenv("ERA_DEFAULT_TIMEOUT", "30")),
             network_mode=os.getenv("ERA_NETWORK_MODE", "none"),
-            api_key=os.getenv("ERA_API_KEY") or None
+            api_key=os.getenv("ERA_API_KEY") or None,
+            start_timeout=int(os.getenv("ERA_START_TIMEOUT", "30")),
+            max_retries=int(os.getenv("ERA_MAX_RETRIES", "3")),
+            retry_backoff=float(os.getenv("ERA_RETRY_BACKOFF", "2.0"))
         )
 
 

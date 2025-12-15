@@ -23,7 +23,7 @@ if str(prompt_refiner_path) not in sys.path:
 
 try:
     from prompt_refiner import (
-        Refiner,
+        Pipeline,
         StripHTML,
         NormalizeWhitespace,
         Deduplicate,
@@ -35,7 +35,11 @@ except ImportError as e:
     logging.warning(f"prompt-refiner not available: {e}. Prompt optimization will be disabled.")
     PROMPT_REFINER_AVAILABLE = False
     # Fallback classes
-    class Refiner:
+    class Pipeline:
+        def __init__(self, *args, **kwargs):
+            pass
+        def pipe(self, *args, **kwargs):
+            return self
         def run(self, text: str) -> str:
             return text
     class StripHTML:
@@ -118,7 +122,7 @@ class PromptRefinerWrapper:
             self.refiner = None
             logger.warning("PromptRefinerWrapper disabled (prompt-refiner not available or explicitly disabled)")
     
-    def _build_pipeline(self, strategy: str) -> Refiner:
+    def _build_pipeline(self, strategy: str) -> Pipeline:
         """
         전략에 따라 refiner pipeline 구성.
         
@@ -126,12 +130,12 @@ class PromptRefinerWrapper:
             strategy: 최적화 전략
             
         Returns:
-            구성된 Refiner 인스턴스
+            구성된 Pipeline 인스턴스
         """
         if not PROMPT_REFINER_AVAILABLE:
-            return Refiner()
+            return Pipeline()
         
-        refiner = Refiner()
+        refiner = Pipeline()
         
         if strategy == "minimal":
             # Minimal: HTML 제거 + 공백 정규화 (약 4-5% 절감)
@@ -212,9 +216,9 @@ class PromptRefinerWrapper:
                 # 모델의 max_tokens를 기반으로 설정 (80% 사용)
                 effective_max = int(model_max_tokens * 0.8)
                 # 동적으로 TruncateTokens를 추가한 새로운 refiner 생성
-                dynamic_refiner = Refiner()
+                dynamic_refiner = Pipeline()
                 # 기존 pipeline의 모든 operation 복사
-                for operation in self.refiner._operations:
+                for operation in self.refiner._refiners:
                     dynamic_refiner = dynamic_refiner.pipe(operation)
                 # TruncateTokens 추가 (동적 설정)
                 dynamic_refiner = dynamic_refiner.pipe(TruncateTokens(
