@@ -909,47 +909,36 @@ class UniversalMCPHub:
         # 서버별 기본 설정
         settings = {
             "timeout": 30.0,
-            "pre_init_delay": 0.0,  # initialize 전 대기
-            "post_init_delay": 0.0,  # initialize 후 대기
             "max_retries": 1,
         }
         
-        # npx 기반 stdio 서버는 더 긴 시간 필요
+        # npx 기반 stdio 서버는 더 긴 타임아웃 필요
         if is_npx:
-            settings["timeout"] = 60.0  # npx 다운로드 및 실행 시간 고려 (45초 -> 60초로 증가)
-            settings["pre_init_delay"] = 3.0  # npx 프로세스 시작 대기 (2초 -> 3초로 증가)
-            settings["post_init_delay"] = 1.0  # 초기화 후 안정화 대기
+            settings["timeout"] = 60.0  # npx 다운로드 및 실행 시간 고려
         
-        # 특정 서버별 커스텀 설정 - 타임아웃 증가 (안정성 우선)
+        # 특정 서버별 커스텀 설정 - 타임아웃만 설정 (초기화 지연은 일괄 처리)
         if server_name == "exa":
             settings["timeout"] = 15.0  # HTTP 서버는 빠르지만 여유 시간 확보
         elif server_name == "semantic_scholar":
             settings["timeout"] = 20.0  # HTTP 서버지만 인증 처리 시간 필요
         elif server_name == "context7-mcp":
             settings["timeout"] = 60.0  # Upstash 서버는 초기화 시간 필요 (npx 기반)
-            settings["pre_init_delay"] = 3.0
         elif server_name == "parallel-search":
             settings["timeout"] = 60.0  # npx 기반 서버
-            settings["pre_init_delay"] = 3.0
         elif server_name == "unified-search-mcp-server":
             settings["timeout"] = 60.0
-            settings["pre_init_delay"] = 3.0
         elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
             settings["timeout"] = 60.0  # npx 기반 서버, API 키 검증 시간 필요
-            settings["pre_init_delay"] = 3.0
         elif server_name == "ddg_search":
             settings["timeout"] = 45.0  # uvx 기반 서버는 초기화 시간 필요
-            settings["pre_init_delay"] = 2.0  # uvx 패키지 다운로드 시간 고려
-            settings["post_init_delay"] = 1.0
         elif server_name in ["fetch", "docfork"]:
             settings["timeout"] = 60.0  # npx 기반 smithery 서버
-            settings["pre_init_delay"] = 3.0
+        elif server_name == "arxiv":
+            settings["timeout"] = 60.0  # npx 기반 arXiv MCP 서버
         
         # HTTP 서버는 빠르지만 여유 시간 확보
         if not is_stdio:
             settings["timeout"] = max(settings["timeout"], 20.0)  # 최소 20초
-            settings["pre_init_delay"] = 0.0
-            settings["post_init_delay"] = 0.0
         
         return settings
     
@@ -1136,12 +1125,6 @@ class UniversalMCPHub:
                     fastmcp_client = FastMCPClient(mcp_config)
                     self.fastmcp_clients[server_name] = fastmcp_client
                     logger.debug(f"[MCP][fastmcp.create] server={server_name} Created new FastMCP client")
-                
-                # pre_init_delay 적용 (npx 서버 등 프로세스 시작 대기)
-                pre_init_delay = server_settings.get("pre_init_delay", 0.0)
-                if pre_init_delay > 0:
-                    logger.debug(f"[MCP][init.delay] server={server_name} waiting {pre_init_delay}s before initialize...")
-                    await asyncio.sleep(pre_init_delay)
                 
                 # FastMCP Client를 Context Manager로 사용 (가이드에 따른 올바른 사용법)
                 try:
@@ -1363,6 +1346,12 @@ class UniversalMCPHub:
         try:
             logger.info("Initializing MCP Hub with MCP servers (no OpenRouter)...")
             
+            # 일괄 초기화 대기 시간 (agent 시작 초기에 모든 서버 준비 시간 확보)
+            batch_init_delay = float(os.getenv("MCP_BATCH_INIT_DELAY", "3.0"))  # 기본 3초
+            if batch_init_delay > 0:
+                logger.info(f"[MCP][init.batch] Waiting {batch_init_delay}s for batch initialization before connecting servers...")
+                await asyncio.sleep(batch_init_delay)
+            
             # MCP 서버 연결 (모든 서버) - 병렬 + 타임아웃 적용
             timeout_per_server = float(os.getenv("MCP_CONNECT_TIMEOUT", "60"))  # 서버당 최대 60초(환경변수로 조정, npx 서버 고려)
             max_concurrency = int(os.getenv("MCP_MAX_CONCURRENCY", "3"))  # 동시 연결 수 제한 (기본 3개)
@@ -1416,7 +1405,7 @@ class UniversalMCPHub:
                                 return name, False
                             
                             try:
-                                logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, pre_delay: {server_settings['pre_init_delay']}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
+                                logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
                                 # shield로 보호하여 외부 취소 방지
                                 ok = await asyncio.shield(
                                     self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
@@ -1940,6 +1929,114 @@ class UniversalMCPHub:
 
         logger.info(f"[MCP][exec.start] tool={tool_name} params_keys={list(parameters.keys())}")
         logger.info(f"[MCP][exec.start] parameters_preview={str(parameters)[:200]}...")
+        
+        # 학술 도구 라우팅 (arxiv, scholar) - MCP 서버 우선 사용
+        if tool_name in ["arxiv", "scholar"]:
+            logger.info(f"[MCP][exec.academic] Routing {tool_name} to _execute_academic_tool (MCP server first)")
+            try:
+                # 먼저 MCP 서버에서 시도
+                mcp_hub = get_mcp_hub()
+                
+                # MCP 서버 연결 확인
+                if not mcp_hub.mcp_sessions:
+                    logger.warning("No MCP servers connected, attempting to initialize...")
+                    try:
+                        await mcp_hub.initialize_mcp()
+                    except Exception as e:
+                        logger.warning(f"Failed to initialize MCP servers: {e}")
+                
+                # arXiv MCP 서버에서 시도
+                mcp_result = None
+                if tool_name == "arxiv":
+                    # arXiv MCP 서버 도구 찾기
+                    if "arxiv" in mcp_hub.mcp_sessions and "arxiv" in mcp_hub.mcp_tools_map:
+                        tools = mcp_hub.mcp_tools_map["arxiv"]
+                        arxiv_tool_name = None
+                        
+                        # arxiv_search, arxiv_get_paper 등 찾기
+                        for tool_key in tools.keys():
+                            tool_lower = tool_key.lower()
+                            if "search" in tool_lower or "query" in tool_lower:
+                                arxiv_tool_name = tool_key
+                                break
+                        
+                        if arxiv_tool_name:
+                            logger.info(f"Using arXiv MCP server with tool: {arxiv_tool_name}")
+                            mcp_result = await mcp_hub._execute_via_mcp_server(
+                                "arxiv",
+                                arxiv_tool_name,
+                                parameters
+                            )
+                
+                # MCP 결과가 있으면 사용, 없으면 로컬 fallback
+                if mcp_result:
+                    from src.core.mcp_integration import ToolResult
+                    tool_result = ToolResult(
+                        success=True,
+                        data=mcp_result if isinstance(mcp_result, dict) else {"result": mcp_result},
+                        execution_time=time.time() - start_time,
+                        confidence=0.9
+                    )
+                else:
+                    # 로컬 fallback
+                    from src.core.mcp_integration import _execute_academic_tool, ToolResult
+                    tool_result = await _execute_academic_tool(tool_name, parameters)
+                
+                execution_time = time.time() - start_time
+                logger.info(f"[MCP][exec.academic.success] {tool_name} routing succeeded: success={tool_result.success}")
+
+                # 도구 실행 결과 표시
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict) and 'results' in tool_result.data:
+                        result_count = len(tool_result.data['results'])
+                        result_summary = f"{result_count}개 논문 검색됨"
+                    else:
+                        result_summary = f"데이터 반환됨 ({type(tool_result.data).__name__})"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+
+                return {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "mcp_academic" if mcp_result else "local_academic"
+                }
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.academic.error] {tool_name} routing failed: {e}", exc_info=True)
+
+                # 도구 실행 실패 결과 표시
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"학술 도구 실행 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Academic tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0,
+                    "source": "academic_routing_failed"
+                }
         
         # g-search, tavily, exa는 먼저 라우팅 확인 (도구 찾기 전에)
         if tool_name in ["g-search", "tavily", "exa"]:

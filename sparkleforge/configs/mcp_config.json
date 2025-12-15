@@ -62,6 +62,41 @@
       "headers": {
         "Authorization": "Bearer ${SMITHERY_API_KEY}"
       }
+    },
+    "Google search console": {
+      "type": "http",
+      "url": "https://server.smithery.ai/google_search_console/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
+    },
+    "Paper Search": {
+      "type": "http",
+      "url": "https://server.smithery.ai/@adamamer20/paper-search-mcp-openai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
+    },
+    "TodoList": {
+      "type": "http",
+      "url": "https://server.smithery.ai/todoist/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
+    },
+    "arxiv": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-arxiv@latest"
+      ]
+    },
+    "kis MCP": {
+      "type": "http",
+      "url": "https://server.smithery.ai/@KISOpenAPI/kis-code-assistant-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     }
   }
 }

@@ -2036,10 +2036,13 @@ class AutonomousOrchestrator:
                 "WebSearch-MCP::web_search"  # 실제 MCP 도구
             ],
             ToolCategory.ACADEMIC: [
+                "arxiv::arxiv_search",  # arXiv MCP 서버 우선
+                "arxiv::arxiv_get_paper",  # arXiv MCP 서버
                 "semantic_scholar::papers-search-basic",
                 "semantic_scholar::paper-search-advanced",
                 "semantic_scholar::search-paper-title",
-                "semantic_scholar::search-arxiv"
+                "semantic_scholar::search-arxiv",
+                "arxiv"  # 로컬 fallback
             ],
             ToolCategory.DATA: [
                 "fetch::fetch_url",
