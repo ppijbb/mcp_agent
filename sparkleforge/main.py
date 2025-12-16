@@ -317,6 +317,16 @@ class AutonomousResearchSystem:
             logger.error(f"❌ Health Monitor initialization failed: {e}")
             raise
         
+        # ProcessManager 초기화 (프로세스 추적 및 종료 관리)
+        try:
+            from src.core.process_manager import get_process_manager
+            pm = get_process_manager()
+            # ProcessManager의 시그널 핸들러는 설치하지 않음 (main.py의 핸들러 사용)
+            # pm.initialize()는 호출하지 않음 - 시그널 핸들러 충돌 방지
+            logger.info("✅ ProcessManager initialized (signal handlers managed by main.py)")
+        except Exception as e:
+            logger.warning(f"⚠️ ProcessManager initialization failed: {e} - continuing without process tracking")
+        
         # Initialize signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -379,31 +389,42 @@ class AutonomousResearchSystem:
         try:
             logger.info("Performing graceful shutdown...")
             
-            # Health monitor 정지 (타임아웃 설정)
+            # ProcessManager를 통한 프로세스 종료 (우선 처리)
             try:
-                await asyncio.wait_for(self.health_monitor.stop_monitoring(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Health monitor stop timed out")
+                from src.core.process_manager import get_process_manager
+                pm = get_process_manager()
+                pm.abort()  # 모든 작업 중단 플래그 설정
+                killed = pm.kill_all()  # 모든 등록된 프로세스 종료
+                if killed > 0:
+                    logger.info(f"Killed {killed} registered processes")
             except Exception as e:
-                logger.debug(f"Error stopping health monitor: {e}")
+                logger.debug(f"Error killing processes: {e}")
             
-            # MCP Hub cleanup (타임아웃 설정)
+            # MCP Hub cleanup (타임아웃 단축: 10초 -> 3초)
             if self.config.mcp.enabled and self.mcp_hub:
                 try:
-                    # 신규 연결 차단
+                    # 신규 연결 차단 (즉시)
                     if hasattr(self.mcp_hub, 'start_shutdown'):
                         self.mcp_hub.start_shutdown()
                     # cleanup은 CancelledError를 발생시킬 수 있으므로 무시
                     try:
-                        await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=10.0)
+                        await asyncio.wait_for(self.mcp_hub.cleanup(), timeout=3.0)  # 타임아웃 단축
                     except asyncio.CancelledError:
                         logger.debug("MCP Hub cleanup was cancelled (normal during shutdown)")
                     except asyncio.TimeoutError:
-                        logger.warning("MCP Hub cleanup timed out")
+                        logger.warning("MCP Hub cleanup timed out (continuing shutdown)")
                 except asyncio.CancelledError:
                     logger.debug("MCP Hub cleanup setup was cancelled (normal during shutdown)")
                 except Exception as e:
                     logger.warning(f"Error cleaning up MCP Hub: {e}")
+            
+            # Health monitor 정지 (타임아웃 단축: 5초 -> 2초)
+            try:
+                await asyncio.wait_for(self.health_monitor.stop_monitoring(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning("Health monitor stop timed out (continuing shutdown)")
+            except Exception as e:
+                logger.debug(f"Error stopping health monitor: {e}")
             
             logger.info("✅ Graceful shutdown completed")
             

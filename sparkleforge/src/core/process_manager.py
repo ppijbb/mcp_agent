@@ -104,7 +104,21 @@ class ProcessManager:
         
         def handle_signal(signum, frame):
             """Handle shutdown signal"""
-            asyncio.create_task(self._handle_shutdown(signum))
+            # 시그널 핸들러는 동기 함수이므로 이벤트 루프 확인 후 태스크 생성
+            try:
+                loop = asyncio.get_running_loop()
+                # 중복 생성 방지
+                if not hasattr(self, '_shutdown_task') or self._shutdown_task is None or self._shutdown_task.done():
+                    def _schedule():
+                        self._shutdown_task = asyncio.create_task(self._handle_shutdown(signum))
+                    loop.call_soon_threadsafe(_schedule)
+            except RuntimeError:
+                # 이벤트 루프가 없으면 강제 종료
+                self.abort()
+                self.kill_all()
+                self.restore_terminal()
+                exit_code = 130 if signum == signal.SIGINT else 143
+                os._exit(exit_code)
         
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)

@@ -1135,13 +1135,16 @@ class UniversalMCPHub:
                     
                     # Context Manager로 사용하여 연결 테스트 및 도구 목록 가져오기
                     async with fastmcp_client:
-                        # 도구 목록 가져오기 (타임아웃 설정)
+                        # stopping 플래그 체크
+                        if self.stopping:
+                            logger.info(f"[MCP][skip.stopping] server={server_name} stopping flag is set, skipping connection")
+                            raise asyncio.CancelledError("Stopping flag is set")
+                        
+                        # 도구 목록 가져오기 (타임아웃 설정, shield 제거하여 취소 가능)
                         try:
-                            tools = await asyncio.shield(
-                                asyncio.wait_for(
-                                    fastmcp_client.list_tools(),
-                                    timeout=timeout
-                                )
+                            tools = await asyncio.wait_for(
+                                fastmcp_client.list_tools(),
+                                timeout=timeout
                             )
                         except asyncio.TimeoutError:
                             logger.warning(f"[MCP][list_tools.timeout] server={server_name} list_tools timeout after {timeout}s")
@@ -1149,10 +1152,10 @@ class UniversalMCPHub:
                         except asyncio.CancelledError as e:
                             if self.stopping:
                                 logger.info(f"[MCP][list_tools.cancelled] server={server_name} cancelled due to stopping flag")
-                                raise asyncio.CancelledError("Stopping flag is set")
+                                raise
                             else:
                                 logger.warning(f"[MCP][list_tools.cancelled] server={server_name} list_tools was cancelled unexpectedly")
-                                raise asyncio.TimeoutError(f"List tools cancelled (timeout: {timeout}s)")
+                                raise
                     
                     # 도구 정보 저장
                     tools_dict = {}
@@ -1274,12 +1277,27 @@ class UniversalMCPHub:
             # FastMCP Client 정리
             if server_name in self.fastmcp_clients:
                 try:
-                    # FastMCP Client는 context manager이므로 명시적 정리 불필요
-                    # 참조만 제거하면 됨
+                    fastmcp_client = self.fastmcp_clients[server_name]
+                    # FastMCP Client 명시적 종료 시도
+                    if hasattr(fastmcp_client, 'close'):
+                        try:
+                            await asyncio.wait_for(fastmcp_client.close(), timeout=0.5)
+                        except (asyncio.TimeoutError, Exception) as e:
+                            logger.debug(f"FastMCP client close timeout/error for {server_name}: {e}")
+                    elif hasattr(fastmcp_client, '__aexit__'):
+                        # Context manager의 __aexit__ 호출 시도
+                        try:
+                            await asyncio.wait_for(fastmcp_client.__aexit__(None, None, None), timeout=0.5)
+                        except (asyncio.TimeoutError, Exception) as e:
+                            logger.debug(f"FastMCP client __aexit__ timeout/error for {server_name}: {e}")
+                    # 참조 제거
                     del self.fastmcp_clients[server_name]
                     logger.debug(f"Removed FastMCP client for {server_name}")
                 except Exception as e:
                     logger.debug(f"Error removing FastMCP client for {server_name}: {e}")
+                    # 오류가 있어도 참조는 제거
+                    if server_name in self.fastmcp_clients:
+                        del self.fastmcp_clients[server_name]
             
             # 세션 먼저 제거 및 종료 (heartbeat 무한 루프 방지)
             if server_name in self.mcp_sessions:
@@ -1406,10 +1424,12 @@ class UniversalMCPHub:
                             
                             try:
                                 logger.info(f"Connecting to MCP server {name} (timeout: {server_timeout}s, attempt {retry_attempt + 1}/{max_connection_retries})...")
-                                # shield로 보호하여 외부 취소 방지
-                                ok = await asyncio.shield(
-                                    self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
-                                )
+                                # stopping 플래그 체크
+                                if self.stopping:
+                                    logger.info(f"[MCP][skip.stopping] server={name} stopping flag is set, skipping connection")
+                                    return name, False
+                                # shield 제거하여 취소 가능하도록 (stopping 플래그로 제어)
+                                ok = await self._connect_to_mcp_server(name, cfg, timeout=server_timeout)
                                 if ok:
                                     connection_success = True
                                     if retry_attempt > 0:
@@ -1605,11 +1625,15 @@ class UniversalMCPHub:
                             tool_config = get_agent_tool_config()
                             tool_timeout = tool_config.mcp_command_timeout
                             
-                            result = await asyncio.shield(
-                                asyncio.wait_for(
-                                    fastmcp_client.call_tool(tool_name, params),
-                                    timeout=tool_timeout
-                                )
+                            # stopping 플래그 체크
+                            if self.stopping:
+                                logger.info(f"[MCP][exec.skip] server={server_name} tool={tool_name} stopping flag is set, skipping execution")
+                                return None
+                            
+                            # shield 제거하여 취소 가능하도록 (stopping 플래그로 제어)
+                            result = await asyncio.wait_for(
+                                fastmcp_client.call_tool(tool_name, params),
+                                timeout=tool_timeout
                             )
                             
                             # FastMCP Client의 결과 처리
@@ -1835,15 +1859,43 @@ class UniversalMCPHub:
         # OpenRouter 클라이언트 사용 안 함
         self.openrouter_client = None
         
-        # FastMCP Client 정리
-        for server_name in list(self.fastmcp_clients.keys()):
+        # FastMCP Client 정리 (병렬로 빠르게 종료)
+        async def close_fastmcp_client(server_name: str, client: Any):
+            """FastMCP Client 종료 헬퍼"""
             try:
-                # FastMCP Client는 context manager이므로 명시적 정리 불필요
-                # 하지만 참조는 제거
-                del self.fastmcp_clients[server_name]
-                logger.debug(f"Removed FastMCP client for {server_name}")
+                # 명시적 종료 시도
+                if hasattr(client, 'close'):
+                    try:
+                        await asyncio.wait_for(client.close(), timeout=0.5)
+                    except (asyncio.TimeoutError, Exception):
+                        pass
+                elif hasattr(client, '__aexit__'):
+                    try:
+                        await asyncio.wait_for(client.__aexit__(None, None, None), timeout=0.5)
+                    except (asyncio.TimeoutError, Exception):
+                        pass
+                logger.debug(f"Closed FastMCP client for {server_name}")
             except Exception as e:
-                logger.debug(f"Error removing FastMCP client for {server_name}: {e}")
+                logger.debug(f"Error closing FastMCP client for {server_name}: {e}")
+        
+        # 모든 FastMCP Client를 병렬로 종료 (최대 1초 타임아웃)
+        if self.fastmcp_clients:
+            close_tasks = [
+                close_fastmcp_client(name, client)
+                for name, client in list(self.fastmcp_clients.items())
+            ]
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*close_tasks, return_exceptions=True),
+                    timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("FastMCP clients cleanup timed out (continuing)")
+            except Exception as e:
+                logger.debug(f"Error during parallel FastMCP cleanup: {e}")
+            finally:
+                # 참조는 무조건 제거
+                self.fastmcp_clients.clear()
         
         # 모든 MCP 서버 연결 해제 (역순으로 정리)
         server_names = list(self.mcp_sessions.keys())
@@ -1852,14 +1904,20 @@ class UniversalMCPHub:
                 # 세션 제거
                 if server_name in self.mcp_sessions:
                     session = self.mcp_sessions.get(server_name)
-                    # FastMCP Client인 경우 context manager이므로 명시적 shutdown 불필요
+                    # FastMCP Client인 경우 명시적 종료 시도
                     if session and isinstance(session, FastMCPClient) if FASTMCP_AVAILABLE else False:
-                        # FastMCP Client는 context manager로만 사용되므로 참조만 제거
-                        pass
+                        try:
+                            # FastMCP Client 명시적 종료
+                            if hasattr(session, 'close'):
+                                await asyncio.wait_for(session.close(), timeout=0.5)
+                            elif hasattr(session, '__aexit__'):
+                                await asyncio.wait_for(session.__aexit__(None, None, None), timeout=0.5)
+                        except (asyncio.TimeoutError, Exception) as e:
+                            logger.debug(f"FastMCP session close timeout/error for {server_name}: {e}")
                     elif session and hasattr(session, 'shutdown'):
                         # 기존 ClientSession 방식
                         try:
-                            await asyncio.wait_for(session.shutdown(), timeout=1.0)
+                            await asyncio.wait_for(session.shutdown(), timeout=0.5)  # 타임아웃 단축
                         except:
                             pass
                     del self.mcp_sessions[server_name]
