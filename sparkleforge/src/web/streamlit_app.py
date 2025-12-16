@@ -8,6 +8,7 @@ Streamlit Web Interface for SparkleForge - 인터랙티브 채팅 UI
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import asyncio
 import json
 import sys
@@ -27,6 +28,7 @@ sys.path.insert(0, str(project_root))
 from src.core.agent_orchestrator import AgentOrchestrator, AgentState
 from src.core.reliability import HealthMonitor
 from src.core.researcher_config import config
+from src.core.a2ui_handler import get_a2ui_handler
 
 import logging
 logger = logging.getLogger(__name__)
@@ -208,7 +210,26 @@ def chat_interface():
                 with st.chat_message("assistant", avatar="🤖"):
                     agent_name = msg.get("agent_name", "Agent")
                     st.caption(f"**{agent_name}**")
-                    st.write(msg["content"])
+                    
+                    # A2UI JSON 확인 (직접 저장된 것 또는 감지)
+                    content = msg["content"]
+                    a2ui_json = msg.get("a2ui_json")
+                    
+                    if not a2ui_json:
+                        # A2UI JSON이 없으면 감지 시도
+                        a2ui_handler = get_a2ui_handler()
+                        a2ui_json = a2ui_handler.detect_a2ui(content)
+                    
+                    if a2ui_json:
+                        # A2UI 렌더링
+                        render_a2ui(a2ui_json, height=500)
+                        # A2UI가 있으면 원본 텍스트는 숨기거나 축약 표시
+                        with st.expander("📋 원본 응답 보기", expanded=False):
+                            st.code(content, language="text")
+                    else:
+                        # 일반 텍스트 렌더링
+                        st.write(content)
+                    
                     if msg.get("timestamp"):
                         st.caption(msg["timestamp"])
             elif msg["role"] == "system":
@@ -233,13 +254,25 @@ def process_streaming_queue():
                 _, agent, message, activity_type = update
                 add_activity_log(agent, message, activity_type)
             elif update_type == "chat":
-                _, role, agent_name, content = update
-                st.session_state.chat_history.append({
-                    "role": role,
-                    "agent_name": agent_name,
-                    "content": content,
-                    "timestamp": datetime.now().strftime("%H:%M:%S")
-                })
+                if len(update) >= 5:
+                    # A2UI 포함된 메시지
+                    _, role, agent_name, content, a2ui_json = update
+                    st.session_state.chat_history.append({
+                        "role": role,
+                        "agent_name": agent_name,
+                        "content": content,
+                        "a2ui_json": a2ui_json,  # A2UI JSON 저장
+                        "timestamp": datetime.now().strftime("%H:%M:%S")
+                    })
+                else:
+                    # 일반 메시지
+                    _, role, agent_name, content = update
+                    st.session_state.chat_history.append({
+                        "role": role,
+                        "agent_name": agent_name,
+                        "content": content,
+                        "timestamp": datetime.now().strftime("%H:%M:%S")
+                    })
             elif update_type == "status":
                 _, status = update
                 st.session_state.research_status = status
@@ -480,11 +513,27 @@ async def execute_research_stream(query: str, session_id: str):
                         
                         # 최종 보고서
                         final_report = node_state.get('final_report')
+                        final_report_a2ui = node_state.get('final_report_a2ui')
+                        
                         if final_report:
                             st.session_state.streaming_queue.put(("log", "generator", f"최종 보고서 생성 완료 ({len(final_report)}자)", "complete"))
                             st.session_state.streaming_queue.put(("status", "completed"))
-                            # 채팅에 보고서 추가
-                            st.session_state.streaming_queue.put(("chat", "agent", "Generator", f"연구 보고서가 완성되었습니다:\n\n{final_report[:1000]}..."))
+                            
+                            # A2UI 우선 확인 (GeneratorAgent가 생성한 A2UI)
+                            a2ui_json = final_report_a2ui
+                            
+                            # A2UI가 없으면 감지 시도
+                            if not a2ui_json:
+                                a2ui_handler = get_a2ui_handler()
+                                a2ui_json = a2ui_handler.detect_a2ui(final_report)
+                            
+                            if a2ui_json:
+                                # A2UI가 있으면 A2UI로 렌더링
+                                st.session_state.streaming_queue.put(("chat", "agent", "Generator", final_report, a2ui_json))
+                            else:
+                                # 일반 텍스트
+                                st.session_state.streaming_queue.put(("chat", "agent", "Generator", f"연구 보고서가 완성되었습니다:\n\n{final_report[:1000]}..."))
+                            
                             # 결과 저장
                             st.session_state.streaming_queue.put(("save", query, final_report, session_id))
                         
@@ -531,6 +580,79 @@ def save_research_result(query: str, report: str, session_id: str):
         logger.error(f"Failed to save research result: {e}")
 
 
+def render_a2ui(a2ui_json: Dict[str, Any], height: int = 600):
+    """
+    A2UI JSON을 Streamlit에서 렌더링
+    
+    Args:
+        a2ui_json: A2UI JSON 객체
+        height: 렌더링 높이 (픽셀)
+    """
+    try:
+        # JavaScript와 CSS 파일 읽기
+        js_file = project_root / "src" / "web" / "a2ui_renderer.js"
+        css_file = project_root / "src" / "web" / "a2ui_styles.css"
+        
+        js_code = ""
+        css_code = ""
+        
+        if js_file.exists():
+            with open(js_file, 'r', encoding='utf-8') as f:
+                js_code = f.read()
+        
+        if css_file.exists():
+            with open(css_file, 'r', encoding='utf-8') as f:
+                css_code = f.read()
+        
+        # 고유한 컨테이너 ID 생성
+        container_id = f"a2ui-container-{int(time.time() * 1000)}"
+        
+        # HTML 생성
+        html = f"""
+        <style>
+        {css_code}
+        </style>
+        <div id="{container_id}"></div>
+        <script>
+        {js_code}
+        
+        // Initialize renderer
+        const renderer = new A2UIRenderer('{container_id}');
+        const a2uiData = {json.dumps(a2ui_json, ensure_ascii=False)};
+        
+        // Render A2UI
+        renderer.render(a2uiData);
+        
+        // Listen for actions and forward to Streamlit
+        window.addEventListener('message', function(event) {{
+            if (event.data && event.data.type === 'a2ui-action') {{
+                console.log('A2UI action received:', event.data);
+                // Forward to Streamlit component value
+                if (window.parent && window.parent.streamlit) {{
+                    try {{
+                        window.parent.streamlit.setComponentValue(event.data);
+                    }} catch (e) {{
+                        console.debug('Failed to send action to Streamlit:', e);
+                    }}
+                }}
+            }}
+        }});
+        
+        // Expose renderer for external access
+        window.a2uiRenderer = renderer;
+        </script>
+        """
+        
+        components.html(html, height=height, scrolling=True)
+        
+    except Exception as e:
+        logger.error(f"Failed to render A2UI: {e}", exc_info=True)
+        st.error(f"⚠️ A2UI 렌더링 실패: {str(e)}")
+        # Fallback: JSON 표시
+        with st.expander("A2UI JSON (렌더링 실패)", expanded=False):
+            st.json(a2ui_json)
+
+
 def handle_chat_message(prompt: str):
     """일반 채팅 메시지 처리."""
     # Agent 선택 (간단한 휴리스틱)
@@ -553,8 +675,17 @@ def handle_chat_message(prompt: str):
         try:
             response = loop.run_until_complete(get_agent_response(prompt, agent_type))
             
-            # 큐에 응답 추가
-            st.session_state.streaming_queue.put(("chat", "agent", agent_type.upper(), response))
+            # A2UI 감지
+            a2ui_handler = get_a2ui_handler()
+            a2ui_json = a2ui_handler.detect_a2ui(response)
+            
+            if a2ui_json:
+                # A2UI가 있으면 특별한 형식으로 전달
+                st.session_state.streaming_queue.put(("chat", "agent", agent_type.upper(), response, a2ui_json))
+            else:
+                # 일반 응답
+                st.session_state.streaming_queue.put(("chat", "agent", agent_type.upper(), response))
+            
             st.session_state.streaming_queue.put(("log", agent_type, "응답 생성 완료", "complete"))
         except Exception as e:
             error_msg = f"⚠️ 오류 발생: {str(e)}"

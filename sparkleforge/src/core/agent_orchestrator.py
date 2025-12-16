@@ -3436,6 +3436,21 @@ Provide a review with:
             logger.info(f"[{self.name}] ✅ Citation validation completed")
         
         state['final_report'] = report
+        
+        # A2UI 형식으로도 생성 시도 (선택적)
+        try:
+            from src.core.a2ui_generator import get_a2ui_generator
+            a2ui_generator = get_a2ui_generator()
+            a2ui_json = a2ui_generator.generate_research_report_a2ui(
+                query=state['user_query'],
+                verified_results=verified_results,
+                report_text=report
+            )
+            state['final_report_a2ui'] = a2ui_json
+            logger.info(f"[{self.name}] ✅ A2UI 형식 보고서 생성 완료")
+        except Exception as e:
+            logger.debug(f"[{self.name}] A2UI 생성 실패 (무시): {e}")
+            state['final_report_a2ui'] = None
         state['current_agent'] = self.name
         state['report_failed'] = False
         state['report_completeness'] = final_completeness  # 완성도 정보 저장
