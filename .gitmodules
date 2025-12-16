@@ -85,3 +85,6 @@
 [submodule "open_researcher/mdflow"]
 	path = open_researcher/mdflow
 	url = https://github.com/johnlindquist/mdflow.git
+[submodule "open_researcher/A2UI"]
+	path = open_researcher/A2UI
+	url = https://github.com/google/A2UI.git
