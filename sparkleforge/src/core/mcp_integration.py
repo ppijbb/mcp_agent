@@ -1027,17 +1027,114 @@ class UniversalMCPHub:
             exit_stack = AsyncExitStack()
             self.exit_stacks[server_name] = exit_stack
             
-            # FastMCP 기반 연결 (모든 서버를 HTTP로 처리)
-            # Smithery 기반 서버는 모두 HTTP로 연결
-            if not FASTMCP_AVAILABLE or FastMCPClient is None:
-                logger.error(f"FastMCP client not available for server {server_name}")
-                return False
+            # 서버 타입 확인 (stdio vs HTTP)
+            server_type = server_config.get("type", "stdio")
+            is_stdio = server_type == "stdio" or ("command" in server_config and "httpUrl" not in server_config and "url" not in server_config)
             
-            # 서버 설정을 FastMCP 형식으로 변환
-            base_url = server_config.get("httpUrl") or server_config.get("url")
-            if not base_url:
-                logger.error(f"No URL provided for MCP server {server_name}")
-                return False
+            if is_stdio:
+                # stdio 서버 연결 (FastMCP 지원)
+                if not FASTMCP_AVAILABLE or FastMCPClient is None:
+                    logger.error(f"FastMCP client not available for stdio server {server_name}")
+                    return False
+                
+                command = server_config.get("command")
+                args = server_config.get("args", [])
+                if not command:
+                    logger.error(f"No command provided for stdio server {server_name}")
+                    return False
+                
+                # FastMCP stdio 서버 설정
+                mcp_config = {
+                    "mcpServers": {
+                        server_name: {
+                            "command": command,
+                            "args": args
+                        }
+                    }
+                }
+                
+                logger.info(f"[MCP][stdio.connect] server={server_name} command={command} args={args}")
+                
+                try:
+                    # FastMCP Client 생성 (stdio)
+                    fastmcp_client = FastMCPClient(mcp_config)
+                    self.fastmcp_configs[server_name] = mcp_config
+                    
+                    # Context Manager로 사용하여 연결 테스트 및 도구 목록 가져오기
+                    try:
+                        async with fastmcp_client:
+                            # 도구 목록 가져오기 (타임아웃 설정)
+                            if self.stopping:
+                                raise asyncio.CancelledError("Stopping flag is set, skipping list_tools")
+                            
+                            tools_task = fastmcp_client.list_tools()
+                            if not self.stopping:
+                                tools = await asyncio.shield(asyncio.wait_for(tools_task, timeout=timeout))
+                            else:
+                                # If stopping, allow cancellation of the task
+                                tools = await asyncio.wait_for(tools_task, timeout=timeout)
+                            
+                            # 도구 등록
+                            for tool in tools:
+                                tool_name_full = f"{server_name}::{tool.name}"
+                                tool_info = MCPToolInfo(
+                                    name=tool_name_full,
+                                    description=tool.description or "",
+                                    mcp_server=server_name,
+                                    parameters=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+                                )
+                                self.registry.register_tool(tool_info)
+                                
+                                if server_name not in self.mcp_tools_map:
+                                    self.mcp_tools_map[server_name] = {}
+                                self.mcp_tools_map[server_name][tool.name] = tool_info
+                            
+                            logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name}, tools: {len(tools)}")
+                            
+                            # FastMCP Client 저장 (context manager 밖에서도 사용 가능하도록)
+                            self.fastmcp_clients[server_name] = fastmcp_client
+                            self.mcp_sessions[server_name] = fastmcp_client
+                            
+                            self.connection_diagnostics[server_name].update({
+                                "ok": True,
+                                "stage": "connected",
+                                "tools_count": len(tools)
+                            })
+                            
+                            return True
+                    except asyncio.CancelledError:
+                        logger.debug(f"[MCP][stdio.connect] Connection cancelled for {server_name}")
+                        raise
+                    except Exception as e:
+                        logger.error(f"[MCP][stdio.connect] Failed to connect to {server_name}: {e}", exc_info=True)
+                        self.connection_diagnostics[server_name].update({
+                            "ok": False,
+                            "error": str(e),
+                            "stage": "failed"
+                        })
+                        return False
+                        
+                except Exception as e:
+                    logger.error(f"[MCP][stdio.connect] Error setting up stdio connection for {server_name}: {e}", exc_info=True)
+                    self.connection_diagnostics[server_name].update({
+                        "ok": False,
+                        "error": str(e),
+                        "stage": "failed"
+                    })
+                    return False
+            else:
+                # HTTP 서버 연결 (기존 로직)
+                # FastMCP 기반 연결 (모든 서버를 HTTP로 처리)
+                # Smithery 기반 서버는 모두 HTTP로 연결
+                if not FASTMCP_AVAILABLE or FastMCPClient is None:
+                    logger.error(f"FastMCP client not available for server {server_name}")
+                    return False
+                
+                # 서버 설정을 FastMCP 형식으로 변환
+                base_url = server_config.get("httpUrl") or server_config.get("url")
+                if not base_url:
+                    logger.error(f"No URL provided for MCP server {server_name}")
+                    return False
             
             # Headers 구성 (환경 변수 치환 포함)
             headers = server_config.get("headers", {}).copy()
@@ -1269,6 +1366,86 @@ class UniversalMCPHub:
                 await self._disconnect_from_mcp_server(server_name)
             except:
                 pass
+            return False
+    
+    async def _register_dynamic_server(
+        self,
+        server_name: str,
+        server_path: Path
+    ) -> bool:
+        """
+        동적으로 생성된 MCP 서버를 등록하고 시작.
+        
+        Args:
+            server_name: 서버 이름
+            server_path: 서버 파일 경로
+            
+        Returns:
+            등록 성공 여부
+        """
+        try:
+            logger.info(f"[MCP][builder.register] Registering dynamic server: {server_name}")
+            
+            # 서버 설정 생성 (stdio 방식)
+            server_config = {
+                "type": "stdio",
+                "command": "python",
+                "args": [str(server_path)]
+            }
+            
+            # mcp_server_configs에 추가
+            self.mcp_server_configs[server_name] = server_config
+            
+            # mcp_config.json에도 추가 (선택적, 영구 저장)
+            try:
+                config_file = project_root / "configs" / "mcp_config.json"
+                if config_file.exists():
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                    
+                    if "mcpServers" not in config_data:
+                        config_data["mcpServers"] = {}
+                    
+                    # 동적 서버 추가 (기존 서버와 충돌 방지)
+                    if server_name not in config_data["mcpServers"]:
+                        config_data["mcpServers"][server_name] = server_config
+                        
+                        # 백업 후 저장
+                        backup_file = config_file.with_suffix('.json.bak')
+                        if not backup_file.exists():
+                            import shutil
+                            shutil.copy2(config_file, backup_file)
+                        
+                        with open(config_file, 'w', encoding='utf-8') as f:
+                            json.dump(config_data, f, indent=2, ensure_ascii=False)
+                        logger.debug(f"[MCP][builder.register] Added {server_name} to mcp_config.json")
+            except Exception as config_error:
+                logger.warning(f"[MCP][builder.register] Failed to update mcp_config.json: {config_error}")
+                # 계속 진행 (메모리에는 등록됨)
+            
+            # 서버 연결 시도
+            connected = await self._connect_to_mcp_server(server_name, server_config, timeout=30.0)
+            
+            if connected:
+                logger.info(f"[MCP][builder.register] ✅ Dynamic server registered and connected: {server_name}")
+                
+                # ProcessManager에 등록 (서버 프로세스 추적)
+                try:
+                    from src.core.process_manager import get_process_manager
+                    pm = get_process_manager()
+                    # 서버 프로세스는 _connect_to_mcp_server에서 시작되므로 여기서는 로깅만
+                    logger.debug(f"[MCP][builder.register] Server {server_name} process will be tracked by ProcessManager")
+                except Exception as pm_error:
+                    logger.debug(f"[MCP][builder.register] ProcessManager registration skipped: {pm_error}")
+                
+                return True
+            else:
+                logger.error(f"[MCP][builder.register] ❌ Failed to connect to dynamic server: {server_name}")
+                # 등록은 했지만 연결 실패 - 설정은 유지 (재시도 가능)
+                return False
+                
+        except Exception as e:
+            logger.error(f"[MCP][builder.register] Failed to register dynamic server {server_name}: {e}", exc_info=True)
             return False
     
     async def _disconnect_from_mcp_server(self, server_name: str):
@@ -1952,6 +2129,17 @@ class UniversalMCPHub:
         except:
             pass
         
+        # 동적으로 생성된 서버 정리 (auto_cleanup이 활성화된 경우)
+        if self.config.builder_auto_cleanup:
+            try:
+                from src.core.mcp_server_builder import get_mcp_server_builder
+                builder = get_mcp_server_builder()
+                # 빌드된 서버 디렉토리 정리 (선택적)
+                # 실제 서버 프로세스는 ProcessManager가 관리하므로 여기서는 로깅만
+                logger.debug("[MCP][cleanup] Dynamic servers will be cleaned up by ProcessManager")
+            except Exception as e:
+                logger.debug(f"[MCP][cleanup] Builder cleanup skipped: {e}")
+        
         logger.info("MCP Hub cleanup completed")
 
     def start_shutdown(self):
@@ -2380,6 +2568,40 @@ class UniversalMCPHub:
             tool_info = self.tools.get(tool_name)
         
         if not tool_info:
+            # MCP Builder를 통한 자동 서버 생성 시도
+            if self.config.builder_enabled:
+                logger.info(f"[MCP][builder] Tool '{tool_name}' not found, attempting auto-build...")
+                try:
+                    from src.core.mcp_server_builder import get_mcp_server_builder
+                    builder = get_mcp_server_builder()
+                    
+                    # 서버 빌드
+                    build_result = await builder.build_mcp_server(
+                        tool_name=tool_name,
+                        parameters=parameters,
+                        error_context=None
+                    )
+                    
+                    if build_result.get("success"):
+                        server_name = build_result["server_name"]
+                        server_path = build_result["server_path"]
+                        
+                        logger.info(f"[MCP][builder] Server built successfully: {server_name}")
+                        
+                        # 동적 서버 등록
+                        registered = await self._register_dynamic_server(server_name, server_path)
+                        
+                        if registered:
+                            logger.info(f"[MCP][builder] Server registered: {server_name}, retrying tool execution...")
+                            # 도구 실행 재시도
+                            return await self.execute_tool(tool_name, parameters)
+                        else:
+                            logger.warning(f"[MCP][builder] Failed to register server: {server_name}")
+                    else:
+                        logger.warning(f"[MCP][builder] Server build failed: {build_result.get('error')}")
+                except Exception as builder_error:
+                    logger.error(f"[MCP][builder] Builder error: {builder_error}", exc_info=True)
+            
             # 사용 가능한 모든 tool 목록 로깅
             available_tools = self.registry.get_all_tool_names()
             execution_time = time.time() - start_time
@@ -2719,6 +2941,40 @@ class UniversalMCPHub:
                         "confidence": 0.0,
                         "source": "local"
                     }
+            
+            # MCP 도구도 로컬 도구도 아닌 경우 MCP Builder 시도
+            if self.config.builder_enabled:
+                logger.info(f"[MCP][builder] Tool '{tool_name}' not available, attempting auto-build...")
+                try:
+                    from src.core.mcp_server_builder import get_mcp_server_builder
+                    builder = get_mcp_server_builder()
+                    
+                    # 서버 빌드
+                    build_result = await builder.build_mcp_server(
+                        tool_name=tool_name,
+                        parameters=parameters,
+                        error_context=f"Tool not found in MCP servers or local tools"
+                    )
+                    
+                    if build_result.get("success"):
+                        server_name = build_result["server_name"]
+                        server_path = build_result["server_path"]
+                        
+                        logger.info(f"[MCP][builder] Server built successfully: {server_name}")
+                        
+                        # 동적 서버 등록
+                        registered = await self._register_dynamic_server(server_name, server_path)
+                        
+                        if registered:
+                            logger.info(f"[MCP][builder] Server registered: {server_name}, retrying tool execution...")
+                            # 도구 실행 재시도
+                            return await self.execute_tool(tool_name, parameters)
+                        else:
+                            logger.warning(f"[MCP][builder] Failed to register server: {server_name}")
+                    else:
+                        logger.warning(f"[MCP][builder] Server build failed: {build_result.get('error')}")
+                except Exception as builder_error:
+                    logger.error(f"[MCP][builder] Builder error: {builder_error}", exc_info=True)
             
             # MCP 도구도 로컬 도구도 아닌 경우 에러 반환
             error_msg = f"Tool '{tool_name}' is not available (neither MCP nor local)"

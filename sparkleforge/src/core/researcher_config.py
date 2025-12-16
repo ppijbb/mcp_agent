@@ -155,6 +155,12 @@ class MCPConfig:
     code_tools: List[str]
     academic_tools: List[str]
     business_tools: List[str]
+    
+    # MCP Server Builder configuration - Optional with defaults
+    builder_enabled: bool = True
+    builder_temp_dir: str = "temp/mcp_servers"
+    builder_auto_cleanup: bool = True
+    builder_cache_enabled: bool = True
 
 
 @dataclass
@@ -627,7 +633,11 @@ def load_config_from_env() -> ResearcherSystemConfig:
         data_tools=get_required_list_env("MCP_DATA_TOOLS"),
         code_tools=get_required_list_env("MCP_CODE_TOOLS"),
         academic_tools=get_required_list_env("MCP_ACADEMIC_TOOLS"),
-        business_tools=get_required_list_env("MCP_BUSINESS_TOOLS")
+        business_tools=get_required_list_env("MCP_BUSINESS_TOOLS"),
+        builder_enabled=get_optional_env("MCP_BUILDER_ENABLED", True, bool),
+        builder_temp_dir=get_optional_env("MCP_BUILDER_TEMP_DIR", "temp/mcp_servers"),
+        builder_auto_cleanup=get_optional_env("MCP_BUILDER_AUTO_CLEANUP", True, bool),
+        builder_cache_enabled=get_optional_env("MCP_BUILDER_CACHE_ENABLED", True, bool)
     )
     
     # Load Compression configuration
