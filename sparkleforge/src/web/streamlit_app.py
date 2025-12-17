@@ -234,6 +234,9 @@ def chat_interface():
                         st.caption(msg["timestamp"])
             elif msg["role"] == "system":
                 st.info(f"ℹ️ {msg['content']}")
+        
+        # 대기 중인 질문 표시 및 응답 수집
+        display_pending_questions()
     
     # 채팅 입력
     if prompt := st.chat_input("Agent에게 질문하거나 연구를 시작하세요..."):
@@ -511,6 +514,37 @@ async def execute_research_stream(query: str, session_id: str):
                             elif verified:
                                 st.session_state.streaming_queue.put(("log", "verifier", f"검증 완료", "complete"))
                         
+                        # 대기 중인 질문 확인
+                        pending_questions = node_state.get('pending_questions', [])
+                        waiting_for_user = node_state.get('waiting_for_user', False)
+                        
+                        if waiting_for_user and pending_questions:
+                            # 질문을 채팅에 추가
+                            from src.core.a2ui_generator import get_a2ui_generator
+                            a2ui_generator = get_a2ui_generator()
+                            
+                            for question in pending_questions:
+                                # A2UI 형식으로 질문 생성
+                                question_a2ui = a2ui_generator.generate_question_a2ui(question)
+                                
+                                # 질문 텍스트
+                                question_text = f"❓ {question.get('text', '질문이 있습니다.')}"
+                                
+                                st.session_state.streaming_queue.put((
+                                    "chat",
+                                    "agent",
+                                    "System",
+                                    question_text,
+                                    question_a2ui
+                                ))
+                                
+                                st.session_state.streaming_queue.put((
+                                    "log",
+                                    "system",
+                                    f"질문 생성: {question.get('text', '')[:50]}...",
+                                    "progress"
+                                ))
+                        
                         # 최종 보고서
                         final_report = node_state.get('final_report')
                         final_report_a2ui = node_state.get('final_report_a2ui')
@@ -556,6 +590,115 @@ async def execute_research_stream(query: str, session_id: str):
         st.session_state.streaming_queue.put(("log", "system", f"오류 발생: {str(e)}", "error"))
         # 채팅에 오류 메시지 추가
         st.session_state.streaming_queue.put(("chat", "system", None, f"❌ 오류 발생: {str(e)}"))
+
+
+def display_pending_questions():
+    """대기 중인 질문 표시 및 응답 수집"""
+    # Orchestrator에서 대기 중인 질문 확인
+    if st.session_state.get('orchestrator'):
+        try:
+            # 현재 상태 확인 (간단한 방법: session_state에 저장)
+            if 'pending_questions' in st.session_state and st.session_state.get('waiting_for_user', False):
+                questions = st.session_state.get('pending_questions', [])
+                
+                if questions:
+                    st.markdown("---")
+                    st.info("❓ **질문이 있습니다. 답변해주세요.**")
+                    
+                    for question in questions:
+                        with st.container():
+                            question_id = question.get('id', '')
+                            question_text = question.get('text', '')
+                            question_format = question.get('format', 'natural_language')
+                            
+                            st.markdown(f"**{question_text}**")
+                            
+                            # 응답 수집
+                            response_key = f"question_response_{question_id}"
+                            
+                            if question_format == 'choice':
+                                options = question.get('options', [])
+                                option_labels = [opt.get('label', opt.get('value', '')) for opt in options]
+                                option_values = [opt.get('value', opt.get('label', '')) for opt in options]
+                                
+                                selected_index = st.radio(
+                                    "선택:",
+                                    options=option_labels,
+                                    key=f"choice_{question_id}",
+                                    horizontal=False
+                                )
+                                
+                                if selected_index:
+                                    selected_value = option_values[option_labels.index(selected_index)]
+                                    st.session_state[response_key] = selected_value
+                            else:
+                                # 자연어 응답
+                                user_response = st.text_area(
+                                    "답변:",
+                                    key=f"text_{question_id}",
+                                    height=100
+                                )
+                                if user_response:
+                                    st.session_state[response_key] = user_response
+                            
+                            # 제출 버튼
+                            if st.button("제출", key=f"submit_{question_id}", type="primary"):
+                                response = st.session_state.get(response_key)
+                                
+                                if response:
+                                    # 응답 처리
+                                    submit_question_response(question_id, response, question)
+                                    st.success("✅ 응답이 제출되었습니다.")
+                                    st.rerun()
+                                else:
+                                    st.warning("⚠️ 답변을 입력해주세요.")
+        except Exception as e:
+            logger.debug(f"Error displaying pending questions: {e}")
+
+
+def submit_question_response(question_id: str, response: Any, question: Dict[str, Any]):
+    """질문 응답 제출 및 처리"""
+    try:
+        from src.core.human_clarification_handler import get_clarification_handler
+        clarification_handler = get_clarification_handler()
+        
+        # 응답 처리
+        processed = clarification_handler.process_user_response(
+            question_id,
+            response,
+            {'question': question}
+        )
+        
+        if processed.get('validated', False):
+            # Orchestrator에 응답 전달
+            if st.session_state.get('orchestrator'):
+                # user_responses에 저장
+                if 'user_responses' not in st.session_state:
+                    st.session_state['user_responses'] = {}
+                
+                st.session_state['user_responses'][question_id] = processed
+                
+                # pending_questions에서 제거
+                if 'pending_questions' in st.session_state:
+                    st.session_state['pending_questions'] = [
+                        q for q in st.session_state['pending_questions']
+                        if q.get('id') != question_id
+                    ]
+                
+                # 모든 질문에 응답했으면 대기 상태 해제
+                if not st.session_state.get('pending_questions'):
+                    st.session_state['waiting_for_user'] = False
+                    
+                    # 워크플로우 재개를 위한 플래그
+                    st.session_state['workflow_resume'] = True
+                    
+                    logger.info(f"✅ All questions answered. Resuming workflow.")
+        else:
+            st.error(f"❌ 응답 검증 실패: {processed.get('clarification', {}).get('error', 'Unknown error')}")
+            
+    except Exception as e:
+        logger.error(f"Error submitting question response: {e}")
+        st.error(f"❌ 응답 제출 실패: {str(e)}")
 
 
 def save_research_result(query: str, report: str, session_id: str):

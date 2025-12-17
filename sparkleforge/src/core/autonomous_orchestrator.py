@@ -91,6 +91,13 @@ class ResearchState(TypedDict):
     final_synthesis: Dict[str, Any]
     deliverable_path: Optional[str]
     synthesis_metadata: Dict[str, Any]
+    
+    # Human-in-the-loop 관련 필드
+    pending_questions: List[Dict[str, Any]]  # 대기 중인 질문들
+    user_responses: Dict[str, Any]  # 질문 ID -> 사용자 응답
+    clarification_context: Dict[str, Any]  # 명확화된 정보
+    waiting_for_user: bool  # 사용자 응답 대기 중인지
+    autopilot_mode: bool  # CLI 모드에서 자동 선택 모드
     context_window_usage: Dict[str, Any]
     
     # Control Flow
@@ -157,9 +164,18 @@ class AutonomousOrchestrator:
         
         # Planning Agent 워크플로우
         workflow.add_edge("analyze_objectives", "planning_agent")
-        workflow.add_edge("planning_agent", "verify_plan")
         
-        # Plan 검증 후 조건부 분기
+        # Planning Agent 후 조건부 분기 (사용자 응답 대기 여부 확인)
+        workflow.add_conditional_edges(
+            "planning_agent",
+            lambda state: "waiting_for_clarification" if state.get("waiting_for_user", False) else "verify_plan",
+            {
+                "waiting_for_clarification": "planning_agent",  # 사용자 응답 대기 중이면 다시 planning_agent로
+                "verify_plan": "verify_plan"
+            }
+        )
+        
+        # Plan 검증 후 조건부 분기 (재시도 로직)
         workflow.add_conditional_edges(
             "verify_plan",
             lambda state: "approved" if state.get("plan_approved", False) else "planning_agent",
@@ -343,14 +359,148 @@ class AutonomousOrchestrator:
         logger.info(f"📊 Complexity Score: {state.get('complexity_score', 5.0)}")
         logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
         
+        # 사용자 응답 대기 중이면 응답 처리
+        if state.get("waiting_for_user", False):
+            user_responses = state.get("user_responses", {})
+            if user_responses:
+                # 응답이 있으면 명확화 정보 적용
+                from src.core.human_clarification_handler import get_clarification_handler
+                clarification_handler = get_clarification_handler()
+                
+                for question_id, response_data in user_responses.items():
+                    clarification = response_data.get("clarification", {})
+                    # 계획에 명확화 정보 적용 (나중에 사용)
+                    state["clarification_context"] = state.get("clarification_context", {})
+                    state["clarification_context"][question_id] = clarification
+                
+                # 대기 상태 해제
+                state["waiting_for_user"] = False
+                state["pending_questions"] = []
+                logger.info("✅ User responses processed, continuing planning")
+        
         try:
+            # 불명확한 부분 감지 (사용자 응답이 없을 때만)
+            if not state.get("clarification_context"):
+                from src.core.human_clarification_handler import get_clarification_handler
+                clarification_handler = get_clarification_handler()
+                
+                ambiguities = await clarification_handler.detect_ambiguities(
+                    state.get('user_request', ''),
+                    {
+                        'objectives': state.get('analyzed_objectives', []),
+                        'domain': state.get('domain_analysis', {}),
+                        'scope': state.get('scope_analysis', {})
+                    }
+                )
+                
+                if ambiguities:
+                    # CLI 모드 감지 (더 정확한 방법)
+                    import sys
+                    is_cli_mode = (
+                        not hasattr(sys, 'ps1') and  # Interactive shell이 아님
+                        'streamlit' not in sys.modules and  # Streamlit이 로드되지 않음
+                        not any('streamlit' in str(arg) for arg in sys.argv)  # Streamlit 실행 인자가 없음
+                    )
+                    
+                    # CLI 모드이거나 autopilot 모드인 경우 자동 선택
+                    if is_cli_mode or state.get("autopilot_mode", False):
+                        logger.info("🤖 CLI/Autopilot mode detected - auto-selecting responses")
+                        
+                        # 각 질문에 대해 자동 응답 생성
+                        user_responses = {}
+                        clarification_context = {}
+                        
+                        for ambiguity in ambiguities:
+                            question = await clarification_handler.generate_question(
+                                ambiguity,
+                                {'user_request': state.get('user_request', '')}
+                            )
+                            
+                            # History 기반 자동 선택
+                            shared_memory = getattr(self, 'hybrid_storage', None)
+                            if not shared_memory:
+                                try:
+                                    from src.storage.hybrid_storage import HybridStorage
+                                    shared_memory = HybridStorage()
+                                except:
+                                    shared_memory = None
+                            
+                            auto_response = await clarification_handler.auto_select_response(
+                                question,
+                                {'user_request': state.get('user_request', '')},
+                                shared_memory
+                            )
+                            
+                            # 응답 처리
+                            processed = await clarification_handler.process_user_response(
+                                question['id'],
+                                auto_response,
+                                {'question': question}
+                            )
+                            
+                            if processed.get('validated', False):
+                                user_responses[question['id']] = processed
+                                clarification_context[question['id']] = processed.get('clarification', {})
+                                
+                                logger.info(f"✅ Auto-selected response for {question['type']}: {auto_response}")
+                        
+                        # 명확화 정보를 state에 저장하고 계속 진행
+                        state['clarification_context'] = clarification_context
+                        state['user_responses'] = user_responses
+                        state['waiting_for_user'] = False
+                        state['pending_questions'] = []
+                        state['autopilot_mode'] = True
+                        
+                        logger.info(f"✅ Auto-processed {len(user_responses)} clarifications in autopilot mode")
+                    else:
+                        # 웹 모드: 사용자에게 질문
+                        questions = []
+                        for ambiguity in ambiguities:
+                            question = await clarification_handler.generate_question(
+                                ambiguity,
+                                {'user_request': state.get('user_request', '')}
+                            )
+                            questions.append(question)
+                        
+                        # 사용자 응답 대기 상태로 전환
+                        state['pending_questions'] = questions
+                        state['waiting_for_user'] = True
+                        state['current_step'] = 'waiting_for_clarification'
+                        state['user_responses'] = {}
+                        
+                        logger.info(f"❓ Generated {len(questions)} questions for user clarification")
+                        logger.info("⏸️ Waiting for user responses...")
+                        
+                        # 출력 로깅
+                        key_changes = {
+                            "pending_questions_count": len(questions),
+                            "waiting_for_user": True,
+                            "current_step": "waiting_for_clarification"
+                        }
+                        self._log_node_output("planning_agent", state, key_changes)
+                        
+                        return state
+            
             # 1. MCP 도구로 사전 조사
             preliminary_research = await self._conduct_preliminary_research(state)
             logger.info(f"🔍 Preliminary research completed: {preliminary_research.get('sources_count', 0)} sources")
             
-            # 2. Task 분해 (복잡도 기반)
+            # 2. Task 분해 (복잡도 기반) - 명확화 정보 반영
             tasks = await self._decompose_into_tasks(state, preliminary_research)
             logger.info(f"📋 Tasks decomposed: {len(tasks)} tasks")
+            
+            # 명확화 정보를 작업에 적용
+            clarification_context = state.get("clarification_context", {})
+            if clarification_context:
+                from src.core.human_clarification_handler import get_clarification_handler
+                clarification_handler = get_clarification_handler()
+                
+                for task in tasks:
+                    for question_id, clarification in clarification_context.items():
+                        task = clarification_handler.apply_clarification(
+                            clarification,
+                            task
+                        )
             
             # 3. Agent 동적 할당 (복잡도 기반)
             agent_assignments = await self._assign_agents_dynamically(tasks, state)
@@ -2405,6 +2555,14 @@ class AutonomousOrchestrator:
         """연구 실행 (Production-Grade Reliability)."""
         logger.info(f"🚀 Starting research with 8 core innovations: {user_request}")
         
+        # CLI 모드 감지 및 autopilot 모드 설정
+        import sys
+        is_cli_mode = (
+            not hasattr(sys, 'ps1') and  # Interactive shell이 아님
+            'streamlit' not in sys.modules and  # Streamlit이 로드되지 않음
+            not any('streamlit' in str(arg) for arg in sys.argv)  # Streamlit 실행 인자가 없음
+        )
+        
         # 초기 상태 설정
         initial_state = ResearchState(
             user_request=user_request,
@@ -2441,6 +2599,11 @@ class AutonomousOrchestrator:
             deliverable_path=None,
             synthesis_metadata={},
             context_window_usage={},
+            pending_questions=[],
+            user_responses={},
+            clarification_context={},
+            waiting_for_user=False,
+            autopilot_mode=is_cli_mode,  # CLI 모드이면 autopilot 활성화
             current_step="analyze_objectives",
             iteration=0,
             max_iterations=10,
@@ -2449,6 +2612,9 @@ class AutonomousOrchestrator:
             innovation_stats={},
             messages=[]
         )
+        
+        if is_cli_mode:
+            logger.info("🤖 CLI mode detected - Autopilot mode enabled (auto-selecting responses)")
 
         # LangGraph 워크플로우 실행
         logger.info("🔄 Executing LangGraph workflow with 8 core innovations")

@@ -360,6 +360,140 @@ class A2UIGenerator:
 _generator_instance: Optional[A2UIGenerator] = None
 
 
+    def generate_question_a2ui(
+        self,
+        question: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        질문을 A2UI 형식으로 생성
+        
+        Args:
+            question: 질문 정보
+                {
+                    "id": "question_id",
+                    "text": "질문 텍스트",
+                    "format": "choice" or "natural_language",
+                    "options": [...],  # 선택지 형식인 경우
+                    "type": "...",
+                    "field": "..."
+                }
+            
+        Returns:
+            A2UI JSON 메시지
+        """
+        surface_id = f"question-{question['id']}"
+        
+        if question['format'] == 'choice':
+            # ChoicePicker 사용
+            components = [
+                {
+                    "id": "root",
+                    "component": "Column",
+                    "children": ["question-text", "choice-picker", "submit-button"]
+                },
+                {
+                    "id": "question-text",
+                    "component": "Text",
+                    "text": question['text'],
+                    "usageHint": "h3"
+                },
+                {
+                    "id": "choice-picker",
+                    "component": "ChoicePicker",
+                    "label": "선택하세요",
+                    "usageHint": "mutuallyExclusive",
+                    "options": [
+                        {"label": opt['label'], "value": opt['value']}
+                        for opt in question.get('options', [])
+                    ],
+                    "value": {"path": "selected_value"}
+                },
+                {
+                    "id": "submit-button",
+                    "component": "Button",
+                    "child": "submit-text",
+                    "primary": True,
+                    "action": {
+                        "name": "submit_answer",
+                        "context": {
+                            "question_id": question['id'],
+                            "response_path": {"path": "selected_value"}
+                        }
+                    }
+                },
+                {
+                    "id": "submit-text",
+                    "component": "Text",
+                    "text": "제출"
+                }
+            ]
+            
+            data_model = {
+                "selected_value": []
+            }
+        else:
+            # TextField 사용
+            components = [
+                {
+                    "id": "root",
+                    "component": "Column",
+                    "children": ["question-text", "text-field", "submit-button"]
+                },
+                {
+                    "id": "question-text",
+                    "component": "Text",
+                    "text": question['text'],
+                    "usageHint": "h3"
+                },
+                {
+                    "id": "text-field",
+                    "component": "TextField",
+                    "label": "답변",
+                    "text": {"path": "user_response"},
+                    "usageHint": "longText"
+                },
+                {
+                    "id": "submit-button",
+                    "component": "Button",
+                    "child": "submit-text",
+                    "primary": True,
+                    "action": {
+                        "name": "submit_answer",
+                        "context": {
+                            "question_id": question['id'],
+                            "response_path": {"path": "user_response"}
+                        }
+                    }
+                },
+                {
+                    "id": "submit-text",
+                    "component": "Text",
+                    "text": "제출"
+                }
+            ]
+            
+            data_model = {
+                "user_response": ""
+            }
+        
+        return {
+            "createSurface": {
+                "surfaceId": surface_id,
+                "catalogId": self.catalog_id
+            },
+            "updateComponents": {
+                "surfaceId": surface_id,
+                "components": components
+            },
+            "updateDataModel": {
+                "surfaceId": surface_id,
+                "path": "/",
+                "op": "replace",
+                "value": data_model
+            }
+        }
+
+
 def get_a2ui_generator() -> A2UIGenerator:
     """A2UIGenerator 싱글톤 인스턴스 반환"""
     global _generator_instance

@@ -139,6 +139,12 @@ class AgentState(TypedDict):
     research_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
     verified_results: Annotated[list, override_reducer]  # Changed: supports both dict and str
     final_report: Optional[str]
+    
+    # Human-in-the-loop 관련 필드
+    pending_questions: Optional[List[Dict[str, Any]]]  # 대기 중인 질문들
+    user_responses: Optional[Dict[str, Any]]  # 질문 ID -> 사용자 응답
+    clarification_context: Optional[Dict[str, Any]]  # 명확화된 정보
+    waiting_for_user: Optional[bool]  # 사용자 응답 대기 중인지
     current_agent: Optional[str]
     iteration: int
     session_id: Optional[str]
@@ -1283,6 +1289,85 @@ Return only the queries, one per line, without numbering or bullets."""
                     )
                     search_results = filtered_results
                     logger.info(f"[{self.name}] ✅ Relevance filtering completed: {len(search_results)} relevant results (from {len(search_results) + (len(search_results) - len(filtered_results)) if len(filtered_results) < len(search_results) else 0} total)")
+                    
+                    # 의문점 감지 (검색 결과가 모호하거나 사용자 선호도가 필요한 경우)
+                    if len(filtered_results) > 10 or len(filtered_results) == 0:
+                        # 결과가 너무 많거나 없으면 사용자에게 질문
+                        from src.core.human_clarification_handler import get_clarification_handler
+                        clarification_handler = get_clarification_handler()
+                        
+                        # 의문점 생성
+                        ambiguity = {
+                            "type": "resource_constraint" if len(filtered_results) > 10 else "scope_depth",
+                            "field": "result_count",
+                            "description": f"Found {len(filtered_results)} results. Need to clarify scope or priority.",
+                            "suggested_question": "검색 결과가 많습니다. 어떤 방향으로 진행할까요?" if len(filtered_results) > 10 else "검색 결과가 없습니다. 검색 범위를 조정할까요?",
+                            "suggested_options": [
+                                {"label": "상위 5개 결과만 사용", "value": "top_5"},
+                                {"label": "상위 10개 결과 사용", "value": "top_10"},
+                                {"label": "모든 결과 사용", "value": "all"}
+                            ] if len(filtered_results) > 10 else [
+                                {"label": "검색 범위 확대", "value": "expand"},
+                                {"label": "검색어 수정", "value": "modify"},
+                                {"label": "계속 진행", "value": "continue"}
+                            ]
+                        }
+                        
+                        question = await clarification_handler.generate_question(
+                            ambiguity,
+                            {'user_request': state['user_query'], 'result_count': len(filtered_results)}
+                        )
+                        
+                        # CLI 모드 감지 (더 정확한 방법)
+                        import sys
+                        is_cli_mode = (
+                            not hasattr(sys, 'ps1') and  # Interactive shell이 아님
+                            'streamlit' not in sys.modules and  # Streamlit이 로드되지 않음
+                            not any('streamlit' in str(arg) for arg in sys.argv)  # Streamlit 실행 인자가 없음
+                        )
+                        
+                        # CLI 모드이거나 autopilot 모드인 경우 자동 선택
+                        if is_cli_mode or state.get("autopilot_mode", False):
+                            logger.info("🤖 CLI/Autopilot mode - auto-selecting response")
+                            
+                            # History 기반 자동 선택
+                            shared_memory = self.context.shared_memory
+                            auto_response = await clarification_handler.auto_select_response(
+                                question,
+                                {'user_request': state['user_query'], 'result_count': len(filtered_results)},
+                                shared_memory
+                            )
+                            
+                            # 응답 처리
+                            processed = await clarification_handler.process_user_response(
+                                question['id'],
+                                auto_response,
+                                {'question': question}
+                            )
+                            
+                            if processed.get('validated', False):
+                                # 명확화 정보 적용
+                                clarification = processed.get('clarification', {})
+                                
+                                # 응답에 따라 결과 필터링
+                                if auto_response == "top_5":
+                                    filtered_results = filtered_results[:5]
+                                elif auto_response == "top_10":
+                                    filtered_results = filtered_results[:10]
+                                # "all"이면 그대로 사용
+                                
+                                logger.info(f"✅ Auto-selected: {auto_response}, using {len(filtered_results)} results")
+                                # 계속 진행 (return 하지 않음)
+                        else:
+                            # 웹 모드: 사용자에게 질문
+                            state['pending_questions'] = state.get('pending_questions', []) + [question]
+                            state['waiting_for_user'] = True
+                            state['user_responses'] = state.get('user_responses', {})
+                            
+                            logger.info(f"❓ Generated question during execution: {question['id']}")
+                            logger.info("⏸️ Waiting for user response...")
+                            
+                            return state
                 
                 if search_results and len(search_results) > 0:
                     # 실제 검색 결과를 구조화된 형식으로 저장
