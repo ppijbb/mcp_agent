@@ -100,6 +100,14 @@ class ResearchState(TypedDict):
     autopilot_mode: bool  # CLI 모드에서 자동 선택 모드
     context_window_usage: Dict[str, Any]
     
+    # Greedy Overseer 필드
+    overseer_iterations: int  # Overseer 반복 횟수
+    overseer_requirements: List[Dict[str, Any]]  # 추가 요구사항
+    overseer_evaluations: List[Dict[str, Any]]  # 각 iteration의 평가
+    completeness_scores: Dict[str, float]  # 목표별 완전성 점수
+    quality_assessments: Dict[str, Dict[str, float]]  # 결과별 품질 평가
+    overseer_decision: Optional[str]  # 'continue', 'retry', 'ask_user', 'proceed'
+    
     # Control Flow
     current_step: str
     iteration: int
@@ -147,14 +155,16 @@ class AutonomousOrchestrator:
         # StateGraph 생성
         workflow = StateGraph(ResearchState)
         
-        # 노드 추가 (8대 혁신 통합 + Planning Agent)
+        # 노드 추가 (8대 혁신 통합 + Planning Agent + Greedy Overseer)
         workflow.add_node("analyze_objectives", self._analyze_objectives)
         workflow.add_node("planning_agent", self._planning_agent)
         workflow.add_node("verify_plan", self._verify_plan)
+        workflow.add_node("overseer_initial_review", self._overseer_initial_review)
         workflow.add_node("adaptive_supervisor", self._adaptive_supervisor)
         workflow.add_node("execute_research", self._execute_research)
         workflow.add_node("hierarchical_compression", self._hierarchical_compression)
         workflow.add_node("continuous_verification", self._continuous_verification)
+        workflow.add_node("overseer_evaluation", self._overseer_evaluation)
         workflow.add_node("evaluate_results", self._evaluate_results)
         workflow.add_node("validate_results", self._validate_results)
         workflow.add_node("synthesize_deliverable", self._synthesize_deliverable)
@@ -180,16 +190,34 @@ class AutonomousOrchestrator:
             "verify_plan",
             lambda state: "approved" if state.get("plan_approved", False) else "planning_agent",
             {
-                "approved": "adaptive_supervisor",
+                "approved": "overseer_initial_review",
                 "planning_agent": "planning_agent"
             }
         )
         
-        # 기존 워크플로우 (Planning Agent 통합)
+        # Overseer Initial Review -> Adaptive Supervisor
+        workflow.add_edge("overseer_initial_review", "adaptive_supervisor")
+        
+        # 기존 워크플로우 (Overseer 통합)
         workflow.add_edge("adaptive_supervisor", "execute_research")
         workflow.add_edge("execute_research", "hierarchical_compression")
         workflow.add_edge("hierarchical_compression", "continuous_verification")
-        workflow.add_edge("continuous_verification", "evaluate_results")
+        
+        # Verification -> Overseer Evaluation
+        workflow.add_edge("continuous_verification", "overseer_evaluation")
+        
+        # Overseer Evaluation -> Decision Router
+        workflow.add_conditional_edges(
+            "overseer_evaluation",
+            self._overseer_decision_router,
+            {
+                "retry": "execute_research",
+                "waiting_for_clarification": "planning_agent",
+                "proceed": "evaluate_results"
+            }
+        )
+        
+        # Evaluation -> Validation -> Synthesis
         workflow.add_edge("evaluate_results", "validate_results")
         workflow.add_edge("validate_results", "synthesize_deliverable")
         workflow.add_edge("synthesize_deliverable", END)
@@ -2680,6 +2708,109 @@ class AutonomousOrchestrator:
         except Exception as e:
             logger.error(f"Failed to search similar research: {e}")
             return []
+    
+    async def _overseer_initial_review(self, state: ResearchState) -> ResearchState:
+        """Overseer의 초기 검토 - Planning 후 요구사항 정의"""
+        logger.info("=" * 80)
+        logger.info("🔍 [OVERSEER] Initial Review - Defining Requirements")
+        logger.info("=" * 80)
+        
+        try:
+            from src.agents.greedy_overseer_agent import get_greedy_overseer_agent
+            from src.core.researcher_config import load_config_from_env
+            
+            config = load_config_from_env()
+            overseer_config = config.overseer if hasattr(config, 'overseer') else None
+            
+            if overseer_config and overseer_config.enabled:
+                overseer = get_greedy_overseer_agent(
+                    max_iterations=overseer_config.max_iterations,
+                    completeness_threshold=overseer_config.completeness_threshold,
+                    quality_threshold=overseer_config.quality_threshold,
+                    min_academic_sources=overseer_config.min_academic_sources,
+                    min_verified_sources=overseer_config.min_verified_sources,
+                    require_cross_validation=overseer_config.require_cross_validation,
+                    enable_human_loop=overseer_config.enable_human_loop
+                )
+            else:
+                # Default configuration
+                overseer = get_greedy_overseer_agent()
+            
+            state = await overseer.review_planning_output(state)
+            
+            logger.info(f"[OVERSEER] Requirements defined: {len(state.get('overseer_requirements', []))}")
+            
+        except Exception as e:
+            logger.error(f"[OVERSEER] Initial review failed: {e}")
+            # Continue with default requirements
+            state['overseer_iterations'] = 0
+            state['overseer_requirements'] = []
+        
+        return state
+    
+    async def _overseer_evaluation(self, state: ResearchState) -> ResearchState:
+        """Overseer 평가 - Execution + Validation 후 결과 평가"""
+        logger.info("=" * 80)
+        logger.info("🔍 [OVERSEER] Evaluating Execution Results")
+        logger.info("=" * 80)
+        
+        try:
+            from src.agents.greedy_overseer_agent import get_greedy_overseer_agent
+            from src.core.researcher_config import load_config_from_env
+            
+            config = load_config_from_env()
+            overseer_config = config.overseer if hasattr(config, 'overseer') else None
+            
+            if overseer_config and overseer_config.enabled:
+                overseer = get_greedy_overseer_agent(
+                    max_iterations=overseer_config.max_iterations,
+                    completeness_threshold=overseer_config.completeness_threshold,
+                    quality_threshold=overseer_config.quality_threshold,
+                    min_academic_sources=overseer_config.min_academic_sources,
+                    min_verified_sources=overseer_config.min_verified_sources,
+                    require_cross_validation=overseer_config.require_cross_validation,
+                    enable_human_loop=overseer_config.enable_human_loop
+                )
+            else:
+                overseer = get_greedy_overseer_agent()
+            
+            state = await overseer.evaluate_execution_results(state)
+            
+            decision = state.get('overseer_decision', 'proceed')
+            logger.info(f"[OVERSEER] Decision: {decision}")
+            
+        except Exception as e:
+            logger.error(f"[OVERSEER] Evaluation failed: {e}")
+            # Default to proceed on error
+            state['overseer_decision'] = 'proceed'
+        
+        return state
+    
+    def _overseer_decision_router(self, state: ResearchState) -> str:
+        """Overseer 결정에 따른 라우팅"""
+        decision = state.get('overseer_decision', 'proceed')
+        current_iteration = state.get('overseer_iterations', 0)
+        max_iterations = 5  # Default max
+        
+        try:
+            from src.core.researcher_config import load_config_from_env
+            config = load_config_from_env()
+            if hasattr(config, 'overseer') and config.overseer.enabled:
+                max_iterations = config.overseer.max_iterations
+        except:
+            pass
+        
+        logger.info(f"[OVERSEER] Routing decision: {decision} (iteration {current_iteration}/{max_iterations})")
+        
+        if decision == 'retry' and current_iteration < max_iterations:
+            logger.info(f"[OVERSEER] Retrying execution (iteration {current_iteration + 1})")
+            return 'retry'
+        elif decision == 'ask_user':
+            logger.info("[OVERSEER] Requesting user clarification")
+            return 'waiting_for_clarification'
+        else:
+            logger.info("[OVERSEER] Proceeding to evaluation")
+            return 'proceed'
     
     async def _save_research_memory(self, state: ResearchState) -> bool:
         """연구 결과를 메모리에 저장합니다."""

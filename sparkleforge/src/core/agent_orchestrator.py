@@ -2864,9 +2864,31 @@ Provide a review with:
                 logger.warning(f"[{self.name}] Council review failed: {e}. Using original verification results.")
                 # Council 실패 시 원본 검증 결과 사용 (fallback 제거 - 명확한 로깅만)
         
+        # Enhanced Quality Assessment (Phase 2)
+        quality_assessments = {}
+        logger.info(f"[{self.name}] 📊 Performing quality assessment on {len(verified)} verified results")
+        
+        for result in verified:
+            result_id = result.get('id') or result.get('url', '')
+            if result_id:
+                quality_assessment = await self._assess_result_quality(result, verified)
+                quality_assessments[result_id] = quality_assessment
+                
+                # Add quality assessment to result
+                result['quality_assessment'] = quality_assessment
+                
+                logger.debug(f"[{self.name}] Quality assessment for {result.get('title', 'N/A')[:50]}: "
+                           f"credibility={quality_assessment['source_credibility']:.2f}, "
+                           f"academic={quality_assessment['academic_rigor']:.2f}, "
+                           f"verifiability={quality_assessment['verifiability']:.2f}")
+        
+        # Store quality assessments in state
+        state['quality_assessments'] = quality_assessments
         state['verified_results'] = verified
         state['current_agent'] = self.name
         state['verification_failed'] = False if verified else True
+        
+        logger.info(f"[{self.name}] ✅ Quality assessment complete: {len(quality_assessments)} results assessed")
         
         # Write to shared memory
         memory.write(
@@ -2877,10 +2899,305 @@ Provide a review with:
             agent_id=self.name
         )
         
-        logger.info(f"[{self.name}] Verified results saved to shared memory")
+        memory.write(
+            key=f"quality_assessments_{state['session_id']}",
+            value=quality_assessments,
+            scope=MemoryScope.SESSION,
+            session_id=state['session_id'],
+            agent_id=self.name
+        )
+        
+        logger.info(f"[{self.name}] Verified results and quality assessments saved to shared memory")
         logger.info(f"=" * 80)
         
         return state
+    
+    async def _assess_result_quality(
+        self,
+        result: Dict[str, Any],
+        all_results: List[Dict[str, Any]]
+    ) -> Dict[str, float]:
+        """
+        Assess the quality of a research result across multiple dimensions.
+        
+        Args:
+            result: The result to assess
+            all_results: All verified results for cross-validation
+            
+        Returns:
+            Quality assessment dictionary with scores (0-1)
+        """
+        try:
+            # Assess each dimension
+            source_credibility = self._assess_source_credibility(result)
+            academic_rigor = self._assess_academic_rigor(result)
+            verifiability = self._assess_verifiability(result)
+            cross_source_support = self._assess_cross_validation(result, all_results)
+            information_freshness = self._assess_recency(result)
+            
+            # Calculate weighted overall quality
+            weights = {
+                'source_credibility': 0.25,
+                'academic_rigor': 0.25,
+                'verifiability': 0.25,
+                'cross_source_support': 0.15,
+                'information_freshness': 0.10
+            }
+            
+            overall_quality = (
+                source_credibility * weights['source_credibility'] +
+                academic_rigor * weights['academic_rigor'] +
+                verifiability * weights['verifiability'] +
+                cross_source_support * weights['cross_source_support'] +
+                information_freshness * weights['information_freshness']
+            )
+            
+            return {
+                'source_credibility': source_credibility,
+                'academic_rigor': academic_rigor,
+                'verifiability': verifiability,
+                'cross_source_support': cross_source_support,
+                'information_freshness': information_freshness,
+                'overall_quality': overall_quality
+            }
+            
+        except Exception as e:
+            logger.warning(f"[{self.name}] Error assessing result quality: {e}")
+            # Return default scores on error
+            return {
+                'source_credibility': 0.5,
+                'academic_rigor': 0.5,
+                'verifiability': 0.5,
+                'cross_source_support': 0.5,
+                'information_freshness': 0.5,
+                'overall_quality': 0.5
+            }
+    
+    def _assess_source_credibility(self, result: Dict[str, Any]) -> float:
+        """
+        Assess source credibility based on domain and source type.
+        
+        Priority: Academic > Official > News > General
+        
+        Returns:
+            Credibility score (0-1)
+        """
+        url = result.get('url', '').lower()
+        title = result.get('title', '').lower()
+        
+        # Academic sources (highest credibility)
+        academic_indicators = [
+            'arxiv.org', 'doi.org', 'scholar.google', 'pubmed', 'ncbi.nlm.nih.gov',
+            'ieee.org', 'acm.org', 'springer.com', 'sciencedirect.com',
+            'nature.com', 'science.org', 'cell.com', 'wiley.com',
+            '.edu', 'university', 'journal', 'peer-reviewed'
+        ]
+        
+        if any(indicator in url for indicator in academic_indicators):
+            return 0.95
+        
+        # Official/Government sources
+        official_indicators = [
+            '.gov', '.mil', 'who.int', 'un.org', 'europa.eu',
+            'nih.gov', 'nasa.gov', 'cdc.gov', 'fda.gov'
+        ]
+        
+        if any(indicator in url for indicator in official_indicators):
+            return 0.90
+        
+        # Reputable news/media
+        news_indicators = [
+            'reuters.com', 'bbc.com', 'apnews.com', 'nytimes.com',
+            'wsj.com', 'economist.com', 'theguardian.com', 'washingtonpost.com'
+        ]
+        
+        if any(indicator in url for indicator in news_indicators):
+            return 0.80
+        
+        # Industry/Professional organizations
+        industry_indicators = [
+            '.org', 'association', 'institute', 'foundation', 'society'
+        ]
+        
+        if any(indicator in url for indicator in industry_indicators):
+            return 0.70
+        
+        # General web sources
+        return 0.50
+    
+    def _assess_academic_rigor(self, result: Dict[str, Any]) -> float:
+        """
+        Assess academic rigor based on content indicators.
+        
+        Checks for: citations, methodology, peer-review, research terms
+        
+        Returns:
+            Academic rigor score (0-1)
+        """
+        content = (result.get('content', '') + ' ' + 
+                  result.get('snippet', '') + ' ' + 
+                  result.get('title', '')).lower()
+        
+        url = result.get('url', '').lower()
+        
+        rigor_score = 0.0
+        
+        # Check for peer-reviewed publication
+        peer_review_indicators = ['peer-reviewed', 'peer reviewed', 'refereed']
+        if any(indicator in content or indicator in url for indicator in peer_review_indicators):
+            rigor_score += 0.3
+        
+        # Check for citations/references
+        citation_indicators = ['citation', 'references', 'bibliography', 'doi:', 'cited by']
+        if any(indicator in content for indicator in citation_indicators):
+            rigor_score += 0.2
+        
+        # Check for methodology
+        methodology_indicators = ['methodology', 'methods', 'experimental', 'study design', 'data collection']
+        if any(indicator in content for indicator in methodology_indicators):
+            rigor_score += 0.2
+        
+        # Check for research terms
+        research_indicators = ['research', 'study', 'analysis', 'investigation', 'findings', 'results', 'conclusion']
+        matching_indicators = sum(1 for indicator in research_indicators if indicator in content)
+        rigor_score += min(0.3, matching_indicators * 0.05)
+        
+        return min(1.0, rigor_score)
+    
+    def _assess_verifiability(self, result: Dict[str, Any]) -> float:
+        """
+        Assess verifiability based on evidence, data, and references.
+        
+        Returns:
+            Verifiability score (0-1)
+        """
+        content = (result.get('content', '') + ' ' + 
+                  result.get('snippet', '')).lower()
+        
+        url = result.get('url', '').lower()
+        
+        verifiability_score = 0.0
+        
+        # Check for data/evidence indicators
+        data_indicators = ['data', 'evidence', 'statistics', 'figures', 'table', 'chart']
+        matching_data = sum(1 for indicator in data_indicators if indicator in content)
+        verifiability_score += min(0.3, matching_data * 0.05)
+        
+        # Check for specific claims with sources
+        source_indicators = ['according to', 'source:', 'reference:', 'published in', 'reported by']
+        if any(indicator in content for indicator in source_indicators):
+            verifiability_score += 0.3
+        
+        # Check for URL availability and type
+        if url:
+            verifiability_score += 0.2
+            
+            # Bonus for direct document links
+            if any(ext in url for ext in ['.pdf', '.doc', '.html']):
+                verifiability_score += 0.1
+        
+        # Check for author information
+        author_indicators = ['author:', 'by ', 'written by', 'published by']
+        if any(indicator in content for indicator in author_indicators):
+            verifiability_score += 0.1
+        
+        return min(1.0, verifiability_score)
+    
+    def _assess_cross_validation(
+        self,
+        result: Dict[str, Any],
+        all_results: List[Dict[str, Any]]
+    ) -> float:
+        """
+        Assess cross-validation by checking if information is supported by other sources.
+        
+        Returns:
+            Cross-validation score (0-1)
+        """
+        if len(all_results) < 2:
+            return 0.5  # Can't cross-validate with single result
+        
+        try:
+            # Extract key terms from current result
+            current_title = result.get('title', '').lower()
+            current_content = (result.get('content', '') + ' ' + 
+                             result.get('snippet', '')).lower()
+            
+            # Extract significant words (simple approach)
+            import re
+            words = re.findall(r'\b\w{4,}\b', current_title + ' ' + current_content)
+            significant_words = set(words[:20])  # Take top 20 words
+            
+            # Check overlap with other results
+            overlap_scores = []
+            
+            for other_result in all_results:
+                if other_result.get('url') == result.get('url'):
+                    continue  # Skip same result
+                
+                other_content = (other_result.get('title', '') + ' ' +
+                               other_result.get('content', '') + ' ' +
+                               other_result.get('snippet', '')).lower()
+                
+                other_words = set(re.findall(r'\b\w{4,}\b', other_content))
+                
+                if significant_words and other_words:
+                    overlap = len(significant_words & other_words) / len(significant_words)
+                    overlap_scores.append(overlap)
+            
+            if overlap_scores:
+                # Average overlap with other sources
+                avg_overlap = sum(overlap_scores) / len(overlap_scores)
+                return min(1.0, avg_overlap * 2)  # Scale up
+            else:
+                return 0.5
+                
+        except Exception as e:
+            logger.debug(f"Error in cross-validation: {e}")
+            return 0.5
+    
+    def _assess_recency(self, result: Dict[str, Any]) -> float:
+        """
+        Assess information freshness based on publication date.
+        
+        Returns:
+            Recency score (0-1)
+        """
+        published_date = result.get('published_date', '')
+        
+        if not published_date:
+            return 0.5  # Unknown date
+        
+        try:
+            from datetime import datetime, timezone
+            
+            # Parse date
+            if isinstance(published_date, str):
+                date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
+            else:
+                date_obj = published_date
+            
+            # Calculate age in days
+            now = datetime.now(timezone.utc)
+            age_days = (now - date_obj).days
+            
+            # Scoring based on age
+            if age_days < 30:
+                return 1.0  # Very recent (< 1 month)
+            elif age_days < 90:
+                return 0.9  # Recent (< 3 months)
+            elif age_days < 365:
+                return 0.8  # This year
+            elif age_days < 730:
+                return 0.7  # Last 2 years
+            elif age_days < 1825:
+                return 0.6  # Last 5 years
+            else:
+                return 0.4  # Older than 5 years
+                
+        except Exception as e:
+            logger.debug(f"Error assessing recency: {e}")
+            return 0.5
 
 
 class GeneratorAgent:

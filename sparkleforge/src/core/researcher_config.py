@@ -240,6 +240,19 @@ class PromptRefinerConfig:
     collect_stats: bool = True
 
 
+@dataclass
+class OverseerConfig:
+    """Greedy Overseer configuration for research quality enforcement."""
+    enabled: bool = True
+    max_iterations: int = 5
+    completeness_threshold: float = 0.9
+    quality_threshold: float = 0.85
+    min_academic_sources: int = 3
+    min_verified_sources: int = 5
+    require_cross_validation: bool = True
+    enable_human_loop: bool = True
+
+
 class CouncilConfig(BaseModel):
     """LLM Council configuration for multi-model consensus - Optional with defaults."""
     model_config = ConfigDict(validate_assignment=True, extra='forbid')
@@ -388,6 +401,7 @@ class ResearcherSystemConfig(BaseModel):
     cascade: CascadeConfig = Field(default_factory=CascadeConfig, description="Cascade configuration")
     agent_tools: AgentToolConfig = Field(description="Agent tools configuration")
     prompt_refiner: PromptRefinerConfig = Field(default_factory=lambda: PromptRefinerConfig(), description="Prompt Refiner configuration")
+    overseer: OverseerConfig = Field(default_factory=lambda: OverseerConfig(), description="Overseer configuration")
     
     def model_post_init(self, __context):
         # Ensure output directory exists
@@ -762,6 +776,18 @@ def load_config_from_env() -> ResearcherSystemConfig:
         collect_stats=get_optional_env("PROMPT_REFINER_COLLECT_STATS", True, bool)
     )
     
+    # Load Overseer configuration (Optional with defaults)
+    overseer_config = OverseerConfig(
+        enabled=get_optional_env("OVERSEER_ENABLED", True, bool),
+        max_iterations=get_optional_env("OVERSEER_MAX_ITERATIONS", 5, int),
+        completeness_threshold=get_optional_env("OVERSEER_COMPLETENESS_THRESHOLD", 0.9, float),
+        quality_threshold=get_optional_env("OVERSEER_QUALITY_THRESHOLD", 0.85, float),
+        min_academic_sources=get_optional_env("OVERSEER_MIN_ACADEMIC_SOURCES", 3, int),
+        min_verified_sources=get_optional_env("OVERSEER_MIN_VERIFIED_SOURCES", 5, int),
+        require_cross_validation=get_optional_env("OVERSEER_REQUIRE_CROSS_VALIDATION", True, bool),
+        enable_human_loop=get_optional_env("OVERSEER_ENABLE_HUMAN_LOOP", True, bool)
+    )
+    
     # Create and store global config instance
     global config
     config = ResearcherSystemConfig(
@@ -777,7 +803,8 @@ def load_config_from_env() -> ResearcherSystemConfig:
         council=council_config,
         cascade=cascade_config,
         agent_tools=agent_tool_config,
-        prompt_refiner=prompt_refiner_config
+        prompt_refiner=prompt_refiner_config,
+        overseer=overseer_config
     )
     
     return config
