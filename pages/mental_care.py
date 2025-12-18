@@ -54,7 +54,7 @@ def main():
             help="원하는 상담 유형을 선택하세요"
         )
 
-        submitted = st.form_submit_button("🚀 상담 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 상담 시작", use_container_width=True)
 
     if submitted:
         if not user_message.strip():

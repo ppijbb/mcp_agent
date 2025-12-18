@@ -65,7 +65,7 @@ def display_results(result_data):
         data=content,
         file_name=f"recruitment_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
         mime="text/markdown",
-        width='stretch'
+        use_container_width=True
     )
 
 def main():
@@ -91,7 +91,7 @@ def main():
             default=get_workflow_options() # 기본으로 모두 선택
         )
         
-        submitted = st.form_submit_button("🚀 채용 프로세스 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 채용 프로세스 시작", use_container_width=True)
 
     if submitted:
         if not position.strip() or not company.strip():
@@ -177,7 +177,7 @@ def main():
                         data=content,
                         file_name=f"recruitment_report_{position.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
                         mime="text/markdown",
-                        width='stretch'
+                        use_container_width=True
                     )
                 
                 # 메타데이터 표시

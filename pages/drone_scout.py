@@ -132,7 +132,7 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 물리 엔진 기반 비행 시뮬레이션을 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 Launch Mission", width='stretch')
+        submitted = st.form_submit_button("🚀 Launch Mission", use_container_width=True)
 
     if submitted:
         if not mission_text:
@@ -197,7 +197,7 @@ def main():
                     st.subheader("🗺️ 비행 궤적")
                     try:
                         df = pd.DataFrame(trajectory)
-                        st.dataframe(df, width='stretch')
+                        st.dataframe(df, use_container_width=True)
                         
                         # 지도 시각화 (간단한 버전)
                         if 'lat' in df.columns and 'lon' in df.columns:

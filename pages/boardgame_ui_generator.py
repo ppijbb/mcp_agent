@@ -508,7 +508,7 @@ class RealLangGraphUI:
             height=150
         )
         
-        if st.button("🧠 이 설명으로 UI 생성 분석 요청", type="primary", width='stretch', disabled=st.session_state.analysis_in_progress):
+        if st.button("🧠 이 설명으로 UI 생성 분석 요청", type="primary", use_container_width=True, disabled=st.session_state.analysis_in_progress):
             if game_description.strip():
                 # Streamlit에서 비동기 함수 실행
                 import asyncio
@@ -539,7 +539,7 @@ class RealLangGraphUI:
                 year = f"({game.get('year')})" if game.get('year') else ""
                 st.info(f"**{game.get('name')}** {year}")
             with col2:
-                if st.button("이 게임으로 분석", key=f"select_{game.get('id')}", width='stretch'):
+                if st.button("이 게임으로 분석", key=f"select_{game.get('id')}", use_container_width=True):
                     # Streamlit에서 비동기 함수 실행
                     import asyncio
                     try:
@@ -565,7 +565,7 @@ class RealLangGraphUI:
             name = game_info.get('name', '이름 없음')
             col_name, col_button = st.columns([4, 1])
             col_name.write(f"🎮 **{name}**")
-            if col_button.button("결과 보기", key=f"load_{game_id}", width='stretch'):
+            if col_button.button("결과 보기", key=f"load_{game_id}", use_container_width=True):
                 st.session_state.current_game_id = game_id
                 st.session_state.analysis_in_progress = False
                 st.rerun()

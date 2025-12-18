@@ -174,9 +174,9 @@ with st.form(key="travel_scout_form"):
     
     b1, b2 = st.columns(2)
     with b1:
-        search_hotels_submitted = st.form_submit_button("🏨 Search Hotels", width='stretch')
+        search_hotels_submitted = st.form_submit_button("🏨 Search Hotels", use_container_width=True)
     with b2:
-        search_flights_submitted = st.form_submit_button("✈️ Search Flights", width='stretch')
+        search_flights_submitted = st.form_submit_button("✈️ Search Flights", use_container_width=True)
 
 # --- 🤖 에이전트 실행 로직 ---
 task_to_run = None

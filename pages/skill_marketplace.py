@@ -55,7 +55,7 @@ def main():
             }.get(x, x)
         )
         
-        submitted = st.form_submit_button("🚀 스킬 매칭 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 스킬 매칭 시작", use_container_width=True)
 
     if submitted:
         if not skill_query.strip():

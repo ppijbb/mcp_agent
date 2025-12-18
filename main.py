@@ -4,9 +4,68 @@
 모든 AI 에이전트들을 한 곳에서 체험할 수 있는 Streamlit 데모
 """
 
+import importlib
+import importlib.util
+
+# HACK: 새롭게 설치된 패키지(jsonref 등)를 활성 프로세스에서 인식하도록 캐시 초기화
+importlib.invalidate_caches()
+try:
+    import jsonref
+except ImportError:
+    pass
+
+# HACK: Google GenAI Safety Settings Fix
+# 'HARM_CATEGORY_JAILBREAK' 카테고리는 일부 API 엔드포인트에서 오류(400 INVALID_ARGUMENT)를 유발하므로 필터링합니다.
+try:
+    from google.genai import types as genai_types
+    
+    # GenerateContentConfig의 safety_settings에서 JAILBREAK 제거
+    if hasattr(genai_types, "GenerateContentConfig"):
+        original_config_init = genai_types.GenerateContentConfig.__init__
+        def patched_config_init(self, *args, **kwargs):
+            if "safety_settings" in kwargs and kwargs["safety_settings"]:
+                new_settings = []
+                for s in kwargs["safety_settings"]:
+                    category = None
+                    if isinstance(s, dict): category = s.get("category")
+                    elif hasattr(s, "category"): category = s.category
+                    
+                    if category and "JAILBREAK" in str(category):
+                        continue
+                    new_settings.append(s)
+                kwargs["safety_settings"] = new_settings
+            original_config_init(self, *args, **kwargs)
+        genai_types.GenerateContentConfig.__init__ = patched_config_init
+    
+    # SafetySetting 자체도 안전하게 처리
+    if hasattr(genai_types, "SafetySetting"):
+        original_setting_init = genai_types.SafetySetting.__init__
+        def patched_setting_init(self, *args, **kwargs):
+            if "category" in kwargs and kwargs["category"] and "JAILBREAK" in str(kwargs["category"]):
+                kwargs["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT" # 유효한 카테고리로 매핑
+            original_setting_init(self, *args, **kwargs)
+        genai_types.SafetySetting.__init__ = patched_setting_init
+except Exception:
+    pass
+
+try:
+    import mcp_agent.config
+    mcp_agent.config._settings = None  # Force reload from file
+    import srcs.core.config.loader
+    srcs.core.config.loader._config = None  # Force reload our custom config too
+except Exception:
+    pass
+
 import streamlit as st
 import sys
 from pathlib import Path
+
+# HACK: mcp-agent 0.1.0과 mcp 1.x 간의 타입 호환성 문제 해결
+# Python 3.10+에서 types.UnionType을 상속받으려 할 때 발생하는 TypeError 방지
+import mcp.types
+import types
+if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
+    mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent
@@ -296,7 +355,7 @@ def display_demo_environment_required_agents():
                 </p>
             """, unsafe_allow_html=True)
             if st.button("보안 체크", key="cyber_demo", use_container_width=True):
-                st.switch_page("pages/cybersecurity.py")
+                st.switch_page("pages/cybersecurity_agent.py")
     
     # 안내 메시지
     with st.expander("ℹ️ 시연환경 구성 가이드", expanded=False):

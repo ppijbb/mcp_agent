@@ -45,7 +45,7 @@ def main():
             height=150
         )
         
-        submitted = st.form_submit_button("🚀 CLV 분석 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 CLV 분석 시작", use_container_width=True)
 
     if submitted:
         if not customer_data.strip():

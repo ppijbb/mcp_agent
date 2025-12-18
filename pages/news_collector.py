@@ -54,7 +54,7 @@ def main():
             help="국내뉴스, 국제뉴스, 또는 둘 다"
         )
         
-        submitted = st.form_submit_button("🚀 뉴스 수집 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 뉴스 수집 시작", use_container_width=True)
 
     if submitted:
         reports_path = Path(get_reports_path('news_collector'))

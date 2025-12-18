@@ -55,7 +55,7 @@ def main():
             }.get(x, x)
         )
         
-        submitted = st.form_submit_button("🚀 취미 가이드 생성", width='stretch')
+        submitted = st.form_submit_button("🚀 취미 가이드 생성", use_container_width=True)
 
     if submitted:
         if not hobby_interest.strip():

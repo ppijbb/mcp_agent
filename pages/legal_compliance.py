@@ -47,7 +47,7 @@ def main():
             default=["GDPR", "CCPA"]
         )
         
-        submitted = st.form_submit_button("🚀 법률 준수 검토 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 법률 준수 검토 시작", use_container_width=True)
 
     if submitted:
         if not company_name.strip():

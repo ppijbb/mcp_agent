@@ -47,7 +47,7 @@ def main():
             default=["inventory_optimization", "supplier_risk"]
         )
         
-        submitted = st.form_submit_button("🚀 공급망 분석 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 공급망 분석 시작", use_container_width=True)
 
     if submitted:
         if not company_name.strip():

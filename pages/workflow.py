@@ -154,7 +154,7 @@ def render_workflow_interface():
         model_name = st.selectbox("실행할 모델:", ["gemini-2.5-flash-lite"], key="model_name")
         plan_type = st.selectbox("플래닝 방식:", ["full", "step", "none"], key="plan_type")
 
-        submitted = st.form_submit_button("🚀 워크플로우 실행", type="primary", width='stretch')
+        submitted = st.form_submit_button("🚀 워크플로우 실행", type="primary", use_container_width=True)
 
     if submitted:
         final_task = ""

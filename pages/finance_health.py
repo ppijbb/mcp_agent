@@ -456,7 +456,7 @@ def render_real_finance_agent(save_to_file=False):
             )
             required_fields = [age, income, expenses, savings, investments, debt, retirement_age, financial_goal]
             if all(field is not None for field in required_fields):
-                if st.button("🔍 AI 재무 분석 시작", width='stretch'):
+                if st.button("🔍 AI 재무 분석 시작", use_container_width=True):
                     # 입력값을 JSON으로 저장
                     reports_path = get_reports_path('finance_health')
                     os.makedirs(reports_path, exist_ok=True)
@@ -583,12 +583,12 @@ def display_portfolio_analysis(portfolio_data):
         
         if 'assets' in portfolio_data:
             df = pd.DataFrame(portfolio_data['assets'])
-            st.dataframe(df, width='stretch')
+            st.dataframe(df, use_container_width=True)
         
             # 포트폴리오 구성 차트
             if 'amount' in df.columns and 'name' in df.columns:
                 fig = px.pie(df, values='amount', names='name', title='포트폴리오 구성')
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         st.markdown("#### 📊 성과 분석")
@@ -641,7 +641,7 @@ def display_optimization_suggestions(suggestions):
             with col2:
                 st.metric("우선순위", suggestion['priority'])
             with col3:
-                if st.button("🚀 제안 실행", key=f"execute_{i}", width='stretch'):
+                if st.button("🚀 제안 실행", key=f"execute_{i}", use_container_width=True):
                     execute_suggestion(suggestion)
 
 def execute_suggestion(suggestion: Dict[str, Any]):
@@ -725,7 +725,7 @@ def render_report_download_options(report: Dict[str, Any]):
             data=pdf_data,
             file_name=f"financial_report_{report.get('user_id', 'user')}.pdf",
             mime="application/pdf",
-            width='stretch'
+            use_container_width=True
         )
 
     # Excel 다운로드
@@ -737,12 +737,12 @@ def render_report_download_options(report: Dict[str, Any]):
             data=excel_data,
             file_name=f"financial_report_{report.get('user_id', 'user')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            width='stretch'
+            use_container_width=True
         )
 
     # 이메일 공유
     with col3:
-        if st.button("📧 이메일로 보고서 공유", width='stretch'):
+        if st.button("📧 이메일로 보고서 공유", use_container_width=True):
             with st.form("email_form"):
                 recipient_email = st.text_input("수신자 이메일 주소", placeholder="example@email.com")
                 submit_button = st.form_submit_button("전송")

@@ -182,7 +182,7 @@ def main():
         with col4:
             analysis_mode = st.selectbox("🔄 분석 모드", ["unified", "individual", "both"], index=0)
         
-        submitted = st.form_submit_button("🚀 비즈니스 전략 분석 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 비즈니스 전략 분석 시작", use_container_width=True)
 
     if submitted:
         if not keywords_input.strip():
@@ -231,13 +231,14 @@ def main():
     st.markdown("---")
     st.markdown("## 📊 최신 Business Strategy Agent 결과")
     
-    # 최신 리포트 파일 직접 찾기
-    reports_dir = Path("business_strategy_reports")
+    # 최신 리포트 파일 직접 찾기 (REPORTS_PATH 사용)
+    reports_dir = Path(REPORTS_PATH)
     latest_json = None
     latest_time = None
     
     if reports_dir.exists():
-        for json_file in reports_dir.glob("final_summary_*.json"):
+        # strategy_report_*.json 패턴으로 검색
+        for json_file in reports_dir.glob("strategy_report_*.json"):
             file_time = json_file.stat().st_mtime
             if latest_time is None or file_time > latest_time:
                 latest_time = file_time
@@ -249,7 +250,12 @@ def main():
         try:
             with open(latest_json, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
-                latest_strategy_result = json_data.get("results", {})
+                # BusinessStrategyRunner 구조: {"results": {...}}
+                # 또는 직접 결과 구조인 경우 처리
+                if "results" in json_data:
+                    latest_strategy_result = json_data["results"]
+                else:
+                    latest_strategy_result = json_data
         except Exception as e:
             st.warning(f"최신 결과 파일 읽기 실패: {e}")
     

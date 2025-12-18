@@ -91,7 +91,7 @@ def main():
             disabled=not include_competitors
         )
         
-        submitted = st.form_submit_button("🚀 SEO 진단 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 SEO 진단 시작", use_container_width=True)
 
     if submitted:
         if not url or "http" not in url:

@@ -229,7 +229,7 @@ def render_ai_smart_data_generation():
         data_type = st.text_input("데이터 유형", value="고객", help="생성할 데이터의 유형을 입력하세요 (예: 제품, 거래내역).")
         records_count = st.number_input("레코드 수", min_value=10, max_value=10000, value=100)
         
-        submitted = st.form_submit_button("🚀 AI 스마트 데이터 생성", width='stretch')
+        submitted = st.form_submit_button("🚀 AI 스마트 데이터 생성", use_container_width=True)
 
         if submitted:
             if not data_purpose.strip() or not data_type.strip():
@@ -255,7 +255,7 @@ def render_ai_custom_datasets():
         description = st.text_area("데이터셋 상세 설명", placeholder="예: 온라인 게임 사용자의 3개월간 아이템 구매 패턴 데이터")
         records_count = st.number_input("레코드 수", min_value=10, max_value=5000, value=50)
         
-        submitted = st.form_submit_button("📊 맞춤 데이터셋 생성", width='stretch')
+        submitted = st.form_submit_button("📊 맞춤 데이터셋 생성", use_container_width=True)
         if submitted:
             if not description.strip():
                 st.error("데이터셋 상세 설명을 입력해주세요.")
@@ -277,7 +277,7 @@ def render_ai_customer_profiles():
         target_segment = st.text_input("타겟 고객 세그먼트", placeholder="예: 20대 대학생, IT 업계 종사자")
         records_count = st.number_input("생성할 프로필 수", min_value=5, max_value=1000, value=10)
         
-        submitted = st.form_submit_button("👥 고객 프로필 생성", width='stretch')
+        submitted = st.form_submit_button("👥 고객 프로필 생성", use_container_width=True)
         if submitted:
             if not target_segment.strip():
                 st.error("타겟 고객 세그먼트를 입력해주세요.")
@@ -299,7 +299,7 @@ def render_ai_timeseries_prediction():
         time_period = st.selectbox("예측 기간", options=load_time_periods())
         frequency = st.selectbox("데이터 빈도", options=load_frequencies())
         
-        submitted = st.form_submit_button("📈 시계열 데이터 생성", width='stretch')
+        submitted = st.form_submit_button("📈 시계열 데이터 생성", use_container_width=True)
         if submitted:
             config = {
                 'type': series_type,
@@ -368,7 +368,7 @@ def display_detailed_data_results(result: dict, config: dict):
         key=f"result_{datetime.now().timestamp()}" # To avoid duplicate key error
     )
     
-    if st.download_button("📥 데이터 다운로드 (.json)", data=data_content, file_name=f"generated_data_{config.get('type', 'custom')}.json", width='stretch'):
+    if st.download_button("📥 데이터 다운로드 (.json)", data=data_content, file_name=f"generated_data_{config.get('type', 'custom')}.json", use_container_width=True):
         st.toast("다운로드가 시작되었습니다!")
 
     with st.expander("🔍 품질 측정 항목 보기"):
@@ -477,7 +477,7 @@ def render_results_viewer():
             # 데이터 표시
             if isinstance(latest_result['generated_data'], list):
                 df = pd.DataFrame(latest_result['generated_data'])
-                st.dataframe(df, width='stretch')
+                st.dataframe(df, use_container_width=True)
                 
                 # 다운로드 버튼
                 csv = df.to_csv(index=False, encoding='utf-8-sig')
@@ -500,13 +500,13 @@ def render_results_viewer():
                             y_col = st.selectbox("Y축 선택", [col for col in numeric_cols if col != x_col], key="viz_y")
                             if x_col and y_col:
                                 fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col}")
-                                st.plotly_chart(fig, width='stretch')
+                                st.plotly_chart(fig, use_container_width=True)
                         
                         with col2:
                             hist_col = st.selectbox("히스토그램 컬럼", numeric_cols, key="viz_hist")
                             if hist_col:
                                 fig = px.histogram(df, x=hist_col, title=f"{hist_col} 분포")
-                                st.plotly_chart(fig, width='stretch')
+                                st.plotly_chart(fig, use_container_width=True)
             
             # 품질 메트릭 표시
             if 'quality_metrics' in latest_result:

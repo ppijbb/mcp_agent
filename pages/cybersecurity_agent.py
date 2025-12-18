@@ -52,7 +52,7 @@ def display_results(result_data):
         data=content,
         file_name=f"cybersecurity_report_{result_data.get('assessment_type', 'report')}.md",
         mime="text/markdown",
-        width='stretch'
+        use_container_width=True
     )
 
 
@@ -89,7 +89,7 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 보안 이벤트 시뮬레이터를 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 보안 평가 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 보안 평가 시작", use_container_width=True)
 
     if submitted:
         if not company_name.strip():
@@ -169,7 +169,7 @@ def main():
                         data=content,
                         file_name=f"cybersecurity_report_{assessment_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
                         mime="text/markdown",
-                        width='stretch'
+                        use_container_width=True
                     )
                 
                 # 메타데이터 표시

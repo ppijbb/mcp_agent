@@ -78,7 +78,7 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 클라우드 리소스 시뮬레이터를 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 DevOps 작업 실행", width='stretch')
+        submitted = st.form_submit_button("🚀 DevOps 작업 실행", use_container_width=True)
 
     if submitted:
         reports_path = Path(get_reports_path('devops_assistant'))

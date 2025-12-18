@@ -54,7 +54,7 @@ def main():
             }.get(x, x)
         )
         
-        submitted = st.form_submit_button("🚀 GraphRAG 실행", width='stretch')
+        submitted = st.form_submit_button("🚀 GraphRAG 실행", use_container_width=True)
 
     if submitted:
         if not command.strip():

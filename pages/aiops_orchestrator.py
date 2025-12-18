@@ -55,7 +55,7 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 인프라 메트릭 시뮬레이터를 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 AIOps 작업 실행", width='stretch')
+        submitted = st.form_submit_button("🚀 AIOps 작업 실행", use_container_width=True)
 
     if submitted:
         if not task_description.strip():

@@ -83,7 +83,7 @@ def display_results(result_data):
                 fig.add_scatter(x=df['generation'], y=df['avg_fitness'], 
                               mode='lines', name='평균 적합도', line=dict(dash='dash'))
                 fig.update_layout(xaxis_title="세대", yaxis_title="적합도")
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # 최적화 추천 표시
                 recommendations = full_result.get('optimization_recommendations', [])
@@ -131,7 +131,7 @@ def main():
         if simulation_mode:
             st.info("🔬 시뮬레이션 모드: 아키텍처 성능 모델링 시뮬레이터를 사용합니다.")
         
-        submitted = st.form_submit_button("🚀 아키텍처 진화 시작", width='stretch')
+        submitted = st.form_submit_button("🚀 아키텍처 진화 시작", use_container_width=True)
 
     if submitted:
         if not problem_description.strip():
@@ -197,7 +197,7 @@ def main():
                         df = pd.DataFrame(fitness_history)
                         fig = px.line(df, x='generation', y='max_fitness', title='세대별 최고 적합도', markers=True)
                         fig.update_layout(xaxis_title="세대", yaxis_title="최고 적합도")
-                        st.plotly_chart(fig, width='stretch')
+                        st.plotly_chart(fig, use_container_width=True)
                     
                     # 메타데이터 표시
                     if 'timestamp' in latest_architect_result:
