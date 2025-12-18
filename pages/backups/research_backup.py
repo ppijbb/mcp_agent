@@ -119,7 +119,7 @@ def render_research_agent_interface():
                 placeholder="연구 초점을 직접 입력하세요"
             )
 
-        submitted = st.form_submit_button("🚀 Research Agent 실행", type="primary", width='stretch')
+        submitted = st.form_submit_button("🚀 Research Agent 실행", type="primary", use_container_width=True)
 
     if submitted:
         if not research_topic or not research_focus:
@@ -206,7 +206,7 @@ def display_research_results(result: dict):
             data=content,
             file_name=f"research_report_{result.get('topic', 'untitled').replace(' ', '_')}.md",
             mime="text/markdown",
-            width='stretch',
+            use_container_width=True,
             key="research_download"
         )
 
@@ -275,7 +275,7 @@ if latest_research_result:
                     data=content,
                     file_name=f"research_report_{topic.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
                     mime="text/markdown",
-                    width='stretch'
+                    use_container_width=True
                 )
             
             # 메타데이터 표시
