@@ -6,6 +6,28 @@ Execute all business strategy MCPAgents for comprehensive business intelligence.
 This script provides unified access to all business strategy analysis capabilities.
 """
 
+# HACK: mcp-agent 0.1.0과 mcp 1.x 간의 타입 호환성 문제 해결
+import mcp.types
+import types
+if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
+    mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
+
+# HACK: Google GenAI Safety Settings Fix
+try:
+    from google.genai import types as genai_types
+    if hasattr(genai_types, "GenerateContentConfig"):
+        original_config_init = genai_types.GenerateContentConfig.__init__
+        def patched_config_init(self, *args, **kwargs):
+            if "safety_settings" in kwargs and kwargs["safety_settings"]:
+                kwargs["safety_settings"] = [
+                    s for s in kwargs["safety_settings"]
+                    if "JAILBREAK" not in str(getattr(s, "category", s.get("category", "") if isinstance(s, dict) else ""))
+                ]
+            original_config_init(self, *args, **kwargs)
+        genai_types.GenerateContentConfig.__init__ = patched_config_init
+except Exception:
+    pass
+
 import asyncio
 import sys
 import json
@@ -38,7 +60,8 @@ class BusinessStrategyRunner:
                        industry: str,
                        company_profile: str,
                        competitors: List[str],
-                       tech_trends: List[str]) -> Dict[str, Any]:
+                       tech_trends: List[str],
+                       result_json_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Runs the sequence of business strategy agents using actual MCP agents.
         """
@@ -94,15 +117,23 @@ class BusinessStrategyRunner:
         }
         
         # Save the final summary report
-        await self.save_summary_report(final_summary, f"final_summary_{industry}.json")
+        if result_json_path:
+            await self.save_summary_report(final_summary, result_json_path)
+        else:
+            await self.save_summary_report(final_summary, f"final_summary_{industry}.json")
         
         return final_summary
 
-    async def save_summary_report(self, summary_data: Dict, file_name: str) -> str:
-        """Save execution results to local JSON file in reports directory."""
-        output_dir = "business_strategy_reports"
-        os.makedirs(output_dir, exist_ok=True)
-        path = os.path.join(output_dir, file_name)
+    async def save_summary_report(self, summary_data: Dict, file_path_or_name: str) -> str:
+        """Save execution results to local JSON file."""
+        if os.path.isabs(file_path_or_name) or "/" in file_path_or_name or "\\" in file_path_or_name:
+            path = file_path_or_name
+        else:
+            # 기본 경로 (configs/settings.py와 일치하도록 수정)
+            output_dir = "reports/business_strategy"
+            os.makedirs(output_dir, exist_ok=True)
+            path = os.path.join(output_dir, file_path_or_name)
+            
         report_data = {
             "execution_timestamp": datetime.now().isoformat(),
             "runner": "BusinessStrategyRunner",
