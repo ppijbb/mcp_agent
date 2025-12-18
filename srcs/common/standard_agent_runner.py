@@ -4,10 +4,44 @@
 모든 agent 타입을 통일된 방식으로 실행하는 표준 러너
 """
 
+import importlib
+import importlib.util
+importlib.invalidate_caches()
+
+# HACK: mcp-agent 0.1.0과 mcp 1.x 간의 타입 호환성 문제 해결
+import mcp.types
+import types
+if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
+    mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
+
+# HACK: mcp-agent 설정 캐리 초기화
+try:
+    import mcp_agent.config
+    mcp_agent.config._settings = None
+except Exception:
+    pass
+
+# HACK: Google GenAI Safety Settings Fix
+try:
+    from google.genai import types as genai_types
+    if hasattr(genai_types, "GenerateContentConfig"):
+        original_config_init = genai_types.GenerateContentConfig.__init__
+        def patched_config_init(self, *args, **kwargs):
+            if "safety_settings" in kwargs and kwargs["safety_settings"]:
+                kwargs["safety_settings"] = [
+                    s for s in kwargs["safety_settings"]
+                    if "JAILBREAK" not in str(getattr(s, "category", s.get("category", "") if isinstance(s, dict) else ""))
+                ]
+            original_config_init(self, *args, **kwargs)
+        genai_types.GenerateContentConfig.__init__ = patched_config_init
+except Exception:
+    pass
+
 import asyncio
 import logging
 import subprocess
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -210,6 +244,15 @@ class StandardAgentRunner:
                     is_class_based = "module_path" in task_data and "class_name" in task_data
                     
                     # Agent 실행
+                    from srcs.common.a2a_adapter import A2ALogHandler, current_correlation_id
+                    log_handler = A2ALogHandler(wrapper, correlation_id=message.correlation_id)
+                    log_handler.setLevel(logging.INFO)
+                    root_logger = logging.getLogger()
+                    root_logger.addHandler(log_handler)
+                    
+                    # ContextVar 설정
+                    token = current_correlation_id.set(message.correlation_id)
+                    
                     try:
                         if is_class_based:
                             # class-based agent는 _run_module_agent 사용
@@ -224,12 +267,16 @@ class StandardAgentRunner:
                     except Exception as e:
                         logger.error(f"Error executing agent task: {e}", exc_info=True)
                         execution_time = (datetime.now() - task_start_time).total_seconds()
+                        from srcs.common.agent_interface import AgentExecutionResult
                         exec_result = AgentExecutionResult(
                             success=False,
                             error=str(e),
                             execution_time=execution_time,
                             metadata={"agent_id": agent_id, "message_id": message.message_id}
                         )
+                    finally:
+                        root_logger.removeHandler(log_handler)
+                        current_correlation_id.reset(token)
                     
                     # 결과를 A2A 메시지로 전송
                     response_payload = {
@@ -537,14 +584,21 @@ class StandardAgentRunner:
                         args.extend([f"--{key.replace('_', '-')}", str(value)])
                 cli_args = args
             
+            # 사용할 Python 인터프리터 결정
+            python_exe = sys.executable
+            # mcp_agent_env가 있으면 사용 (허브가 다른 환경에서 실행될 경우 대비)
+            env_python = "/home/user/miniconda3/envs/mcp_agent_env/bin/python"
+            if os.path.exists(env_python):
+                python_exe = env_python
+            
             # 명령어 구성
             if entry_point.startswith("python -m"):
-                command = entry_point.split() + cli_args
+                command = [python_exe] + entry_point.split()[1:] + cli_args
             elif entry_point.endswith(".py"):
-                command = [sys.executable, entry_point] + cli_args
+                command = [python_exe, entry_point] + cli_args
             else:
                 # 모듈 경로인 경우 python -m으로 실행
-                command = [sys.executable, "-m", entry_point] + cli_args
+                command = [python_exe, "-m", entry_point] + cli_args
             
             logger.info(f"Executing CLI command: {' '.join(command)}")
             

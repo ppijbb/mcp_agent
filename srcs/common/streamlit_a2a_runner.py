@@ -255,6 +255,20 @@ def run_agent_via_a2a(
                         return message.payload
                     
                     ui_wrapper.register_handler("task_response", handle_task_response)
+                    
+                    # notification 메시지 핸들러 등록
+                    async def handle_notification(message: A2AMessage) -> Optional[Dict[str, Any]]:
+                        """notification 메시지 처리"""
+                        if message.correlation_id == correlation_id:
+                            payload = message.payload
+                            if payload.get("type") == "log":
+                                msg = payload.get("message", "")
+                                if msg:
+                                    update_status(msg)
+                                    update_log(f"📋 {msg}", "info")
+                        return None
+                    
+                    ui_wrapper.register_handler("notification", handle_notification)
                     await ui_wrapper.start_listener()
                     await registry.register_agent(
                         agent_id=streamlit_agent_id,
@@ -309,6 +323,15 @@ def run_agent_via_a2a(
                             # entry_point는 metadata에서 가져오기
                             entry_point = metadata_dict.get("entry_point", "")
                             
+                            from srcs.common.a2a_adapter import A2ALogHandler, current_correlation_id
+                            log_handler = A2ALogHandler(agent_wrapper, correlation_id=message.correlation_id)
+                            log_handler.setLevel(logging.INFO)
+                            root_logger = logging.getLogger()
+                            root_logger.addHandler(log_handler)
+                            
+                            # ContextVar 설정
+                            token = current_correlation_id.set(message.correlation_id)
+                            
                             try:
                                 # class-based agent인지 확인
                                 is_class_based = "module_path" in task_data and "class_name" in task_data
@@ -338,6 +361,9 @@ def run_agent_via_a2a(
                                     execution_time=execution_time,
                                     metadata={"agent_id": agent_id, "message_id": message.message_id, "exception": str(e)}
                                 )
+                            finally:
+                                root_logger.removeHandler(log_handler)
+                                current_correlation_id.reset(token)
                             
                             update_log(f"✅ Agent 실행 완료: {agent_id} (성공: {exec_result.success})", "success" if exec_result.success else "error")
                             
@@ -402,6 +428,15 @@ def run_agent_via_a2a(
                             # entry_point는 metadata에서 가져오기
                             entry_point = metadata_dict.get("entry_point", "")
                             
+                            from srcs.common.a2a_adapter import A2ALogHandler, current_correlation_id
+                            log_handler = A2ALogHandler(agent_wrapper, correlation_id=message.correlation_id)
+                            log_handler.setLevel(logging.INFO)
+                            root_logger = logging.getLogger()
+                            root_logger.addHandler(log_handler)
+                            
+                            # ContextVar 설정
+                            token = current_correlation_id.set(message.correlation_id)
+                            
                             try:
                                 # class-based agent인지 확인
                                 is_class_based = "module_path" in task_data and "class_name" in task_data
@@ -431,6 +466,9 @@ def run_agent_via_a2a(
                                     execution_time=execution_time,
                                     metadata={"agent_id": agent_id, "message_id": message.message_id, "exception": str(e)}
                                 )
+                            finally:
+                                root_logger.removeHandler(log_handler)
+                                current_correlation_id.reset(token)
                             
                             response_payload = {
                                 "success": exec_result.success,
@@ -510,6 +548,13 @@ def run_agent_via_a2a(
                                     response_received = True
                                     update_log(f"✅ task_response 수신: {message.message_id} (correlation_id: {correlation_id})", "success")
                                     logger.info(f"Streamlit UI received task response: {message.message_id}")
+                                elif message.message_type == "notification" and message.correlation_id == correlation_id:
+                                    payload = message.payload
+                                    if payload.get("type") == "log":
+                                        msg = payload.get("message", "")
+                                        if msg:
+                                            update_status(msg)
+                                            update_log(f"📋 {msg}", "info")
                                 else:
                                     # 다른 메시지는 다시 큐에 넣기
                                     try:

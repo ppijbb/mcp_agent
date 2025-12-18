@@ -1,3 +1,6 @@
+google:
+  api_key: "AIzaSyCaIruAxTOyGa2WBTpnWj_6Kb4YZn_LnUs"
+
 mcp:
   servers:
     # Basic MCP Servers (required for business strategy agents)
@@ -5,7 +8,7 @@ mcp:
       command: "npx"
       args: ["-y", "g-search-mcp"]
       env:
-        GOOGLE_SEARCH_API_KEY: "${GOOGLE_SEARCH_API_KEY}"
+        GOOGLE_SEARCH_API_KEY: "AIzaSyCaIruAxTOyGa2WBTpnWj_6Kb4YZn_LnUs" # Also set here for g-search-mcp
         GOOGLE_SEARCH_ENGINE_ID: "${GOOGLE_SEARCH_ENGINE_ID}"
       enabled: true
     

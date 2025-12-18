@@ -31,8 +31,7 @@ def setup_agent_app(app_name):
         config_path = project_root / "mcp_agent.config.yaml"
     
     # mcp_agent 라이브러리의 표준 설정 사용
-    # set_global=False로 설정하여 멀티스레드 환경에서 안전하게 사용
-    app_settings = get_settings(str(config_path), set_global=False)
+    app_settings = get_settings(str(config_path))
     
     return MCPApp(
         name=app_name,

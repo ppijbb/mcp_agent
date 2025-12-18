@@ -3,7 +3,21 @@ import functools
 import atexit
 import threading
 from abc import ABC, abstractmethod
+import logging
+import subprocess
+import json
+import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# HACK: mcp-agent 설정 캐시 초기화 (파일 변경사항 반영)
+try:
+    import mcp_agent.config
+    mcp_agent.config._settings = None
+except Exception:
+    pass
+
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent as MCP_Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
@@ -124,8 +138,17 @@ class BaseAgent(ABC):
         config_path = project_root / "mcp_agent.config.yaml"
         
         # mcp_agent 라이브러리의 표준 설정 사용
-        # set_global=False로 설정하여 멀티스레드 환경에서 안전하게 사용
-        settings = get_settings(str(config_path), set_global=False)
+        # HACK: 설정 캐시 강제 초기화 (google 섹션 누락 방지)
+        import mcp_agent.config
+        mcp_agent.config._settings = None
+        settings = get_settings(str(config_path))
+        
+        if not settings.google or not settings.google.api_key:
+             # 만약 여전히 None이면 직접 주입 시도 (최후의 수단)
+             import os
+             if os.getenv("GOOGLE_API_KEY"):
+                 from mcp_agent.config import GoogleSettings
+                 settings.google = GoogleSettings(api_key=os.getenv("GOOGLE_API_KEY"))
         
         app = MCPApp(
             name=self.name,

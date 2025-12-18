@@ -6,6 +6,7 @@ srcs/ 폴더의 MCP 기반 agent들을 위한 A2A wrapper
 
 import asyncio
 import logging
+import contextvars
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 
@@ -19,6 +20,56 @@ from srcs.common.a2a_integration import (
 from srcs.common.agent_interface import AgentMetadata, AgentType
 
 logger = logging.getLogger(__name__)
+
+# 현재 실행 중인 작업의 correlation_id를 추적하기 위한 ContextVar
+current_correlation_id = contextvars.ContextVar("current_correlation_id", default=None)
+
+
+class A2ALogHandler(logging.Handler):
+    """로그 메시지를 A2A 알림 메시지로 변환하는 핸들러"""
+    
+    def __init__(self, adapter: "A2AAdapter", correlation_id: Optional[str] = None):
+        super().__init__()
+        self.adapter = adapter
+        self.correlation_id = correlation_id
+        # 무한 루프 방지를 위해 자기 자신의 로거는 제외
+        self.ignored_loggers = [__name__, "srcs.common.a2a_integration", "srcs.common.a2a_adapter"]
+    
+    def emit(self, record):
+        if record.name in self.ignored_loggers:
+            return
+            
+        # ContextVar에서 현재 correlation_id 확인
+        ctx_id = current_correlation_id.get()
+        
+        # 만약 핸들러에 지정된 correlation_id가 있고, 현재 컨텍스트와 일치하지 않으면 무시
+        # (멀티테넌시/세션 분리 지원)
+        if self.correlation_id and ctx_id and self.correlation_id != ctx_id:
+            return
+            
+        try:
+            msg = self.format(record)
+            # 비동기 루프 내에서 실행되는지 확인하고 메시지 전송
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # 비동기적으로 메시지 전송
+                    asyncio.create_task(self.adapter.send_message(
+                        target_agent="", # 브로드캐스트
+                        message_type="notification",
+                        payload={
+                            "type": "log",
+                            "level": record.levelname,
+                            "logger": record.name,
+                            "message": msg
+                        },
+                        correlation_id=self.correlation_id
+                    ))
+            except RuntimeError:
+                # Event loop가 없는 경우 무시 (동기 컨텍스트에서는 전송 불가)
+                pass
+        except Exception:
+            self.handleError(record)
 
 
 class CommonAgentA2AWrapper(A2AAdapter):

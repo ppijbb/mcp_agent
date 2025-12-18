@@ -174,13 +174,19 @@ def execute_standard_agent_via_a2a(
     
     # 표준화된 input_data 생성
     result_json_path_str = str(result_json_path) if result_json_path else None
+    
+    # input_params에서 result_json_path가 있으면 제거하여 중복 전달 방지
+    params = input_params.copy()
+    if "result_json_path" in params:
+        params.pop("result_json_path")
+        
     input_data = create_standard_input_data(
         agent_type=agent_type,
         entry_point=entry_point,
         result_json_path=result_json_path_str,
         class_name=class_name,
         method_name=method_name,
-        **input_params
+        **params
     )
     
     # A2A를 통해 agent 실행
