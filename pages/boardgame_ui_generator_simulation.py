@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 게임 시뮬레이션을 위한 A2A 실시간 통신 시스템
-A2A를 통해 게임 액션을 전송하고 게임 상태를 실시간으로 업데이트
+표준 A2A 헬퍼를 사용하여 실시간 진행 상황 표시
 """
 
 import streamlit as st
-import asyncio
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -18,14 +17,15 @@ logger = logging.getLogger(__name__)
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from srcs.common.streamlit_a2a_runner import send_a2a_message
-from srcs.common.a2a_integration import get_global_registry, get_global_broker, A2AMessage, MessagePriority
+from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
+from srcs.common.agent_interface import AgentType
+from configs.settings import get_reports_path
 
 # 페이지 설정
 st.set_page_config(page_title="🎮 게임 시뮬레이션", page_icon="🎮", layout="wide")
 
 class GameSimulationUI:
-    """게임 시뮬레이션 UI - A2A를 통한 실시간 게임 플레이"""
+    """게임 시뮬레이션 UI - 표준 A2A 방식"""
     
     def __init__(self):
         if "game_state" not in st.session_state:
@@ -38,38 +38,54 @@ class GameSimulationUI:
                 "hand": [],
                 "last_action": None
             }
-        if "game_agent_id" not in st.session_state:
-            st.session_state.game_agent_id = None
     
-    async def send_game_action(self, action_type: str, action_data: Dict[str, Any]) -> bool:
-        """게임 액션을 A2A로 전송"""
-        if not st.session_state.game_agent_id:
-            st.error("게임 agent가 연결되지 않았습니다.")
+    def execute_game_action(self, action_type: str, action_data: Dict[str, Any]):
+        """게임 액션을 표준 A2A 방식으로 실행"""
+        
+        # 결과 저장 경로 설정
+        reports_path = Path(get_reports_path('game_simulation'))
+        reports_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        result_json_path = reports_path / f"game_action_{action_type}_{timestamp}.json"
+        
+        # 입력 파라미터 준비
+        input_params = {
+            "action_type": action_type,
+            "action_data": action_data,
+            "game_id": st.session_state.game_state.get("game_id"),
+            "game_state": st.session_state.game_state
+        }
+        
+        # 결과 표시용 placeholder 생성
+        result_placeholder = st.empty()
+        
+        # 표준화된 방식으로 agent 실행
+        result = execute_standard_agent_via_a2a(
+            placeholder=result_placeholder,
+            agent_id=f"game_simulation_agent_{action_type}",
+            agent_name=f"Game Simulation Agent ({action_type})",
+            agent_type=AgentType.MCP_AGENT,
+            entry_point="srcs.game_agents.game_simulation_agent",
+            capabilities=["game_simulation", "real_time_gameplay", "state_management"],
+            description="게임 시뮬레이션 및 실시간 상태 관리",
+            input_params=input_params,
+            result_json_path=result_json_path,
+            use_a2a=True
+        )
+        
+        if result and result.get("success"):
+            # 게임 상태 업데이트
+            result_data = result.get("data", {})
+            if "game_state" in result_data:
+                st.session_state.game_state.update(result_data["game_state"])
+            
+            st.success(f"✅ {action_type} 액션이 성공적으로 실행되었습니다!")
+            return True
+        elif result and result.get("error"):
+            st.error(f"❌ 액션 실행 실패: {result.get('error')}")
             return False
         
-        try:
-            # game_action 메시지 타입으로 전송
-            success = send_a2a_message(
-                source_agent_id="streamlit_ui",
-                target_agent_id=st.session_state.game_agent_id,
-                message_type="game_action",
-                payload={
-                    "action_type": action_type,
-                    "action_data": action_data,
-                    "game_id": st.session_state.game_state.get("game_id"),
-                    "timestamp": datetime.now().isoformat()
-                }
-            )
-            return success
-        except Exception as e:
-            logger.error(f"게임 액션 전송 실패: {e}", exc_info=True)
-            return False
-    
-    async def check_game_state_updates(self):
-        """게임 상태 업데이트 확인 (폴링 방식)"""
-        # A2A 메시지 큐에서 game_state_update 메시지 확인
-        # 실제 구현은 streamlit_a2a_runner의 메시지 핸들러 활용
-        pass
+        return False
     
     def render_game_board(self):
         """게임 보드 렌더링"""
@@ -90,7 +106,7 @@ class GameSimulationUI:
         st.subheader("🎲 게임 보드")
         board_state = game_state.get('board_state', {})
         if board_state:
-            st.json(board_state)  # 임시로 JSON 표시, 나중에 UI 명세서 기반으로 렌더링
+            st.json(board_state)
         
         # 플레이어 손패
         st.subheader("🃏 내 손패")
@@ -100,8 +116,8 @@ class GameSimulationUI:
             for i, card in enumerate(hand):
                 with cols[i % len(cols)]:
                     if st.button(f"카드 {i+1}", key=f"card_{i}"):
-                        # 카드 플레이 액션 전송
-                        asyncio.run(self.send_game_action("play_card", {"card_index": i}))
+                        self.execute_game_action("play_card", {"card_index": i})
+                        st.rerun()
         else:
             st.info("손패가 없습니다.")
         
@@ -111,19 +127,24 @@ class GameSimulationUI:
         
         with col1:
             if st.button("🃏 카드 뽑기", use_container_width=True):
-                asyncio.run(self.send_game_action("draw_card", {}))
+                self.execute_game_action("draw_card", {})
+                st.rerun()
         
         with col2:
             if st.button("⏭️ 턴 종료", use_container_width=True):
-                asyncio.run(self.send_game_action("end_turn", {}))
+                self.execute_game_action("end_turn", {})
+                st.rerun()
         
         with col3:
             if st.button("🔄 게임 상태 새로고침", use_container_width=True):
-                asyncio.run(self.send_game_action("get_state", {}))
+                self.execute_game_action("get_state", {})
+                st.rerun()
         
         with col4:
             if st.button("❌ 게임 종료", use_container_width=True):
-                asyncio.run(self.send_game_action("end_game", {}))
+                self.execute_game_action("end_game", {})
+                st.session_state.game_state["game_id"] = None
+                st.rerun()
         
         # 마지막 액션 표시
         last_action = game_state.get('last_action')
@@ -138,12 +159,20 @@ class GameSimulationUI:
         player_count = st.number_input("플레이어 수", min_value=2, max_value=8, value=4)
         
         if st.button("🎮 게임 시작", type="primary"):
-            # 게임 초기화 액션 전송
-            asyncio.run(self.send_game_action("init_game", {
+            # 게임 초기화
+            game_id = f"game_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            st.session_state.game_state.update({
+                "game_id": game_id,
+                "game_name": game_name,
+                "players": [f"Player {i+1}" for i in range(player_count)],
+                "game_phase": "setup"
+            })
+            
+            # 게임 초기화 액션 실행
+            self.execute_game_action("init_game", {
                 "game_name": game_name,
                 "player_count": player_count
-            }))
-            st.session_state.game_state["game_id"] = f"game_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            })
             st.rerun()
     
     def render_main(self):
@@ -161,4 +190,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

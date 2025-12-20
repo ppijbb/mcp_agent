@@ -163,7 +163,15 @@ def render_chat_generator():
             with st.chat_message("assistant"):
                 with st.spinner(f"'{data_type}' 데이터 {record_count}개를 생성하는 중... 잠시만 기다려주세요."):
                     try:
-                        response = asyncio.run(agent.run(data_type=data_type, record_count=record_count))
+                        # asyncio.run 대신 안전한 방식으로 실행
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                        
+                        response = loop.run_until_complete(agent.run(data_type=data_type, record_count=record_count))
                         st.markdown(response)
                         st.session_state.chat_messages.append({"role": "assistant", "content": response})
                     except Exception as e:
