@@ -13,7 +13,7 @@ from dataclasses import dataclass
 @dataclass
 class APIConfig:
     """API endpoint configuration."""
-    public_data_api_key: str = os.getenv("PUBLIC_DATA_API_KEY", "sample_key")
+    public_data_api_key: str = os.getenv("PUBLIC_DATA_API_KEY") or ""
     timeout_seconds: int = 10
     max_retries: int = 3
     

@@ -31,10 +31,12 @@
 
 ```bash
 # GitHub API (Required)
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Set via environment variable: GITHUB_TOKEN
+export GITHUB_TOKEN="${GITHUB_TOKEN}"
 
 # Google Gemini API (Required)  
-export GOOGLE_API_KEY="AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Set via environment variable: GOOGLE_API_KEY
+export GOOGLE_API_KEY="${GOOGLE_API_KEY}"
 
 # Prometheus (Optional - defaults to localhost:9090)
 export PROMETHEUS_URL="http://your-prometheus:9090"

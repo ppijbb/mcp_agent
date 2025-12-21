@@ -14,11 +14,15 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Set environment variables for minimal config
-os.environ.setdefault("OPENROUTER_API_KEY", "sk-or-dummy")
+# Note: OPENROUTER_API_KEY must be set via environment variable
+if not os.getenv("OPENROUTER_API_KEY"):
+    raise ValueError("OPENROUTER_API_KEY environment variable is required")
 os.environ.setdefault("LLM_MODEL", "google/gemini-2.5-flash-lite")
 os.environ.setdefault("LLM_TEMPERATURE", "0.7")
 os.environ.setdefault("LLM_MAX_TOKENS", "4000")
-os.environ.setdefault("GOOGLE_API_KEY", "dummy")
+# Note: GOOGLE_API_KEY must be set via environment variable
+if not os.getenv("GOOGLE_API_KEY"):
+    raise ValueError("GOOGLE_API_KEY environment variable is required")
 os.environ.setdefault("PLANNING_MODEL", "google/gemini-2.5-flash-lite")
 os.environ.setdefault("REASONING_MODEL", "google/gemini-2.5-flash-lite")
 os.environ.setdefault("VERIFICATION_MODEL", "google/gemini-2.5-flash-lite")

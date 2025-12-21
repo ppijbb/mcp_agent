@@ -216,7 +216,9 @@ DevOps Assistant는 다음 KPI를 추적합니다:
 
 ```python
 # GitHub API 설정
-GITHUB_TOKEN = "ghp_xxxxxxxxxxxx"
+# Use environment variable: GITHUB_TOKEN
+import os
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 # 지원 기능
 - 저장소 목록 조회

@@ -367,7 +367,7 @@ notion:
 
 # 선택적 설정
 openai:
-  api_key: "sk-****"  # LLM 기능 사용시
+  api_key: "${OPENAI_API_KEY}"  # LLM 기능 사용시 - 환경변수에서 로드
 ```
 
 ### 5.3 Agent 전용 설정 (`config.py`)
