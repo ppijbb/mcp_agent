@@ -57,6 +57,21 @@ try:
     for logger_name in ["fastmcp", "fastmcp.client", "fastmcp.runner"]:
         logger_instance = fastmcp_logging.getLogger(logger_name)
         logger_instance.setLevel(fastmcp_logging.WARNING)
+    
+    # MCP 클라이언트 로거도 필터링 (heartbeat 오류 방지)
+    for logger_name in ["mcp", "mcp.client", "mcp.client.streamable_http", "Runner"]:
+        logger_instance = logging.getLogger(logger_name)
+        logger_instance.setLevel(logging.WARNING)
+        # heartbeat 관련 메시지 필터링
+        class HeartbeatFilter(logging.Filter):
+            def filter(self, record):
+                msg = record.getMessage()
+                # heartbeat 관련 오류 메시지 필터링
+                if "heartbeat" in msg.lower() or "invalid_token" in msg.lower():
+                    return False
+                return True
+        logger_instance.addFilter(HeartbeatFilter())
+    
     FASTMCP_AVAILABLE = True
 except ImportError:
     FastMCPClient = None
@@ -819,6 +834,7 @@ class UniversalMCPHub:
         smithery_servers = ["fetch", "docfork", "context7-mcp", "parallel-search", "tavily-mcp", "WebSearch-MCP"]
         if server_name in smithery_servers:
             smithery_key = os.getenv("SMITHERY_API_KEY")
+            logger.debug(f"[MCP][check.req] server={server_name} smithery_key_present={bool(smithery_key)}")
             if not smithery_key:
                 return False
         
@@ -827,6 +843,11 @@ class UniversalMCPHub:
     
     def _load_mcp_servers_from_config(self):
         """MCP 서버 설정을 config에서 로드하고 환경변수 치환."""
+        # 중복 실행 방지
+        if hasattr(self, '_mcp_servers_loaded') and self._mcp_servers_loaded:
+            logger.debug("[MCP][load.skip] MCP server configs already loaded, skipping")
+            return
+
         try:
             # configs 폴더에서 로드 시도 (우선)
             config_file = project_root / "configs" / "mcp_config.json"
@@ -859,6 +880,8 @@ class UniversalMCPHub:
                     
                     self.mcp_server_configs = filtered_configs
                     logger.info(f"✅ Loaded MCP server configs: {list(self.mcp_server_configs.keys())}")
+                    # 로드 완료 플래그 설정
+                    self._mcp_servers_loaded = True
             else:
                 # 기본 DuckDuckGo MCP 서버 설정
                 self.mcp_server_configs = {
@@ -875,18 +898,18 @@ class UniversalMCPHub:
                     }
                 }
                 logger.info("✅ Using default MCP server config for ddg_search")
+                # 로드 완료 플래그 설정
+                self._mcp_servers_loaded = True
             
-            # FORCE DISABLE FLAKY SERVERS (DDG, Tavily) to use native fallbacks
+            # FORCE DISABLE FLAKY SERVERS (DDG only) to use native fallbacks
             if "ddg_search" in self.mcp_server_configs:
                 logger.info("🚫 Disabling flaky 'ddg_search' MCP server to use Native Tool fallback")
                 del self.mcp_server_configs["ddg_search"]
+
+            # tavily-mcp는 이제 활성화 (사용자가 요청)
                 
-            if "tavily-mcp" in self.mcp_server_configs:
-                logger.info("🚫 Disabling flaky 'tavily-mcp' MCP server")
-                del self.mcp_server_configs["tavily-mcp"]
-                
-            # Ensure we don't default to them either
-            keys_to_remove = [k for k in self.mcp_server_configs if k in ["ddg_search", "tavily-mcp"]]
+            # Ensure we don't default to them either (tavily-mcp 제외)
+            keys_to_remove = [k for k in self.mcp_server_configs if k in ["ddg_search"]]
             for k in keys_to_remove:
                 del self.mcp_server_configs[k]
                 
@@ -1047,6 +1070,7 @@ class UniversalMCPHub:
                 mcp_config = {
                     "mcpServers": {
                         server_name: {
+                            "transport": "stdio",
                             "command": command,
                             "args": args
                         }
@@ -1076,17 +1100,18 @@ class UniversalMCPHub:
                             
                             # 도구 등록
                             for tool in tools:
-                                tool_name_full = f"{server_name}::{tool.name}"
-                                tool_info = MCPToolInfo(
-                                    name=tool_name_full,
-                                    description=tool.description or "",
-                                    mcp_server=server_name,
-                                    parameters=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
-                                )
-                                self.registry.register_tool(tool_info)
+                                # register_mcp_tool 사용
+                                self.registry.register_mcp_tool(server_name, tool, tool)
                                 
                                 if server_name not in self.mcp_tools_map:
                                     self.mcp_tools_map[server_name] = {}
+                                # MCPToolInfo 생성 (자동 발견용)
+                                tool_info = MCPToolInfo(
+                                    server_guess=server_name,
+                                    name=f"{server_name}::{tool.name}",
+                                    description=tool.description or "",
+                                    input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+                                )
                                 self.mcp_tools_map[server_name][tool.name] = tool_info
                             
                             logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name}, tools: {len(tools)}")
@@ -1189,25 +1214,6 @@ class UniversalMCPHub:
                 }
             }
             
-            # #region agent log
-            import json
-            with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-                f.write(json.dumps({
-                    "location": f"mcp_integration.py:{1071}",
-                    "message": "FastMCP config prepared",
-                    "data": {
-                        "server_name": server_name,
-                        "url": base_url,
-                        "headers_keys": list(resolved_headers.keys()) if resolved_headers else [],
-                        "has_auth": "Authorization" in resolved_headers if resolved_headers else False,
-                        "mcp_config": mcp_config
-                    },
-                    "timestamp": int(time.time() * 1000),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }) + "\n")
-            # #endregion
             
             logger.info(f"[MCP][fastmcp.connect] server={server_name} url={base_url} headers={list(resolved_headers.keys()) if resolved_headers else 'None'}")
             
@@ -1715,27 +1721,6 @@ class UniversalMCPHub:
     
     async def _execute_via_mcp_server(self, server_name: str, tool_name: str, params: Dict[str, Any]) -> Optional[Any]:
         """MCP 서버를 통해 도구 실행 (with connection pooling and health check)."""
-        # #region agent log
-        import json
-        with open("/home/user/workspace/mcp_agent/.cursor/debug.log", "a") as f:
-            f.write(json.dumps({
-                "location": f"mcp_integration.py:{1569}",
-                "message": "_execute_via_mcp_server called",
-                "data": {
-                    "server_name": server_name,
-                    "tool_name": tool_name,
-                    "params_keys": list(params.keys()),
-                    "sessions_available": list(self.mcp_sessions.keys()),
-                    "server_in_sessions": server_name in self.mcp_sessions,
-                    "tools_map_available": list(self.mcp_tools_map.keys()),
-                    "server_in_tools_map": server_name in self.mcp_tools_map
-                },
-                "timestamp": int(time.time() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A"
-            }) + "\n")
-        # #endregion
         
         # Connection pooling: Check if connection exists and is healthy
         if server_name not in self.mcp_sessions:
@@ -1797,10 +1782,14 @@ class UniversalMCPHub:
                     # Context Manager로 사용 (가이드에 따른 올바른 사용법)
                     try:
                         async with fastmcp_client:
-                            # 타임아웃 설정
-                            from src.core.researcher_config import get_agent_tool_config
-                            tool_config = get_agent_tool_config()
-                            tool_timeout = tool_config.mcp_command_timeout
+                            # 타임아웃 설정 (기본값 30초)
+                            try:
+                                from src.core.researcher_config import get_agent_tool_config
+                                tool_config = get_agent_tool_config()
+                                tool_timeout = tool_config.mcp_command_timeout
+                            except (ImportError, AttributeError):
+                                # 기본 타임아웃 사용
+                                tool_timeout = 30.0
                             
                             # stopping 플래그 체크
                             if self.stopping:

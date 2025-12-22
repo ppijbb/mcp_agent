@@ -387,6 +387,111 @@ class HumanClarificationHandler:
                 }
             }
     
+    async def auto_select_response(
+        self,
+        question: Dict[str, Any],
+        context: Dict[str, Any],
+        shared_memory: Optional[Any] = None
+    ) -> Any:
+        """
+        자동으로 응답 선택 (사용자 입력 없이 LLM이 결정)
+        
+        Args:
+            question: 질문 정보
+            context: 컨텍스트 정보
+            shared_memory: 공유 메모리 (선택적)
+            
+        Returns:
+            선택된 응답 (선택지 값 또는 자연어 텍스트)
+        """
+        try:
+            question_text = question.get("text", "")
+            question_format = question.get("format", "natural_language")
+            options = question.get("options", [])
+            question_type = question.get("type", "general")
+            
+            # 컨텍스트에서 사용자 요청 추출
+            user_request = context.get("user_request", "")
+            
+            # LLM을 사용하여 자동 응답 생성
+            if question_format == "choice" and options:
+                # 선택지 형식인 경우 가장 적절한 선택지 선택
+                options_text = "\n".join([
+                    f"{i+1}. {opt.get('label', opt.get('value', ''))} (value: {opt.get('value', '')})"
+                    for i, opt in enumerate(options)
+                ])
+                
+                selection_prompt = f"""
+                Based on the user's request and context, automatically select the most appropriate option.
+                
+                User Request: {user_request}
+                
+                Question: {question_text}
+                
+                Available Options:
+                {options_text}
+                
+                Question Type: {question_type}
+                
+                Select the most appropriate option value based on:
+                1. The user's original request
+                2. Common sense and best practices
+                3. The context of the research task
+                
+                Return only the option value (e.g., "1_month", "3_months", etc.), not the label.
+                If none of the options seem appropriate, return the first option's value as a default.
+                """
+            else:
+                # 자연어 형식인 경우 적절한 응답 생성
+                selection_prompt = f"""
+                Based on the user's request and context, automatically provide an appropriate response.
+                
+                User Request: {user_request}
+                
+                Question: {question_text}
+                
+                Question Type: {question_type}
+                
+                Provide a clear, concise response that:
+                1. Addresses the question appropriately
+                2. Is consistent with the user's original request
+                3. Uses common sense and best practices
+                
+                Return only the response text, no additional explanation.
+                """
+            
+            result = await execute_llm_task(
+                prompt=selection_prompt,
+                task_type=TaskType.ANALYSIS,
+                system_message="You are an expert at making reasonable decisions based on context and user intent."
+            )
+            
+            auto_response = result.content.strip() if result.content else ""
+            
+            # 선택지 형식인 경우 값 검증
+            if question_format == "choice" and options:
+                # 응답이 선택지 값 중 하나인지 확인
+                option_values = [opt.get("value", "") for opt in options]
+                if auto_response in option_values:
+                    return auto_response
+                else:
+                    # 응답이 라벨인 경우 값으로 변환
+                    for opt in options:
+                        if opt.get("label", "").lower() == auto_response.lower():
+                            return opt.get("value", "")
+                    # 기본값: 첫 번째 옵션
+                    logger.warning(f"Auto-selected response '{auto_response}' not in options, using first option")
+                    return options[0].get("value", "") if options else ""
+            
+            return auto_response
+            
+        except Exception as e:
+            logger.error(f"Error in auto_select_response: {e}")
+            # 기본값 반환
+            if question.get("format") == "choice" and question.get("options"):
+                return question["options"][0].get("value", "") if question["options"] else ""
+            return "기본값"
+    
     def apply_clarification(
         self,
         clarification: Dict[str, Any],

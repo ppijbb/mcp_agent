@@ -1,102 +1,128 @@
 {
   "mcpServers": {
     "ddg_search": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@modelcontextprotocol/server-duckduckgo-search/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@modelcontextprotocol/server-duckduckgo-search"
+      ]
     },
     "fetch": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@smithery-ai/fetch/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery-ai/fetch"
+      ]
     },
     "docfork": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@docfork/mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@docfork/mcp"
+      ]
     },
     "context7-mcp": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@upstash/context7-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@upstash/context7-mcp"
+      ]
     },
     "exa": {
       "type": "http",
+      "transport": "stdio",
       "httpUrl": "https://mcp.exa.ai/mcp",
       "headers": {
         "Remove-Me": "Disable web_search_exa tool if you're just coding. To 100% call exa-code, say 'use exa-code'."
       }
     },
     "semantic_scholar": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@hamid-vakilzadeh/mcpsemanticscholar/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@hamid-vakilzadeh/mcpsemanticscholar"
+      ]
     },
     "parallel-search": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@parallel/search/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@parallel/search"
+      ]
     },
     "tavily-mcp": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@Jeetanshu18/tavily-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@Jeetanshu18/tavily-mcp"
+      ]
     },
     "WebSearch-MCP": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@mnhlt/WebSearch-MCP/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@mnhlt/WebSearch-MCP"
+      ]
     },
     "Google search console": {
-      "type": "http",
-      "url": "https://server.smithery.ai/google_search_console/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "google_search_console"
+      ]
     },
     "Paper Search": {
-      "type": "http",
-      "url": "https://server.smithery.ai/@adamamer20/paper-search-mcp-openai/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@adamamer20/paper-search-mcp-openai"
+      ]
     },
     "TodoList": {
-      "type": "http",
-      "url": "https://server.smithery.ai/todoist/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "todoist"
+      ]
     },
     "arxiv": {
       "command": "npx",
+      "transport": "stdio",
       "args": [
         "-y",
         "@modelcontextprotocol/server-arxiv@latest"
       ]
     },
     "kis MCP": {
-      "type": "http",
-      "url": "https://server.smithery.ai/@KISOpenAPI/kis-code-assistant-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@KISOpenAPI/kis-code-assistant-mcp"
+      ]
     }
   }
 }
