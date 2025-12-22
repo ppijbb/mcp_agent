@@ -407,29 +407,44 @@ class AutonomousOrchestrator:
                 logger.info("✅ User responses processed, continuing planning")
         
         try:
-            # 불명확한 부분 감지 (사용자 응답이 없을 때만)
-            if not state.get("clarification_context"):
+            # CLI 모드 감지 (더 정확한 방법)
+            import sys
+            is_cli_mode = (
+                not hasattr(sys, 'ps1') and  # Interactive shell이 아님
+                'streamlit' not in sys.modules and  # Streamlit이 로드되지 않음
+                not any('streamlit' in str(arg) for arg in sys.argv)  # Streamlit 실행 인자가 없음
+            )
+            
+            # 불명확한 부분 감지 (CLI 모드에서는 건너뛰기, 사용자 응답이 없을 때만)
+            if not state.get("clarification_context") and not is_cli_mode:
                 from src.core.human_clarification_handler import get_clarification_handler
                 clarification_handler = get_clarification_handler()
                 
-                ambiguities = await clarification_handler.detect_ambiguities(
-                    state.get('user_request', ''),
-                    {
-                        'objectives': state.get('analyzed_objectives', []),
-                        'domain': state.get('domain_analysis', {}),
-                        'scope': state.get('scope_analysis', {})
-                    }
-                )
-                
-                if ambiguities:
-                    # CLI 모드 감지 (더 정확한 방법)
-                    import sys
-                    is_cli_mode = (
-                        not hasattr(sys, 'ps1') and  # Interactive shell이 아님
-                        'streamlit' not in sys.modules and  # Streamlit이 로드되지 않음
-                        not any('streamlit' in str(arg) for arg in sys.argv)  # Streamlit 실행 인자가 없음
+                # 타임아웃 설정 (10초)
+                try:
+                    ambiguities = await asyncio.wait_for(
+                        clarification_handler.detect_ambiguities(
+                            state.get('user_request', ''),
+                            {
+                                'objectives': state.get('analyzed_objectives', []),
+                                'domain': state.get('domain_analysis', {}),
+                                'scope': state.get('scope_analysis', {})
+                            }
+                        ),
+                        timeout=10.0
                     )
-                    
+                except asyncio.TimeoutError:
+                    logger.warning("detect_ambiguities timeout, skipping clarification")
+                    ambiguities = []
+            elif is_cli_mode:
+                # CLI 모드에서는 clarification 건너뛰기
+                ambiguities = []
+                logger.info("🤖 CLI mode: Skipping ambiguity detection")
+            else:
+                ambiguities = []
+            
+            # ambiguities가 있으면 처리
+            if ambiguities:
                     # CLI 모드이거나 autopilot 모드인 경우 자동 선택
                     if is_cli_mode or state.get("autopilot_mode", False):
                         logger.info("🤖 CLI/Autopilot mode detected - auto-selecting responses")

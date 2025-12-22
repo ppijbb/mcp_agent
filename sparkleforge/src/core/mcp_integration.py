@@ -830,13 +830,20 @@ class UniversalMCPHub:
             if not smithery_key:
                 return False
         
-        # Smithery 기반 서버들 (fetch, docfork, context7-mcp, parallel-search, tavily-mcp, WebSearch-MCP)
+        # stdio 방식 서버는 API 키 불필요 (npx로 실행)
+        if "command" in server_config and "httpUrl" not in server_config and "url" not in server_config:
+            logger.debug(f"[MCP][check.req] server={server_name} stdio mode, no API key required")
+            return True
+        
+        # HTTP 방식 Smithery 서버만 API 키 필요
         smithery_servers = ["fetch", "docfork", "context7-mcp", "parallel-search", "tavily-mcp", "WebSearch-MCP"]
         if server_name in smithery_servers:
-            smithery_key = os.getenv("SMITHERY_API_KEY")
-            logger.debug(f"[MCP][check.req] server={server_name} smithery_key_present={bool(smithery_key)}")
-            if not smithery_key:
-                return False
+            # HTTP URL이 있는 경우만 API 키 필요
+            if server_config.get("httpUrl") or server_config.get("url"):
+                smithery_key = os.getenv("SMITHERY_API_KEY")
+                logger.debug(f"[MCP][check.req] server={server_name} http mode, smithery_key_present={bool(smithery_key)}")
+                if not smithery_key:
+                    return False
         
         # 다른 서버들은 API 키가 없어도 사용 가능 (예: ddg_search)
         return True
@@ -1667,7 +1674,27 @@ class UniversalMCPHub:
 
             tasks = [asyncio.create_task(connect_one_with_settings(n, c)) for n, c in enabled_server_items]
             # return_exceptions=True로 변경하여 일부 실패해도 계속 진행
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # 전체 초기화 타임아웃 설정 (서버 수 * 타임아웃, 최대 300초)
+            total_timeout = min(len(enabled_server_items) * timeout_per_server, 300.0)
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=total_timeout
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"[MCP][init.timeout] MCP initialization timeout after {total_timeout}s, cancelling remaining tasks...")
+                # 남은 작업 취소
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                # 완료된 작업만 결과 수집
+                results = []
+                for task in tasks:
+                    try:
+                        result = await task
+                        results.append(result)
+                    except (asyncio.CancelledError, Exception):
+                        results.append(None)
             
             # 결과 파싱 (예외가 포함될 수 있음)
             connected_servers = []

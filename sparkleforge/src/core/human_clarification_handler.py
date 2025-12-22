@@ -8,6 +8,7 @@ Planning 단계와 Task 실행 과정에서 불명확한 부분을 감지하고,
 
 import logging
 import uuid
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -47,6 +48,10 @@ class HumanClarificationHandler:
             [{"type": "time_range", "field": "...", "description": "..."}, ...]
         """
         try:
+            # 간단한 쿼리는 건너뛰기 (무한 대기 방지)
+            if len(user_query.split()) < 3:
+                logger.debug("Simple query detected, skipping ambiguity detection")
+                return []
             detection_prompt = f"""
             Analyze the following user query and identify any ambiguous or unclear aspects
             that would benefit from user clarification before creating a research plan.
@@ -95,11 +100,19 @@ class HumanClarificationHandler:
             If no ambiguities are found, return an empty list.
             """
             
-            result = await execute_llm_task(
-                prompt=detection_prompt,
-                task_type=TaskType.ANALYSIS,
-                system_message="You are an expert at identifying ambiguous requirements and determining when user clarification is needed."
-            )
+            # 타임아웃 설정 (15초)
+            try:
+                result = await asyncio.wait_for(
+                    execute_llm_task(
+                        prompt=detection_prompt,
+                        task_type=TaskType.ANALYSIS,
+                        system_message="You are an expert at identifying ambiguous requirements and determining when user clarification is needed."
+                    ),
+                    timeout=15.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("LLM timeout in detect_ambiguities, returning empty list")
+                return []
             
             # 결과 파싱
             import json
@@ -182,13 +195,20 @@ class HumanClarificationHandler:
                 Return only the question text, no additional explanation.
                 """
                 
-                result = await execute_llm_task(
-                    prompt=question_prompt,
-                    task_type=TaskType.GENERATION,
-                    system_message="You are an expert at creating clear, user-friendly questions."
-                )
-                
-                question_text = result.content.strip() if result.content else suggested_question
+                # 타임아웃 설정 (10초)
+                try:
+                    result = await asyncio.wait_for(
+                        execute_llm_task(
+                            prompt=question_prompt,
+                            task_type=TaskType.GENERATION,
+                            system_message="You are an expert at creating clear, user-friendly questions."
+                        ),
+                        timeout=10.0
+                    )
+                    question_text = result.content.strip() if result.content else suggested_question
+                except asyncio.TimeoutError:
+                    logger.warning("LLM timeout in generate_question, using suggested question")
+                    question_text = suggested_question
             else:
                 question_text = suggested_question
             
@@ -297,11 +317,19 @@ class HumanClarificationHandler:
             }}
             """
             
-            result = await execute_llm_task(
-                prompt=options_prompt,
-                task_type=TaskType.GENERATION,
-                system_message="You are an expert at creating clear, mutually exclusive choice options."
-            )
+            # 타임아웃 설정 (10초)
+            try:
+                result = await asyncio.wait_for(
+                    execute_llm_task(
+                        prompt=options_prompt,
+                        task_type=TaskType.GENERATION,
+                        system_message="You are an expert at creating clear, mutually exclusive choice options."
+                    ),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("LLM timeout in _generate_choice_options, returning empty list")
+                return []
             
             import json
             content = result.content or "{}"
@@ -460,13 +488,20 @@ class HumanClarificationHandler:
                 Return only the response text, no additional explanation.
                 """
             
-            result = await execute_llm_task(
-                prompt=selection_prompt,
-                task_type=TaskType.ANALYSIS,
-                system_message="You are an expert at making reasonable decisions based on context and user intent."
-            )
-            
-            auto_response = result.content.strip() if result.content else ""
+            # 타임아웃 설정 (10초)
+            try:
+                result = await asyncio.wait_for(
+                    execute_llm_task(
+                        prompt=selection_prompt,
+                        task_type=TaskType.ANALYSIS,
+                        system_message="You are an expert at making reasonable decisions based on context and user intent."
+                    ),
+                    timeout=10.0
+                )
+                auto_response = result.content.strip() if result.content else ""
+            except asyncio.TimeoutError:
+                logger.warning("LLM timeout in auto_select_response, using default")
+                auto_response = ""
             
             # 선택지 형식인 경우 값 검증
             if question_format == "choice" and options:
