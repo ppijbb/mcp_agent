@@ -9449,3 +9449,24 @@ Traceback (most recent call last):
     print(formatted_message, flush=True)
 BrokenPipeError: [Errno 32] Broken pipe
 
+2025-12-22 17:07:23,649 [ERROR] asyncio: Task exception was never retrieved
+future: <Task finished name='Task-2714' coro=<ProcessManager._handle_shutdown() done, defined at /home/user/workspace/mcp_agent/sparkleforge/src/core/process_manager.py:250> exception=SystemExit(143)>
+Traceback (most recent call last):
+  File "/home/user/workspace/mcp_agent/test_mcp_tool_call.py", line 481, in <module>
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/base_events.py", line 678, in run_until_complete
+    self.run_forever()
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/base_events.py", line 645, in run_forever
+    self._run_once()
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/home/user/miniconda3/envs/mcp/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/home/user/workspace/mcp_agent/sparkleforge/src/core/process_manager.py", line 276, in _handle_shutdown
+    sys.exit(exit_code)
+SystemExit: 143
