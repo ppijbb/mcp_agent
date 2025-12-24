@@ -179,7 +179,9 @@ class PIIRedactor:
     def _detect_pii_with_llm(self, text: str) -> List[PIIMatch]:
         """LLM을 사용한 PII 감지 (더 정확하지만 느림)."""
         # TODO: LLM 기반 PII 감지 구현
+        # Issue: High priority - LLM 기반 PII 감지 기능 구현 필요
         # 현재는 패턴 기반만 사용
+        # 향후 구현 시 LLM을 사용하여 더 정확한 PII 감지 가능
         return []
 
 

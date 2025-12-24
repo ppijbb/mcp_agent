@@ -250,6 +250,7 @@ class ContextEngineer:
                 try:
                     from src.core.memory_service import get_background_memory_service
                     # TODO: 실제 메모리 저장소에서 조회 (현재는 빈 리스트)
+                    # Issue: High priority - 실제 메모리 저장소에서 관련 메모리 조회 구현 필요
                     # memories = await memory_storage.get_relevant_memories(user_id, user_query)
                     fetched_context["memories"] = []
                 except Exception as e:
@@ -257,6 +258,8 @@ class ContextEngineer:
             
             # 2. RAG 문서 조회 (외부 지식)
             # TODO: RAG 시스템 통합
+            # Issue: High priority - RAG 시스템 통합 필요 (벡터 DB, 임베딩 검색 등)
+            # 현재는 빈 리스트 반환
             fetched_context["rag_documents"] = []
             
             # 3. 세션 히스토리 조회

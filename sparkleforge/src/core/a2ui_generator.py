@@ -354,12 +354,7 @@ class A2UIGenerator:
                 "value": data_model
             }
         }
-
-
-# 싱글톤 인스턴스
-_generator_instance: Optional[A2UIGenerator] = None
-
-
+    
     def generate_question_a2ui(
         self,
         question: Dict[str, Any]

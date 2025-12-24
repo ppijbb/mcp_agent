@@ -25,6 +25,9 @@ class MemoryTool:
         """초기화."""
         self.access_control = get_memory_access_control()
         # TODO: 실제 메모리 저장소 연결
+        # Issue: High priority - 실제 메모리 저장소(벡터 DB 등) 연결 필요
+        # 현재는 임시 인메모리 저장소 사용
+        # 향후 HybridStorage 또는 벡터 DB와 통합 필요
         self.memory_storage: Dict[str, BaseMemory] = {}  # 임시 저장소
         
         logger.info("MemoryTool initialized")
