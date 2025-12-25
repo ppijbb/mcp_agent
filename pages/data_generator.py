@@ -164,7 +164,6 @@ def render_chat_generator():
                 with st.spinner(f"'{data_type}' 데이터 {record_count}개를 생성하는 중... 잠시만 기다려주세요."):
                     try:
                         # asyncio.run 대신 안전한 방식으로 실행
-                        import asyncio
                         try:
                             loop = asyncio.get_event_loop()
                         except RuntimeError:

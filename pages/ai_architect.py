@@ -9,7 +9,6 @@ from pathlib import Path
 import sys
 import json
 from datetime import datetime
-import os
 import pandas as pd
 import plotly.express as px
 
@@ -30,7 +29,7 @@ except ImportError:
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()

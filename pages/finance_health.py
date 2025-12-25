@@ -9,19 +9,18 @@ import sys
 from pathlib import Path
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 import json
 import yfinance as yf
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import os
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -33,13 +32,13 @@ sys.path.insert(0, str(project_root))
 # 중앙 설정 시스템 import
 from configs.settings import get_reports_path
 
-# Finance Health Agent 모듈 임포트
-try:
-    from srcs.enterprise_agents.personal_finance_health_agent import main as finance_health_main
-except ImportError as e:
-    st.error(f"Finance Health Agent를 사용하려면 필요한 의존성을 설치해야 합니다: {e}")
-    st.error("시스템 관리자에게 문의하여 Finance Health Agent 모듈을 설정하세요.")
-    st.stop()
+# Finance Health Agent 모듈 임포트 (필요시 사용)
+# try:
+#     from srcs.enterprise_agents.personal_finance_health_agent import main as finance_health_main
+# except ImportError as e:
+#     st.error(f"Finance Health Agent를 사용하려면 필요한 의존성을 설치해야 합니다: {e}")
+#     st.error("시스템 관리자에게 문의하여 Finance Health Agent 모듈을 설정하세요.")
+#     st.stop()
 
 # 페이지 설정
 try:
@@ -482,7 +481,6 @@ def render_real_finance_agent(save_to_file=False):
                 st.warning("모든 필수 정보를 입력해주세요.")
         with col2:
             if 'finance_input_data' in st.session_state:
-                placeholder = st.empty()
                 result_json_path = Path(st.session_state['finance_result_json_path'])
                 
                 # 입력 파라미터 준비
@@ -1001,5 +999,5 @@ if latest_finance_result:
                 st.caption(f"⏰ 분석 시간: {latest_finance_result['timestamp']}")
         else:
             st.write("결과 데이터 형식이 예상과 다릅니다.")
-    else:
+else:
     st.info("💡 아직 Finance Health Agent의 결과가 없습니다. 위에서 재무 건강 분석을 실행해보세요.") 

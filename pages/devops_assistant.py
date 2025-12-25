@@ -7,7 +7,6 @@
 import streamlit as st
 import sys
 from pathlib import Path
-import json
 from datetime import datetime
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -21,7 +20,7 @@ from configs.settings import get_reports_path
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()

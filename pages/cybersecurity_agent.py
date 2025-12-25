@@ -1,9 +1,7 @@
 import streamlit as st
 from pathlib import Path
 import sys
-import json
 from datetime import datetime
-import os
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
@@ -20,14 +18,13 @@ except ImportError:
     st.error("❌ 설정 파일을 찾을 수 없습니다. configs/settings.py를 확인해주세요.")
     st.stop()
 from srcs.enterprise_agents.cybersecurity_infrastructure_agent import (
-    CybersecurityAgent,
     load_assessment_types,
     load_compliance_frameworks
 )
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -98,14 +95,6 @@ def main():
             reports_path = Path(get_reports_path('cybersecurity'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"cybersecurity_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
-            config = {
-                'company_name': company_name,
-                'assessment_type': assessment_type,
-                'frameworks': frameworks,
-                'simulation_mode': simulation_mode,
-                'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
-            }
 
             # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(

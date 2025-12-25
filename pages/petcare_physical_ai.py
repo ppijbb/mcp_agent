@@ -7,7 +7,6 @@ LangGraph 기반 반려동물 케어 Agent
 import streamlit as st
 import sys
 from pathlib import Path
-import json
 from datetime import datetime
 
 project_root = Path(__file__).parent.parent
@@ -19,7 +18,7 @@ from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()

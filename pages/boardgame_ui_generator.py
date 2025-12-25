@@ -7,7 +7,6 @@
 import streamlit as st
 import asyncio
 import sys
-import os
 import logging
 from pathlib import Path
 from typing import Dict, Any
@@ -24,21 +23,17 @@ from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
-# LLM import (게임 이름 추출용)
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
-
 # BGG 접근용 - 웹 스크래핑
 import aiohttp
-import xml.etree.ElementTree as ET
 from urllib.parse import quote_plus
 import re
 
-# Result Reader 임포트
-try:
-    from srcs.utils.result_reader import result_reader, result_display
-except ImportError as e:
-    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
-    st.stop()
+# Result Reader 임포트 (필요시 사용)
+# try:
+#     from srcs.utils.result_reader import result_reader
+# except ImportError as e:
+#     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+#     st.stop()
 
 # 페이지 설정
 st.set_page_config(page_title="🤖 Agent-driven UI", page_icon="🤖", layout="wide")
@@ -144,9 +139,9 @@ class RealLangGraphUI:
                                 
                                 year = None
                                 year_patterns = [
-                                    rf'\((\d{{4}})\)',
-                                    rf'<span[^>]*>(\d{{4}})</span>',
-                                    rf'year[^>]*>(\d{{4}})<',
+                                    r'\((\d{4})\)',
+                                    r'<span[^>]*>(\d{4})</span>',
+                                    r'year[^>]*>(\d{4})<',
                                 ]
                                 
                                 for pattern in year_patterns:
@@ -471,7 +466,6 @@ class RealLangGraphUI:
 
         # 상세 정보 및 웹 규칙 가져오기
         try:
-            game_name_for_search = selected_game.get('name', 'board game')
 
             with st.spinner(f"'{selected_game['name']}' 상세 정보 조회 중..."):
                 # BGG 웹 페이지에서 상세 정보 가져오기
@@ -511,7 +505,6 @@ class RealLangGraphUI:
         if st.button("🧠 이 설명으로 UI 생성 분석 요청", type="primary", use_container_width=True, disabled=st.session_state.analysis_in_progress):
             if game_description.strip():
                 # Streamlit에서 비동기 함수 실행
-                import asyncio
                 try:
                     loop = asyncio.get_event_loop()
                 except RuntimeError:
@@ -541,7 +534,6 @@ class RealLangGraphUI:
             with col2:
                 if st.button("이 게임으로 분석", key=f"select_{game.get('id')}", use_container_width=True):
                     # Streamlit에서 비동기 함수 실행
-                    import asyncio
                     try:
                         loop = asyncio.get_event_loop()
                     except RuntimeError:
@@ -588,7 +580,6 @@ class RealLangGraphUI:
             input_description = game_info["description"]
         
         # GameUIAnalysisState 데이터 구성
-        from lang_graph.table_game_mate.agents.game_ui_analyzer import GameUIAnalysisState
         input_state_data = {
             "game_description": input_description,
             "detailed_rules": game_info.get("rules", ""),
@@ -742,7 +733,6 @@ UI 명세서:
 
         # 마크다운 형식으로 결과 표시
         with st.spinner("📝 분석 결과를 마크다운 형식으로 변환 중..."):
-            import asyncio
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:

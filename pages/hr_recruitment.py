@@ -7,10 +7,7 @@
 import streamlit as st
 import sys
 from pathlib import Path
-import os
-import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
 
 
 from srcs.common.page_utils import create_agent_page
@@ -26,14 +23,14 @@ from configs.settings import get_reports_path
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
 
 # HR Recruitment Agent 임포트 시도
 try:
-    from srcs.enterprise_agents.hr_recruitment_agent import HRRecruitmentAgent
+    pass  # HRRecruitmentAgent는 현재 사용되지 않음
 except ImportError as e:
     st.error(f"HR Recruitment Agent를 사용하려면 필요한 의존성을 설치해야 합니다: {e}")
     st.error("시스템 관리자에게 문의하여 HR Recruitment Agent 모듈을 설정하세요.")
@@ -100,13 +97,6 @@ def main():
             reports_path = Path(get_reports_path('recruitment'))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"recruitment_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
-            config = {
-                'position': position,
-                'company': company,
-                'workflows': workflows,
-                'save_to_file': False # UI 모드에서는 파일 저장을 비활성화
-            }
 
             # 입력 파라미터 준비
             input_data = {

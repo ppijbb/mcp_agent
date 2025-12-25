@@ -11,8 +11,6 @@ sys.path.insert(0, str(project_root))
 
 from configs.settings import get_reports_path
 from srcs.advanced_agents.decision_agent import (
-    MobileInteraction,
-    UserProfile,
     InteractionType,
 )
 from srcs.common.page_utils import create_agent_page
@@ -21,7 +19,7 @@ from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
