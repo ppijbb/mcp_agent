@@ -88,3 +88,6 @@
 [submodule "open_researcher/A2UI"]
 	path = open_researcher/A2UI
 	url = https://github.com/google/A2UI.git
+[submodule "open_researcher/candleview"]
+	path = open_researcher/candleview
+	url = https://github.com/0xhappyboy/candleview.git
