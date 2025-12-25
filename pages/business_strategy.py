@@ -25,14 +25,13 @@ except ImportError:
     st.stop()
 
 # 공통 스타일 및 유틸리티 임포트
-from srcs.common.styles import get_common_styles, get_page_header
-from srcs.common.page_utils import setup_page, render_home_button, create_agent_page
+from srcs.common.page_utils import setup_page, create_agent_page
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -88,7 +87,7 @@ def display_results(result_data):
                 report_data = scout_result.get("data", "")
                 
                 with st.expander("📊 Business Data Scout 보고서", expanded=True):
-                    st.success(f"✅ Business Data Scout 완료")
+                    st.success("✅ Business Data Scout 완료")
                     if report_path:
                         st.info(f"**보고서 위치**: `{report_path}`")
                         # 파일이 존재하면 파일에서 읽기, 없으면 data 필드 사용
@@ -114,7 +113,7 @@ def display_results(result_data):
                 report_data = trend_result.get("data", "")
                 
                 with st.expander("📈 Trend Analyzer 보고서", expanded=True):
-                    st.success(f"✅ Trend Analyzer 완료")
+                    st.success("✅ Trend Analyzer 완료")
                     if report_path:
                         st.info(f"**보고서 위치**: `{report_path}`")
                         # 파일이 존재하면 파일에서 읽기, 없으면 data 필드 사용

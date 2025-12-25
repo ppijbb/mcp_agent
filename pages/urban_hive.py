@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -17,7 +16,7 @@ from configs.settings import get_reports_path
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -229,5 +228,5 @@ if latest_urban_result:
                 st.caption(f"⏰ 분석 시간: {latest_urban_result['analysis_timestamp']}")
         else:
             st.write("결과 데이터 형식이 예상과 다릅니다.")
-    else:
+else:
     st.info("💡 아직 Urban Hive Agent의 결과가 없습니다. 위에서 도시 데이터 분석을 실행해보세요.")

@@ -5,9 +5,7 @@ SparkleForge Multi-Agent Research System Page
 """
 
 import streamlit as st
-import asyncio
-import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import logging
 from datetime import datetime
 from pathlib import Path

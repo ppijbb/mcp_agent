@@ -7,9 +7,6 @@ AI 기반 자율 연구 시스템과 통합된 연구 에이전트
 import streamlit as st
 import sys
 from pathlib import Path
-import tempfile
-import json
-import os
 from datetime import datetime
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
@@ -21,15 +18,12 @@ sys.path.insert(0, str(project_root))
 # 중앙 설정 임포트
 from configs.settings import get_reports_path
 
-# 공통 유틸리티 임포트
-from srcs.common.page_utils import create_agent_page
-
-# Result Reader 임포트
-try:
-    from srcs.utils.result_reader import result_reader, result_display
-except ImportError as e:
-    st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
-    st.stop()
+# Result Reader 임포트 (필요시 사용)
+# try:
+#     from srcs.utils.result_reader import result_reader
+# except ImportError as e:
+#     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
+#     st.stop()
 
 # SparkleForge Project 임포트 시도
 try:
@@ -37,14 +31,15 @@ try:
     sparkleforge_path = Path(__file__).parent.parent / "sparkleforge"
     sys.path.insert(0, str(sparkleforge_path))
     
-    from src.core.agent_orchestrator import AgentOrchestrator
-    from src.core.autonomous_orchestrator import AutonomousOrchestrator
-    from src.agents.research_agent import ResearchAgent
-    from src.agents.evaluation_agent import EvaluationAgent
-    from src.agents.validation_agent import ValidationAgent
-    from src.agents.synthesis_agent import SynthesisAgent
-    from src.core.mcp_integration import UniversalMCPHub
-    from src.core.researcher_config import load_config_from_env
+    # SparkleForge imports (필요시 사용)
+    # from src.core.agent_orchestrator import AgentOrchestrator
+    # from src.core.autonomous_orchestrator import AutonomousOrchestrator
+    # from src.agents.research_agent import ResearchAgent
+    # from src.agents.evaluation_agent import EvaluationAgent
+    # from src.agents.validation_agent import ValidationAgent
+    # from src.agents.synthesis_agent import SynthesisAgent
+    # from src.core.mcp_integration import UniversalMCPHub
+    # from src.core.researcher_config import load_config_from_env
     
     SPARKLEFORGE_AVAILABLE = True
 except ImportError as e:
@@ -57,11 +52,8 @@ LOCAL_RESEARCHER_AVAILABLE = SPARKLEFORGE_AVAILABLE
 if not LOCAL_RESEARCHER_AVAILABLE:
     try:
         from srcs.advanced_agents.researcher_v2 import (
-            ResearcherAgent,
             load_research_focus_options,
-            load_research_templates,
-            get_research_agent_status,
-            save_research_report
+            load_research_templates
         )
     except ImportError as e:
         st.error(f"⚠️ Research Agent를 불러올 수 없습니다: {e}")
@@ -166,7 +158,6 @@ def run_research_interface():
         }
         
         # 연구 실행 (A2A를 통해)
-        placeholder = st.empty()
         result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         result_json_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -293,7 +284,7 @@ def run_fallback_interface():
     
     # 기존 Research Agent 로직
     research_focus_options = load_research_focus_options()
-    research_templates = load_research_templates()
+    load_research_templates()  # 사용되지 않지만 함수 호출 유지
     
     col1, col2 = st.columns([2, 1])
     
@@ -322,7 +313,6 @@ def run_fallback_interface():
             st.warning("⚠️ 연구 주제를 입력해주세요.")
             return
         
-        placeholder = st.empty()
         result_json_path = Path(get_reports_path('research')) / f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         result_json_path.parent.mkdir(parents=True, exist_ok=True)
         

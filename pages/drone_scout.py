@@ -1,6 +1,5 @@
 import streamlit as st
 import sys
-import json
 from datetime import datetime
 from pathlib import Path
 import pydeck as pdk
@@ -16,7 +15,7 @@ from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()

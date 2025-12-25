@@ -13,7 +13,6 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from srcs.common.standard_a2a_page_template import create_standard_a2a_page
 from srcs.common.agent_interface import AgentType
 
 def display_results(result_data):

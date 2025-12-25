@@ -19,7 +19,7 @@ from srcs.common.agent_interface import AgentType
 from configs.settings import get_reports_path
 
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()

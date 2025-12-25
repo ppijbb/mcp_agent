@@ -6,18 +6,14 @@
 
 import streamlit as st
 import sys
-import asyncio
-import os
-import tempfile
 from pathlib import Path
-import json
 from datetime import datetime
 from srcs.common.standard_a2a_page_helper import execute_standard_agent_via_a2a
 from srcs.common.agent_interface import AgentType
 
 # Result Reader 임포트
 try:
-    from srcs.utils.result_reader import result_reader, result_display
+    from srcs.utils.result_reader import result_reader
 except ImportError as e:
     st.error(f"❌ 결과 읽기 모듈을 불러올 수 없습니다: {e}")
     st.stop()
@@ -32,7 +28,7 @@ from configs.settings import get_reports_path
 # Workflow Orchestrator 임포트 시도
 try:
     # We only need the app for some info, not execution
-    from srcs.basic_agents.workflow_orchestration import app
+    # from srcs.basic_agents.workflow_orchestration import app
     WORKFLOW_AGENT_AVAILABLE = True
 except ImportError as e:
     WORKFLOW_AGENT_AVAILABLE = False
@@ -386,5 +382,5 @@ if latest_workflow_result:
                 st.caption(f"⏰ 실행 시간: {latest_workflow_result['timestamp']}")
         else:
             st.write("결과 데이터 형식이 예상과 다릅니다.")
-    else:
+else:
     st.info("💡 아직 Workflow Orchestrator의 결과가 없습니다. 위에서 워크플로우를 실행해보세요.") 
