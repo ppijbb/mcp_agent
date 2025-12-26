@@ -17,6 +17,8 @@ def portfolio_manager_node(state: AgentState) -> Dict:
     outlook = state.get("market_outlook")
     risk_profile = state.get("risk_profile")
     tickers = state.get("target_tickers", [])
+    synthesized_indicators = state.get("synthesized_indicators")
+    exit_point_predictions = state.get("exit_point_predictions")
 
     if not outlook:
         error_message = "투자 계획 수립에 필요한 시장 전망 데이터가 없습니다."
@@ -25,7 +27,7 @@ def portfolio_manager_node(state: AgentState) -> Dict:
         return {"error_message": error_message}
 
     prompt = f"""
-역할: 포트폴리오 매니저. 시장 전망, 리스크 성향, 대상 티커로 실행 가능한 계획을 산출하라.
+역할: 포트폴리오 매니저. 시장 전망, 리스크 성향, 최종 통합 지표, 매도시점 추측을 종합하여 실행 가능한 계획을 산출하라.
 제약:
 - 응답은 오직 JSON.
 - buy/sell/hold는 제공된 티커 집합의 부분집합이며 중복 금지.
@@ -35,6 +37,7 @@ def portfolio_manager_node(state: AgentState) -> Dict:
   - moderate: buy≤2, 포지션 균형
   - aggressive: buy≤3, 공세적 포지셔닝 허용
 - 불확실할 경우 hold로 분류.
+- 매도시점 추측을 고려하여 매도 타이밍을 결정하라.
 
 입력:
 - 시장 전망:
@@ -42,6 +45,12 @@ def portfolio_manager_node(state: AgentState) -> Dict:
 
 - 리스크 성향: {risk_profile}
 - 대상 티커: {tickers}
+
+- 최종 통합 지표(JSON):
+{json.dumps(synthesized_indicators, indent=2, ensure_ascii=False) if synthesized_indicators else "없음"}
+
+- 매도시점 추측(JSON):
+{json.dumps(exit_point_predictions, indent=2, ensure_ascii=False) if exit_point_predictions else "없음"}
 
 출력(JSON only):
 {{

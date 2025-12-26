@@ -17,6 +17,9 @@ from .agents import (
     debt_manager_node,
     goal_tracker_node,
     commission_calculator_node,
+    chart_analyzer_node,
+    technical_synthesizer_node,
+    exit_point_predictor_node,
 )
 
 class FinancialAgentWorkflow:
@@ -48,9 +51,12 @@ class FinancialAgentWorkflow:
         # 기존 투자 워크플로우 노드
         workflow.add_node("market_data_collector", market_data_collector_node)
         workflow.add_node("news_collector", news_collector_node)
+        workflow.add_node("chart_analyzer", chart_analyzer_node)
         workflow.add_node("sync_data", sync_node)
         workflow.add_node("news_analyzer", news_analyzer_node)
         workflow.add_node("chief_strategist", chief_strategist_node)
+        workflow.add_node("technical_synthesizer", technical_synthesizer_node)
+        workflow.add_node("exit_point_predictor", exit_point_predictor_node)
         workflow.add_node("portfolio_manager", portfolio_manager_node)
         workflow.add_node("trader", trader_node)
         
@@ -68,16 +74,21 @@ class FinancialAgentWorkflow:
         # 투자 워크플로우 단계
         workflow.add_edge("goal_tracker", "market_data_collector")
         workflow.add_edge("goal_tracker", "news_collector")
+        workflow.add_edge("goal_tracker", "chart_analyzer")
         
         # 데이터 수집 노드 -> 동기화 노드
         workflow.add_edge("market_data_collector", "sync_data")
         workflow.add_edge("news_collector", "sync_data")
+        workflow.add_edge("chart_analyzer", "sync_data")
         
         # 동기화 노드 -> 뉴스 분석가 -> 전략가 노드
         workflow.add_edge("sync_data", "news_analyzer")
         workflow.add_edge("news_analyzer", "chief_strategist")
         
-        workflow.add_edge("chief_strategist", "portfolio_manager")
+        # 전략가 -> 기술적 지표 통합 -> 매도시점 추측 -> 포트폴리오 관리자
+        workflow.add_edge("chief_strategist", "technical_synthesizer")
+        workflow.add_edge("technical_synthesizer", "exit_point_predictor")
+        workflow.add_edge("exit_point_predictor", "portfolio_manager")
         workflow.add_edge("portfolio_manager", "trader")
         
         # 수수료 계산 및 감사
@@ -142,6 +153,14 @@ if __name__ == "__main__":
         # 투자 워크플로우 필드
         "technical_analysis": {},
         "news_data": {},
+        # 차트 분석 필드 (신규)
+        "ohlcv_data": None,
+        "chart_analysis": None,
+        "chart_images": None,
+        "technical_indicators_advanced": None,
+        # 최종 지표 및 매도시점 추측 필드 (신규)
+        "synthesized_indicators": None,
+        "exit_point_predictions": None,
         "sentiment_analysis": None,
         "market_outlook": None,
         "investment_plan": None,

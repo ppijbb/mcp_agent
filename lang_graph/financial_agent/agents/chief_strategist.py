@@ -28,25 +28,33 @@ def chief_strategist_node(state: AgentState) -> Dict:
 
     tech_analysis = state.get("technical_analysis")
     sentiment_analysis = state.get("sentiment_analysis")
+    chart_analysis = state.get("chart_analysis")
+    technical_indicators_advanced = state.get("technical_indicators_advanced")
 
-    if not tech_analysis and not sentiment_analysis:
+    if not tech_analysis and not sentiment_analysis and not chart_analysis:
         error_message = "분석에 필요한 데이터가 부족합니다."
         state["log"].append(error_message)
         raise ValueError(error_message)
 
     prompt = f"""
-역할: 수석 전략가. 아래 기술적 분석과 뉴스 감성 결과를 통합하여 시장 전망을 산출하라.
+역할: 수석 전략가. 아래 기술적 분석, 뉴스 감성, 차트 분석 결과를 통합하여 시장 전망을 산출하라.
 요구 사항:
 1) 긍/부/중립 요인을 모두 고려해 단일 결론을 내린다(결정적).
 2) 불확실성은 수치형 신뢰도(0~1)로 표현한다.
 3) 출력은 오직 아래 JSON 스키마만 반환한다. 추가 텍스트 금지.
 
 입력:
-- 기술적 분석(JSON):
-{json.dumps(tech_analysis, indent=2, cls=NumpyEncoder)}
+- 기본 기술적 분석(JSON):
+{json.dumps(tech_analysis, indent=2, cls=NumpyEncoder) if tech_analysis else "없음"}
 
 - 뉴스 감성 분석(JSON):
-{json.dumps(sentiment_analysis, indent=2, ensure_ascii=False)}
+{json.dumps(sentiment_analysis, indent=2, ensure_ascii=False) if sentiment_analysis else "없음"}
+
+- 차트 분석(JSON):
+{json.dumps(chart_analysis, indent=2, ensure_ascii=False, cls=NumpyEncoder) if chart_analysis else "없음"}
+
+- 고급 기술적 지표(JSON):
+{json.dumps(technical_indicators_advanced, indent=2, ensure_ascii=False, cls=NumpyEncoder) if technical_indicators_advanced else "없음"}
 
 출력(JSON only):
 {{

@@ -16,4 +16,9 @@ from .financial_analyzer import financial_analyzer_node
 from .tax_optimizer import tax_optimizer_node
 from .debt_manager import debt_manager_node
 from .goal_tracker import goal_tracker_node
-from .commission_calculator import commission_calculator_node 
+from .commission_calculator import commission_calculator_node
+
+# 차트 분석 관련 에이전트들
+from .chart_analyzer import chart_analyzer_node
+from .technical_synthesizer import technical_synthesizer_node
+from .exit_point_predictor import exit_point_predictor_node 

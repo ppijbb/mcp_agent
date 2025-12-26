@@ -54,6 +54,15 @@ class TradingConfig:
 
 
 @dataclass
+class ChartAnalysisConfig:
+    """차트 분석 관련 설정"""
+    chart_image_save_path: str
+    chart_analysis_llm_model: Optional[str]
+    max_ohlcv_data_points: int
+    exit_prediction_horizon_days: int
+
+
+@dataclass
 class WorkflowConfig:
     """워크플로우 관련 설정"""
     valid_risk_profiles: List[str]
@@ -68,6 +77,7 @@ class FinancialAgentConfig:
     mcp: MCPConfig
     trading: TradingConfig
     workflow: WorkflowConfig
+    chart_analysis: ChartAnalysisConfig
 
 
 def _get_required_env(key: str, var_type: type = str) -> Any:
@@ -199,12 +209,26 @@ def load_config() -> FinancialAgentConfig:
         )
         _validate_risk_profiles(workflow_config.valid_risk_profiles)
         
+        # 차트 분석 설정 (선택적, 기본값 사용)
+        chart_image_save_path = _get_optional_env("CHART_IMAGE_SAVE_PATH", str) or "chart_images"
+        chart_analysis_llm_model = _get_optional_env("CHART_ANALYSIS_LLM_MODEL", str)
+        max_ohlcv_data_points = _get_optional_env("MAX_OHLCV_DATA_POINTS", int) or 1000
+        exit_prediction_horizon_days = _get_optional_env("EXIT_PREDICTION_HORIZON_DAYS", int) or 30
+        
+        chart_analysis_config = ChartAnalysisConfig(
+            chart_image_save_path=chart_image_save_path,
+            chart_analysis_llm_model=chart_analysis_llm_model,
+            max_ohlcv_data_points=max_ohlcv_data_points,
+            exit_prediction_horizon_days=exit_prediction_horizon_days
+        )
+        
         return FinancialAgentConfig(
             llm=llm_config,
             multi_model_llm=multi_model_llm_config,
             mcp=mcp_config,
             trading=trading_config,
-            workflow=workflow_config
+            workflow=workflow_config,
+            chart_analysis=chart_analysis_config
         )
         
     except ValueError as e:
@@ -253,3 +277,8 @@ def get_multi_model_llm_config() -> MultiModelLLMConfig:
 def get_trading_config() -> TradingConfig:
     """거래 설정 반환"""
     return get_config().trading
+
+
+def get_chart_analysis_config() -> ChartAnalysisConfig:
+    """차트 분석 설정 반환"""
+    return get_config().chart_analysis

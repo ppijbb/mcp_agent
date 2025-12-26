@@ -1,4 +1,4 @@
-from typing import List, TypedDict, Optional, Dict
+from typing import List, TypedDict, Optional, Dict, Any
 from typing_extensions import Annotated
 from langgraph.graph.message import add_messages
 
@@ -42,9 +42,20 @@ class AgentState(TypedDict):
     technical_analysis: dict
     news_data: dict
     
+    # 차트 분석 단계 결과 (신규)
+    ohlcv_data: Optional[Dict[str, List[Dict[str, Any]]]]  # 티커별 OHLCV 데이터
+    chart_analysis: Optional[Dict[str, Dict[str, Any]]]  # 티커별 차트 분석 결과
+    chart_images: Optional[Dict[str, str]]  # 티커별 차트 이미지 (base64 또는 파일 경로)
+    technical_indicators_advanced: Optional[Dict[str, Dict[str, Any]]]  # 고급 기술적 지표
+    
     # 분석 및 전략 단계 결과
     sentiment_analysis: Optional[dict]
     market_outlook: Optional[str]
+    
+    # 최종 지표 산출 및 매도시점 추측 (신규)
+    synthesized_indicators: Optional[Dict[str, Dict[str, Any]]]  # 최종 통합 지표
+    exit_point_predictions: Optional[Dict[str, Dict[str, Any]]]  # 티커별 매도시점 추측
+    
     investment_plan: Optional[InvestmentPlan]
     
     # 실행 및 감사 단계 결과

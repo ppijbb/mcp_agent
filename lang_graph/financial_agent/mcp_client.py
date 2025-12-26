@@ -83,4 +83,53 @@ def call_technical_indicators_tool(tickers: List[str]) -> Dict:
 
 def call_market_news_tool(tickers: List[str]) -> Dict:
     """여러 티커에 대해 'get_market_news' MCP 도구를 병렬로 동기적으로 호출합니다."""
-    return _run_async_concurrent_calls("get_market_news", tickers) 
+    return _run_async_concurrent_calls("get_market_news", tickers)
+
+def call_ohlcv_data_tool(tickers: List[str], period: str = None) -> Dict:
+    """여러 티커에 대해 'get_ohlcv_data' MCP 도구를 병렬로 동기적으로 호출합니다."""
+    if period:
+        # period가 지정된 경우, 각 티커에 대해 period를 포함한 arguments 전달
+        async def _call_with_period():
+            config = get_mcp_config()
+            try:
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        tasks = [
+                            _call_tool_async(session, "get_ohlcv_data", {"ticker": ticker, "period": period})
+                            for ticker in tickers
+                        ]
+                        
+                        results = await asyncio.wait_for(
+                            asyncio.gather(*tasks, return_exceptions=True),
+                            timeout=config.timeout
+                        )
+                        
+                        ticker_results = {}
+                        failed_tickers = []
+                        
+                        for ticker, result in zip(tickers, results):
+                            if isinstance(result, Exception):
+                                error_msg = f"MCP tool 'get_ohlcv_data' for ticker '{ticker}' failed: {result}"
+                                print(f"❌ {error_msg}")
+                                failed_tickers.append(ticker)
+                                ticker_results[ticker] = {"error": str(result)}
+                            else:
+                                ticker_results[ticker] = result
+                        
+                        if failed_tickers:
+                            raise RuntimeError(f"MCP 도구 호출 실패 - 티커: {failed_tickers}")
+                        
+                        return ticker_results
+            except asyncio.TimeoutError:
+                error_msg = f"MCP 도구 호출 타임아웃 ({config.timeout}초 초과) - 도구: get_ohlcv_data, 티커: {tickers}"
+                print(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+            except Exception as e:
+                error_msg = f"MCP 서버 연결 실패 - 도구: get_ohlcv_data, 티커: {tickers}, 에러: {e}"
+                print(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+        
+        return asyncio.run(_call_with_period())
+    else:
+        return _run_async_concurrent_calls("get_ohlcv_data", tickers) 
