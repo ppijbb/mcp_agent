@@ -1,0 +1,63 @@
+{
+  "server_name": "tavily_search_server",
+  "created_at": "2025-12-27T13:12:00.301155",
+  "requirements": {
+    "server_name": "tavily_search_server",
+    "api_base_url": "https://api.tavily.com",
+    "auth_method": "api_key",
+    "api_key_env": "TAVILY_API_KEY",
+    "tools": [
+      {
+        "name": "financial_agent::run_financial_analysis",
+        "description": "Performs a comprehensive financial market analysis and research using an advanced search engine optimized for AI agents. It's suitable for complex, open-ended questions requiring up-to-date information and synthesis.",
+        "method": "POST",
+        "endpoint": "/search",
+        "input_schema": {
+          "user_query": {
+            "type": "string",
+            "description": "The detailed financial analysis query to research. For example: '2024년 한국 주식 시장 전망과 투자 전략 분석'. This will be mapped to the 'query' parameter of the backend API.",
+            "required": true,
+            "default": null
+          },
+          "search_depth": {
+            "type": "string",
+            "description": "The depth of the search. Use 'basic' for a quick search or 'advanced' for a more in-depth, slower analysis that may consume more credits.",
+            "required": false,
+            "default": "advanced"
+          },
+          "include_answer": {
+            "type": "boolean",
+            "description": "Whether to include a synthesized answer to the query in the response.",
+            "required": false,
+            "default": true
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "The maximum number of search results to return.",
+            "required": false,
+            "default": 7
+          }
+        },
+        "output_format": "json"
+      }
+    ],
+    "dependencies": [
+      "httpx",
+      "pydantic"
+    ],
+    "error_handling": {
+      "common_errors": [
+        "auth_failed",
+        "rate_limit",
+        "invalid_request",
+        "server_error"
+      ],
+      "retry_strategy": "exponential_backoff"
+    }
+  },
+  "server_file": "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/tavily_search_server/server.py",
+  "dependencies": [
+    "httpx",
+    "pydantic"
+  ]
+}

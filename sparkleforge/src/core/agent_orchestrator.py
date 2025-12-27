@@ -287,6 +287,158 @@ class PlannerAgent:
                 }
             }
     
+    async def _detect_economic_request(self, query: str, domain_analysis: Dict[str, Any]) -> bool:
+        """
+        LLM을 사용하여 사용자 요청이 경제/금융 관련인지 판단합니다.
+        
+        Args:
+            query: 사용자 요청
+            domain_analysis: 도메인 분석 결과
+            
+        Returns:
+            bool: 경제/금융 관련이면 True
+        """
+        try:
+            from src.core.llm_manager import execute_llm_task, TaskType
+            
+            # 도메인 분석 결과에서 경제 관련 키워드 확인 (1차 필터링)
+            domain = domain_analysis.get('domain', '').lower()
+            subdomains = [s.lower() for s in domain_analysis.get('subdomains', [])]
+            characteristics = [c.lower() for c in domain_analysis.get('characteristics', [])]
+            key_terminology = [t.lower() for t in domain_analysis.get('key_terminology', [])]
+            
+            # 경제 관련 키워드
+            economic_keywords = [
+                'finance', 'financial', 'economy', 'economic', 'stock', 'stocks', 'market', 'markets',
+                'investment', 'investing', 'trading', 'trade', 'portfolio', 'asset', 'assets',
+                'revenue', 'profit', 'loss', 'earnings', 'dividend', 'bond', 'bonds',
+                'currency', 'exchange', 'banking', 'bank', 'credit', 'debt', 'loan',
+                '주식', '주가', '투자', '경제', '금융', '시장', '증권', '자산', '수익', '손익',
+                '환율', '은행', '대출', '채권', '배당', '거래', '포트폴리오'
+            ]
+            
+            # 1차 필터링: 키워드 기반 빠른 체크
+            query_lower = query.lower()
+            domain_text = ' '.join([domain] + subdomains + characteristics + key_terminology).lower()
+            
+            has_economic_keyword = any(
+                keyword in query_lower or keyword in domain_text
+                for keyword in economic_keywords
+            )
+            
+            # 키워드가 없으면 경제 관련이 아님
+            if not has_economic_keyword:
+                logger.info(f"[{self.name}] No economic keywords found - not an economic request")
+                return False
+            
+            # 2차 필터링: LLM 기반 정확한 판단
+            prompt = f"""
+사용자 요청: {query}
+
+도메인 분석 결과:
+- Domain: {domain_analysis.get('domain', 'unknown')}
+- Subdomains: {', '.join(domain_analysis.get('subdomains', []))}
+- Characteristics: {', '.join(domain_analysis.get('characteristics', []))}
+- Key Terminology: {', '.join(domain_analysis.get('key_terminology', []))}
+
+위 요청이 경제/금융/투자 관련 요청인지 판단하세요.
+
+경제/금융/투자 관련 요청의 예:
+- 주식 시장 분석, 투자 전략, 경제 지표 분석
+- 기업 재무 분석, 주가 예측, 포트폴리오 관리
+- 경제 전망, 금융 정책, 환율 분석
+- 부동산 투자, 채권 분석, 파생상품
+
+비경제 요청의 예:
+- 기술 동향, 과학 연구, 의학 연구
+- 역사, 문화, 예술
+- 교육, 법률, 정치 (경제와 무관한 경우)
+
+출력 형식 (JSON only, 추가 텍스트 금지):
+{{
+    "is_economic": true/false,
+    "confidence": 0.0-1.0,
+    "reason": "판단 근거를 한국어로 1문장"
+}}
+"""
+            
+            result = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.ANALYSIS,
+                model_name=None,
+                system_message="You are an expert at classifying research requests. Determine if a request is related to economics, finance, or investment."
+            )
+            
+            result_text = result.content or "{}"
+            
+            # JSON 파싱 (json은 이미 파일 상단에서 import됨)
+            json_match = re.search(r'\{[\s\S]*\}', result_text)
+            if json_match:
+                try:
+                    analysis_result = json.loads(json_match.group())
+                    is_economic = analysis_result.get('is_economic', False)
+                    confidence = analysis_result.get('confidence', 0.5)
+                    reason = analysis_result.get('reason', '')
+                    
+                    # confidence가 0.7 이상이면 경제 관련으로 판단
+                    if is_economic and confidence >= 0.7:
+                        logger.info(f"[{self.name}] Economic request detected (confidence: {confidence:.2f}): {reason}")
+                        return True
+                    else:
+                        logger.info(f"[{self.name}] Not an economic request (confidence: {confidence:.2f}): {reason}")
+                        return False
+                except json.JSONDecodeError:
+                    logger.warning(f"[{self.name}] Failed to parse economic detection JSON, using keyword-based result")
+                    return has_economic_keyword
+            else:
+                logger.warning(f"[{self.name}] No JSON found in economic detection result, using keyword-based result")
+                return has_economic_keyword
+                
+        except Exception as e:
+            logger.error(f"[{self.name}] Economic request detection failed: {e}")
+            # 에러 발생 시 키워드 기반 결과 사용
+            return has_economic_keyword if 'has_economic_keyword' in locals() else False
+    
+    async def _call_financial_agent(self, user_query: str) -> Dict[str, Any]:
+        """
+        Financial Agent MCP 도구를 호출하여 경제 지표 분석을 수행합니다.
+        
+        Args:
+            user_query: 사용자 요청
+            
+        Returns:
+            Dict: Financial Agent 분석 결과
+        """
+        try:
+            from src.core.mcp_integration import execute_tool
+            
+            logger.info(f"[{self.name}] Calling financial_agent::run_financial_analysis...")
+            
+            # MCP 도구 호출
+            result = await execute_tool(
+                "financial_agent::run_financial_analysis",
+                {"user_query": user_query}
+            )
+            
+            if result.get("success", False):
+                # execute_tool의 data 필드에 financial_agent의 전체 결과가 들어있음
+                financial_result = result.get("data", {})
+                # financial_agent의 결과도 success 키를 포함하므로 확인
+                if isinstance(financial_result, dict) and financial_result.get("success", False):
+                    logger.info(f"[{self.name}] Financial agent returned successful result")
+                    return financial_result
+                else:
+                    logger.warning(f"[{self.name}] Financial agent result format unexpected: {type(financial_result)}")
+                    return financial_result if isinstance(financial_result, dict) else None
+            else:
+                error_msg = result.get("error", "Unknown error")
+                logger.warning(f"[{self.name}] Financial agent returned error: {error_msg}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[{self.name}] Failed to call financial agent: {e}")
+            return None
+    
     async def execute(self, state: AgentState) -> AgentState:
         """Execute planning task with Skills-based instruction and detailed logging."""
         logger.info(f"=" * 80)
@@ -331,6 +483,30 @@ class PlannerAgent:
         state['domain_analysis'] = domain_analysis_result
         logger.info(f"[{self.name}] ✅ Domain analysis completed: {domain_analysis_result.get('domain', 'unknown')}")
         
+        # Phase 1.5: 경제 관련 요청 감지 (LLM 기반)
+        logger.info(f"[{self.name}] 🔍 Checking if request is related to economics/finance...")
+        is_economic_request = await self._detect_economic_request(state['user_query'], domain_analysis_result)
+        state['is_economic_request'] = is_economic_request
+        
+        # Phase 1.6: 경제 관련 요청이면 financial_agent 호출
+        financial_analysis_result = None
+        if is_economic_request:
+            logger.info(f"[{self.name}] ✅ Economic/finance related request detected")
+            logger.info(f"[{self.name}] 📊 Calling financial_agent for economic indicator analysis...")
+            try:
+                financial_analysis_result = await self._call_financial_agent(state['user_query'])
+                if financial_analysis_result and financial_analysis_result.get('success'):
+                    logger.info(f"[{self.name}] ✅ Financial agent analysis completed successfully")
+                    state['financial_analysis_result'] = financial_analysis_result
+                else:
+                    logger.warning(f"[{self.name}] ⚠️ Financial agent analysis failed or returned no results")
+                    financial_analysis_result = None
+            except Exception as e:
+                logger.warning(f"[{self.name}] ⚠️ Financial agent call failed: {e}. Continuing with normal planning.")
+                financial_analysis_result = None
+        else:
+            logger.info(f"[{self.name}] ℹ️ Not an economic/finance related request")
+        
         # Format previous_plans for prompt - only include if from current session
         # CRITICAL: Previous context is for REFERENCE ONLY - current task must be planned independently
         if previous_plans:
@@ -367,6 +543,39 @@ Domain Analysis Results:
 - Verification Criteria: {', '.join(domain_analysis_result.get('verification_criteria', []))}
 """
         
+        # Financial Agent 분석 결과를 프롬프트에 포함
+        financial_context = ""
+        if financial_analysis_result:
+            import json
+            try:
+                # Financial analysis 결과를 JSON 문자열로 변환 (요약 포함)
+                financial_summary = {
+                    "extracted_info": financial_analysis_result.get("extracted_info", {}),
+                    "market_outlook": financial_analysis_result.get("market_outlook"),
+                    "investment_plan": financial_analysis_result.get("investment_plan"),
+                    "technical_analysis_summary": {
+                        ticker: {
+                            "price": data.get("price"),
+                            "rsi": data.get("rsi"),
+                            "macd": data.get("macd")
+                        }
+                        for ticker, data in financial_analysis_result.get("technical_analysis", {}).items()
+                    } if financial_analysis_result.get("technical_analysis") else {},
+                    "daily_pnl": financial_analysis_result.get("daily_pnl"),
+                    "sentiment_analysis": financial_analysis_result.get("sentiment_analysis")
+                }
+                
+                financial_context = f"""
+Financial Agent Analysis Results (경제 지표 분석):
+{json.dumps(financial_summary, ensure_ascii=False, indent=2)}
+
+이 분석 결과를 바탕으로 더 구체적이고 정확한 연구 계획을 수립하세요.
+경제 지표, 시장 전망, 투자 계획 등을 고려하여 연구 방향을 설정하세요.
+"""
+            except Exception as e:
+                logger.warning(f"[{self.name}] Failed to format financial analysis context: {e}")
+                financial_context = ""
+        
         # prompt는 execute_llm_task의 decorator에서 자동으로 최적화됨
         logger.info(f"[{self.name}] Calling LLM for planning...")
         
@@ -379,9 +588,15 @@ Domain Analysis Results:
                            previous_plans=previous_plans_text,
                            current_time=current_time)
         
-        # 도메인 분석 결과를 프롬프트에 추가
+        # 도메인 분석 결과와 Financial Agent 결과를 프롬프트에 추가
+        context_parts = []
         if domain_context:
-            prompt = f"{domain_context}\n\n{prompt}"
+            context_parts.append(domain_context)
+        if financial_context:
+            context_parts.append(financial_context)
+        
+        if context_parts:
+            prompt = "\n\n".join(context_parts) + "\n\n" + prompt
 
         # prompt는 execute_llm_task의 decorator에서 자동으로 최적화됨
         logger.info(f"[{self.name}] Calling LLM for planning...")

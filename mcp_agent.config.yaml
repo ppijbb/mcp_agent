@@ -63,4 +63,10 @@ mcp:
       enabled: false
     market_data:
       url: "http://localhost:3006"
-      enabled: false 
+      enabled: false
+    
+    # Financial Agent MCP Server
+    financial_agent:
+      command: "python"
+      args: ["lang_graph/financial_agent/financial_mcp_server.py"]
+      enabled: true

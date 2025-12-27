@@ -123,6 +123,12 @@
         "run",
         "@KISOpenAPI/kis-code-assistant-mcp"
       ]
+    },
+    "financial_agent": {
+      "command": "python",
+      "args": [
+        "lang_graph/financial_agent/financial_mcp_server.py"
+      ]
     }
   }
 }

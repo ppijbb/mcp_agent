@@ -1,0 +1,57 @@
+{
+  "server_name": "financial_analysis_service",
+  "created_at": "2025-12-27T13:14:43.808714",
+  "requirements": {
+    "server_name": "financial_analysis_service",
+    "api_base_url": "https://api.internal.financial-analysis.com/v1",
+    "auth_method": "api_key",
+    "api_key_env": "FINANCIAL_ANALYSIS_API_KEY",
+    "tools": [
+      {
+        "name": "financial_agent::run_financial_analysis",
+        "method": "POST",
+        "endpoint": "/analysis",
+        "input_schema": {
+          "user_query": {
+            "type": "string",
+            "description": "The user's natural language query for financial analysis. Should include the company name or ticker symbol (e.g., 'NVDA 주식 투자 전략 분석').",
+            "required": true,
+            "default": null
+          },
+          "ticker_symbols": {
+            "type": "list[string]",
+            "description": "An optional list of specific ticker symbols to focus the analysis on. If not provided, the service will attempt to extract them from the user_query.",
+            "required": false,
+            "default": null
+          },
+          "output_language": {
+            "type": "string",
+            "description": "The desired language for the analysis output, specified as an ISO 639-1 code (e.g., 'en', 'ko').",
+            "required": false,
+            "default": "en"
+          }
+        },
+        "output_format": "json"
+      }
+    ],
+    "dependencies": [
+      "httpx",
+      "pydantic"
+    ],
+    "error_handling": {
+      "common_errors": [
+        "invalid_ticker",
+        "auth_failed",
+        "rate_limit",
+        "upstream_data_source_error",
+        "analysis_failed"
+      ],
+      "retry_strategy": "exponential_backoff"
+    }
+  },
+  "server_file": "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/financial_analysis_service/server.py",
+  "dependencies": [
+    "httpx",
+    "pydantic"
+  ]
+}

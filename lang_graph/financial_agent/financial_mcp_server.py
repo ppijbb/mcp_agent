@@ -1,11 +1,103 @@
 import yfinance as yf
 import pandas as pd
-from typing import Dict, List
+import json
+import re
+from typing import Dict, List, Any
+from datetime import datetime
 from mcp.server.fastmcp import FastMCP
-from .config import get_mcp_config
+import sys
+from pathlib import Path
+
+# 프로젝트 루트를 PYTHONPATH에 추가
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# 절대 import 사용
+from lang_graph.financial_agent.config import get_mcp_config, initialize_config, get_workflow_config
+from lang_graph.financial_agent.graph import FinancialAgentWorkflow
+from lang_graph.financial_agent.state import AgentState
+from lang_graph.financial_agent.llm_client import initialize_llm_client, call_llm
 
 # MCP 서버 초기화
 mcp = FastMCP("FinancialTools")
+
+# 설정 및 워크플로우 초기화 (한 번만)
+_initialized = False
+_workflow_runner = None
+
+def _ensure_initialized():
+    """설정 및 워크플로우 초기화 (한 번만 실행)"""
+    global _initialized, _workflow_runner
+    if not _initialized:
+        try:
+            initialize_config()
+            initialize_llm_client()
+            _workflow_runner = FinancialAgentWorkflow()
+            _initialized = True
+        except Exception as e:
+            raise RuntimeError(f"Financial Agent 초기화 실패: {e}")
+
+def _extract_tickers_and_risk_profile(user_query: str) -> Dict[str, Any]:
+    """LLM을 사용하여 사용자 요청에서 티커와 리스크 프로필 추출"""
+    try:
+        workflow_config = get_workflow_config()
+        valid_profiles = workflow_config.valid_risk_profiles
+        default_tickers = workflow_config.default_tickers
+        
+        prompt = f"""
+사용자 요청: {user_query}
+
+위 요청에서 다음 정보를 추출하세요:
+1. 주식 티커 심볼 (예: AAPL, MSFT, NVDA, TSLA 등) - 없으면 빈 리스트
+2. 리스크 프로필 (conservative, moderate, aggressive 중 하나) - 없으면 "moderate"
+
+출력 형식 (JSON only, 추가 텍스트 금지):
+{{
+    "tickers": ["TICKER1", "TICKER2"],
+    "risk_profile": "conservative|moderate|aggressive"
+}}
+
+주의:
+- 티커가 없으면 빈 리스트 반환
+- 리스크 프로필이 없거나 불명확하면 "moderate" 사용
+- 티커는 대문자로 정규화
+- 유효한 리스크 프로필만 사용: {', '.join(valid_profiles)}
+"""
+        
+        response = call_llm(prompt)
+        
+        # JSON 추출
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            result = json.loads(json_match.group())
+        else:
+            # JSON이 없으면 기본값 사용
+            result = {
+                "tickers": [],
+                "risk_profile": "moderate"
+            }
+        
+        # 검증 및 기본값 설정
+        tickers = result.get("tickers", [])
+        if not tickers:
+            tickers = default_tickers
+        
+        risk_profile = result.get("risk_profile", "moderate")
+        if risk_profile not in valid_profiles:
+            risk_profile = "moderate"
+        
+        return {
+            "tickers": [t.upper().strip() for t in tickers if t],
+            "risk_profile": risk_profile
+        }
+    except Exception as e:
+        # 추출 실패 시 기본값 사용
+        workflow_config = get_workflow_config()
+        return {
+            "tickers": workflow_config.default_tickers,
+            "risk_profile": "moderate"
+        }
 
 @mcp.tool()
 def get_technical_indicators(ticker: str, period: str = None) -> Dict:
@@ -119,6 +211,107 @@ def get_ohlcv_data(ticker: str, period: str = None) -> Dict:
         "latest_price": float(hist['Close'].iloc[-1]) if pd.notna(hist['Close'].iloc[-1]) else None,
         "latest_volume": int(hist['Volume'].iloc[-1]) if pd.notna(hist['Volume'].iloc[-1]) else None,
     }
+
+@mcp.tool()
+def run_financial_analysis(user_query: str) -> Dict[str, Any]:
+    """
+    사용자 요청을 받아 Financial Agent의 LangGraph 워크플로우를 실행하여 경제 지표 분석을 수행합니다.
+    
+    Args:
+        user_query: 사용자의 경제/금융 관련 요청 (전체 쿼리)
+    
+    Returns:
+        Dict: 경제 지표 분석 결과 (JSON)
+    """
+    try:
+        # 초기화 확인
+        _ensure_initialized()
+        
+        # 사용자 요청에서 티커와 리스크 프로필 추출
+        extracted = _extract_tickers_and_risk_profile(user_query)
+        target_tickers = extracted["tickers"]
+        risk_profile = extracted["risk_profile"]
+        
+        if not target_tickers:
+            return {
+                "success": False,
+                "error": "티커를 추출할 수 없습니다. 사용자 요청에 주식 티커 심볼을 포함해주세요.",
+                "user_query": user_query
+            }
+        
+        # 초기 상태 정의
+        initial_state: AgentState = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "risk_profile": risk_profile,
+            "target_tickers": target_tickers,
+            "user_id": "mcp_user",
+            "log": [],
+            # 재무 관리 단계 필드
+            "financial_analysis": None,
+            "budget_status": None,
+            "savings_progress": None,
+            "tax_optimization": None,
+            "debt_management": None,
+            "financial_goals": None,
+            "goal_progress": None,
+            # 투자 워크플로우 필드
+            "technical_analysis": {},
+            "news_data": {},
+            # 차트 분석 필드
+            "ohlcv_data": None,
+            "chart_analysis": None,
+            "chart_images": None,
+            "technical_indicators_advanced": None,
+            # 최종 지표 및 매도시점 추측 필드
+            "synthesized_indicators": None,
+            "exit_point_predictions": None,
+            "sentiment_analysis": None,
+            "market_outlook": None,
+            "investment_plan": None,
+            "trade_results": None,
+            "daily_pnl": None,
+            # 구조적 상업성 필드
+            "commission_rate": None,
+            "total_commission": None,
+            "affiliate_commission": None,
+            # 에러 필드
+            "error_message": None,
+        }
+        
+        # 워크플로우 실행
+        final_state = _workflow_runner.run(initial_state)
+        
+        # 결과 정리 (JSON 직렬화 가능한 형태로 변환)
+        result = {
+            "success": True,
+            "user_query": user_query,
+            "extracted_info": {
+                "tickers": target_tickers,
+                "risk_profile": risk_profile
+            },
+            "financial_analysis": final_state.get("financial_analysis"),
+            "tax_optimization": final_state.get("tax_optimization"),
+            "debt_management": final_state.get("debt_management"),
+            "financial_goals": final_state.get("financial_goals"),
+            "goal_progress": final_state.get("goal_progress"),
+            "technical_analysis": final_state.get("technical_analysis", {}),
+            "news_data": final_state.get("news_data", {}),
+            "sentiment_analysis": final_state.get("sentiment_analysis"),
+            "market_outlook": final_state.get("market_outlook"),
+            "investment_plan": final_state.get("investment_plan"),
+            "daily_pnl": final_state.get("daily_pnl"),
+            "log": final_state.get("log", []),
+            "error_message": final_state.get("error_message")
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Financial Agent 실행 중 오류 발생: {str(e)}",
+            "user_query": user_query
+        }
 
 if __name__ == "__main__":
     # Stdio를 통해 서버 실행
