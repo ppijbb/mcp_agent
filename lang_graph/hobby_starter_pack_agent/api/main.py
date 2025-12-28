@@ -57,6 +57,17 @@ class WorkflowRequest(BaseModel):
     user_profile: Optional[Dict[str, Any]] = None
     preferences: Optional[Dict[str, Any]] = None
 
+class StartConversationRequest(BaseModel):
+    initial_input: str
+    user_profile: Optional[Dict[str, Any]] = None
+
+class AnswerQuestionRequest(BaseModel):
+    session_id: str
+    answer: str
+
+class CompleteConversationRequest(BaseModel):
+    session_id: str
+
 @app.post("/api/agents/consensus")
 async def create_agent_consensus(request: AgentConsensusRequest):
     """에이전트 간 합의 프로세스 시작"""
@@ -162,6 +173,165 @@ async def run_workflow(request: WorkflowRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
+
+@app.post("/api/workflow/start-conversation")
+async def start_conversation(request: StartConversationRequest):
+    """대화 세션 시작"""
+    try:
+        session_id = str(uuid.uuid4())
+        
+        # 초기 상태로 워크플로우 실행 (대화 단계까지)
+        initial_state = {
+            "user_input": request.initial_input,
+            "user_profile": request.user_profile or {},
+            "agent_session": {"session_id": session_id},
+            "workflow_context": {"started_at": datetime.now().isoformat()},
+            "current_decision_point": "collect_preferences",
+            "conversation_history": [],
+            "collected_preferences": {},
+            "question_completeness_score": 0.0,
+            "current_question": None,
+            "waiting_for_user_response": False
+        }
+        
+        # 대화 수집 노드 실행
+        from ..langgraph_workflow.state import StateManager
+        state_manager = StateManager()
+        
+        # 첫 질문 생성
+        question_result = await autogen_agents.generate_adaptive_question(
+            conversation_history=[],
+            collected_preferences={},
+            user_input=request.initial_input
+        )
+        
+        initial_state["current_question"] = question_result["next_question"]
+        initial_state["waiting_for_user_response"] = True
+        initial_state["conversation_history"] = [{
+            "question": question_result["next_question"],
+            "category": question_result["category"],
+            "timestamp": datetime.now().isoformat()
+        }]
+        initial_state["collected_preferences"] = question_result.get("collected_preferences", {})
+        initial_state["question_completeness_score"] = question_result.get("completeness_score", 0.0)
+        initial_state["session_id"] = session_id
+        initial_state["current_step"] = "collect_user_preferences"
+        initial_state["current_step_result"] = {}
+        initial_state["hobby_recommendations"] = []
+        initial_state["cached_data_keys"] = []
+        
+        # 상태 저장
+        state_manager.save_state(initial_state)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "question": question_result["next_question"],
+            "category": question_result["category"],
+            "completeness_score": question_result["completeness_score"],
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversation start failed: {str(e)}")
+
+@app.post("/api/workflow/answer-question")
+async def answer_question(request: AnswerQuestionRequest):
+    """사용자 답변 제출 및 다음 질문 받기"""
+    try:
+        # 세션 상태 로드 (실제로는 Redis나 DB에서 로드해야 함)
+        # 여기서는 간단히 워크플로우를 통해 처리
+        from ..langgraph_workflow.state import StateManager
+        state_manager = StateManager()
+        
+        # 세션 상태 로드 시도
+        session_state = state_manager.load_state(request.session_id)
+        
+        if not session_state:
+            raise HTTPException(status_code=404, detail=f"Session {request.session_id} not found")
+        
+        conversation_history = session_state.get("conversation_history", [])
+        collected_preferences = session_state.get("collected_preferences", {})
+        
+        # 사용자 답변을 히스토리에 추가
+        if conversation_history:
+            conversation_history[-1]["answer"] = request.answer
+        
+        # 다음 질문 생성
+        question_result = await autogen_agents.generate_adaptive_question(
+            conversation_history=conversation_history,
+            collected_preferences=collected_preferences,
+            user_input=request.answer
+        )
+        
+        # 새로운 질문 추가
+        conversation_history.append({
+            "question": question_result["next_question"],
+            "category": question_result["category"],
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # 상태 업데이트
+        session_state["conversation_history"] = conversation_history
+        session_state["collected_preferences"] = question_result["collected_preferences"]
+        session_state["current_question"] = question_result["next_question"]
+        session_state["question_completeness_score"] = question_result["completeness_score"]
+        session_state["waiting_for_user_response"] = True
+        
+        # 상태 저장
+        state_manager.save_state(session_state)
+        
+        return {
+            "status": "success",
+            "session_id": request.session_id,
+            "question": question_result["next_question"],
+            "category": question_result["category"],
+            "completeness_score": question_result["completeness_score"],
+            "should_continue": question_result["should_continue"],
+            "collected_preferences": question_result["collected_preferences"],
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Answer processing failed: {str(e)}")
+
+@app.post("/api/workflow/complete-conversation")
+async def complete_conversation(request: CompleteConversationRequest):
+    """대화 완료 후 워크플로우 진행"""
+    try:
+        # 세션 상태 로드
+        from ..langgraph_workflow.state import StateManager
+        state_manager = StateManager()
+        
+        session_state = state_manager.load_state(request.session_id)
+        
+        if not session_state:
+            raise HTTPException(status_code=404, detail=f"Session {request.session_id} not found")
+        
+        # 수집된 정보로 프로필 구성
+        collected_preferences = session_state.get("collected_preferences", {})
+        user_profile = session_state.get("user_profile", {})
+        user_profile.update(collected_preferences)
+        
+        # 워크플로우 실행 (대화 단계를 건너뛰고 프로필 분석부터 시작)
+        workflow_result = await langgraph_workflow.run_workflow(
+            user_input=session_state.get("user_input", ""),
+            user_profile=user_profile,
+            preferences={},
+            a2a_bridge=a2a_bridge,
+            mcp_manager=mcp_manager
+        )
+        
+        return {
+            "status": "success",
+            "session_id": request.session_id,
+            "workflow_result": workflow_result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversation completion failed: {str(e)}")
 
 @app.get("/api/mcp/capabilities")
 async def get_mcp_capabilities():

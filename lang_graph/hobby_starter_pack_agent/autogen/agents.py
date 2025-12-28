@@ -71,13 +71,22 @@ class HSPAutoGenAgents:
             description="에이전트 간 의견 차이를 조율하고 최종 의사결정 지원"
         )
         
+        # 대화 주도 전문 에이전트
+        conversation_agent = AssistantAgent(
+            name="ConversationAgent",
+            system_message="",  # 빈 값, LLM이 동적으로 결정
+            llm_config=self.llm_config,
+            description="사용자와의 대화를 주도하여 취미 선호도와 요구사항을 수집하는 전문가"
+        )
+        
         return {
             "profile_analyst": profile_analyst,
             "hobby_discoverer": hobby_discoverer,
             "schedule_integrator": schedule_integrator,
             "community_matcher": community_matcher,
             "progress_tracker": progress_tracker,
-            "decision_moderator": decision_moderator
+            "decision_moderator": decision_moderator,
+            "conversation_agent": conversation_agent
         }
     
     def create_consensus_chat(self, relevant_agents: List[str]) -> GroupChat:
@@ -234,4 +243,64 @@ class HSPAutoGenAgents:
             }
             
         except Exception as e:
-            return {"error": "Consensus extraction failed", "details": str(e)} 
+            return {"error": "Consensus extraction failed", "details": str(e)}
+    
+    async def generate_adaptive_question(self, conversation_history: List[Dict[str, Any]], 
+                                        collected_preferences: Dict[str, Any],
+                                        user_input: str) -> Dict[str, Any]:
+        """
+        대화 히스토리와 수집된 정보를 바탕으로 적응형 질문 생성
+        
+        Args:
+            conversation_history: 대화 히스토리
+            collected_preferences: 현재까지 수집된 선호도 정보
+            user_input: 사용자 최근 입력
+            
+        Returns:
+            다음 질문과 관련 정보
+        """
+        try:
+            from ..core.question_generator import QuestionGenerator
+            
+            question_generator = QuestionGenerator()
+            
+            # 사용자 입력 분석
+            if conversation_history:
+                # 마지막 질문의 카테고리 찾기
+                last_question = conversation_history[-1].get("question", "")
+                last_category = conversation_history[-1].get("category", "basic_info")
+                
+                # 사용자 답변 분석
+                analysis_result = question_generator.analyze_user_response(
+                    user_input, last_category, collected_preferences
+                )
+                
+                return {
+                    "next_question": analysis_result["next_question"],
+                    "category": analysis_result["next_category"],
+                    "collected_preferences": analysis_result["updated_preferences"],
+                    "completeness_score": analysis_result["completeness_score"],
+                    "should_continue": question_generator.should_continue_conversation(
+                        analysis_result["completeness_score"]
+                    )
+                }
+            else:
+                # 첫 질문 생성
+                initial_question = question_generator.generate_initial_question(user_input)
+                return {
+                    "next_question": initial_question["question"],
+                    "category": initial_question["category"],
+                    "collected_preferences": initial_question["collected_preferences"],
+                    "completeness_score": 0.0,
+                    "should_continue": True
+                }
+                
+        except Exception as e:
+            logger.error(f"적응형 질문 생성 실패: {e}")
+            return {
+                "next_question": "안녕하세요! 취미를 찾는 데 도움을 드리겠습니다. 먼저 간단한 질문부터 시작할게요.",
+                "category": "basic_info",
+                "collected_preferences": collected_preferences,
+                "completeness_score": 0.0,
+                "should_continue": True
+            } 

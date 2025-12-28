@@ -176,6 +176,8 @@ class HSPLangGraphWorkflow:
         
         # 노드 정의
         workflow.add_node("initialize_session", self._initialize_session)
+        workflow.add_node("collect_user_preferences", self._collect_user_preferences)
+        workflow.add_node("determine_question_completeness", self._determine_question_completeness)
         workflow.add_node("analyze_user_profile", self._analyze_user_profile)
         workflow.add_node("discover_hobbies", self._discover_hobbies)
         workflow.add_node("integrate_schedule", self._integrate_schedule)
@@ -187,7 +189,20 @@ class HSPLangGraphWorkflow:
         # 엣지 정의 (조건부 라우팅)
         workflow.set_entry_point("initialize_session")
         
-        workflow.add_edge("initialize_session", "analyze_user_profile")
+        # 대화형 상호작용 플로우
+        workflow.add_edge("initialize_session", "collect_user_preferences")
+        workflow.add_edge("collect_user_preferences", "determine_question_completeness")
+        
+        # 정보 수집 완성도에 따른 라우팅
+        workflow.add_conditional_edges(
+            "determine_question_completeness",
+            self._route_conversation_completeness,
+            {
+                "continue_conversation": "collect_user_preferences",
+                "proceed_to_analysis": "analyze_user_profile"
+            }
+        )
+        
         workflow.add_edge("analyze_user_profile", "autogen_consensus")
         
         workflow.add_conditional_edges(
@@ -238,7 +253,121 @@ class HSPLangGraphWorkflow:
         state["agent_consensus"] = {}
         state["mcp_responses"] = {}
         state["a2a_messages"] = []
+        
+        # 대화 관련 필드 초기화
+        if "conversation_history" not in state:
+            state["conversation_history"] = []
+        if "collected_preferences" not in state:
+            state["collected_preferences"] = {}
+        if "question_completeness_score" not in state:
+            state["question_completeness_score"] = 0.0
+        if "current_question" not in state:
+            state["current_question"] = None
+        if "waiting_for_user_response" not in state:
+            state["waiting_for_user_response"] = False
+        
         return state
+    
+    async def _collect_user_preferences(self, state: HSPAgentState) -> HSPAgentState:
+        """사용자와의 대화형 질문-답변 진행"""
+        print("---Collecting User Preferences---")
+        
+        try:
+            # 사용자 입력이 있는 경우 (답변)
+            user_input = state.get("user_input", "")
+            conversation_history = state.get("conversation_history", [])
+            collected_preferences = state.get("collected_preferences", {})
+            
+            # 적응형 질문 생성
+            question_result = await self.autogen_agents.generate_adaptive_question(
+                conversation_history=conversation_history,
+                collected_preferences=collected_preferences,
+                user_input=user_input
+            )
+            
+            # 사용자 답변이 있는 경우 히스토리에 추가
+            if user_input and conversation_history:
+                conversation_history[-1]["answer"] = user_input
+                collected_preferences = question_result["collected_preferences"]
+            
+            # 새로운 질문을 히스토리에 추가
+            new_question_entry = {
+                "question": question_result["next_question"],
+                "category": question_result["category"],
+                "timestamp": datetime.now().isoformat()
+            }
+            conversation_history.append(new_question_entry)
+            
+            # 상태 업데이트
+            state["conversation_history"] = conversation_history
+            state["collected_preferences"] = collected_preferences
+            state["current_question"] = question_result["next_question"]
+            state["question_completeness_score"] = question_result["completeness_score"]
+            state["waiting_for_user_response"] = True
+            
+            # 수집된 정보를 user_profile에 반영
+            if collected_preferences:
+                state["user_profile"].update(collected_preferences)
+            
+            logger.info(f"Question generated for session {state.get('session_id', 'unknown')}: "
+                       f"completeness={question_result['completeness_score']:.2f}")
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"사용자 선호도 수집 실패: {e}")
+            state["error_log"].append(f"Preference collection failed: {str(e)}")
+            # 기본 질문으로 fallback
+            state["current_question"] = "안녕하세요! 취미를 찾는 데 도움을 드리겠습니다. 나이를 알려주세요."
+            state["waiting_for_user_response"] = True
+            return state
+    
+    async def _determine_question_completeness(self, state: HSPAgentState) -> HSPAgentState:
+        """수집된 정보가 충분한지 판단"""
+        print("---Determining Question Completeness---")
+        
+        try:
+            completeness_score = state.get("question_completeness_score", 0.0)
+            collected_preferences = state.get("collected_preferences", {})
+            
+            # 최소 완성도 임계값 (0.7 = 70%)
+            min_completeness = 0.7
+            
+            # 필수 정보 확인
+            required_fields = ["age", "occupation", "available_days"]
+            has_required = all(field in collected_preferences for field in required_fields)
+            
+            # 완성도 판단
+            is_complete = completeness_score >= min_completeness and has_required
+            
+            state["question_completeness_score"] = completeness_score
+            
+            if is_complete:
+                logger.info(f"Information collection complete: score={completeness_score:.2f}")
+                state["waiting_for_user_response"] = False
+            else:
+                logger.info(f"Information collection incomplete: score={completeness_score:.2f}, "
+                          f"required_fields={has_required}")
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"완성도 판단 실패: {e}")
+            state["error_log"].append(f"Completeness determination failed: {str(e)}")
+            return state
+    
+    def _route_conversation_completeness(self, state: HSPAgentState) -> str:
+        """대화 완성도에 따른 라우팅"""
+        completeness_score = state.get("question_completeness_score", 0.0)
+        min_completeness = 0.7
+        collected_preferences = state.get("collected_preferences", {})
+        required_fields = ["age", "occupation", "available_days"]
+        has_required = all(field in collected_preferences for field in required_fields)
+        
+        if completeness_score >= min_completeness and has_required:
+            return "proceed_to_analysis"
+        else:
+            return "continue_conversation"
 
     async def _analyze_user_profile(self, state: HSPAgentState) -> HSPAgentState:
         print("---Analyzing User Profile---")
@@ -586,7 +715,12 @@ class HSPLangGraphWorkflow:
                 "error_log": [],
                 "agent_consensus": {},
                 "mcp_responses": {},
-                "a2a_messages": []
+                "a2a_messages": [],
+                "conversation_history": [],
+                "collected_preferences": {},
+                "question_completeness_score": 0.0,
+                "current_question": None,
+                "waiting_for_user_response": False
             }
             
             # 워크플로우 실행
