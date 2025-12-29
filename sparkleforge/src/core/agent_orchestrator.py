@@ -5060,7 +5060,30 @@ class AgentOrchestrator:
         
         # Execute workflow
         try:
-            result = await self.graph.ainvoke(initial_state)
+            # DataFlow Pipeline 옵션 확인 (환경 변수 또는 설정에서)
+            use_pipeline = os.getenv("USE_DATAFLOW_PIPELINE", "false").lower() == "true"
+            
+            if use_pipeline:
+                try:
+                    from src.dataflow.integration.orchestrator_pipeline_integration import OrchestratorPipelineIntegration
+                    pipeline_integration = OrchestratorPipelineIntegration(use_pipeline=True)
+                    
+                    # Pipeline을 사용하여 실행
+                    logger.info("Using DataFlow Pipeline for execution")
+                    result = await pipeline_integration.execute_with_pipeline(
+                        agent_state=dict(initial_state),
+                        session_id=session_id
+                    )
+                    
+                    # 결과를 AgentState로 변환
+                    result = AgentState(**result)
+                except Exception as e:
+                    logger.warning(f"Pipeline execution failed, falling back to traditional workflow: {e}")
+                    # Fallback to traditional workflow
+                    result = await self.graph.ainvoke(initial_state)
+            else:
+                # Traditional workflow execution
+                result = await self.graph.ainvoke(initial_state)
             
             # 세션 자동 저장 (워크플로우 완료 후)
             try:
