@@ -405,6 +405,214 @@ class MCPToolChecker:
                     "type": type(e).__name__
                 })
     
+    async def test_github_mcp_server(self):
+        """GitHub MCP 서버 연결 및 도구 테스트"""
+        logger.info("\n" + "=" * 80)
+        logger.info("🐙 GitHub MCP 서버 테스트")
+        logger.info("=" * 80)
+        
+        github_server_name = None
+        github_tools = []
+        
+        # GitHub 서버 찾기
+        if not self.mcp_hub or not self.mcp_hub.mcp_sessions:
+            logger.warning("⚠️ 연결된 MCP 서버가 없습니다")
+            self.test_results["warnings"].append("No MCP servers connected for GitHub test")
+            return
+        
+        # GitHub 관련 서버 찾기
+        for server_name in self.mcp_hub.mcp_sessions.keys():
+            if "github" in server_name.lower():
+                github_server_name = server_name
+                break
+        
+        if not github_server_name:
+            logger.warning("⚠️ GitHub MCP 서버를 찾을 수 없습니다")
+            logger.info("   💡 GitHub 서버를 사용하려면 configs/mcp_config.json에 다음을 추가하세요:")
+            logger.info("   {")
+            logger.info('     "github": {')
+            logger.info('       "command": "npx",')
+            logger.info('       "args": ["-y", "@modelcontextprotocol/server-github@latest"],')
+            logger.info('       "env": {')
+            logger.info('         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"')
+            logger.info("       }")
+            logger.info("     }")
+            logger.info("   }")
+            self.test_results["warnings"].append("GitHub MCP server not found in configuration")
+            return
+        
+        logger.info(f"✅ GitHub 서버 발견: {github_server_name}")
+        
+        try:
+            # 서버 상태 확인
+            is_healthy = await self.mcp_hub._check_connection_health(github_server_name)
+            
+            if not is_healthy:
+                logger.warning(f"  ⚠️ GitHub 서버가 비정상 상태입니다")
+                self.test_results["warnings"].append(f"GitHub server {github_server_name} is unhealthy")
+                return
+            
+            # 도구 목록 가져오기
+            tools = self.mcp_hub.mcp_tools_map.get(github_server_name, {})
+            github_tools = list(tools.keys())
+            
+            logger.info(f"  ✅ 연결 상태: 정상")
+            logger.info(f"  ✅ 사용 가능한 도구: {len(github_tools)}개")
+            
+            if github_tools:
+                logger.info(f"\n  📋 GitHub 도구 목록:")
+                for tool_name in github_tools[:10]:  # 처음 10개만 표시
+                    logger.info(f"    - {tool_name}")
+                if len(github_tools) > 10:
+                    logger.info(f"    ... 외 {len(github_tools) - 10}개")
+            
+            # GitHub 서버 정보 저장
+            self.test_results["servers"][github_server_name] = {
+                "name": github_server_name,
+                "connected": True,
+                "healthy": is_healthy,
+                "tools_count": len(github_tools),
+                "tools": github_tools,
+                "type": "github"
+            }
+            
+            # GitHub 도구 테스트
+            if github_tools:
+                logger.info(f"\n  🧪 GitHub 도구 실행 테스트")
+                
+                # 일반적인 GitHub 도구들 테스트
+                test_cases = []
+                
+                # 리포지토리 파일 읽기 도구
+                read_file_tools = [t for t in github_tools if "get_file_contents" in t.lower() or ("get" in t.lower() and "file" in t.lower() and "content" in t.lower())]
+                if read_file_tools:
+                    test_cases.append({
+                        "tool": read_file_tools[0],
+                        "params": {
+                            "owner": "modelcontextprotocol",
+                            "repo": "servers",
+                            "path": "README.md"
+                        },
+                        "description": "리포지토리 파일 읽기"
+                    })
+                
+                # 이슈 검색 도구
+                issue_tools = [t for t in github_tools if "issue" in t.lower()]
+                if issue_tools:
+                    test_cases.append({
+                        "tool": issue_tools[0],
+                        "params": {
+                            "owner": "modelcontextprotocol",
+                            "repo": "servers",
+                            "state": "open",
+                            "limit": 5
+                        },
+                        "description": "이슈 목록 조회"
+                    })
+                
+                # PR 검색 도구
+                pr_tools = [t for t in github_tools if "pull" in t.lower() or "pr" in t.lower()]
+                if pr_tools:
+                    test_cases.append({
+                        "tool": pr_tools[0],
+                        "params": {
+                            "owner": "modelcontextprotocol",
+                            "repo": "servers",
+                            "state": "open",
+                            "limit": 5
+                        },
+                        "description": "PR 목록 조회"
+                    })
+                
+                # 검색 도구
+                search_tools = [t for t in github_tools if "search" in t.lower()]
+                if search_tools:
+                    test_cases.append({
+                        "tool": search_tools[0],
+                        "params": {
+                            "query": "MCP server",
+                            "type": "code"
+                        },
+                        "description": "코드 검색"
+                    })
+                
+                # 테스트 실행 (최대 3개만)
+                for i, test_case in enumerate(test_cases[:3]):
+                    tool_name = f"{github_server_name}::{test_case['tool']}"
+                    logger.info(f"\n    🔍 테스트 {i+1}: {test_case['description']} ({test_case['tool']})")
+                    
+                    try:
+                        # 도구 실행
+                        result = await execute_tool(tool_name, test_case['params'])
+                        
+                        if result.get("success", False):
+                            logger.info(f"      ✅ 성공: {result.get('execution_time', 0):.2f}초")
+                            data = result.get("data", {})
+                            
+                            # 결과 검증
+                            is_valid = False
+                            if isinstance(data, dict):
+                                # 결과가 비어있지 않은지 확인
+                                has_content = len(str(data)) > 0
+                                if "items" in data or "content" in data or "files" in data:
+                                    is_valid = True
+                                elif has_content:
+                                    is_valid = True
+                            elif isinstance(data, (list, str)):
+                                is_valid = len(data) > 0 if isinstance(data, (list, str)) else len(str(data)) > 0
+                            
+                            tool_result = {
+                                "tested": True,
+                                "success": True,
+                                "is_valid": is_valid,
+                                "execution_time": result.get("execution_time", 0),
+                                "description": test_case['description']
+                            }
+                            
+                            if not is_valid:
+                                logger.warning(f"      ⚠️ 결과가 비어있거나 유효하지 않습니다")
+                                tool_result["warning"] = "Result is empty or invalid"
+                                self.test_results["warnings"].append(f"GitHub tool {tool_name}: Invalid result")
+                            
+                            self.test_results["tools"][tool_name] = tool_result
+                        else:
+                            error_msg = result.get('error', 'Unknown error')
+                            logger.warning(f"      ⚠️ 실패: {error_msg}")
+                            self.test_results["tools"][tool_name] = {
+                                "tested": True,
+                                "success": False,
+                                "error": error_msg,
+                                "description": test_case['description']
+                            }
+                            # 인증 오류는 경고로만 처리
+                            if "401" in error_msg or "unauthorized" in error_msg.lower() or "token" in error_msg.lower():
+                                self.test_results["warnings"].append(f"GitHub tool {tool_name}: Authentication required (GITHUB_TOKEN not set or invalid)")
+                    except Exception as e:
+                        logger.warning(f"      ⚠️ 테스트 중 예외: {e}")
+                        self.test_results["tools"][tool_name] = {
+                            "tested": True,
+                            "success": False,
+                            "error": str(e),
+                            "exception_type": type(e).__name__,
+                            "description": test_case['description']
+                        }
+                
+                if not test_cases:
+                    logger.info(f"    ℹ️ 테스트 가능한 GitHub 도구를 찾을 수 없습니다")
+                    logger.info(f"    💡 GitHub 도구는 GITHUB_TOKEN 환경 변수가 필요할 수 있습니다")
+            else:
+                logger.warning(f"  ⚠️ GitHub 서버에 도구가 없습니다")
+                self.test_results["warnings"].append(f"GitHub server {github_server_name} has no tools")
+        
+        except Exception as e:
+            logger.error(f"  ❌ GitHub 서버 테스트 실패: {e}")
+            self.test_results["errors"].append({
+                "server": github_server_name,
+                "stage": "github_test",
+                "error": str(e),
+                "type": type(e).__name__
+            })
+    
     async def test_search_tools(self):
         """검색 도구들 테스트"""
         logger.info("\n" + "=" * 80)
@@ -726,6 +934,9 @@ async def main():
         
         # 필수 도구 테스트
         await checker.test_essential_tools()
+        
+        # GitHub MCP 서버 테스트
+        await checker.test_github_mcp_server()
         
         # 검색 도구 테스트
         await checker.test_search_tools()

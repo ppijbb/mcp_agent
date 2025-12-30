@@ -4,36 +4,28 @@
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@modelcontextprotocol/server-duckduckgo-search"
+        "@modelcontextprotocol/server-duckduckgo-search@latest"
       ]
     },
     "fetch": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@smithery-ai/fetch"
+        "fetch-mcp@latest"
       ]
     },
     "docfork": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@docfork/mcp"
+        "@docfork/mcp@latest"
       ]
     },
     "context7-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@upstash/context7-mcp"
+        "@upstash/context7-mcp@latest"
       ]
     },
     "exa": {
@@ -48,63 +40,49 @@
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@hamid-vakilzadeh/mcpsemanticscholar"
+        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
       ]
     },
     "parallel-search": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@parallel/search"
+        "@parallel/search@latest"
       ]
     },
     "tavily-mcp": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@Jeetanshu18/tavily-mcp"
+        "@Jeetanshu18/tavily-mcp@latest"
       ]
     },
     "WebSearch-MCP": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@mnhlt/WebSearch-MCP"
+        "@mnhlt/WebSearch-MCP@latest"
       ]
     },
     "Google search console": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "google_search_console"
+        "google_search_console@latest"
       ]
     },
     "Paper Search": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@adamamer20/paper-search-mcp-openai"
+        "@adamamer20/paper-search-mcp-openai@latest"
       ]
     },
     "TodoList": {
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "todoist"
+        "todoist@latest"
       ]
     },
     "arxiv": {
@@ -119,9 +97,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@KISOpenAPI/kis-code-assistant-mcp"
+        "@KISOpenAPI/kis-code-assistant-mcp@latest"
       ]
     },
     "financial_agent": {
@@ -129,6 +105,16 @@
       "args": [
         "lang_graph/financial_agent/financial_mcp_server.py"
       ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github@latest"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
     }
   }
 }

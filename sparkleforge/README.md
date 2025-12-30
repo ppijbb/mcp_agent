@@ -156,7 +156,7 @@ python main.py --request "Latest AI trends in 2025"
 - Smart tool selection and rate limiting
 - Health monitoring of all forge equipment
 
-#### MCP Server Configuration (DuckDuckGo/G-Search)
+#### MCP Server Configuration
 
 **1. Create MCP Server Config File**
 ```bash
@@ -169,11 +169,21 @@ cat > configs/mcp_config.json << 'EOF'
       "command": "npx",
       "args": [
         "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@OEvortex/ddg_search",
-        "--key",
-        "YOUR_API_KEY"
+        "@modelcontextprotocol/server-duckduckgo-search@latest"
+      ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "fetch-mcp@latest"
+      ]
+    },
+    "arxiv": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-arxiv@latest"
       ]
     }
   }
@@ -183,7 +193,8 @@ EOF
 
 **2. Usage**
 - The system automatically reads the `configs/mcp_config.json` file and connects to MCP servers (also supports `mcp_config.json` in the root directory for backward compatibility)
-- If MCP server connection fails, it automatically falls back to direct DuckDuckGo search
+- MCP servers are executed directly via npx without any intermediate platform
+- If MCP server connection fails, it automatically falls back to direct API calls where available
 - Rate limit issues are automatically handled
 
 **3. Check MCP Server Connection Status**
@@ -213,7 +224,7 @@ Total available tools: 45
 
 ✅ Server: ddg_search
    Type: stdio
-   Command: npx -y @smithery/cli@latest...
+   Command: npx -y @modelcontextprotocol/server-duckduckgo-search@latest
    Connection status: Connected
    Tools provided: 3
    Tool list:
@@ -222,17 +233,16 @@ Total available tools: 45
      ...
 ```
 
-**4. Using G-Search MCP Server** (Optional)
-```json
-{
-  "mcpServers": {
-    "g-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-g-search"]
-    }
-  }
-}
-```
+**4. Available MCP Servers**
+All MCP servers are now executed directly from npm packages. Common servers include:
+- `@modelcontextprotocol/server-duckduckgo-search` - DuckDuckGo search
+- `@modelcontextprotocol/server-arxiv` - Academic paper search
+- `fetch-mcp` - Web content fetching
+- `@docfork/mcp` - Document forking
+- `@upstash/context7-mcp` - Context management
+- And many more community packages
+
+Each server may require specific API keys or environment variables. Check the server's documentation for details.
 
 ### 7. **Adaptive Workspace**
 - Dynamic adjustment from 2K to 1M tokens

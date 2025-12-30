@@ -824,26 +824,13 @@ class UniversalMCPHub:
                 if "${" in auth_value or not auth_value.replace("Bearer ", "").strip():
                     return False
         
-        # semantic_scholar는 SMITHERY_API_KEY 필요
-        if "semantic" in server_name.lower() or "scholar" in server_name.lower():
-            smithery_key = os.getenv("SMITHERY_API_KEY")
-            if not smithery_key:
-                return False
-        
         # stdio 방식 서버는 API 키 불필요 (npx로 실행)
         if "command" in server_config and "httpUrl" not in server_config and "url" not in server_config:
             logger.debug(f"[MCP][check.req] server={server_name} stdio mode, no API key required")
             return True
         
-        # HTTP 방식 Smithery 서버만 API 키 필요
-        smithery_servers = ["fetch", "docfork", "context7-mcp", "parallel-search", "tavily-mcp", "WebSearch-MCP"]
-        if server_name in smithery_servers:
-            # HTTP URL이 있는 경우만 API 키 필요
-            if server_config.get("httpUrl") or server_config.get("url"):
-                smithery_key = os.getenv("SMITHERY_API_KEY")
-                logger.debug(f"[MCP][check.req] server={server_name} http mode, smithery_key_present={bool(smithery_key)}")
-                if not smithery_key:
-                    return False
+        # HTTP 서버는 설정에 따라 API 키가 필요할 수 있음 (서버별로 다름)
+        # 각 서버의 headers 설정에서 환경변수로 API 키를 지정할 수 있음
         
         # 다른 서버들은 API 키가 없어도 사용 가능 (예: ddg_search)
         return True
@@ -896,11 +883,7 @@ class UniversalMCPHub:
                         "command": "npx",
                         "args": [
                             "-y",
-                            "@smithery/cli@latest",
-                            "run",
-                            "@OEvortex/ddg_search",
-                            "--key",
-                            os.getenv("DDG_SEARCH_KEY", "")
+                            "@modelcontextprotocol/server-duckduckgo-search@latest"
                         ]
                     }
                 }
@@ -960,9 +943,9 @@ class UniversalMCPHub:
         elif server_name in ["tavily-mcp", "WebSearch-MCP"]:
             settings["timeout"] = 60.0  # npx 기반 서버, API 키 검증 시간 필요
         elif server_name == "ddg_search":
-            settings["timeout"] = 45.0  # uvx 기반 서버는 초기화 시간 필요
+            settings["timeout"] = 45.0  # npx 기반 서버는 초기화 시간 필요
         elif server_name in ["fetch", "docfork"]:
-            settings["timeout"] = 60.0  # npx 기반 smithery 서버
+            settings["timeout"] = 60.0  # npx 기반 서버
         elif server_name == "arxiv":
             settings["timeout"] = 60.0  # npx 기반 arXiv MCP 서버
         
@@ -1157,7 +1140,6 @@ class UniversalMCPHub:
             else:
                 # HTTP 서버 연결 (기존 로직)
                 # FastMCP 기반 연결 (모든 서버를 HTTP로 처리)
-                # Smithery 기반 서버는 모두 HTTP로 연결
                 if not FASTMCP_AVAILABLE or FastMCPClient is None:
                     logger.error(f"FastMCP client not available for server {server_name}")
                     return False
@@ -1171,7 +1153,7 @@ class UniversalMCPHub:
             # Headers 구성 (환경 변수 치환 포함)
             headers = server_config.get("headers", {}).copy()
             
-            # 환경 변수 치환 (${VAR} 형식) - Bearer ${SMITHERY_API_KEY} 같은 형식도 지원
+            # 환경 변수 치환 (${VAR} 형식) - Bearer ${API_KEY} 같은 형식 지원
             resolved_headers = {}
             for k, v in headers.items():
                 if isinstance(v, str):
@@ -1195,14 +1177,8 @@ class UniversalMCPHub:
                 else:
                     resolved_headers[k] = v
             
-            # Authorization 헤더가 없으면 SMITHERY_API_KEY에서 가져오기
-            if "Authorization" not in resolved_headers:
-                api_key = os.getenv("SMITHERY_API_KEY", "")
-                if api_key:
-                    resolved_headers["Authorization"] = f"Bearer {api_key}"
-                    logger.info(f"[MCP][auth.header] server={server_name} Authorization header set from SMITHERY_API_KEY (length: {len(api_key)})")
-                else:
-                    logger.warning(f"[MCP][auth.header] server={server_name} No API key found")
+            # Authorization 헤더는 서버 설정에서 명시적으로 지정해야 함
+            # 환경변수 치환을 통해 각 서버별 API 키를 설정할 수 있음
             
             # FastMCP 설정 구성
             # FastMCP는 httpUrl이 아니라 url을 기대함

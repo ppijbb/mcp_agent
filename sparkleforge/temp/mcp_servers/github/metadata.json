@@ -1,0 +1,80 @@
+{
+  "server_name": "github",
+  "created_at": "2025-12-30T15:06:06.390715",
+  "requirements": {
+    "server_name": "github",
+    "api_base_url": "https://api.github.com",
+    "auth_method": "api_key",
+    "api_key_env": "GITHUB_TOKEN",
+    "tools": [
+      {
+        "name": "github::create_pull_request",
+        "method": "POST",
+        "endpoint": "/repos/{owner}/{repo}/pulls",
+        "input_schema": {
+          "owner": {
+            "type": "string",
+            "description": "The account owner of the repository. The name is not case sensitive.",
+            "required": true,
+            "default": null
+          },
+          "repo": {
+            "type": "string",
+            "description": "The name of the repository. The name is not case sensitive.",
+            "required": true,
+            "default": null
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the new pull request.",
+            "required": true,
+            "default": null
+          },
+          "head": {
+            "type": "string",
+            "description": "The name of the branch where your changes are implemented (the source branch).",
+            "required": true,
+            "default": null
+          },
+          "base": {
+            "type": "string",
+            "description": "The name of the branch you want the changes pulled into (the target branch).",
+            "required": true,
+            "default": null
+          },
+          "body": {
+            "type": "string",
+            "description": "The contents of the pull request.",
+            "required": false,
+            "default": null
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "Indicates whether the pull request is a draft.",
+            "required": false,
+            "default": false
+          }
+        },
+        "output_format": "json"
+      }
+    ],
+    "dependencies": [
+      "httpx",
+      "pydantic"
+    ],
+    "error_handling": {
+      "common_errors": [
+        "auth_failed (401)",
+        "not_found (404)",
+        "validation_error (422)",
+        "rate_limit (403)"
+      ],
+      "retry_strategy": "exponential_backoff"
+    }
+  },
+  "server_file": "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/github/server.py",
+  "dependencies": [
+    "httpx",
+    "pydantic"
+  ]
+}
