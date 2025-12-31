@@ -136,3 +136,4 @@ class SynthesisOperator(SparkleForgeOperatorABC):
         return f"Synthesized {non_null_count} reports"
 
 
+
