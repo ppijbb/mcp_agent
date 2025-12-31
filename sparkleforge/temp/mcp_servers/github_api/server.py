@@ -1,6 +1,6 @@
 """
-Auto-generated MCP server for github
-Generated at: 2025-12-31T11:14:56.292392
+Auto-generated MCP server for github_api
+Generated at: 2025-12-31T11:12:20.225133
 """
 
 import os
@@ -18,12 +18,12 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("github")
+mcp = FastMCP("github_api")
 
 class Github::SearchCodeInput(BaseModel):
     """Input schema for github::search_code"""
-    query: str = Field(..., description="The search keywords, as well as any qualifiers. This will be used for the 'q' parameter in the GitHub API.")
-    limit: Optional[int] = Field(default=10, description="The number of results to return per page. This will be used for the 'per_page' parameter. Maximum value is 100.")
+    query: str = Field(..., description="The search keywords, as well as any qualifiers (e.g., 'user:openai MCP').")
+    limit: Optional[int] = Field(default=5, description="The maximum number of code results to return. Maps to the 'per_page' API parameter.")
 
 @mcp.tool()
 async def github::search_code(input: Github::SearchCodeInput) -> str:
@@ -31,9 +31,9 @@ async def github::search_code(input: Github::SearchCodeInput) -> str:
     github::search_code tool
     """
     try:
-        api_key = os.getenv("GITHUB_TOKEN")
+        api_key = os.getenv("GITHUB_API_TOKEN")
         if not api_key:
-            return json.dumps({"error": "API key not found. Set GITHUB_TOKEN environment variable."})
+            return json.dumps({"error": "API key not found. Set GITHUB_API_TOKEN environment variable."})
         headers = {"Authorization": f"Bearer {api_key}"}
 
         url = f"https://api.github.com/search/code"
