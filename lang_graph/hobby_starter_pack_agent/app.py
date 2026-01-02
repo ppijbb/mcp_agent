@@ -47,18 +47,24 @@ class HSPAgentApplication:
             print("🌉 A2A 프로토콜 브리지 초기화...")
             self.a2a_bridge = A2AProtocolBridge()
             
-            # 4. LangGraph 워크플로우 초기화
+            # 4. 벡터 스토어 초기화
+            print("🔍 벡터 스토어 초기화...")
+            from langgraph_workflow.vector_store import HSPVectorStore
+            vector_store = HSPVectorStore()
+            
+            # 5. LangGraph 워크플로우 초기화
             print("📊 LangGraph 워크플로우 초기화...")
             self.langgraph_workflow = HSPLangGraphWorkflow(
                 autogen_agents=self.autogen_agents,
-                mcp_manager=self.mcp_manager
+                mcp_manager=self.mcp_manager,
+                vector_store=vector_store
             )
             
-            # 5. 컴포넌트 간 연결 설정
+            # 6. 컴포넌트 간 연결 설정
             print("🔗 컴포넌트 간 연결 설정...")
             self.langgraph_workflow.a2a_bridge = self.a2a_bridge
             
-            # 6. A2A 브리지에 주요 에이전트들 등록
+            # 7. A2A 브리지에 주요 에이전트들 등록
             await self._register_agents()
             
             print("✅ 모든 컴포넌트 초기화 완료!")
@@ -139,6 +145,7 @@ class HSPAgentApplication:
         app.state.langgraph_workflow = self.langgraph_workflow
         app.state.a2a_bridge = self.a2a_bridge
         app.state.mcp_manager = self.mcp_manager
+        app.state.vector_store = self.langgraph_workflow.vector_store
         
         config = uvicorn.Config(
             app=app,

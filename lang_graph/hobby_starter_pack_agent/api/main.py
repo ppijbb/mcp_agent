@@ -1,15 +1,14 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
-import asyncio
 import uuid
 from datetime import datetime
 
 from ..autogen.agents import HSPAutoGenAgents
 from ..langgraph_workflow.workflow import HSPLangGraphWorkflow
+from ..langgraph_workflow.vector_store import HSPVectorStore
 from ..bridge.a2a_bridge import A2AProtocolBridge, A2AMessage
 from ..mcp.manager import MCPServerManager
-from .langchain_endpoints import router as langchain_router
 
 # 새로운 API 라우터들
 from .auth import router as auth_router
@@ -22,12 +21,12 @@ app = FastAPI(title="Hobby Starter Pack Agent API", version="2.0.0")
 
 # Global instances
 autogen_agents = HSPAutoGenAgents()
-langgraph_workflow = HSPLangGraphWorkflow()
+vector_store = HSPVectorStore()
+langgraph_workflow = HSPLangGraphWorkflow(vector_store=vector_store)
 a2a_bridge = A2AProtocolBridge()
 mcp_manager = MCPServerManager()
 
 # 라우터 등록
-app.include_router(langchain_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(hobbies_router)
@@ -354,19 +353,142 @@ async def get_agents_status():
         "timestamp": datetime.now().isoformat()
     }
 
+class VectorSearchRequest(BaseModel):
+    query: str
+    user_profile: Dict[str, Any]
+    search_type: str = "hobbies"  # "hobbies" or "communities"
+    top_k: int = 5
+
+@app.post("/api/vector/search")
+async def vector_search(request: VectorSearchRequest):
+    """벡터 데이터베이스 검색"""
+    try:
+        if request.search_type == "hobbies":
+            results = vector_store.search_similar_hobbies(
+                request.query, 
+                request.user_profile, 
+                request.top_k
+            )
+        elif request.search_type == "communities":
+            results = vector_store.search_communities(
+                request.query, 
+                request.user_profile, 
+                request.top_k
+            )
+        else:
+            raise HTTPException(status_code=400, detail="잘못된 검색 타입입니다. 'hobbies' 또는 'communities'를 사용하세요.")
+        
+        return {
+            "status": "success",
+            "search_type": request.search_type,
+            "query": request.query,
+            "results": results,
+            "result_count": len(results),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"벡터 검색 실패: {str(e)}")
+
+@app.get("/api/vector/stats")
+async def get_vector_store_stats():
+    """벡터 스토어 통계 조회"""
+    try:
+        stats = vector_store.get_vector_store_stats()
+        return {
+            "status": "success",
+            "vector_store_stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"벡터 스토어 통계 조회 실패: {str(e)}")
+
 @app.get("/api/health")
 async def health_check():
-    """API 헬스 체크"""
-    return {
-        "status": "healthy",
-        "components": {
+    """
+    API 헬스 체크 및 시스템 상태 확인
+    
+    Returns:
+        시스템 상태 및 메트릭 정보
+    """
+    try:
+        # 각 컴포넌트 상태 확인
+        vector_stats = vector_store.get_vector_store_stats()
+        error_stats = langgraph_workflow.error_handler.get_error_statistics() if hasattr(langgraph_workflow, 'error_handler') else {}
+        
+        # 컴포넌트 상태
+        components_status = {
             "autogen_agents": "active",
             "langgraph_workflow": "active", 
             "a2a_bridge": "active",
-            "mcp_manager": "active"
-        },
-        "timestamp": datetime.now().isoformat()
-    }
+            "mcp_manager": "active",
+            "vector_store": "active" if not vector_stats.get("error") else "inactive"
+        }
+        
+        # 전체 상태 결정
+        all_healthy = all(
+            status == "active" 
+            for status in components_status.values()
+        )
+        
+        return {
+            "status": "healthy" if all_healthy else "degraded",
+            "components": components_status,
+            "metrics": {
+                "error_statistics": error_stats,
+                "vector_store_stats": vector_stats,
+                "active_sessions": len(a2a_bridge.active_sessions) if hasattr(a2a_bridge, 'active_sessions') else 0
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/api/metrics")
+async def get_metrics():
+    """
+    시스템 메트릭 수집
+    
+    Returns:
+        상세 메트릭 정보
+    """
+    try:
+        metrics = {
+            "timestamp": datetime.now().isoformat(),
+            "components": {}
+        }
+        
+        # 에러 통계
+        if hasattr(langgraph_workflow, 'error_handler'):
+            metrics["error_statistics"] = langgraph_workflow.error_handler.get_error_statistics()
+        
+        # 벡터 스토어 통계
+        metrics["vector_store"] = vector_store.get_vector_store_stats()
+        
+        # A2A 브리지 상태
+        if hasattr(a2a_bridge, 'agent_registry'):
+            metrics["a2a_bridge"] = {
+                "registered_agents": len(a2a_bridge.agent_registry),
+                "active_sessions": len(a2a_bridge.active_sessions) if hasattr(a2a_bridge, 'active_sessions') else 0
+            }
+        
+        # MCP 서버 상태
+        if hasattr(mcp_manager, 'get_available_capabilities'):
+            capabilities = mcp_manager.get_available_capabilities()
+            metrics["mcp_servers"] = {
+                "available_capabilities": len(capabilities),
+                "capabilities": list(capabilities.keys()) if isinstance(capabilities, dict) else []
+            }
+        
+        return {
+            "status": "success",
+            "metrics": metrics
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메트릭 수집 실패: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

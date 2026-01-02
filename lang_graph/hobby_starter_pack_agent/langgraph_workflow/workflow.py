@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, TypeVar, Awaitable
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import InMemorySaver
 from datetime import datetime
+from enum import Enum
 
 # Logger 설정
 logging.basicConfig(
@@ -12,162 +13,192 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import necessary classes from other modules
-from .state import HSPAgentState, StateManager
-from ..autogen.agents import HSPAutoGenAgents
-from ..autogen.decision_engine import AutoGenDecisionEngine
-from ..mcp.manager import MCPServerManager, MCPManager
+T = TypeVar("T")
 
-class OptimizedHSPWorkflow:
-    """최적화된 워크플로우 - A2A 제거하고 직접 연동"""
+
+class ErrorCategory(Enum):
+    """에러 카테고리"""
+    SYSTEM_ERROR = "system_error"
+    NETWORK_ERROR = "network_error"
+    DATABASE_ERROR = "database_error"
+    AUTHENTICATION_ERROR = "authentication_error"
+    VALIDATION_ERROR = "validation_error"
+    BUSINESS_LOGIC_ERROR = "business_logic_error"
+    EXTERNAL_SERVICE_ERROR = "external_service_error"
+
+
+class ErrorSeverity(Enum):
+    """에러 심각도"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class ErrorHandler:
+    """에러 처리 핸들러"""
     
     def __init__(self):
-        self.state_manager = StateManager()
-        self.autogen_engine = AutoGenDecisionEngine()
-        self.mcp_manager = MCPManager()
-        
-    def create_workflow(self) -> StateGraph:
-        """최적화된 워크플로우 생성"""
-        workflow = StateGraph(HSPAgentState)
-        
-        # 단순화된 노드들
-        workflow.add_node("profile_analysis", self.analyze_profile)
-        workflow.add_node("hobby_discovery", self.discover_hobbies)
-        workflow.add_node("community_matching", self.match_communities)
-        workflow.add_node("final_recommendation", self.generate_recommendations)
-        
-        # 효율적인 라우팅
-        workflow.add_edge("profile_analysis", "hobby_discovery")
-        workflow.add_edge("hobby_discovery", "community_matching")
-        workflow.add_edge("community_matching", "final_recommendation")
-        workflow.add_edge("final_recommendation", END)
-        
-        workflow.set_entry_point("profile_analysis")
-        return workflow.compile()
+        """ErrorHandler 초기화"""
+        self.error_log: list = []
+        self.error_counts: Dict[str, int] = {}
     
-    async def analyze_profile(self, state: HSPAgentState) -> HSPAgentState:
-        """사용자 프로필 분석 - 직접 AutoGen 호출"""
-        try:
-            # AutoGen에 직접 요청 (A2A 우회)
-            profile_prompt = f"사용자 입력을 분석하여 프로필을 생성해주세요: {state['user_input']}"
-            profile_result = await self.autogen_engine.analyze_user_profile(profile_prompt)
-            
-            # 상태 업데이트 (캐시 활용)
-            state["current_step"] = "hobby_discovery"
-            state["user_profile"] = {
-                "interests": profile_result.get("interests", []),
-                "skill_level": profile_result.get("skill_level", "beginner"),
-                "time_availability": profile_result.get("time_availability", "weekend")
-            }
-            
-            # 현재 단계 결과 저장
-            state["current_step_result"] = profile_result
-            
-            # 상태 압축 저장
-            self.state_manager.save_state(state)
-            
-            logger.info(f"Profile analysis completed for session {state['session_id']}")
-            return state
-            
-        except Exception as e:
-            state["error_context"] = f"프로필 분석 실패: {str(e)}"
-            logger.error(f"Profile analysis failed: {e}")
-            return state
+    def handle_error(
+        self,
+        error: Exception,
+        context: str,
+        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+        category: ErrorCategory = ErrorCategory.SYSTEM_ERROR,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        에러 처리 및 로깅
+        
+        Args:
+            error: 발생한 예외
+            context: 에러 발생 컨텍스트
+            severity: 에러 심각도
+            category: 에러 카테고리
+            metadata: 추가 메타데이터
+        
+        Returns:
+            에러 정보 딕셔너리
+        """
+        error_info = {
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "context": context,
+            "severity": severity.value,
+            "category": category.value,
+            "timestamp": datetime.now().isoformat(),
+            "metadata": metadata or {},
+        }
+        
+        # 에러 로깅
+        log_level = self._get_log_level(severity)
+        logger.log(log_level, f"Error in {context}: {error}", exc_info=True)
+        
+        # 에러 카운트 업데이트
+        error_key = f"{category.value}:{context}"
+        self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
+        
+        # 에러 로그에 추가
+        self.error_log.append(error_info)
+        
+        # 심각한 에러는 알림
+        if severity in [ErrorSeverity.HIGH, ErrorSeverity.CRITICAL]:
+            self._send_alert(error_info)
+        
+        return error_info
     
-    async def discover_hobbies(self, state: HSPAgentState) -> HSPAgentState:
-        """취미 발견 - 병렬 MCP 호출 최적화"""
-        try:
-            # 병렬로 여러 MCP 서버 호출
-            hobby_tasks = [
-                self.mcp_manager.get_hobby_suggestions(state["user_profile"]),
-                self.mcp_manager.get_trending_hobbies(),
-                self.mcp_manager.get_local_activities(state["user_profile"].get("location"))
-            ]
-            
-            results = await asyncio.gather(*hobby_tasks, return_exceptions=True)
-            
-            # 결과 병합
-            hobby_suggestions = []
-            for result in results:
-                if isinstance(result, list):
-                    hobby_suggestions.extend(result)
-            
-            # AutoGen 필터링
-            filtered_hobbies = await self.autogen_engine.filter_hobbies(
-                hobby_suggestions, state["user_profile"]
-            )
-            
-            state["current_step"] = "community_matching"
-            state["current_step_result"] = {"discovered_hobbies": filtered_hobbies}
-            
-            self.state_manager.save_state(state)
-            return state
-            
-        except Exception as e:
-            state["error_context"] = f"취미 발견 실패: {str(e)}"
-            return state
+    def _get_log_level(self, severity: ErrorSeverity) -> int:
+        """심각도에 따른 로그 레벨 반환"""
+        severity_map = {
+            ErrorSeverity.LOW: logging.DEBUG,
+            ErrorSeverity.MEDIUM: logging.WARNING,
+            ErrorSeverity.HIGH: logging.ERROR,
+            ErrorSeverity.CRITICAL: logging.CRITICAL,
+        }
+        return severity_map.get(severity, logging.WARNING)
     
-    async def match_communities(self, state: HSPAgentState) -> HSPAgentState:
-        """커뮤니티 매칭"""
-        try:
-            # 이전 단계 결과를 캐시에서 로드
-            hobbies = state["current_step_result"].get("discovered_hobbies", [])
-            
-            # MCP로 커뮤니티 검색
-            communities = await self.mcp_manager.find_communities(hobbies)
-            
-            state["current_step"] = "final_recommendation"
-            state["current_step_result"] = {"matched_communities": communities}
-            
-            self.state_manager.save_state(state)
-            return state
-            
-        except Exception as e:
-            state["error_context"] = f"커뮤니티 매칭 실패: {str(e)}"
-            return state
+    def _send_alert(self, error_info: Dict[str, Any]):
+        """심각한 에러 알림 전송"""
+        logger.critical(f"ALERT: {error_info}")
     
-    async def generate_recommendations(self, state: HSPAgentState) -> HSPAgentState:
-        """최종 추천 생성"""
-        try:
-            # 이전 결과들 통합
-            hobbies = self.state_manager.get_cached_data(
-                state["session_id"], 
-                f"step_result:{state['session_id']}:hobby_discovery"
-            )
-            
-            communities = state["current_step_result"].get("matched_communities", [])
-            
-            # AutoGen으로 최종 추천 생성
-            final_recommendations = await self.autogen_engine.generate_final_recommendations(
-                user_profile=state["user_profile"],
-                hobbies=hobbies,
-                communities=communities
-            )
-            
-            state["hobby_recommendations"] = final_recommendations
-            state["current_step"] = "completed"
-            
-            self.state_manager.save_state(state)
-            return state
-            
-        except Exception as e:
-            state["error_context"] = f"최종 추천 생성 실패: {str(e)}"
-            return state
+    def get_error_statistics(self) -> Dict[str, Any]:
+        """에러 통계 반환"""
+        return {
+            "total_errors": len(self.error_log),
+            "error_counts": self.error_counts,
+            "recent_errors": self.error_log[-10:] if self.error_log else [],
+        }
 
-# 워크플로우 팩토리
-def create_optimized_workflow() -> StateGraph:
-    """최적화된 워크플로우 인스턴스 생성"""
-    hsp_workflow = OptimizedHSPWorkflow()
-    return hsp_workflow.create_workflow()
+
+class RetryHandler:
+    """재시도 핸들러"""
+    
+    def __init__(
+        self,
+        max_retries: int = 3,
+        initial_delay: float = 1.0,
+        backoff_factor: float = 2.0,
+        max_delay: float = 60.0
+    ):
+        """
+        RetryHandler 초기화
+        
+        Args:
+            max_retries: 최대 재시도 횟수
+            initial_delay: 초기 지연 시간 (초)
+            backoff_factor: 지연 시간 배수
+            max_delay: 최대 지연 시간 (초)
+        """
+        self.max_retries = max_retries
+        self.initial_delay = initial_delay
+        self.backoff_factor = backoff_factor
+        self.max_delay = max_delay
+    
+    async def retry_async(
+        self,
+        func: Callable[..., Awaitable[T]],
+        *args,
+        retry_on: type = Exception,
+        **kwargs
+    ) -> T:
+        """
+        재시도 로직이 포함된 비동기 함수 호출
+        
+        Args:
+            func: 호출할 비동기 함수
+            *args: 함수 인자
+            retry_on: 재시도할 예외 타입
+            **kwargs: 함수 키워드 인자
+        
+        Returns:
+            함수 반환값
+        
+        Raises:
+            Exception: 최대 재시도 횟수 초과 시
+        """
+        last_exception = None
+        
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await func(*args, **kwargs)
+            except retry_on as e:
+                last_exception = e
+                if attempt < self.max_retries:
+                    delay = min(
+                        self.initial_delay * (self.backoff_factor ** attempt),
+                        self.max_delay
+                    )
+                    logger.warning(
+                        f"Retry attempt {attempt + 1}/{self.max_retries} after {delay}s: {e}"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(f"Max retries ({self.max_retries}) exceeded")
+        
+        raise last_exception
+
+# Import necessary classes from other modules
+from .state import HSPAgentState
+from .vector_store import HSPVectorStore
+from ..autogen.agents import HSPAutoGenAgents
+from ..mcp.manager import MCPServerManager
 
 class HSPLangGraphWorkflow:
     """LangGraph 기반 메인 워크플로우"""
     
     def __init__(self, autogen_agents: Optional[HSPAutoGenAgents] = None, 
-                 mcp_manager: Optional[MCPServerManager] = None):
+                 mcp_manager: Optional[MCPServerManager] = None,
+                 vector_store: Optional[HSPVectorStore] = None):
         self.autogen_agents = autogen_agents or HSPAutoGenAgents()
         self.mcp_manager = mcp_manager or MCPServerManager()
+        self.vector_store = vector_store or HSPVectorStore()
         self.a2a_bridge = None  # Will be set during workflow run
+        self.error_handler = ErrorHandler()
+        self.retry_handler = RetryHandler(max_retries=3, initial_delay=1.0)
         self.workflow = self._build_workflow()
     
     def _build_workflow(self) -> StateGraph:
@@ -315,8 +346,13 @@ class HSPLangGraphWorkflow:
             return state
             
         except Exception as e:
-            logger.error(f"사용자 선호도 수집 실패: {e}")
+            error_info = self.error_handler.handle_error(
+                e, "collect_user_preferences",
+                ErrorSeverity.MEDIUM, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"session_id": state.get("session_id", "unknown")}
+            )
             state["error_log"].append(f"Preference collection failed: {str(e)}")
+            state["error_log"].append(f"Error details: {error_info.get('error_message', str(e))}")
             # 기본 질문으로 fallback
             state["current_question"] = "안녕하세요! 취미를 찾는 데 도움을 드리겠습니다. 나이를 알려주세요."
             state["waiting_for_user_response"] = True
@@ -372,61 +408,104 @@ class HSPLangGraphWorkflow:
     async def _analyze_user_profile(self, state: HSPAgentState) -> HSPAgentState:
         print("---Analyzing User Profile---")
         
-        # MCP 서버를 통해 사용자 데이터 수집
-        mcp_results = {}
-        
-        # 구글 캘린더에서 스케줄 정보 가져오기
-        calendar_data = await self.mcp_manager.call_mcp_server(
-            "google_calendar", 
-            "list_events", 
-            {"timeframe": "next_month"}
-        )
-        mcp_results["calendar"] = calendar_data
-        
-        # 소셜 미디어에서 관심사 분석
-        social_data = await self.mcp_manager.call_mcp_server(
-            "social_search",
-            "search_groups", 
-            {"user_interests": state.get("user_profile", {}).get("interests", [])}
-        )
-        mcp_results["social"] = social_data
-        
-        state["mcp_responses"].update(mcp_results)
-        state["current_decision_point"] = "hobby_discovery"
-        
-        # A2A 메시지로 프로필 분석 완료 알림
-        if self.a2a_bridge:
-            await self._send_a2a_update(state, "profile_analysis_complete", mcp_results)
+        try:
+            # MCP 서버를 통해 사용자 데이터 수집
+            mcp_results = {}
+            
+            # 구글 캘린더에서 스케줄 정보 가져오기 (재시도 로직 포함)
+            try:
+                calendar_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "google_calendar", 
+                    "list_events", 
+                    {"timeframe": "next_month"}
+                )
+                mcp_results["calendar"] = calendar_data
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "analyze_user_profile.calendar",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                mcp_results["calendar"] = {"error": error_info}
+            
+            # 소셜 미디어에서 관심사 분석 (재시도 로직 포함)
+            try:
+                social_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "social_search",
+                    "search_groups", 
+                    {"user_interests": state.get("user_profile", {}).get("interests", [])}
+                )
+                mcp_results["social"] = social_data
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "analyze_user_profile.social",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                mcp_results["social"] = {"error": error_info}
+            
+            state["mcp_responses"].update(mcp_results)
+            state["current_decision_point"] = "hobby_discovery"
+            
+            # A2A 메시지로 프로필 분석 완료 알림
+            if self.a2a_bridge:
+                await self._send_a2a_update(state, "profile_analysis_complete", mcp_results)
+            
+        except Exception as e:
+            error_info = self.error_handler.handle_error(
+                e, "analyze_user_profile",
+                ErrorSeverity.HIGH, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"state": state.get("session_id", "unknown")}
+            )
+            state["error_log"].append(f"Profile analysis failed: {str(e)}")
+            state["mcp_responses"]["profile_analysis_error"] = error_info
         
         return state
 
     async def _discover_hobbies(self, state: HSPAgentState) -> HSPAgentState:
         print("---Discovering Hobbies---")
         
+        user_profile = state.get("user_profile", {})
+        hobby_recommendations = []
+        
+        # 벡터 스토어에서 유사 취미 검색
+        try:
+            query = f"사용자 관심사: {', '.join(user_profile.get('interests', []))}"
+            vector_results = self.vector_store.search_similar_hobbies(
+                query, user_profile, top_k=10
+            )
+            hobby_recommendations.extend(vector_results)
+        except Exception as e:
+            logger.error(f"벡터 스토어 검색 실패: {e}")
+        
         # 교육 플랫폼에서 취미 관련 강의 검색
         education_data = await self.mcp_manager.call_mcp_server(
             "education",
             "search_courses",
-            {"user_profile": state.get("user_profile", {})}
+            {"user_profile": user_profile}
         )
         
         # 전자상거래에서 관련 용품 검색
         ecommerce_data = await self.mcp_manager.call_mcp_server(
             "ecommerce",
             "search_products", 
-            {"hobby_categories": state.get("hobby_recommendations", [])}
+            {"hobby_categories": [h.get("hobby_name", "") for h in hobby_recommendations[:5]]}
         )
         
+        # 취미 추천 결과 업데이트
+        state["hobby_recommendations"] = hobby_recommendations
         state["mcp_responses"].update({
             "education": education_data,
-            "ecommerce": ecommerce_data
+            "ecommerce": ecommerce_data,
+            "vector_search": vector_results if 'vector_results' in locals() else []
         })
         state["current_decision_point"] = "integrate_schedule"
         
         if self.a2a_bridge:
             await self._send_a2a_update(state, "hobby_discovery_complete", {
                 "education": education_data,
-                "ecommerce": ecommerce_data
+                "ecommerce": ecommerce_data,
+                "vector_results": vector_results if 'vector_results' in locals() else []
             })
         
         return state
@@ -434,49 +513,117 @@ class HSPLangGraphWorkflow:
     async def _integrate_schedule(self, state: HSPAgentState) -> HSPAgentState:
         print("---Integrating Schedule---")
         
-        # 날씨 정보로 야외 활동 계획
-        weather_data = await self.mcp_manager.call_mcp_server(
-            "weather_api",
-            "forecast",
-            {"location": state.get("user_profile", {}).get("location", "Seoul")}
-        )
-        
-        # 구글 맵스로 근처 취미 장소 검색
-        maps_data = await self.mcp_manager.call_mcp_server(
-            "google_maps",
-            "search_places",
-            {"hobby_types": state.get("hobby_recommendations", [])}
-        )
-        
-        state["mcp_responses"].update({
-            "weather": weather_data,
-            "maps": maps_data
-        })
-        state["current_decision_point"] = "match_communities"
-        
-        if self.a2a_bridge:
-            await self._send_a2a_update(state, "schedule_integration_complete", {
+        try:
+            # 날씨 정보로 야외 활동 계획 (재시도 로직 포함)
+            try:
+                weather_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "weather_api",
+                    "forecast",
+                    {"location": state.get("user_profile", {}).get("location", "Seoul")}
+                )
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "integrate_schedule.weather",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                weather_data = {"error": error_info}
+            
+            # 구글 맵스로 근처 취미 장소 검색 (재시도 로직 포함)
+            try:
+                maps_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "google_maps",
+                    "search_places",
+                    {"hobby_types": [h.get("hobby_name", "") if isinstance(h, dict) else str(h) for h in state.get("hobby_recommendations", [])[:5]]}
+                )
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "integrate_schedule.maps",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                maps_data = {"error": error_info}
+            
+            state["mcp_responses"].update({
                 "weather": weather_data,
                 "maps": maps_data
             })
+            state["current_decision_point"] = "match_communities"
+            
+            if self.a2a_bridge:
+                await self._send_a2a_update(state, "schedule_integration_complete", {
+                    "weather": weather_data,
+                    "maps": maps_data
+                })
+            
+        except Exception as e:
+            error_info = self.error_handler.handle_error(
+                e, "integrate_schedule",
+                ErrorSeverity.HIGH, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"state": state.get("session_id", "unknown")}
+            )
+            state["error_log"].append(f"Schedule integration failed: {str(e)}")
         
         return state
 
     async def _match_communities(self, state: HSPAgentState) -> HSPAgentState:
         print("---Matching Communities---")
         
-        # 소셜 미디어에서 관련 그룹 찾기
-        community_data = await self.mcp_manager.call_mcp_server(
-            "social_search",
-            "find_communities",
-            {"hobbies": state.get("hobby_recommendations", [])}
-        )
-        
-        state["mcp_responses"]["communities"] = community_data
-        state["current_decision_point"] = "track_progress"
-        
-        if self.a2a_bridge:
-            await self._send_a2a_update(state, "community_matching_complete", community_data)
+        try:
+            user_profile = state.get("user_profile", {})
+            hobby_recommendations = state.get("hobby_recommendations", [])
+            community_matches = []
+            vector_communities = []
+            
+            # 벡터 스토어에서 커뮤니티 검색
+            try:
+                hobby_categories = [h.get("category", "") for h in hobby_recommendations if isinstance(h, dict)]
+                query = f"취미 카테고리: {', '.join(hobby_categories)}"
+                vector_communities = self.vector_store.search_communities(
+                    query, user_profile, top_k=5
+                )
+                community_matches.extend(vector_communities)
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "match_communities.vector_search",
+                    ErrorSeverity.MEDIUM, ErrorCategory.SYSTEM_ERROR
+                )
+                logger.error(f"벡터 스토어 커뮤니티 검색 실패: {e}")
+            
+            # 소셜 미디어에서 관련 그룹 찾기 (재시도 로직 포함)
+            try:
+                community_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "social_search",
+                    "find_communities",
+                    {"hobbies": [h.get("hobby_name", "") if isinstance(h, dict) else str(h) for h in hobby_recommendations[:5]]}
+                )
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "match_communities.social_search",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                community_data = {"error": error_info}
+            
+            # 커뮤니티 매칭 결과 업데이트
+            state["community_matches"] = community_matches
+            state["mcp_responses"]["communities"] = community_data
+            state["mcp_responses"]["vector_communities"] = vector_communities
+            state["current_decision_point"] = "track_progress"
+            
+            if self.a2a_bridge:
+                await self._send_a2a_update(state, "community_matching_complete", {
+                    "mcp_communities": community_data,
+                    "vector_communities": vector_communities
+                })
+            
+        except Exception as e:
+            error_info = self.error_handler.handle_error(
+                e, "match_communities",
+                ErrorSeverity.HIGH, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"state": state.get("session_id", "unknown")}
+            )
+            state["error_log"].append(f"Community matching failed: {str(e)}")
         
         return state
 
@@ -501,33 +648,62 @@ class HSPLangGraphWorkflow:
     async def _generate_insights(self, state: HSPAgentState) -> HSPAgentState:
         print("---Generating Insights---")
         
-        # 모든 MCP 응답을 종합하여 최종 인사이트 생성
-        all_mcp_data = state.get("mcp_responses", {})
-        
-        # 음악/독서 플랫폼에서 추가 추천
-        music_data = await self.mcp_manager.call_mcp_server(
-            "music_platform",
-            "get_recommendations",
-            {"user_preferences": state.get("user_profile", {})}
-        )
-        
-        reading_data = await self.mcp_manager.call_mcp_server(
-            "reading_platform", 
-            "search_books",
-            {"interests": state.get("hobby_recommendations", [])}
-        )
-        
-        state["mcp_responses"].update({
-            "music": music_data,
-            "reading": reading_data
-        })
-        
-        if self.a2a_bridge:
-            await self._send_a2a_update(state, "insights_generated", {
+        try:
+            # 모든 MCP 응답을 종합하여 최종 인사이트 생성
+            all_mcp_data = state.get("mcp_responses", {})
+            
+            # 음악/독서 플랫폼에서 추가 추천 (재시도 로직 포함)
+            try:
+                music_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "music_platform",
+                    "get_recommendations",
+                    {"user_preferences": state.get("user_profile", {})}
+                )
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "generate_insights.music",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                music_data = {"error": error_info}
+            
+            try:
+                reading_data = await self.retry_handler.retry_async(
+                    self.mcp_manager.call_mcp_server,
+                    "reading_platform", 
+                    "search_books",
+                    {"interests": state.get("hobby_recommendations", [])}
+                )
+            except Exception as e:
+                error_info = self.error_handler.handle_error(
+                    e, "generate_insights.reading",
+                    ErrorSeverity.MEDIUM, ErrorCategory.EXTERNAL_SERVICE_ERROR
+                )
+                reading_data = {"error": error_info}
+            
+            state["mcp_responses"].update({
                 "music": music_data,
-                "reading": reading_data,
-                "summary": "Final hobby recommendations generated"
+                "reading": reading_data
             })
+            
+            # 모든 MCP 데이터를 로깅 (디버깅용)
+            logger.info(f"Generated insights with {len(all_mcp_data)} MCP data sources")
+            
+            if self.a2a_bridge:
+                await self._send_a2a_update(state, "insights_generated", {
+                    "music": music_data,
+                    "reading": reading_data,
+                    "summary": "Final hobby recommendations generated",
+                    "total_mcp_sources": len(all_mcp_data)
+                })
+            
+        except Exception as e:
+            error_info = self.error_handler.handle_error(
+                e, "generate_insights",
+                ErrorSeverity.HIGH, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"state": state.get("session_id", "unknown")}
+            )
+            state["error_log"].append(f"Insights generation failed: {str(e)}")
         
         return state
 
@@ -592,7 +768,11 @@ class HSPLangGraphWorkflow:
             
         except Exception as e:
             # 에러 처리: 빈 값 fallback
-            print(f"Consensus error: {e}")
+            error_info = self.error_handler.handle_error(
+                e, f"autogen_consensus.{current_decision}",
+                ErrorSeverity.HIGH, ErrorCategory.BUSINESS_LOGIC_ERROR,
+                {"session_id": session_id, "current_decision": current_decision}
+            )
             state["error_log"].append(f"Consensus failed for {current_decision}: {str(e)}")
             
             # 기본 다음 단계로 진행
@@ -607,7 +787,8 @@ class HSPLangGraphWorkflow:
             
             state["agent_consensus"] = {
                 "next_step": next_step_mapping.get(current_decision, "END"),
-                "error": "Consensus failed, using default routing"
+                "error": "Consensus failed, using default routing",
+                "error_info": error_info
             }
         
         return state
@@ -691,7 +872,21 @@ class HSPLangGraphWorkflow:
     async def run_workflow(self, user_input: str, user_profile: Optional[Dict[str, Any]] = None,
                           preferences: Optional[Dict[str, Any]] = None, 
                           a2a_bridge=None, mcp_manager=None) -> Dict[str, Any]:
-        """워크플로우 실행 (API에서 호출)"""
+        """
+        워크플로우 실행 (API에서 호출)
+        
+        Args:
+            user_input: 사용자 입력
+            user_profile: 사용자 프로필 (선택)
+            preferences: 사용자 선호도 (선택)
+            a2a_bridge: A2A 브리지 (선택)
+            mcp_manager: MCP 매니저 (선택)
+        
+        Returns:
+            워크플로우 실행 결과 딕셔너리
+        """
+        start_time = datetime.now()
+        
         try:
             # 외부에서 전달받은 컴포넌트들 설정
             if a2a_bridge:
@@ -705,7 +900,7 @@ class HSPLangGraphWorkflow:
                 "user_profile": user_profile or {},
                 "preferences": preferences or {},
                 "agent_session": {},
-                "workflow_context": {},
+                "workflow_context": {"started_at": start_time.isoformat()},
                 "current_decision_point": "profile_analysis",
                 "hobby_recommendations": [],
                 "schedule_analysis": {},
@@ -726,8 +921,14 @@ class HSPLangGraphWorkflow:
             # 워크플로우 실행
             result = await self.workflow.ainvoke(
                 initial_state,
-                config={"configurable": {"thread_id": f"hsp_{datetime.now().isoformat()}"}}
+                config={"configurable": {"thread_id": f"hsp_{start_time.isoformat()}"}}
             )
+            
+            # 실행 시간 계산
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            # 에러 통계 수집
+            error_stats = self.error_handler.get_error_statistics()
             
             return {
                 "success": True,
@@ -735,15 +936,33 @@ class HSPLangGraphWorkflow:
                 "recommendations": result.get("hobby_recommendations", []),
                 "mcp_data": result.get("mcp_responses", {}),
                 "consensus_history": result.get("agent_consensus", {}),
-                "error_log": result.get("error_log", [])
+                "error_log": result.get("error_log", []),
+                "performance_metrics": {
+                    "execution_time_seconds": execution_time,
+                    "error_count": error_stats.get("total_errors", 0),
+                    "started_at": start_time.isoformat(),
+                    "completed_at": datetime.now().isoformat()
+                }
             }
             
         except Exception as e:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            error_info = self.error_handler.handle_error(
+                e, "run_workflow",
+                ErrorSeverity.CRITICAL, ErrorCategory.SYSTEM_ERROR,
+                {"user_input": user_input[:100] if user_input else ""}
+            )
+            
             return {
                 "success": False,
                 "error": str(e),
+                "error_info": error_info,
                 "recommendations": [],
                 "mcp_data": {},
                 "consensus_history": {},
-                "error_log": [f"Workflow execution failed: {str(e)}"]
+                "error_log": [f"Workflow execution failed: {str(e)}"],
+                "performance_metrics": {
+                    "execution_time_seconds": execution_time,
+                    "failed_at": datetime.now().isoformat()
+                }
             } 
