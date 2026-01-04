@@ -22,6 +22,18 @@ from models.types import GraphRAGState
 from config import AgentConfig
 from .llm_processor import LLMProcessor
 
+# Optional imports for Neo4j and query translation
+try:
+    from utils.neo4j_connector import Neo4jConnector, Neo4jConfig
+    from .query_translator import QueryTranslator, QueryResult
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    Neo4jConnector = None
+    Neo4jConfig = None
+    QueryTranslator = None
+    QueryResult = None
+
 
 class QueryType(Enum):
     """Types of queries that can be processed"""
@@ -81,7 +93,7 @@ class RAGAgentNode:
     - Self-directed learning from queries
     """
     
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, neo4j_config: Optional[Neo4jConfig] = None):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.llm_processor = LLMProcessor(config)
@@ -96,8 +108,22 @@ class RAGAgentNode:
         self.learning_enabled = True
         self.adaptation_threshold = 0.7
         self.reasoning_depth = 3
+        
+        # Neo4j and query translation components
+        self.use_neo4j = NEO4J_AVAILABLE and neo4j_config is not None
+        self.neo4j_connector = None
+        self.query_translator = None
+        
+        if self.use_neo4j:
+            try:
+                self.neo4j_connector = Neo4jConnector(neo4j_config)
+                self.query_translator = QueryTranslator(config, self.llm_processor)
+                self.logger.info("Neo4j and query translation components initialized")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize Neo4j/query translation components: {e}")
+                self.use_neo4j = False
     
-    def __call__(self, state: GraphRAGState) -> GraphRAGState:
+    async def __call__(self, state: GraphRAGState) -> GraphRAGState:
         """
         Process query using true GraphRAG principles
         
@@ -114,8 +140,11 @@ class RAGAgentNode:
                 state["status"] = "error"
                 return state
             
-            if not state.get("knowledge_graph"):
-                state["error"] = "No knowledge graph available"
+            # Check if Neo4j is available and should be used
+            use_neo4j_query = self.use_neo4j and self.neo4j_connector and self.query_translator
+            
+            if not use_neo4j_query and not state.get("knowledge_graph"):
+                state["error"] = "No knowledge graph available and Neo4j not configured"
                 state["status"] = "error"
                 return state
             
@@ -123,11 +152,21 @@ class RAGAgentNode:
             query_analysis = self._analyze_query_autonomously(state["query"], state.get("user_intent", ""))
             
             # Step 2: Intelligent information retrieval
-            retrieval_results = self._retrieve_information_intelligently(
-                state["knowledge_graph"], 
-                query_analysis,
-                state.get("user_intent", "")
-            )
+            if use_neo4j_query:
+                # Use Neo4j query translation and execution
+                retrieval_results = await self._retrieve_from_neo4j(
+                    state["query"],
+                    query_analysis,
+                    state.get("user_intent", ""),
+                    state.get("ontology_schema")
+                )
+            else:
+                # Fallback to NetworkX graph traversal
+                retrieval_results = self._retrieve_information_intelligently(
+                    state["knowledge_graph"], 
+                    query_analysis,
+                    state.get("user_intent", "")
+                )
             
             # Step 3: Context-aware response generation
             response = self._generate_intelligent_response(
@@ -399,6 +438,111 @@ Provide multi-hop reasoning in JSON format:
             summary += "Sample entities:\n" + "\n".join(sample_entities)
         
         return summary
+    
+    async def _retrieve_from_neo4j(
+        self,
+        query: str,
+        query_analysis: QueryAnalysis,
+        user_intent: str = "",
+        ontology_schema: Optional[Any] = None
+    ) -> List[RetrievalResult]:
+        """
+        Retrieve information from Neo4j using query translation
+        
+        Args:
+            query: Natural language query
+            query_analysis: Query analysis result
+            user_intent: User intent
+            ontology_schema: Optional ontology schema
+            
+        Returns:
+            List of RetrievalResult
+        """
+        try:
+            # Translate natural language to Cypher
+            context = {
+                "user_intent": user_intent,
+                "domain": ontology_schema.domain if ontology_schema else "general"
+            }
+            
+            graph_schema = None
+            if ontology_schema:
+                graph_schema = {
+                    "entity_types": list(ontology_schema.entity_types.keys()),
+                    "relationship_types": list(ontology_schema.relationship_types.keys())
+                }
+            
+            translation = self.query_translator.translate_query(query, context, graph_schema)
+            
+            # Get graph stats for optimization
+            graph_stats = await self.neo4j_connector.get_graph_stats()
+            
+            # Optimize query
+            optimized_translation = self.query_translator.optimize_query(translation, graph_stats)
+            
+            # Execute query
+            records, summary = await self.neo4j_connector.execute_query(
+                optimized_translation.cypher_query
+            )
+            
+            # Create QueryResult
+            query_result = QueryResult(
+                records=[dict(record) for record in records],
+                summary={
+                    "result_available_after": summary.result_available_after if hasattr(summary, 'result_available_after') else None,
+                    "result_consumed_after": summary.result_consumed_after if hasattr(summary, 'result_consumed_after') else None,
+                    "query": optimized_translation.cypher_query
+                },
+                success=True
+            )
+            
+            # Validate query result
+            is_valid, error_msg = self.query_translator.validate_query_result(
+                optimized_translation,
+                query_result,
+                query
+            )
+            
+            if not is_valid:
+                self.logger.warning(f"Query result validation failed: {error_msg}")
+            
+            # Convert Neo4j records to RetrievalResult
+            retrieval_results = []
+            for record in query_result.records:
+                # Extract content from record
+                content_parts = []
+                source_nodes = []
+                
+                for key, value in record.items():
+                    if isinstance(value, dict):
+                        # Node or relationship
+                        if 'name' in value:
+                            content_parts.append(f"{key}: {value.get('name', '')}")
+                            source_nodes.append(value.get('id', ''))
+                        elif 'content' in value:
+                            content_parts.append(f"{key}: {value.get('content', '')}")
+                            source_nodes.append(value.get('id', ''))
+                    else:
+                        content_parts.append(f"{key}: {value}")
+                
+                content = "\n".join(content_parts)
+                
+                result = RetrievalResult(
+                    content=content,
+                    source_nodes=source_nodes,
+                    confidence=optimized_translation.confidence,
+                    reasoning_path=[optimized_translation.reasoning],
+                    context={"query_type": optimized_translation.query_type},
+                    metadata={"cypher_query": optimized_translation.cypher_query}
+                )
+                retrieval_results.append(result)
+            
+            self.logger.info(f"Retrieved {len(retrieval_results)} results from Neo4j")
+            return retrieval_results
+            
+        except Exception as e:
+            self.logger.error(f"Neo4j retrieval failed: {e}")
+            return []
     
     def _generate_intelligent_response(self, query: str, query_analysis: QueryAnalysis, retrieval_results: List[RetrievalResult], user_intent: str = "") -> str:
         """Generate intelligent response based on retrieval results"""

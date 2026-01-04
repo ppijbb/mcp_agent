@@ -139,6 +139,45 @@ class LoggingConfig(BaseModel):
         return v.upper()
 
 
+class Neo4jConfig(BaseModel):
+    """Configuration for Neo4j GraphDB"""
+    enabled: bool = Field(default=False, description="Enable Neo4j GraphDB")
+    uri: str = Field(default="bolt://localhost:7687", description="Neo4j URI")
+    username: str = Field(default="neo4j", description="Neo4j username")
+    password: str = Field(default="password", description="Neo4j password")
+    database: str = Field(default="neo4j", description="Neo4j database name")
+    max_connection_pool_size: int = Field(default=50, description="Max connection pool size")
+    connection_timeout: int = Field(default=30, description="Connection timeout in seconds")
+    max_retry_time: int = Field(default=30, description="Max retry time in seconds")
+    
+    @field_validator('max_connection_pool_size')
+    def validate_pool_size(cls, v):
+        if v < 1 or v > 200:
+            raise ValueError('max_connection_pool_size must be between 1 and 200')
+        return v
+
+
+class OntologyConfig(BaseModel):
+    """Configuration for ontology construction"""
+    enabled: bool = Field(default=True, description="Enable automatic ontology schema generation")
+    importance_threshold: float = Field(default=0.5, description="Minimum importance score for relationships/entities")
+    complexity_control: bool = Field(default=True, description="Control service-level complexity")
+    max_relationships_per_entity: int = Field(default=20, description="Max relationships per entity")
+    value_based_filtering: bool = Field(default=True, description="Filter based on semantic importance")
+    
+    @field_validator('importance_threshold')
+    def validate_threshold(cls, v):
+        if v < 0.0 or v > 1.0:
+            raise ValueError('importance_threshold must be between 0.0 and 1.0')
+        return v
+    
+    @field_validator('max_relationships_per_entity')
+    def validate_max_relationships(cls, v):
+        if v < 1 or v > 100:
+            raise ValueError('max_relationships_per_entity must be between 1 and 100')
+        return v
+
+
 class GraphRAGConfig(BaseModel):
     """Main configuration for GraphRAG Agent"""
     agent: AgentConfig
@@ -146,6 +185,8 @@ class GraphRAGConfig(BaseModel):
     visualization: VisualizationConfig
     optimization: OptimizationConfig
     logging: LoggingConfig
+    neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig, description="Neo4j configuration")
+    ontology: OntologyConfig = Field(default_factory=OntologyConfig, description="Ontology configuration")
     
     # Runtime settings
     data_file: Optional[str] = Field(default=None, description="Data file path")
@@ -301,6 +342,23 @@ class ConfigManager:
                 "max_file_size": 10485760,
                 "backup_count": 5
             },
+            "neo4j": {
+                "enabled": False,
+                "uri": "bolt://localhost:7687",
+                "username": "neo4j",
+                "password": "password",
+                "database": "neo4j",
+                "max_connection_pool_size": 50,
+                "connection_timeout": 30,
+                "max_retry_time": 30
+            },
+            "ontology": {
+                "enabled": True,
+                "importance_threshold": 0.5,
+                "complexity_control": True,
+                "max_relationships_per_entity": 20,
+                "value_based_filtering": True
+            },
             "data_file": None,
             "output_path": None,
             "query": None,
@@ -376,7 +434,24 @@ class ConfigManager:
             'QUERY': ['query'],
             'GRAPH_PATH': ['graph_path'],
             'MODE': ['mode'],
-            'VERBOSE': ['verbose']
+            'VERBOSE': ['verbose'],
+            
+            # Neo4j settings
+            'NEO4J_ENABLED': ['neo4j', 'enabled'],
+            'NEO4J_URI': ['neo4j', 'uri'],
+            'NEO4J_USERNAME': ['neo4j', 'username'],
+            'NEO4J_PASSWORD': ['neo4j', 'password'],
+            'NEO4J_DATABASE': ['neo4j', 'database'],
+            'NEO4J_MAX_POOL_SIZE': ['neo4j', 'max_connection_pool_size'],
+            'NEO4J_CONNECTION_TIMEOUT': ['neo4j', 'connection_timeout'],
+            'NEO4J_MAX_RETRY_TIME': ['neo4j', 'max_retry_time'],
+            
+            # Ontology settings
+            'ONTOLOGY_ENABLED': ['ontology', 'enabled'],
+            'ONTOLOGY_IMPORTANCE_THRESHOLD': ['ontology', 'importance_threshold'],
+            'ONTOLOGY_COMPLEXITY_CONTROL': ['ontology', 'complexity_control'],
+            'ONTOLOGY_MAX_RELATIONSHIPS': ['ontology', 'max_relationships_per_entity'],
+            'ONTOLOGY_VALUE_FILTERING': ['ontology', 'value_based_filtering']
         }
         
         env_vars_found = []

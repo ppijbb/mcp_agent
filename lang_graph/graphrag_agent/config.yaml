@@ -19,6 +19,25 @@ graph:
   enable_query_optimization: true
   default_data_classification: "internal"  # Options: public, internal, confidential, restricted
 
+neo4j:
+  # Neo4j GraphDB configuration
+  enabled: false  # Set to true to use Neo4j instead of NetworkX
+  uri: "bolt://localhost:7687"
+  username: "neo4j"
+  password: "password"  # Set via NEO4J_PASSWORD environment variable
+  database: "neo4j"
+  max_connection_pool_size: 50
+  connection_timeout: 30
+  max_retry_time: 30
+
+ontology:
+  # Ontology construction settings
+  enabled: true  # Enable automatic ontology schema generation
+  importance_threshold: 0.5  # Minimum importance score (0.0-1.0) for relationships/entities
+  complexity_control: true  # Control service-level complexity
+  max_relationships_per_entity: 20  # Limit relationships per entity to prevent over-complexity
+  value_based_filtering: true  # Filter based on semantic importance and query value
+
 visualization:
   # Graph visualization settings
   enabled: true

@@ -23,6 +23,19 @@ from models.types import GraphRAGState, GraphStats
 from config import AgentConfig
 from .llm_processor import LLMProcessor, Entity, Relationship
 
+# Optional imports for Neo4j and ontology
+try:
+    from utils.neo4j_connector import Neo4jConnector, Neo4jConfig
+    from models.ontology_schema import OntologySchemaGenerator
+    from .ontology_builder import OntologyBuilder
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    Neo4jConnector = None
+    Neo4jConfig = None
+    OntologySchemaGenerator = None
+    OntologyBuilder = None
+
 
 class GraphStructureType(Enum):
     """Types of graph structures that can be generated"""
@@ -60,7 +73,7 @@ class GraphGeneratorNode:
     - Self-directed learning and adaptation
     """
     
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, neo4j_config: Optional[Neo4jConfig] = None):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.llm_processor = LLMProcessor(config)
@@ -75,8 +88,24 @@ class GraphGeneratorNode:
         self.learning_enabled = True
         self.adaptation_threshold = 0.7
         self.quality_threshold = 0.6
+        
+        # Neo4j and ontology components
+        self.use_neo4j = NEO4J_AVAILABLE and neo4j_config is not None
+        self.neo4j_connector = None
+        self.ontology_schema_generator = None
+        self.ontology_builder = None
+        
+        if self.use_neo4j:
+            try:
+                self.neo4j_connector = Neo4jConnector(neo4j_config)
+                self.ontology_schema_generator = OntologySchemaGenerator(self.llm_processor)
+                self.ontology_builder = OntologyBuilder(config, self.llm_processor)
+                self.logger.info("Neo4j and ontology components initialized")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize Neo4j/ontology components: {e}")
+                self.use_neo4j = False
     
-    def __call__(self, state: GraphRAGState) -> GraphRAGState:
+    async def __call__(self, state: GraphRAGState) -> GraphRAGState:
         """
         Generate knowledge graph using true GraphRAG principles
         
@@ -101,13 +130,52 @@ class GraphGeneratorNode:
             user_intent = state.get("user_intent", "")
             construction_plan = self._create_dynamic_construction_plan(state["text_units"], user_intent)
             
-            # Step 3: Intelligent graph generation
-            knowledge_graph = self._generate_intelligent_graph(state["text_units"], construction_plan, user_intent)
+            # Step 2.5: Generate ontology schema if using Neo4j
+            ontology_schema = None
+            if self.use_neo4j and self.ontology_schema_generator:
+                try:
+                    data_sample = " ".join([unit["text"][:500] for unit in state["text_units"][:10]])
+                    domain = state.get("data_analysis", {}).get("data_understanding", {}).get("domain_context", "general")
+                    ontology_schema = self.ontology_schema_generator.generate_schema(
+                        data_sample, domain, user_intent
+                    )
+                    state["ontology_schema"] = ontology_schema
+                    self.logger.info(f"Ontology schema generated: {len(ontology_schema.entity_types)} entity types, {len(ontology_schema.relationship_types)} relationship types")
+                except Exception as e:
+                    self.logger.warning(f"Failed to generate ontology schema: {e}")
+            
+            # Step 3: Intelligent graph generation with value-based filtering
+            knowledge_graph = self._generate_intelligent_graph(
+                state["text_units"], 
+                construction_plan, 
+                user_intent,
+                ontology_schema
+            )
             
             # Step 4: Graph optimization and validation
             optimized_graph = self._optimize_and_validate_graph(knowledge_graph, construction_plan)
             
-            # Step 5: Learning from the process
+            # Step 5: Save to Neo4j if enabled
+            if self.use_neo4j and self.neo4j_connector:
+                try:
+                    graph_name = state.get("graph_name") or f"graph_{datetime.now().isoformat()}"
+                    success = await self.neo4j_connector.save_graph(
+                        optimized_graph,
+                        graph_name=graph_name,
+                        clear_existing=True
+                    )
+                    if success:
+                        # Create indexes for better query performance
+                        await self.neo4j_connector.create_indexes()
+                        state["neo4j_saved"] = True
+                        state["neo4j_graph_name"] = graph_name
+                        self.logger.info(f"Graph saved to Neo4j: {graph_name}")
+                    else:
+                        self.logger.warning("Failed to save graph to Neo4j")
+                except Exception as e:
+                    self.logger.warning(f"Neo4j save failed: {e}")
+            
+            # Step 6: Learning from the process
             self._learn_from_graph_construction(construction_plan, optimized_graph, user_intent)
             
             # Calculate statistics
@@ -358,7 +426,13 @@ Consider:
             reasoning=plan_data.get("reasoning", "")
         )
     
-    def _generate_intelligent_graph(self, text_units: List[Dict[str, Any]], construction_plan: GraphConstructionPlan, user_intent: str = "") -> nx.Graph:
+    def _generate_intelligent_graph(
+        self, 
+        text_units: List[Dict[str, Any]], 
+        construction_plan: GraphConstructionPlan, 
+        user_intent: str = "",
+        ontology_schema: Optional[Any] = None
+    ) -> nx.Graph:
         """
         Generate knowledge graph using intelligent, adaptive approach
         
@@ -382,8 +456,40 @@ Consider:
         # Step 1: Intelligent entity extraction
         entities = self._extract_entities_intelligently(text_units, construction_plan, user_intent)
         
+        # Step 1.5: Filter entities based on importance if using ontology builder
+        if self.use_neo4j and self.ontology_builder:
+            try:
+                context = {
+                    "user_intent": user_intent,
+                    "domain": ontology_schema.domain if ontology_schema else "general"
+                }
+                entity_evaluations = self.ontology_builder.filter_entities(
+                    entities, context, ontology_schema
+                )
+                # Filter to only include important entities
+                entities = [e.entity for e in entity_evaluations if e.should_include]
+                self.logger.info(f"Filtered entities: {len(entities)} important entities from {len(entity_evaluations)} candidates")
+            except Exception as e:
+                self.logger.warning(f"Entity filtering failed: {e}")
+        
         # Step 2: Dynamic relationship discovery
         relationships = self._discover_relationships_intelligently(text_units, entities, construction_plan, user_intent)
+        
+        # Step 2.5: Filter relationships based on value if using ontology builder
+        if self.use_neo4j and self.ontology_builder:
+            try:
+                context = {
+                    "user_intent": user_intent,
+                    "domain": ontology_schema.domain if ontology_schema else "general"
+                }
+                relationship_evaluations = self.ontology_builder.filter_relationships(
+                    relationships, entities, context, ontology_schema
+                )
+                # Filter to only include valuable relationships
+                relationships = [e.relationship for e in relationship_evaluations if e.should_include]
+                self.logger.info(f"Filtered relationships: {len(relationships)} valuable relationships from {len(relationship_evaluations)} candidates")
+            except Exception as e:
+                self.logger.warning(f"Relationship filtering failed: {e}")
         
         # Step 3: Build graph structure
         graph = self._build_graph_structure(graph, text_units, entities, relationships, construction_plan)

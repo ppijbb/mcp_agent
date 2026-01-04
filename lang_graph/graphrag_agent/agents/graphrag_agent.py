@@ -59,7 +59,24 @@ class GraphRAGAgent:
             max_nodes=self.config.visualization.max_nodes
         )
         
-        self.coordinator = GraphRAGWorkflow(agent_config)
+        # Create Neo4j config if enabled
+        neo4j_config = None
+        if self.config.neo4j.enabled:
+            try:
+                from utils.neo4j_connector import Neo4jConfig
+                neo4j_config = Neo4jConfig(
+                    uri=self.config.neo4j.uri,
+                    username=self.config.neo4j.username,
+                    password=self.config.neo4j.password,
+                    database=self.config.neo4j.database,
+                    max_connection_pool_size=self.config.neo4j.max_connection_pool_size,
+                    connection_timeout=self.config.neo4j.connection_timeout,
+                    max_retry_time=self.config.neo4j.max_retry_time
+                )
+            except ImportError:
+                self.logger.warning("Neo4j not available, falling back to NetworkX")
+        
+        self.coordinator = GraphRAGWorkflow(agent_config, neo4j_config)
     
     async def run(self) -> bool:
         """

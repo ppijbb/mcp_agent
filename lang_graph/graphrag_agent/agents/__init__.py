@@ -24,6 +24,18 @@ try:
 except ImportError:
     AUTONOMOUS_BEHAVIOR_AVAILABLE = False
 
+try:
+    from .ontology_builder import OntologyBuilder
+    ONTOLOGY_BUILDER_AVAILABLE = True
+except ImportError:
+    ONTOLOGY_BUILDER_AVAILABLE = False
+
+try:
+    from .query_translator import QueryTranslator
+    QUERY_TRANSLATOR_AVAILABLE = True
+except ImportError:
+    QUERY_TRANSLATOR_AVAILABLE = False
+
 __all__ = [
     "GraphGeneratorNode",
     "RAGAgentNode",
@@ -39,3 +51,9 @@ if INTELLIGENT_AGENT_AVAILABLE:
 
 if AUTONOMOUS_BEHAVIOR_AVAILABLE:
     __all__.append("AutonomousBehaviorEngine")
+
+if ONTOLOGY_BUILDER_AVAILABLE:
+    __all__.append("OntologyBuilder")
+
+if QUERY_TRANSLATOR_AVAILABLE:
+    __all__.append("QueryTranslator")

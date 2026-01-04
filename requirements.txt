@@ -92,6 +92,7 @@ redis
 aioredis
 alembic
 sentence-transformers
+neo4j
 
 # Search and Research
 duckduckgo-search

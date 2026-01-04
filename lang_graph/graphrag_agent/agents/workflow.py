@@ -4,9 +4,17 @@ Simple GraphRAG Workflow
 This module defines a simple workflow without LangGraph dependencies.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from models.types import GraphRAGState
 from config import AgentConfig
+
+try:
+    from utils.neo4j_connector import Neo4jConfig
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    Neo4jConfig = None
+
 from .graph_generator import GraphGeneratorNode
 from .rag_agent import RAGAgentNode
 from utils.visualization import VisualizationNode
@@ -16,10 +24,10 @@ from utils.optimization import OptimizationNode
 class GraphRAGWorkflow:
     """Simple GraphRAG workflow"""
     
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, neo4j_config: Optional[Neo4jConfig] = None):
         self.config = config
-        self.graph_generator = GraphGeneratorNode(config)
-        self.rag_agent = RAGAgentNode(config)
+        self.graph_generator = GraphGeneratorNode(config, neo4j_config)
+        self.rag_agent = RAGAgentNode(config, neo4j_config)
         self.visualizer = VisualizationNode(config)
         self.optimizer = OptimizationNode(config)
     
@@ -34,7 +42,7 @@ class GraphRAGWorkflow:
             
             if mode == "create":
                 # Generate graph
-                state = self.graph_generator(state)
+                state = await self.graph_generator(state)
                 if state.get("status") != "completed":
                     return dict(state)
                 
@@ -67,7 +75,7 @@ class GraphRAGWorkflow:
                     with open(state["graph_path"], "rb") as f:
                         state["knowledge_graph"] = pickle.load(f)
                 
-                state = self.rag_agent(state)
+                state = await self.rag_agent(state)
                 if state.get("status") != "completed":
                     return dict(state)
                 
