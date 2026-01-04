@@ -94,3 +94,6 @@
 [submodule "open_researcher/DataFlow"]
 	path = open_researcher/DataFlow
 	url = https://github.com/OpenDCAI/DataFlow.git
+[submodule "open_researcher/deeotutor"]
+	path = open_researcher/deeotutor
+	url = https://github.com/HKUDS/DeepTutor.git
