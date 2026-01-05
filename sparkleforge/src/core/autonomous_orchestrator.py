@@ -123,7 +123,7 @@ class ResearchState(TypedDict):
 
 
 class AutonomousOrchestrator:
-    """8대 혁신을 통합한 LangGraph 오케스트레이터."""
+    """9대 혁신을 통합한 LangGraph 오케스트레이터."""
     
     def __init__(self):
         """초기화."""
@@ -146,6 +146,18 @@ class AutonomousOrchestrator:
         self.user_profiler = UserProfiler()
         self.research_recommender = ResearchRecommender(self.hybrid_storage, self.user_profiler)
         self.creativity_agent = CreativityAgent()
+        
+        # 9번째 혁신: Adaptive Research Depth
+        from src.core.adaptive_research_depth import AdaptiveResearchDepth
+        depth_config = self.research_config.research_depth if hasattr(self.research_config, "research_depth") else {}
+        if isinstance(depth_config, dict):
+            self.research_depth = AdaptiveResearchDepth(depth_config)
+        else:
+            # AdaptiveResearchDepthConfig 객체인 경우
+            self.research_depth = AdaptiveResearchDepth({
+                "default_preset": getattr(depth_config, "default_preset", "auto"),
+                "presets": getattr(depth_config, "presets", {})
+            })
         
         self.graph = None
         self._build_langgraph_workflow()
@@ -524,13 +536,40 @@ class AutonomousOrchestrator:
                         
                         return state
             
+            # 9번째 혁신: Adaptive Research Depth - 연구 깊이 결정
+            from src.core.adaptive_research_depth import ResearchPreset
+            user_request = state.get("user_request", "")
+            preset_str = state.get("research_preset")
+            preset = None
+            if preset_str:
+                try:
+                    preset = ResearchPreset(preset_str)
+                except ValueError:
+                    preset = None
+            
+            depth_config = self.research_depth.determine_depth(
+                user_request,
+                preset=preset,
+                context=state.get("context")
+            )
+            
+            # 깊이 설정을 state에 저장
+            state["research_depth"] = {
+                "preset": depth_config.preset.value,
+                "planning": depth_config.planning,
+                "researching": depth_config.researching,
+                "reporting": depth_config.reporting,
+                "complexity_score": depth_config.complexity_score
+            }
+            logger.info(f"📊 Research depth determined: {depth_config.preset.value} (complexity: {depth_config.complexity_score:.2f})")
+            
             # 1. MCP 도구로 사전 조사
             preliminary_research = await self._conduct_preliminary_research(state)
             logger.info(f"🔍 Preliminary research completed: {preliminary_research.get('sources_count', 0)} sources")
             
-            # 2. Task 분해 (복잡도 기반) - 명확화 정보 반영
-            tasks = await self._decompose_into_tasks(state, preliminary_research)
-            logger.info(f"📋 Tasks decomposed: {len(tasks)} tasks")
+            # 2. Task 분해 (복잡도 기반) - 명확화 정보 및 깊이 설정 반영
+            tasks = await self._decompose_into_tasks(state, preliminary_research, depth_config)
+            logger.info(f"📋 Tasks decomposed: {len(tasks)} tasks (depth: {depth_config.preset.value})")
             
             # 명확화 정보를 작업에 적용
             clarification_context = state.get("clarification_context", {})
@@ -785,6 +824,7 @@ class AutonomousOrchestrator:
         return state
     
     async def _execute_research(self, state: ResearchState) -> ResearchState:
+        """연구 실행 (9번째 혁신: Progressive Deepening 통합)."""
         """연구 실행 (Universal MCP Hub + Streaming Pipeline + Parallel Execution)."""
         # 입력 로깅
         self._log_node_input("execute_research", state)
@@ -939,10 +979,53 @@ class AutonomousOrchestrator:
                         "status": "failed"
                     })
         
+        # 9번째 혁신: Progressive Deepening - 연구 진행 상황 분석 및 깊이 조정
+        current_depth = state.get("research_depth", {})
+        if current_depth and hasattr(self, "research_depth"):
+            progress = {
+                "iteration_count": state.get("research_iteration", 0) + 1,
+                "completion_rate": float(len([r for r in execution_results if r.get("status") == "completed"])) / max(len(tasks), 1),
+                "tasks_total": len(tasks),
+                "tasks_completed": len([r for r in execution_results if r.get("status") == "completed"]),
+            }
+            
+            # DepthConfig 객체 재구성
+            from src.core.adaptive_research_depth import DepthConfig, ResearchPreset
+            try:
+                preset = ResearchPreset(current_depth.get("preset", "medium"))
+                current_depth_config = DepthConfig(
+                    preset=preset,
+                    planning=current_depth.get("planning", {}),
+                    researching=current_depth.get("researching", {}),
+                    reporting=current_depth.get("reporting", {}),
+                    complexity_score=current_depth.get("complexity_score", 0.5)
+                )
+                
+                # Progressive Deepening 체크
+                adjusted_depth = self.research_depth.adjust_depth_progressively(
+                    current_depth_config,
+                    progress,
+                    goals_achieved=False  # TODO: 실제 목표 달성 여부 확인
+                )
+                
+                if adjusted_depth:
+                    logger.info(f"📈 Progressive Deepening: {current_depth_config.preset.value} -> {adjusted_depth.preset.value}")
+                    state["research_depth"] = {
+                        "preset": adjusted_depth.preset.value,
+                        "planning": adjusted_depth.planning,
+                        "researching": adjusted_depth.researching,
+                        "reporting": adjusted_depth.reporting,
+                        "complexity_score": adjusted_depth.complexity_score
+                    }
+                    state["research_depth_adjusted"] = True
+            except Exception as e:
+                logger.debug(f"Progressive Deepening check failed: {e}")
+        
         state.update({
             "execution_results": execution_results,
             "streaming_data": streaming_data,
             "current_step": "hierarchical_compression",
+            "research_iteration": state.get("research_iteration", 0) + 1,
             "innovation_stats": {
                 **state.get("innovation_stats", {}),
                 "tasks_executed": len(execution_results),
@@ -1544,32 +1627,63 @@ class AutonomousOrchestrator:
         return [kw for kw, count in keyword_counts.most_common(10)]
     
     async def _decompose_into_tasks(
-        self, 
-        state: ResearchState, 
-        preliminary_research: Dict[str, Any]
+        self,
+        state: ResearchState,
+        preliminary_research: Dict[str, Any],
+        depth_config: Optional[Any] = None
     ) -> List[Dict[str, Any]]:
-        """복잡도 기반 task 분해."""
+        """복잡도 기반 task 분해 (9번째 혁신: Adaptive Research Depth 통합)."""
         logger.info("📋 Decomposing research into specific tasks")
         
-        complexity_raw = state.get('complexity_score', 5.0)
-        
-        # complexity가 dict인 경우 처리
-        if isinstance(complexity_raw, dict):
-            complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
-        elif isinstance(complexity_raw, (int, float)):
-            complexity = float(complexity_raw)
+        # 9번째 혁신: depth_config가 있으면 사용
+        if depth_config:
+            planning_config = depth_config.planning.get("decompose", {})
+            mode = planning_config.get("mode", "manual")
+            
+            if mode == "auto":
+                # 자동 모드: 복잡도 기반
+                complexity_raw = state.get('complexity_score', 5.0)
+                if isinstance(complexity_raw, dict):
+                    complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
+                elif isinstance(complexity_raw, (int, float)):
+                    complexity = float(complexity_raw)
+                else:
+                    complexity = 5.0
+                
+                # 복잡도에 따른 task 개수 결정
+                if complexity <= 5:
+                    num_tasks = 3 + int(complexity)  # 3-8개
+                elif complexity <= 8:
+                    num_tasks = 5 + int(complexity)  # 5-13개
+                else:
+                    num_tasks = 8 + int(complexity * 0.5)  # 8-13개
+                
+                # auto_max_subtopics 제한 적용
+                max_subtopics = planning_config.get("auto_max_subtopics", 8)
+                num_tasks = min(num_tasks, max_subtopics)
+            else:
+                # 수동 모드: 프리셋 설정 사용
+                num_tasks = planning_config.get("initial_subtopics", 5)
+                logger.info(f"📊 Using preset subtopics: {num_tasks}")
         else:
-            complexity = 5.0
+            # 기존 로직 (depth_config가 없는 경우)
+            complexity_raw = state.get('complexity_score', 5.0)
+            if isinstance(complexity_raw, dict):
+                complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
+            elif isinstance(complexity_raw, (int, float)):
+                complexity = float(complexity_raw)
+            else:
+                complexity = 5.0
+            
+            # 복잡도에 따른 task 개수 결정
+            if complexity <= 5:
+                num_tasks = 3 + int(complexity)  # 3-8개
+            elif complexity <= 8:
+                num_tasks = 5 + int(complexity)  # 5-13개
+            else:
+                num_tasks = 8 + int(complexity * 0.5)  # 8-13개
         
-        # 복잡도에 따른 task 개수 결정
-        if complexity <= 5:
-            num_tasks = 3 + int(complexity)  # 3-8개
-        elif complexity <= 8:
-            num_tasks = 5 + int(complexity)  # 5-13개
-        else:
-            num_tasks = 8 + int(complexity * 0.5)  # 8-13개
-        
-        logger.info(f"📊 Target task count: {num_tasks} (complexity: {complexity})")
+        logger.info(f"📊 Target task count: {num_tasks}")
         
         # LLM으로 task 생성 (사전 조사 결과 포함)
         decomposition_prompt = f"""

@@ -1,10 +1,11 @@
 """
-Local Researcher Project Configuration (v2.0 - 8대 혁신)
+Local Researcher Project Configuration (v2.0 - 9대 혁신)
 
 Centralized configuration management for advanced multi-agent research system.
-Supports 8 core innovations: Adaptive Supervisor, Hierarchical Compression, 
+Supports 9 core innovations: Adaptive Supervisor, Hierarchical Compression, 
 Multi-Model Orchestration, Continuous Verification, Streaming Pipeline,
-Universal MCP Hub, Adaptive Context Window, Production-Grade Reliability.
+Universal MCP Hub, Adaptive Context Window, Production-Grade Reliability,
+Adaptive Research Depth.
 """
 
 import os
@@ -117,8 +118,103 @@ class AgentConfig(BaseModel):
 
 
 @dataclass
+class ResearchPresetConfig:
+    """연구 깊이 프리셋 설정 (9번째 혁신: Adaptive Research Depth)."""
+    description: str
+    planning: Dict[str, Any]  # Planning 단계 설정
+    researching: Dict[str, Any]  # Researching 단계 설정
+    reporting: Dict[str, Any]  # Reporting 단계 설정
+
+
+@dataclass
+class AdaptiveResearchDepthConfig:
+    """Adaptive Research Depth 설정 (9번째 혁신)."""
+    enabled: bool = True
+    default_preset: str = "auto"  # quick, medium, deep, auto
+    enable_progressive_deepening: bool = True
+    enable_self_adjusting: bool = True
+    enable_dynamic_iteration: bool = True
+    
+    # Preset configurations
+    presets: Dict[str, ResearchPresetConfig] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """기본 프리셋 설정 초기화."""
+        if not self.presets:
+            self.presets = {
+                "quick": ResearchPresetConfig(
+                    description="빠른 연구, 최소 깊이",
+                    planning={
+                        "decompose": {
+                            "mode": "manual",
+                            "initial_subtopics": 1,
+                            "auto_max_subtopics": 2
+                        }
+                    },
+                    researching={
+                        "max_iterations": 1,
+                        "iteration_mode": "fixed"
+                    },
+                    reporting={
+                        "min_section_length": 300
+                    }
+                ),
+                "medium": ResearchPresetConfig(
+                    description="균형잡힌 연구",
+                    planning={
+                        "decompose": {
+                            "mode": "manual",
+                            "initial_subtopics": 5,
+                            "auto_max_subtopics": 5
+                        }
+                    },
+                    researching={
+                        "max_iterations": 4,
+                        "iteration_mode": "fixed"
+                    },
+                    reporting={
+                        "min_section_length": 500
+                    }
+                ),
+                "deep": ResearchPresetConfig(
+                    description="깊이 있는 연구",
+                    planning={
+                        "decompose": {
+                            "mode": "manual",
+                            "initial_subtopics": 8,
+                            "auto_max_subtopics": 8
+                        }
+                    },
+                    researching={
+                        "max_iterations": 7,
+                        "iteration_mode": "fixed"
+                    },
+                    reporting={
+                        "min_section_length": 800
+                    }
+                ),
+                "auto": ResearchPresetConfig(
+                    description="자율 결정 (에이전트가 최적 깊이 선택)",
+                    planning={
+                        "decompose": {
+                            "mode": "auto",
+                            "auto_max_subtopics": 8
+                        }
+                    },
+                    researching={
+                        "max_iterations": 6,
+                        "iteration_mode": "flexible"
+                    },
+                    reporting={
+                        "min_section_length": 500
+                    }
+                )
+            }
+
+
+@dataclass
 class ResearchConfig:
-    """Research-specific settings with Streaming Pipeline (혁신 5)."""
+    """Research-specific settings with Streaming Pipeline (혁신 5) and Adaptive Research Depth (혁신 9)."""
     # Basic settings - NO DEFAULTS
     max_sources: int
     search_timeout: int
@@ -135,6 +231,9 @@ class ResearchConfig:
     # Parallel processing - NO DEFAULTS
     enable_parallel_compression: bool
     enable_parallel_verification: bool
+    
+    # Adaptive Research Depth (혁신 9) - Optional with defaults
+    research_depth: AdaptiveResearchDepthConfig = field(default_factory=AdaptiveResearchDepthConfig)
 
 
 @dataclass

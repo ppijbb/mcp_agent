@@ -15,6 +15,7 @@ References 섹션 자동 생성, 본문 내 인라인 인용 삽입을 제공합
 
 import re
 import logging
+import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
@@ -81,21 +82,31 @@ class Citation:
 
 class CitationManager:
     """
-    Production-grade 인용 관리 시스템.
+    Production-grade 인용 관리 시스템 (9대 혁신 - Citation Management 강화).
     
     Features:
     - 표준 인용 형식 생성 (APA, MLA, Chicago 등)
     - 인용 번호 자동 할당
     - References 섹션 자동 생성
     - 본문 내 인라인 인용 삽입
+    - 체계적인 ID 생성 (PLAN-XX, CIT-X-XX)
+    - ref_number 매핑 및 중복 제거
+    - Thread-safe async 메서드 (병렬 실행 지원)
     """
     
-    def __init__(self, default_style: CitationStyle = CitationStyle.APA):
+    def __init__(self, default_style: CitationStyle = CitationStyle.APA, research_id: Optional[str] = None):
         """인용 매니저 초기화."""
         self.default_style = default_style
         self.sources: Dict[str, Source] = {}
         self.citations: Dict[str, Citation] = {}
         self.citation_counter = 0
+        
+        # 9대 혁신: 체계적인 ID 생성 시스템
+        self.research_id = research_id or f"research_{int(datetime.now().timestamp())}"
+        self._plan_counter = 0  # PLAN-XX 형식 (Planning 단계)
+        self._block_counters: Dict[str, int] = {}  # CIT-X-XX 형식 (Research 단계, X=block 번호)
+        self._ref_number_map: Dict[str, int] = {}  # citation_id -> ref_number (1-based) 매핑
+        self._lock = asyncio.Lock()  # Thread-safe 병렬 실행 지원
         
         # 인용 스타일별 포맷터
         self.formatters = {
@@ -107,7 +118,7 @@ class CitationManager:
             CitationStyle.NATURE: self._format_nature
         }
         
-        logger.info(f"CitationManager initialized with {default_style.value} style")
+        logger.info(f"CitationManager initialized with {default_style.value} style (research_id: {self.research_id})")
     
     def add_citation(
         self,
@@ -640,3 +651,246 @@ class CitationManager:
             bibtex_entries.append(bibtex)
         
         return "\n".join(bibtex_entries)
+    
+    # ========== 9대 혁신: 체계적인 ID 생성 시스템 ==========
+    
+    def generate_plan_citation_id(self) -> str:
+        """
+        Planning 단계용 citation ID 생성 (PLAN-XX 형식).
+        
+        Returns:
+            Citation ID in PLAN-XX format
+        """
+        self._plan_counter += 1
+        return f"PLAN-{self._plan_counter:02d}"
+    
+    def generate_research_citation_id(self, block_id: str = "") -> str:
+        """
+        Research 단계용 citation ID 생성 (CIT-X-XX 형식).
+        
+        Args:
+            block_id: Block ID (e.g., "block_3") - optional
+        
+        Returns:
+            Citation ID in CIT-X-XX format
+        """
+        # Extract block number from block_id
+        block_num = 0
+        if block_id:
+            try:
+                if "_" in block_id:
+                    block_num = int(block_id.split("_")[1])
+            except (ValueError, IndexError):
+                block_num = 0
+        
+        # Increment counter for this block
+        block_key = str(block_num)
+        if block_key not in self._block_counters:
+            self._block_counters[block_key] = 0
+        self._block_counters[block_key] += 1
+        
+        return f"CIT-{block_num}-{self._block_counters[block_key]:02d}"
+    
+    def get_next_citation_id(self, stage: str = "research", block_id: str = "") -> str:
+        """
+        다음 사용 가능한 citation ID 반환.
+        
+        Args:
+            stage: "planning" or "research"
+            block_id: Block ID (required for research stage)
+        
+        Returns:
+            Next available citation ID
+        """
+        if stage == "planning":
+            return self.generate_plan_citation_id()
+        return self.generate_research_citation_id(block_id)
+    
+    def citation_exists(self, citation_id: str) -> bool:
+        """
+        Citation ID 존재 여부 확인.
+        
+        Args:
+            citation_id: Citation ID to check
+        
+        Returns:
+            True if citation exists, False otherwise
+        """
+        return citation_id in self.citations
+    
+    # ========== ref_number 매핑 시스템 ==========
+    
+    def _get_citation_dedup_key(self, citation: Citation, source: Optional[Source] = None) -> str:
+        """
+        Citation 중복 제거를 위한 고유 키 생성.
+        
+        Paper citation의 경우 title + first author로 중복 제거.
+        다른 citation 타입은 각각 고유한 ref_number를 받음.
+        
+        Args:
+            citation: Citation 객체
+            source: Source 객체 (optional)
+        
+        Returns:
+            Unique string key for deduplication
+        """
+        if source and source.source_type == 'journal' and source.title:
+            # Paper citation: title + first author로 중복 제거
+            title = source.title.lower().strip()
+            authors = source.authors[0].lower().strip() if source.authors else ""
+            if title:
+                return f"paper:{title}|{authors}"
+        
+        # 다른 타입: 각 citation은 고유한 ref_number
+        return f"unique:{citation.citation_id}"
+    
+    def _extract_citation_sort_key(self, citation_id: str) -> Tuple[int, int, int]:
+        """
+        Citation ID에서 정렬 키 추출.
+        
+        Args:
+            citation_id: Citation ID (e.g., "PLAN-01", "CIT-1-02")
+        
+        Returns:
+            Tuple for sorting (stage, block_num, seq_num)
+        """
+        try:
+            if citation_id.startswith("PLAN-"):
+                # PLAN-XX 형식: 처음에 배치
+                num = int(citation_id.replace("PLAN-", ""))
+                return (0, 0, num)
+            elif citation_id.startswith("CIT-"):
+                # CIT-X-XX 형식
+                parts = citation_id.replace("CIT-", "").split("-")
+                if len(parts) == 2:
+                    return (1, int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            pass
+        return (999, 999, 999)
+    
+    def build_ref_number_map(self) -> Dict[str, int]:
+        """
+        citation_id → ref_number 매핑 구축 (중복 제거 포함).
+        
+        Returns:
+            Dictionary mapping citation_id to reference number (1-based)
+        """
+        if not self.citations:
+            self._ref_number_map = {}
+            return self._ref_number_map
+        
+        # 모든 citation ID를 숫자 부분으로 정렬
+        sorted_citation_ids = sorted(self.citations.keys(), key=self._extract_citation_sort_key)
+        
+        # 중복 제거 키와 할당된 ref_number 추적
+        seen_keys: Dict[str, int] = {}
+        ref_idx = 0
+        ref_map: Dict[str, int] = {}
+        
+        for citation_id in sorted_citation_ids:
+            citation = self.citations.get(citation_id)
+            if not citation:
+                continue
+            
+            source = self.sources.get(citation.source_id)
+            dedup_key = self._get_citation_dedup_key(citation, source)
+            
+            if dedup_key in seen_keys:
+                # 중복: 기존 ref_number 사용
+                ref_map[citation_id] = seen_keys[dedup_key]
+            else:
+                # 새로운 고유 citation
+                ref_idx += 1
+                seen_keys[dedup_key] = ref_idx
+                ref_map[citation_id] = ref_idx
+        
+        self._ref_number_map = ref_map
+        return ref_map
+    
+    def get_ref_number(self, citation_id: str) -> int:
+        """
+        Citation ID에 대한 ref_number 반환.
+        매핑이 아직 구축되지 않았다면 먼저 구축.
+        
+        Args:
+            citation_id: Citation ID
+        
+        Returns:
+            Reference number (1-based), or 0 if not found
+        """
+        if not self._ref_number_map:
+            self.build_ref_number_map()
+        return self._ref_number_map.get(citation_id, 0)
+    
+    def get_ref_number_map(self) -> Dict[str, int]:
+        """
+        전체 ref_number 매핑 반환.
+        매핑이 아직 구축되지 않았다면 먼저 구축.
+        
+        Returns:
+            Dictionary mapping citation_id to reference number
+        """
+        if not self._ref_number_map:
+            self.build_ref_number_map()
+        return self._ref_number_map.copy()
+    
+    # ========== Thread-safe async 메서드 (병렬 실행 지원) ==========
+    
+    async def generate_plan_citation_id_async(self) -> str:
+        """
+        Thread-safe async version of generate_plan_citation_id.
+        
+        Returns:
+            Citation ID in PLAN-XX format
+        """
+        async with self._lock:
+            return self.generate_plan_citation_id()
+    
+    async def generate_research_citation_id_async(self, block_id: str = "") -> str:
+        """
+        Thread-safe async version of generate_research_citation_id.
+        
+        Args:
+            block_id: Block ID (e.g., "block_3")
+        
+        Returns:
+            Citation ID in CIT-X-XX format
+        """
+        async with self._lock:
+            return self.generate_research_citation_id(block_id)
+    
+    async def get_next_citation_id_async(self, stage: str = "research", block_id: str = "") -> str:
+        """
+        Thread-safe async version of get_next_citation_id.
+        
+        Args:
+            stage: "planning" or "research"
+            block_id: Block ID (required for research stage)
+        
+        Returns:
+            Next available citation ID
+        """
+        async with self._lock:
+            return self.get_next_citation_id(stage, block_id)
+    
+    async def add_citation_async(
+        self,
+        source: Source,
+        style: Optional[CitationStyle] = None,
+        page_number: Optional[str] = None,
+        context: Optional[str] = None
+    ) -> str:
+        """
+        Thread-safe async version of add_citation.
+        
+        Args:
+            source: 출처 정보
+            style: 인용 스타일 (기본값 사용)
+            page_number: 페이지 번호
+            context: 인용 컨텍스트
+        
+        Returns:
+            str: 인용 ID
+        """
+        async with self._lock:
+            return self.add_citation(source, style, page_number, context)

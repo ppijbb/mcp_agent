@@ -107,6 +107,146 @@ from src.core.config import HTTPServerSpec
 
 logger = logging.getLogger(__name__)
 
+# 9대 혁신: ToolTrace 추적 시스템
+_tool_trace_manager = None
+
+def get_tool_trace_manager():
+    """전역 ToolTraceManager 인스턴스 반환 (싱글톤 패턴)."""
+    global _tool_trace_manager
+    if _tool_trace_manager is None:
+        from src.core.tool_trace import ToolTraceManager
+        _tool_trace_manager = ToolTraceManager()
+    return _tool_trace_manager
+
+def set_tool_trace_manager(manager):
+    """전역 ToolTraceManager 인스턴스 설정."""
+    global _tool_trace_manager
+    _tool_trace_manager = manager
+
+def _create_tool_trace(
+    tool_id: str,
+    citation_id: str,
+    tool_type: str,
+    query: str,
+    result: Dict[str, Any],
+    mcp_server: Optional[str] = None,
+    mcp_tool_name: Optional[str] = None,
+) -> Optional[Any]:
+    """
+    ToolTrace 생성 헬퍼 함수 (9대 혁신: ToolTrace 추적 시스템).
+    
+    Args:
+        tool_id: Tool ID
+        citation_id: Citation ID
+        tool_type: Tool type
+        query: Query string
+        result: 도구 실행 결과
+        mcp_server: MCP 서버 이름 (optional)
+        mcp_tool_name: MCP 도구 이름 (optional)
+    
+    Returns:
+        ToolTrace 객체 (생성 성공 시), None (실패 시)
+    """
+    try:
+        from src.core.tool_trace import ToolTrace
+        
+        # raw_answer 생성 (result를 JSON 문자열로)
+        raw_answer = json.dumps(result, ensure_ascii=False, indent=2) if result else "{}"
+        
+        # summary 생성 (간단한 요약)
+        if result.get("success"):
+            if isinstance(result.get("data"), dict):
+                if "results" in result["data"]:
+                    summary = f"Found {len(result['data']['results'])} results"
+                elif "content" in result["data"]:
+                    content = str(result["data"]["content"])
+                    summary = f"Content: {content[:100]}..." if len(content) > 100 else f"Content: {content}"
+                else:
+                    summary = "Tool executed successfully"
+            else:
+                summary = "Tool executed successfully"
+        else:
+            summary = f"Tool execution failed: {result.get('error', 'Unknown error')[:100]}"
+        
+        trace = ToolTrace.create_with_size_limit(
+            tool_id=tool_id,
+            citation_id=citation_id,
+            tool_type=tool_type,
+            query=query,
+            raw_answer=raw_answer,
+            summary=summary,
+            mcp_server=mcp_server,
+            mcp_tool_name=mcp_tool_name,
+        )
+        
+        # ToolTraceManager에 추가
+        try:
+            manager = get_tool_trace_manager()
+            manager.add_trace(trace)
+        except Exception as e:
+            logger.debug(f"Failed to add ToolTrace to manager: {e}")
+        
+        return trace
+    except Exception as e:
+        logger.debug(f"Failed to create ToolTrace: {e}")
+        return None
+
+def _infer_tool_type(tool_name: str) -> str:
+    """
+    도구 이름에서 도구 타입 추론.
+    
+    Args:
+        tool_name: 도구 이름
+    
+    Returns:
+        도구 타입
+    """
+    tool_lower = tool_name.lower()
+    
+    if "::" in tool_name:
+        # MCP 도구
+        return "mcp_tool"
+    elif "search" in tool_lower or "google" in tool_lower or "tavily" in tool_lower:
+        return "web_search"
+    elif "arxiv" in tool_lower or "scholar" in tool_lower or "paper" in tool_lower:
+        return "paper_search"
+    elif "rag" in tool_lower or "query" in tool_lower:
+        return "rag_hybrid" if "hybrid" in tool_lower else "rag_naive"
+    elif "code" in tool_lower or "python" in tool_lower or "execute" in tool_lower:
+        return "run_code"
+    elif "browser" in tool_lower:
+        return "browser"
+    elif "generate" in tool_lower or "document" in tool_lower:
+        return "document_generation"
+    elif "file" in tool_lower:
+        return "file_operation"
+    else:
+        return "unknown"
+
+def _format_query_string(tool_name: str, parameters: Dict[str, Any]) -> str:
+    """
+    도구 파라미터를 쿼리 문자열로 포맷.
+    
+    Args:
+        tool_name: 도구 이름
+        parameters: 도구 파라미터
+    
+    Returns:
+        포맷된 쿼리 문자열
+    """
+    # 주요 파라미터 추출
+    query_keys = ["query", "question", "text", "input", "url", "path", "code"]
+    for key in query_keys:
+        if key in parameters:
+            value = parameters[key]
+            if isinstance(value, str):
+                return value[:200]  # 최대 200자
+            elif isinstance(value, dict):
+                return json.dumps(value, ensure_ascii=False)[:200]
+    
+    # 파라미터 전체를 JSON으로
+    return json.dumps(parameters, ensure_ascii=False)[:200]
+
 
 class ToolCategory(Enum):
     """MCP 도구 카테고리."""
@@ -2143,16 +2283,45 @@ class UniversalMCPHub:
         """LLM 호출은 llm_manager를 통해 수행하도록 강제 (Gemini 직결)."""
         raise RuntimeError("call_llm_async via MCP Hub is disabled. Use llm_manager for Gemini.")
     
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any], citation_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Tool 실행 - MCP 프로토콜만 사용.
+        Tool 실행 - MCP 프로토콜만 사용 (9대 혁신: ToolTrace 추적 통합).
 
         실행 우선순위:
         1. MCP 서버에서 Tool 실행 (server_name::tool_name 형식 또는 tool_name으로 찾기)
         2. 실패 시 명확한 에러 반환 (fallback 없음)
+        
+        Args:
+            tool_name: 도구 이름
+            parameters: 도구 파라미터
+            citation_id: Citation ID (optional, ToolTrace 추적용)
         """
         import time
+        import uuid
         start_time = time.time()
+        
+        # 9대 혁신: ToolTrace 추적 준비
+        tool_id = f"tool_{uuid.uuid4().hex[:8]}"
+        tool_type = _infer_tool_type(tool_name)
+        query_str = _format_query_string(tool_name, parameters)
+        
+        # MCP 서버 정보 추출
+        mcp_server = None
+        mcp_tool_name = None
+        if "::" in tool_name:
+            parts = tool_name.split("::", 1)
+            mcp_server = parts[0]
+            mcp_tool_name = parts[1] if len(parts) > 1 else tool_name
+        
+        # Citation ID가 없으면 생성 (임시)
+        if not citation_id:
+            try:
+                from src.generation.citation_manager import CitationManager
+                # 전역 citation manager가 있다면 사용, 없으면 임시 생성
+                # 실제로는 orchestrator에서 관리하는 citation_id를 전달받아야 함
+                citation_id = f"TEMP-{tool_id}"
+            except Exception:
+                citation_id = f"TEMP-{tool_id}"
 
         # 출력 매니저 통합
         from src.utils.output_manager import get_output_manager, OutputLevel, ToolExecutionResult
@@ -2814,7 +2983,7 @@ class UniversalMCPHub:
                             )
                             await output_manager.output_tool_execution(tool_exec_result)
 
-                            return {
+                            result_dict = {
                                 "success": True,
                                 "data": result_data,
                                 "error": None,
@@ -2822,6 +2991,19 @@ class UniversalMCPHub:
                                 "confidence": 0.9,
                                 "source": "mcp"
                             }
+                            
+                            # 9대 혁신: ToolTrace 생성
+                            _create_tool_trace(
+                                tool_id=tool_id,
+                                citation_id=citation_id or f"TEMP-{tool_id}",
+                                tool_type=tool_type,
+                                query=query_str,
+                                result=result_dict,
+                                mcp_server=mcp_server,
+                                mcp_tool_name=mcp_tool_name,
+                            )
+                            
+                            return result_dict
                     except Exception as mcp_error:
                         execution_time = time.time() - start_time
                         logger.error(f"[MCP][exec.error] server={server_name} tool={tool_name} err={mcp_error}")
@@ -2902,7 +3084,7 @@ class UniversalMCPHub:
                     )
                     await output_manager.output_tool_execution(tool_exec_result)
                     
-                    return {
+                    result_dict = {
                         "success": tool_result.success,
                         "data": tool_result.data,
                         "error": tool_result.error,
@@ -2910,6 +3092,19 @@ class UniversalMCPHub:
                         "confidence": tool_result.confidence,
                         "source": "local"
                     }
+                    
+                    # 9대 혁신: ToolTrace 생성
+                    _create_tool_trace(
+                        tool_id=tool_id,
+                        citation_id=citation_id or f"TEMP-{tool_id}",
+                        tool_type=tool_type,
+                        query=query_str,
+                        result=result_dict,
+                        mcp_server=mcp_server,
+                        mcp_tool_name=mcp_tool_name,
+                    )
+                    
+                    return result_dict
                     
                 except Exception as local_error:
                     execution_time = time.time() - start_time
