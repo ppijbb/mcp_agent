@@ -159,6 +159,19 @@ class AutonomousOrchestrator:
                 "presets": getattr(depth_config, "presets", {})
             })
         
+        # 완전 자동형 기능: 코드베이스 에이전트 및 문서 정리 에이전트
+        from src.agents.codebase_agent import CodebaseAgent
+        from src.agents.document_organizer_agent import DocumentOrganizerAgent
+        from src.core.checkpoint_manager import CheckpointManager
+        from src.core.context_loader import ContextLoader
+        from src.core.session_control import get_session_control
+        
+        self.codebase_agent = CodebaseAgent()
+        self.document_organizer = DocumentOrganizerAgent()
+        self.checkpoint_manager = CheckpointManager()
+        self.context_loader = ContextLoader()
+        self.session_control = get_session_control()
+        
         self.graph = None
         self._build_langgraph_workflow()
     
@@ -419,6 +432,16 @@ class AutonomousOrchestrator:
                 logger.info("✅ User responses processed, continuing planning")
         
         try:
+            # 컨텍스트 로드 (SPARKLEFORGE.md)
+            try:
+                project_context = await self.context_loader.load_context()
+                if project_context:
+                    logger.info("📄 Loaded project context from SPARKLEFORGE.md")
+                    state["context"] = state.get("context", {})
+                    state["context"]["project_context"] = project_context
+            except Exception as e:
+                logger.debug(f"Failed to load context: {e}")
+            
             # CLI 모드 감지 (더 정확한 방법)
             import sys
             is_cli_mode = (

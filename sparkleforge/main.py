@@ -1160,10 +1160,22 @@ Examples:
     mode_group.add_argument("--mcp-client", action="store_true", help="Start MCP client with Smart Tool Selection")
     mode_group.add_argument("--health-check", action="store_true", help="Check system health and MCP tools")
     mode_group.add_argument("--check-mcp-servers", action="store_true", help="Check all MCP server connections and list tools")
+    mode_group.add_argument("--interactive", action="store_true", help="Start interactive CLI mode")
+    mode_group.add_argument("-p", "--prompt", help="Headless mode: execute prompt directly (non-interactive)")
+    mode_group.add_argument("--daemon", action="store_true", help="Start as long-running daemon (24/7 mode)")
     
     # Optional arguments
     parser.add_argument("--output", help="Output file path for research results")
+    parser.add_argument("--output-format", choices=["text", "json", "stream-json"], default="text", help="Output format for headless mode")
     parser.add_argument("--config", help="Configuration file path")
+    parser.add_argument("--checkpoint", help="Checkpoint file path to save/restore conversation")
+    parser.add_argument("--restore", help="Restore conversation from checkpoint file")
+    
+    # Long-running daemon options
+    parser.add_argument("--auto-save-interval", type=int, default=300, help="Auto-save interval in seconds (default: 300)")
+    parser.add_argument("--max-memory-mb", type=float, default=2048, help="Max memory usage in MB before restart (default: 2048)")
+    parser.add_argument("--max-uptime-hours", type=float, default=0, help="Max uptime in hours before restart (0=unlimited, default: 0)")
+    parser.add_argument("--no-auto-restart", action="store_true", help="Disable auto-restart on errors")
     parser.add_argument("--format", choices=["json", "yaml", "txt"], default="json", help="Output format for research results")
     parser.add_argument("--streaming", action="store_true", help="Enable streaming pipeline for real-time results")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
@@ -1277,6 +1289,86 @@ Examples:
     system = AutonomousResearchSystem()
     
     try:
+        # 체크포인트 복원 (있는 경우)
+        if args.restore:
+            from src.core.checkpoint_manager import CheckpointManager
+            checkpoint_manager = CheckpointManager()
+            restored_state = await checkpoint_manager.restore_checkpoint(args.restore)
+            if restored_state:
+                logger.info(f"✅ Restored checkpoint: {args.restore}")
+                # 복원된 상태를 사용하여 계속 진행
+            else:
+                logger.error(f"❌ Failed to restore checkpoint: {args.restore}")
+                return
+        
+        # Headless 모드 (비대화형)
+        if args.prompt:
+            from src.core.autonomous_orchestrator import AutonomousOrchestrator
+            orchestrator = AutonomousOrchestrator()
+            
+            result = await orchestrator.execute_full_research_workflow(args.prompt)
+            
+            # 출력 형식에 따라 결과 출력
+            if args.output_format == "json":
+                import json
+                output = json.dumps(result, indent=2, ensure_ascii=False)
+                print(output)
+            elif args.output_format == "stream-json":
+                # 스트리밍 JSON (newline-delimited)
+                import json
+                if isinstance(result, dict):
+                    for key, value in result.items():
+                        print(json.dumps({key: value}, ensure_ascii=False))
+                else:
+                    print(json.dumps(result, ensure_ascii=False))
+            else:
+                # 기본 텍스트 출력
+                if isinstance(result, dict):
+                    if "content" in result:
+                        print(result["content"])
+                    elif "final_synthesis" in result:
+                        print(result["final_synthesis"].get("content", ""))
+                    else:
+                        print(str(result))
+                else:
+                    print(str(result))
+            
+            # 체크포인트 저장 (요청된 경우)
+            if args.checkpoint:
+                from src.core.checkpoint_manager import CheckpointManager
+                checkpoint_manager = CheckpointManager()
+                checkpoint_id = await checkpoint_manager.save_checkpoint(
+                    state={"result": result, "prompt": args.prompt},
+                    metadata={"mode": "headless", "output_format": args.output_format}
+                )
+                logger.info(f"✅ Checkpoint saved: {checkpoint_id}")
+            
+            return
+        
+        # Interactive 모드
+        if args.interactive:
+            from src.cli.interactive_cli import InteractiveCLI
+            from src.core.scheduler import get_scheduler
+            
+            # 스케줄러 초기화 및 시작
+            scheduler = get_scheduler()
+            
+            # 실행 콜백 설정
+            async def execute_scheduled_query(user_query: str, session_id: str):
+                from src.core.autonomous_orchestrator import AutonomousOrchestrator
+                orchestrator = AutonomousOrchestrator()
+                return await orchestrator.execute_full_research_workflow(user_query)
+            
+            scheduler.set_execution_callback(execute_scheduled_query)
+            await scheduler.start()
+            
+            cli = InteractiveCLI()
+            try:
+                await cli.run()
+            finally:
+                await scheduler.stop()
+            return
+        
         if args.request:
             # CLI Research Mode with 8 innovations
             logger.info("🚀 Starting Local Researcher with enhanced systems...")

@@ -259,6 +259,7 @@ class ToolCategory(Enum):
     BROWSER = "browser"  # 브라우저 자동화
     DOCUMENT = "document"  # 문서 생성
     FILE = "file"  # 파일 작업
+    GIT = "git"  # Git 워크플로우
 
 
 @dataclass
@@ -818,6 +819,116 @@ class UniversalMCPHub:
         except Exception as e:
             logger.error(f"❌ Failed to register native tools: {e}")
 
+        # ========================================================================
+        # GIT TOOLS REGISTRATION
+        # ========================================================================
+        try:
+            from langchain_core.tools import Tool
+            
+            git_tools = [
+                {
+                    "name": "git_status",
+                    "description": "Check Git repository status (branch, staged/unstaged files)",
+                    "parameters": {
+                        "repo_path": {"type": "string", "description": "Repository path (optional, defaults to current directory)"}
+                    }
+                },
+                {
+                    "name": "git_commit",
+                    "description": "Create a Git commit with automatic message generation",
+                    "parameters": {
+                        "message": {"type": "string", "description": "Commit message (optional, auto-generated if not provided)"},
+                        "auto_stage": {"type": "boolean", "description": "Automatically stage files (default: true)"},
+                        "repo_path": {"type": "string", "description": "Repository path (optional)"}
+                    }
+                },
+                {
+                    "name": "git_push",
+                    "description": "Push Git branch to remote repository",
+                    "parameters": {
+                        "branch": {"type": "string", "description": "Branch to push (optional, defaults to current branch)"},
+                        "force": {"type": "boolean", "description": "Force push (default: false)"},
+                        "repo_path": {"type": "string", "description": "Repository path (optional)"}
+                    }
+                },
+                {
+                    "name": "git_create_pr",
+                    "description": "Create a Pull Request using GitHub CLI",
+                    "parameters": {
+                        "title": {"type": "string", "description": "PR title (required)"},
+                        "body": {"type": "string", "description": "PR body (optional)"},
+                        "base": {"type": "string", "description": "Base branch (default: main)"},
+                        "repo_path": {"type": "string", "description": "Repository path (optional)"}
+                    }
+                },
+                {
+                    "name": "git_commit_push_pr",
+                    "description": "Complete workflow: commit, push, and create PR in one step",
+                    "parameters": {
+                        "commit_message": {"type": "string", "description": "Commit message (optional, auto-generated if not provided)"},
+                        "pr_title": {"type": "string", "description": "PR title (optional, uses commit message if not provided)"},
+                        "pr_body": {"type": "string", "description": "PR body (optional, auto-generated if not provided)"},
+                        "base": {"type": "string", "description": "Base branch (default: main)"},
+                        "repo_path": {"type": "string", "description": "Repository path (optional)"}
+                    }
+                }
+            ]
+            
+            for git_tool_config in git_tools:
+                tool_name = git_tool_config["name"]
+                logger.info(f"🛠️ Registering Git Tool: {tool_name}")
+                
+                tool_info = ToolInfo(
+                    name=tool_name,
+                    category=ToolCategory.GIT,
+                    description=git_tool_config["description"],
+                    parameters=git_tool_config["parameters"],
+                    mcp_server=""
+                )
+                
+                # LangChain Tool 래퍼 생성
+                def create_git_tool_wrapper(tool_name: str):
+                    async def git_tool_wrapper(**kwargs):
+                        from src.core.mcp_integration import _execute_git_tool, ToolResult
+                        result = await _execute_git_tool(tool_name, kwargs)
+                        if result.success:
+                            return result.data if isinstance(result.data, dict) else {"result": result.data}
+                        else:
+                            return {"error": result.error}
+                    
+                    return git_tool_wrapper
+                
+                # 동기 래퍼 (LangChain Tool은 동기 함수를 기대)
+                def sync_git_wrapper(tool_name: str):
+                    def wrapper(**kwargs):
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                # 이미 실행 중인 루프가 있으면 새 태스크 생성
+                                import concurrent.futures
+                                with concurrent.futures.ThreadPoolExecutor() as executor:
+                                    future = executor.submit(asyncio.run, create_git_tool_wrapper(tool_name)(**kwargs))
+                                    return future.result()
+                            else:
+                                return loop.run_until_complete(create_git_tool_wrapper(tool_name)(**kwargs))
+                        except RuntimeError:
+                            return asyncio.run(create_git_tool_wrapper(tool_name)(**kwargs))
+                    return wrapper
+                
+                langchain_tool = Tool(
+                    name=tool_name,
+                    func=sync_git_wrapper(tool_name),
+                    description=git_tool_config["description"]
+                )
+                
+                self.registry.register_local_tool(tool_info, langchain_tool)
+                self.tools[tool_name] = tool_info
+                logger.info(f"✅ Registered Git tool: {tool_name}")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to register Git tools: {e}", exc_info=True)
+        
         # Registry의 tools를 self.tools와 동기화
         self.tools.update(self.registry.tools)
         
@@ -2630,6 +2741,161 @@ class UniversalMCPHub:
                     "confidence": 0.0
                 }
         
+        # Shell 도구 라우팅
+        if tool_name in ["run_shell_command", "run_interactive_command", "run_background_command"]:
+            logger.info(f"[MCP][exec.shell] Routing {tool_name} to _execute_shell_tool")
+            try:
+                from src.core.mcp_integration import _execute_shell_tool, ToolResult
+                tool_result = await _execute_shell_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
+                
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict):
+                        if "stdout" in tool_result.data:
+                            stdout_preview = tool_result.data["stdout"][:100]
+                            result_summary = f"명령 실행 완료: {stdout_preview}..."
+                        elif "pid" in tool_result.data:
+                            result_summary = f"백그라운드 작업 시작: PID {tool_result.data['pid']}"
+                        else:
+                            result_summary = "Shell 명령 실행 완료"
+                    else:
+                        result_summary = "Shell 명령 실행 완료"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                result_dict = {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "shell"
+                }
+                
+                # 9대 혁신: ToolTrace 생성
+                _create_tool_trace(
+                    tool_id=tool_id,
+                    citation_id=citation_id or f"TEMP-{tool_id}",
+                    tool_type=tool_type,
+                    query=query_str,
+                    result=result_dict,
+                    mcp_server=mcp_server,
+                    mcp_tool_name=mcp_tool_name,
+                )
+                
+                return result_dict
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.shell.error] {tool_name} failed: {e}", exc_info=True)
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"Shell 명령 실행 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Shell tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0,
+                    "source": "shell"
+                }
+        
+        # Git 도구 라우팅
+        if tool_name in ["git_status", "git_commit", "git_push", "git_create_pr", "git_commit_push_pr", "git_create_branch"]:
+            logger.info(f"[MCP][exec.git] Routing {tool_name} to _execute_git_tool")
+            try:
+                from src.core.mcp_integration import _execute_git_tool, ToolResult
+                tool_result = await _execute_git_tool(tool_name, parameters)
+                execution_time = time.time() - start_time
+                
+                result_summary = ""
+                if tool_result.success and tool_result.data:
+                    if isinstance(tool_result.data, dict):
+                        if "commit_hash" in tool_result.data:
+                            result_summary = f"커밋 완료: {tool_result.data['commit_hash'][:8]}"
+                        elif "pr_url" in tool_result.data:
+                            result_summary = f"PR 생성 완료: {tool_result.data['pr_url']}"
+                        elif "branch" in tool_result.data:
+                            result_summary = f"브랜치 작업 완료: {tool_result.data['branch']}"
+                        else:
+                            result_summary = "Git 작업 완료"
+                    else:
+                        result_summary = "Git 작업 완료"
+                elif tool_result.error:
+                    result_summary = f"오류: {tool_result.error[:100]}..."
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=tool_result.success,
+                    execution_time=execution_time,
+                    result_summary=result_summary,
+                    confidence=tool_result.confidence,
+                    error_message=tool_result.error
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                result_dict = {
+                    "success": tool_result.success,
+                    "data": tool_result.data,
+                    "error": tool_result.error,
+                    "execution_time": execution_time,
+                    "confidence": tool_result.confidence,
+                    "source": "git"
+                }
+                
+                # 9대 혁신: ToolTrace 생성
+                _create_tool_trace(
+                    tool_id=tool_id,
+                    citation_id=citation_id or f"TEMP-{tool_id}",
+                    tool_type=tool_type,
+                    query=query_str,
+                    result=result_dict,
+                    mcp_server=mcp_server,
+                    mcp_tool_name=mcp_tool_name,
+                )
+                
+                return result_dict
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"[MCP][exec.git.error] {tool_name} failed: {e}", exc_info=True)
+                
+                tool_exec_result = ToolExecutionResult(
+                    tool_name=tool_name,
+                    success=False,
+                    execution_time=execution_time,
+                    result_summary=f"Git 작업 실패: {str(e)[:100]}...",
+                    confidence=0.0,
+                    error_message=str(e)
+                )
+                await output_manager.output_tool_execution(tool_exec_result)
+                
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": f"Git tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0,
+                    "source": "git"
+                }
+        
         # 파일 도구 라우팅
         if tool_name in ["create_file", "read_file", "write_file", "edit_file", "list_files", "delete_file"]:
             logger.info(f"[MCP][exec.file] Routing {tool_name} to _execute_file_tool")
@@ -3050,6 +3316,9 @@ class UniversalMCPHub:
                     elif category == ToolCategory.ACADEMIC:
                         from src.core.mcp_integration import _execute_academic_tool
                         tool_result = await _execute_academic_tool(tool_name, parameters)
+                    elif category == ToolCategory.GIT:
+                        from src.core.mcp_integration import _execute_git_tool
+                        tool_result = await _execute_git_tool(tool_name, parameters)
                     else:
                         # 기본적으로 데이터 도구로 처리
                         from src.core.mcp_integration import _execute_data_tool
@@ -5136,6 +5405,341 @@ async def _execute_document_tool(tool_name: str, parameters: Dict[str, Any]) -> 
             success=False,
             data=None,
             error=f"Document tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_git_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """Git 워크플로우 도구 실행."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from src.core.git_workflow import GitWorkflow
+        from pathlib import Path
+        
+        # 저장소 경로 확인
+        repo_path = parameters.get("repo_path")
+        if repo_path:
+            repo_path = Path(repo_path)
+        else:
+            repo_path = None
+        
+        # GitWorkflow 생성
+        git_workflow = GitWorkflow(repo_path=repo_path)
+        
+        if tool_name == "git_status":
+            result = await git_workflow.git_status()
+            return ToolResult(
+                success=True,
+                data=result,
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "git_commit":
+            message = parameters.get("message")
+            auto_stage = parameters.get("auto_stage", True)
+            result = await git_workflow.git_commit(message=message, auto_stage=auto_stage)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_push":
+            branch = parameters.get("branch")
+            force = parameters.get("force", False)
+            result = await git_workflow.git_push(branch=branch, force=force)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_create_pr":
+            title = parameters.get("title")
+            body = parameters.get("body")
+            base = parameters.get("base", "main")
+            
+            if not title:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="title parameter is required",
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            result = await git_workflow.git_create_pr(title=title, body=body, base=base)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_commit_push_pr":
+            commit_message = parameters.get("commit_message")
+            pr_title = parameters.get("pr_title")
+            pr_body = parameters.get("pr_body")
+            base = parameters.get("base", "main")
+            
+            result = await git_workflow.git_commit_push_pr(
+                commit_message=commit_message,
+                pr_title=pr_title,
+                pr_body=pr_body,
+                base=base
+            )
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        else:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=f"Unknown git tool: {tool_name}",
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+    
+    except Exception as e:
+        logger.error(f"Git tool execution failed: {tool_name} - {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=f"Git tool execution failed: {str(e)}",
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_shell_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """Shell 명령 실행 도구 (완전 자동형 SparkleForge)."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from src.core.shell_executor import ShellExecutor
+        from pathlib import Path
+        
+        # 작업 디렉토리 확인
+        working_dir = parameters.get("working_dir")
+        if working_dir:
+            working_dir = Path(working_dir)
+        else:
+            working_dir = None
+        
+        # ShellExecutor 생성
+        executor = ShellExecutor(
+            require_confirmation=parameters.get("require_confirmation", False),
+            max_execution_time=parameters.get("timeout", 300)
+        )
+        
+        if tool_name == "run_shell_command":
+            command = parameters.get("command")
+            if not command:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="command parameter is required",
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            confirm = parameters.get("confirm")
+            timeout = parameters.get("timeout")
+            result = await executor.run(
+                command=command,
+                working_dir=working_dir,
+                confirm=confirm,
+                timeout=timeout
+            )
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "run_interactive_command":
+            command = parameters.get("command")
+            if not command:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="command parameter is required",
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            input_data = parameters.get("input")
+            result = await executor.run_interactive(
+                command=command,
+                working_dir=working_dir,
+                input_data=input_data
+            )
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "run_background_command":
+            command = parameters.get("command")
+            if not command:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="command parameter is required",
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            result = await executor.run_background(
+                command=command,
+                working_dir=working_dir
+            )
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        else:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=f"Unknown shell tool: {tool_name}",
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+    
+    except Exception as e:
+        logger.error(f"Shell tool execution failed: {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=str(e),
+            execution_time=time.time() - start_time,
+            confidence=0.0
+        )
+
+
+async def _execute_git_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """Git 워크플로우 도구 실행 (완전 자동형 SparkleForge)."""
+    import time
+    start_time = time.time()
+    
+    try:
+        from src.core.git_workflow import GitWorkflow
+        from pathlib import Path
+        
+        # 저장소 경로 확인
+        repo_path = parameters.get("repo_path")
+        if repo_path:
+            repo_path = Path(repo_path)
+        else:
+            repo_path = None  # 현재 디렉토리 사용
+        
+        git_workflow = GitWorkflow(repo_path=repo_path)
+        
+        if tool_name == "git_status":
+            result = await git_workflow.git_status()
+            return ToolResult(
+                success=True,
+                data=result,
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        
+        elif tool_name == "git_commit":
+            message = parameters.get("message")
+            auto_stage = parameters.get("auto_stage", True)
+            result = await git_workflow.git_commit(message=message, auto_stage=auto_stage)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_push":
+            branch = parameters.get("branch")
+            force = parameters.get("force", False)
+            result = await git_workflow.git_push(branch=branch, force=force)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_create_pr":
+            title = parameters.get("title")
+            body = parameters.get("body")
+            base = parameters.get("base", "main")
+            result = await git_workflow.git_create_pr(title=title, body=body, base=base)
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        elif tool_name == "git_commit_push_pr":
+            commit_message = parameters.get("commit_message")
+            pr_title = parameters.get("pr_title")
+            pr_body = parameters.get("pr_body")
+            base = parameters.get("base", "main")
+            result = await git_workflow.git_commit_push_pr(
+                commit_message=commit_message,
+                pr_title=pr_title,
+                pr_body=pr_body,
+                base=base
+            )
+            return ToolResult(
+                success=result.get("success", False),
+                data=result,
+                error=result.get("error"),
+                execution_time=time.time() - start_time,
+                confidence=0.9 if result.get("success") else 0.0
+            )
+        
+        else:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=f"Unknown git tool: {tool_name}",
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+    
+    except Exception as e:
+        logger.error(f"Git tool execution failed: {e}", exc_info=True)
+        return ToolResult(
+            success=False,
+            data=None,
+            error=str(e),
             execution_time=time.time() - start_time,
             confidence=0.0
         )
