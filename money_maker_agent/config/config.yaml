@@ -1,0 +1,85 @@
+system:
+  name: "Money Maker Agent"
+  version: "1.0.0"
+  mode: "production"  # development, staging, production
+
+accounts:
+  payout_account:
+    bank_name: ""  # Set via account_manager or accounts.json
+    account_number: ""  # Encrypted in accounts.json
+    routing_number: ""  # Encrypted in accounts.json
+
+payout:
+  enabled: true
+  threshold: 100.0  # USD - minimum amount for payout
+  schedule: "daily"  # daily, weekly, monthly
+  time: "23:00"  # UTC time for payout execution
+
+agents:
+  debt_management:
+    enabled: true
+    priority: 1
+    config:
+      # Bank API settings (if using Plaid)
+      plaid_enabled: false
+      plaid_client_id: ""
+      plaid_secret: ""
+      # Manual account input
+      manual_accounts: []
+  
+  coupon_discount:
+    enabled: true
+    priority: 2
+    config:
+      websites:
+        - "https://www.retailmenot.com"
+        - "https://www.coupons.com"
+      affiliate_networks:
+        - "amazon_associates"
+        - "rakuten"
+      blog_enabled: true
+      blog_url: ""
+      seo_enabled: true
+  
+  content_generation:
+    enabled: false  # Phase 2
+    priority: 3
+    config:
+      platforms:
+        - "medium"
+        - "wordpress"
+      topics: []
+      llm_provider: "gemini"  # gemini, openai
+      image_generation: false
+  
+  data_collection:
+    enabled: false  # Phase 2
+    priority: 4
+    config:
+      data_sources: []
+      api_enabled: false
+      api_port: 8000
+  
+  portfolio_investment:
+    enabled: false  # Phase 3
+    priority: 5
+    config:
+      initial_capital: 10000.0
+      risk_tolerance: "moderate"  # conservative, moderate, aggressive
+      rebalance_threshold: 0.05  # 5% deviation triggers rebalancing
+  
+  competitor_monitoring:
+    enabled: false  # Phase 3
+    priority: 6
+    config:
+      competitors: []
+      monitoring_interval: 3600  # seconds
+  
+  dropshipping:
+    enabled: false  # Phase 3
+    priority: 7
+    config:
+      platforms:
+        - "shopify"
+      marketing_budget: 1000.0
+

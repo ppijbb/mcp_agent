@@ -1,0 +1,67 @@
+# Agent-specific detailed configurations
+# This file is monitored for changes and automatically reloaded
+
+agents:
+  debt_management:
+    enabled: true
+    priority: 1
+    execution_interval: 3600  # seconds (1 hour)
+    config:
+      # Plaid integration (optional)
+      plaid:
+        enabled: false
+        client_id: ""
+        secret: ""
+        environment: "sandbox"  # sandbox, development, production
+      
+      # Manual account configuration
+      accounts:
+        - name: "Credit Card 1"
+          balance: 0.0
+          interest_rate: 0.0
+          minimum_payment: 0.0
+          due_date: ""
+      
+      # Optimization settings
+      optimization:
+        auto_refinance: false
+        min_savings_threshold: 100.0  # Minimum savings to trigger action
+  
+  coupon_discount:
+    enabled: true
+    priority: 2
+    execution_interval: 1800  # seconds (30 minutes)
+    config:
+      # Website scraping
+      scraping:
+        enabled: true
+        websites:
+          - url: "https://www.retailmenot.com"
+            categories: ["electronics", "clothing"]
+          - url: "https://www.coupons.com"
+            categories: ["groceries", "restaurants"]
+        interval: 3600  # seconds
+      
+      # Affiliate networks
+      affiliate:
+        amazon_associates:
+          enabled: true
+          tag: ""
+        rakuten:
+          enabled: false
+          api_key: ""
+      
+      # Content generation
+      content:
+        blog_enabled: true
+        blog_url: ""
+        blog_platform: "wordpress"  # wordpress, medium, custom
+        auto_publish: true
+        seo_optimization: true
+      
+      # Revenue tracking
+      revenue:
+        commission_rate: 0.05  # 5% average commission
+        min_commission: 0.03  # 3% minimum
+        max_commission: 0.15  # 15% maximum
+
