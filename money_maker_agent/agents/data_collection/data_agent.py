@@ -328,3 +328,4 @@ class DataCollectionAgent(BaseAgent):
         return daily_revenue
 
 
+
