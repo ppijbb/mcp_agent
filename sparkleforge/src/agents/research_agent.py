@@ -270,7 +270,7 @@ class ResearchAgent:
             }
     
     async def execute_task(self, task: Dict[str, Any], objective_id: str, 
-                          is_refinement: bool = False) -> Dict[str, Any]:
+                          is_refinement: bool = False, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute a research task with LLM-based research.
         
         Args:

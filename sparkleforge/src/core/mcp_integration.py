@@ -1372,12 +1372,22 @@ class UniversalMCPHub:
                         logger.debug(f"[MCP][stdio.connect] Connection cancelled for {server_name}")
                         raise
                     except Exception as e:
-                        logger.error(f"[MCP][stdio.connect] Failed to connect to {server_name}: {e}", exc_info=True)
+                        error_str = str(e).lower()
+                        # npm 404 에러는 패키지가 존재하지 않으므로 재시도 불필요
+                        is_npm_404 = "404" in error_str and ("npm" in error_str or "not found" in error_str or "not in this registry" in error_str)
+                        if is_npm_404:
+                            logger.warning(f"[MCP][stdio.connect] Package not found for {server_name} (npm 404), skipping retries")
+                        else:
+                            logger.error(f"[MCP][stdio.connect] Failed to connect to {server_name}: {e}", exc_info=True)
                         self.connection_diagnostics[server_name].update({
                             "ok": False,
                             "error": str(e),
-                            "stage": "failed"
+                            "stage": "failed",
+                            "is_npm_404": is_npm_404
                         })
+                        # npm 404는 재시도 불필요하므로 특별한 플래그 반환
+                        if is_npm_404:
+                            raise RuntimeError(f"Package not found (npm 404) for {server_name}") from e
                         return False
                         
                 except Exception as e:
@@ -1876,6 +1886,13 @@ class UniversalMCPHub:
                                     
                             except Exception as e:
                                 error_str = str(e).lower()
+                                
+                                # npm 404 에러는 패키지가 존재하지 않으므로 재시도 불필요
+                                is_npm_404 = "404" in error_str and ("npm" in error_str or "not found" in error_str or "not in this registry" in error_str or "package not found" in error_str)
+                                if is_npm_404:
+                                    logger.warning(f"[MCP][init.skip] server={name} package not found (npm 404), skipping retries")
+                                    break
+                                
                                 # 504, 502, 503 등 서버 에러는 재시도
                                 is_retryable = any(code in error_str for code in ["504", "502", "503", "500", "gateway", "timeout", "unavailable"])
                                 
@@ -3897,9 +3914,12 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
             ]
             
             # 우선순위 서버 먼저, 나머지는 나중에
+            # fetch는 search 도구가 없으므로 제외
             all_servers = list(mcp_hub.mcp_server_configs.keys())
             priority_servers = [s for s in search_server_priority if s in all_servers]
-            other_servers = [s for s in all_servers if s not in search_server_priority]
+            # fetch, docfork, context7-mcp 등은 search 도구가 없으므로 제외
+            non_search_servers = {"fetch", "docfork", "context7-mcp", "github", "financial_agent", "TodoList"}
+            other_servers = [s for s in all_servers if s not in search_server_priority and s not in non_search_servers]
             server_order = priority_servers + other_servers
             
             logger.info(f"[MCP][_execute_search_tool] Trying search servers in order: {server_order}")

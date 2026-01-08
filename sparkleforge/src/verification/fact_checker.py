@@ -200,7 +200,22 @@ class FactChecker:
                 system_message="You are an expert fact-checker specializing in logical consistency analysis."
             )
             
-            analysis = json.loads(result.content)
+            content = result.content or ""
+            if not content or not content.strip():
+                logger.warning("Self-verification failed: Empty response from LLM")
+                raise ValueError("Empty response from LLM")
+            
+            # JSON 추출 시도
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                analysis = json.loads(json_match.group())
+            else:
+                # JSON 블록이 없으면 전체를 파싱 시도
+                try:
+                    analysis = json.loads(content)
+                except json.JSONDecodeError:
+                    logger.warning(f"Self-verification failed: Invalid JSON format in response")
+                    raise ValueError("Invalid JSON format")
             
             return {
                 'stage': VerificationStage.SELF.value,
@@ -212,8 +227,12 @@ class FactChecker:
                 'model_used': result.model_used
             }
             
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Self-verification failed: {e}")
+            raise
         except Exception as e:
             logger.warning(f"Self-verification failed: {e}")
+            raise
             return {
                 'stage': VerificationStage.SELF.value,
                 'consistency_score': 0.5,
@@ -401,9 +420,27 @@ class FactChecker:
                 system_message="You are an expert at detecting conflicts and contradictions in information."
             )
             
-            analysis = json.loads(result.content)
+            content = result.content or ""
+            if not content or not content.strip():
+                logger.warning("Conflict detection failed: Empty response from LLM")
+                return []
+            
+            # JSON 추출 시도
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                analysis = json.loads(json_match.group())
+            else:
+                # JSON 블록이 없으면 전체를 파싱 시도
+                try:
+                    analysis = json.loads(content)
+                except json.JSONDecodeError:
+                    logger.warning(f"Conflict detection failed: Invalid JSON format in response")
+                    return []
+            
             conflicts = analysis.get('conflicts', [])
             
+        except json.JSONDecodeError as e:
+            logger.warning(f"Conflict detection failed: JSON decode error - {e}")
         except Exception as e:
             logger.warning(f"Conflict detection failed: {e}")
         

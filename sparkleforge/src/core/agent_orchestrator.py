@@ -213,8 +213,6 @@ class PlannerAgent:
             )
             
             # JSON 파싱 시도
-            import json
-            
             domain_text = domain_result.content or "{}"
             
             # JSON 블록 추출
@@ -546,7 +544,6 @@ Domain Analysis Results:
         # Financial Agent 분석 결과를 프롬프트에 포함
         financial_context = ""
         if financial_analysis_result:
-            import json
             try:
                 # Financial analysis 결과를 JSON 문자열로 변환 (요약 포함)
                 financial_summary = {
@@ -983,9 +980,7 @@ class ExecutorAgent:
                     system_message="You are an expert information relevance evaluator. Evaluate search results for relevance to the query."
                 )
                 
-                # JSON 파싱
-                import json
-                
+                # JSON 파싱                
                 evaluation_text = evaluation_result.content or "{}"
                 json_match = re.search(r'\{[\s\S]*\}', evaluation_text)
                 if json_match:
@@ -2064,13 +2059,16 @@ Return only the queries, one per line, without numbering or bullets."""
                             )
                             
                             # LLM 결과 파싱
-                            import json
                             review_text = review_result.content or ""
                             try:
                                 # JSON 추출
                                 json_match = re.search(r'\[.*\]', review_text, re.DOTALL)
                                 if json_match:
-                                    review_data = json.loads(json_match.group())
+                                    json_str = json_match.group().strip()
+                                    if not json_str or json_str == "[]":
+                                        logger.warning(f"[{self.name}] ⚠️ Empty JSON array in review result")
+                                        continue
+                                    review_data = json.loads(json_str)
                                     
                                     # 검토 결과를 결과에 추가
                                     for review_item in review_data:
@@ -4147,9 +4145,7 @@ Provide a review with:
                 task_type=TaskType.VERIFICATION,
                 system_message="You are an expert document completeness validator. You must detect any incomplete sections, truncated content, or formatting issues."
             )
-            
-            import json
-            
+
             # JSON 추출 시도
             content = validation_result.content
             json_match = re.search(r'\{[\s\S]*\}', content)

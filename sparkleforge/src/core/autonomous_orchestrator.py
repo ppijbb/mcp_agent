@@ -172,6 +172,10 @@ class AutonomousOrchestrator:
         self.context_loader = ContextLoader()
         self.session_control = get_session_control()
         
+        # 재귀적 컨텍스트 관리자 초기화
+        from src.core.recursive_context_manager import get_recursive_context_manager
+        self.context_manager = get_recursive_context_manager()
+        
         self.graph = None
         self._build_langgraph_workflow()
     
@@ -225,7 +229,18 @@ class AutonomousOrchestrator:
         
         # 기존 워크플로우 (Overseer 통합)
         workflow.add_edge("adaptive_supervisor", "execute_research")
-        workflow.add_edge("execute_research", "hierarchical_compression")
+        
+        # 컨텍스트 기반 자동 단계 결정 (재귀적 컨텍스트 사용)
+        workflow.add_conditional_edges(
+            "execute_research",
+            self._decide_next_step_based_on_context,
+            {
+                "continue_research": "execute_research",
+                "compress": "hierarchical_compression",
+                "verify": "continuous_verification"
+            }
+        )
+        
         workflow.add_edge("hierarchical_compression", "continuous_verification")
         
         # Verification -> Overseer Evaluation
@@ -285,13 +300,28 @@ class AutonomousOrchestrator:
         logger.info('='*80)
     
     async def _analyze_objectives(self, state: ResearchState) -> ResearchState:
-        """목표 분석 (Multi-Model Orchestration)."""
+        """목표 분석 (Multi-Model Orchestration + 재귀적 컨텍스트)."""
         # 입력 로깅
         self._log_node_input("analyze_objectives", state)
         
         logger.info("🔍 Analyzing objectives with Multi-Model Orchestration")
         logger.info(f"📝 Research Request: {state['user_request']}")
         logger.info(f"📋 Context: {state.get('context', {})}")
+        
+        # 초기 컨텍스트 생성 (재귀적 컨텍스트 사용)
+        initial_context_data = {
+            "user_request": state['user_request'],
+            "context": state.get('context', {}),
+            "objective_id": state.get('objective_id', ''),
+            "stage": "analysis"
+        }
+        context_id = self.context_manager.push_context(
+            context_data=initial_context_data,
+            depth=0,
+            parent_id=None,
+            metadata={"node": "analyze_objectives", "timestamp": datetime.now().isoformat()}
+        )
+        logger.debug(f"Initial context created: {context_id}")
         
         # 스트리밍 이벤트: 분석 시작
         await self.streaming_manager.stream_event(
@@ -404,13 +434,49 @@ class AutonomousOrchestrator:
         return state
     
     async def _planning_agent(self, state: ResearchState) -> ResearchState:
-        """Planning Agent: MCP 기반 사전 조사 → Task 분해 → Agent 동적 할당."""
+        """Planning Agent: MCP 기반 사전 조사 → Task 분해 → Agent 동적 할당 (재귀적 컨텍스트 사용)."""
         # 입력 로깅
         self._log_node_input("planning_agent", state)
         
         logger.info("🎯 Planning Agent: MCP-based research planning")
         logger.info(f"📊 Complexity Score: {state.get('complexity_score', 5.0)}")
         logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
+        
+        # 현재 컨텍스트 가져오기
+        current_context = self.context_manager.get_current_context()
+        if not current_context:
+            # 컨텍스트가 없으면 초기 컨텍스트 생성
+            initial_context_data = {
+                "user_request": state.get('user_request', ''),
+                "context": state.get('context', {}),
+                "objective_id": state.get('objective_id', ''),
+                "stage": "planning"
+            }
+            current_context_id = self.context_manager.push_context(
+                context_data=initial_context_data,
+                depth=0
+            )
+            current_context = self.context_manager.get_current_context()
+        
+        # 분석 결과를 컨텍스트에 추가 (재귀적 확장)
+        if current_context:
+            analysis_context = {
+                "intent_analysis": state.get("intent_analysis", {}),
+                "domain_analysis": state.get("domain_analysis", {}),
+                "scope_analysis": state.get("scope_analysis", {}),
+                "analyzed_objectives": state.get("analyzed_objectives", []),
+                "complexity_score": state.get("complexity_score", 5.0),
+                "stage": "planning"
+            }
+            
+            extended_context = self.context_manager.extend_context(
+                current_context.context_id,
+                analysis_context,
+                metadata={"node": "planning_agent", "timestamp": datetime.now().isoformat()}
+            )
+            
+            if extended_context:
+                logger.debug(f"Context extended for planning: {extended_context.context_id}")
         
         # 사용자 응답 대기 중이면 응답 처리
         if state.get("waiting_for_user", False):
@@ -634,6 +700,22 @@ class AutonomousOrchestrator:
                     "execution_strategy": execution_plan.get('strategy', 'sequential')
                 }
             })
+            
+            # 계획을 컨텍스트에 추가 (재귀적 확장)
+            if current_context:
+                plan_context = {
+                    "planned_tasks": tasks,
+                    "agent_assignments": agent_assignments,
+                    "execution_plan": execution_plan,
+                    "plan_approved": False,
+                    "preliminary_research": preliminary_research
+                }
+                self.context_manager.extend_context(
+                    current_context.context_id,
+                    plan_context,
+                    metadata={"plan_completed": True, "timestamp": datetime.now().isoformat()}
+                )
+                logger.debug(f"Plan added to context: {current_context.context_id}")
             
             # 출력 로깅
             key_changes = {
@@ -1078,6 +1160,22 @@ class AutonomousOrchestrator:
         execution_results = state.get("execution_results", [])
         compression_results = []
         
+        # 실행 결과를 컨텍스트에 추가 (재귀적 확장)
+        current_context = self.context_manager.get_current_context()
+        if current_context:
+            execution_context = {
+                "execution_results": execution_results,
+                "execution_metadata": state.get("execution_metadata", {}),
+                "streaming_data": state.get("streaming_data", []),
+                "stage": "execution_completed"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                execution_context,
+                metadata={"execution_completed": True, "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"Execution results added to context: {current_context.context_id}")
+        
         # 실행 결과가 없는 경우 처리
         if not execution_results:
             logger.warning("⚠️ No execution results available for compression. Skipping compression step.")
@@ -1181,6 +1279,26 @@ class AutonomousOrchestrator:
         total_compressed = sum(c.get("compressed_size", 0) for c in compression_results)
         overall_compression_ratio = total_compressed / max(total_original, 1)
         
+        # 압축 결과를 컨텍스트에 추가 (재귀적 확장)
+        current_context = self.context_manager.get_current_context()
+        if current_context:
+            compression_context = {
+                "compression_results": compression_results,
+                "compression_metadata": {
+                    "overall_compression_ratio": overall_compression_ratio,
+                    "total_original_size": total_original,
+                    "total_compressed_size": total_compressed,
+                    "compression_count": len(compression_results)
+                },
+                "stage": "compression_completed"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                compression_context,
+                metadata={"compression_completed": True, "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"Compression results added to context: {current_context.context_id}")
+        
         state.update({
             "compression_results": compression_results,
             "compression_metadata": {
@@ -1200,8 +1318,24 @@ class AutonomousOrchestrator:
         return state
     
     async def _continuous_verification(self, state: ResearchState) -> ResearchState:
-        """Continuous Verification (혁신 4)."""
+        """Continuous Verification (혁신 4 + 재귀적 컨텍스트 사용)."""
         logger.info("🔬 Applying Continuous Verification")
+        
+        # 현재 컨텍스트 가져오기 및 실행 결과 추가
+        current_context = self.context_manager.get_current_context()
+        if current_context:
+            # 압축 결과를 컨텍스트에 추가 (재귀적 확장)
+            compression_context = {
+                "compression_results": state.get("compression_results", []),
+                "compression_metadata": state.get("compression_metadata", {}),
+                "stage": "verification"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                compression_context,
+                metadata={"node": "continuous_verification", "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"Compression results added to context: {current_context.context_id}")
         
         compression_results = state.get("compression_results", [])
         execution_results = state.get("execution_results", [])
@@ -1321,6 +1455,24 @@ class AutonomousOrchestrator:
                 })
                 confidence_scores[task_id] = 0.3
         
+        # 검증 결과를 컨텍스트에 추가 (재귀적 확장)
+        current_context = self.context_manager.get_current_context()
+        if current_context:
+            verification_result_context = {
+                "verification_results": {
+                    "verification_stages": verification_stages,
+                    "confidence_scores": confidence_scores
+                },
+                "verification_failed": False,
+                "stage": "verification_completed"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                verification_result_context,
+                metadata={"verification_completed": True, "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"Verification results added to context: {current_context.context_id}")
+        
         state.update({
             "verification_stages": verification_stages,
             "confidence_scores": confidence_scores,
@@ -1414,10 +1566,58 @@ class AutonomousOrchestrator:
         return state
     
     async def _synthesize_deliverable(self, state: ResearchState) -> ResearchState:
-        """최종 결과 종합 (Adaptive Context Window)."""
+        """최종 결과 종합 (Adaptive Context Window + 재귀적 컨텍스트 사용)."""
         logger.info("📝 Synthesizing final deliverable with Adaptive Context Window")
         
-        synthesis_prompt = f"""
+        # 현재 컨텍스트 가져오기 및 모든 단계 결과 통합
+        current_context = self.context_manager.get_current_context()
+        if current_context:
+            # 모든 단계 결과를 컨텍스트에 통합 (재귀적 확장)
+            synthesis_context = {
+                "verification_results": state.get("verification_results", {}),
+                "confidence_scores": state.get("confidence_scores", {}),
+                "evaluation_results": state.get("evaluation_results", {}),
+                "quality_metrics": state.get("quality_metrics", {}),
+                "validation_results": state.get("validation_results", {}),
+                "validation_score": state.get("validation_score", 0.0),
+                "stage": "synthesis"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                synthesis_context,
+                metadata={"node": "synthesize_deliverable", "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"All stage results integrated into context: {current_context.context_id}")
+            
+            # 컨텍스트에서 종합 정보 추출
+            context_data = current_context.context_data
+            synthesis_prompt = f"""
+        Synthesize the following research findings into a comprehensive deliverable:
+        
+        User Request: {context_data.get('user_request', state.get('user_request', ''))}
+        Intent Analysis: {context_data.get('intent_analysis', {})}
+        Domain Analysis: {context_data.get('domain_analysis', {})}
+        Planned Tasks: {len(context_data.get('planned_tasks', []))} tasks
+        Execution Results: {len(context_data.get('execution_results', []))} results
+        Compression Results: {len(context_data.get('compression_results', []))} compressed
+        Verification Results: {context_data.get('verification_results', {})}
+        Evaluation Results: {context_data.get('evaluation_results', {})}
+        Quality Metrics: {context_data.get('quality_metrics', {})}
+        
+        Create a comprehensive synthesis including:
+        1. Executive summary with key insights
+        2. Detailed findings with evidence
+        3. Analysis and interpretation
+        4. Conclusions and recommendations
+        5. Limitations and future work
+        6. Appendices with supporting data
+        
+        Use adaptive context management for optimal content organization.
+        Use the recursive context to ensure all stages are properly integrated.
+        """
+        else:
+            # 컨텍스트가 없으면 기존 방식 사용
+            synthesis_prompt = f"""
         Synthesize the following research findings into a comprehensive deliverable:
         
         User Request: {state.get('user_request', '')}
@@ -1447,6 +1647,25 @@ class AutonomousOrchestrator:
         
         # 컨텍스트 윈도우 사용량 계산
         context_usage = self._calculate_context_usage(state, result.content)
+        
+        # 최종 종합 결과를 컨텍스트에 추가 (재귀적 확장)
+        if current_context:
+            final_context = {
+                "final_synthesis": {
+                    "content": result.content,
+                    "model_used": result.model_used,
+                    "confidence": result.confidence,
+                    "execution_time": result.execution_time
+                },
+                "context_window_usage": context_usage,
+                "stage": "completed"
+            }
+            self.context_manager.extend_context(
+                current_context.context_id,
+                final_context,
+                metadata={"synthesis_completed": True, "timestamp": datetime.now().isoformat()}
+            )
+            logger.debug(f"Final synthesis added to context: {current_context.context_id}")
         
         state.update({
             "final_synthesis": {
@@ -2704,6 +2923,45 @@ class AutonomousOrchestrator:
         except Exception as e:
             logger.error(f"❌ Missing elements identification failed: {e}")
             return ["Error in missing elements analysis"]
+    
+    def _decide_next_step_based_on_context(self, state: ResearchState) -> str:
+        """
+        컨텍스트 기반 다음 단계 자동 결정 (재귀적 컨텍스트 사용).
+        
+        Args:
+            state: 현재 상태
+        
+        Returns:
+            다음 단계 이름
+        """
+        current_context = self.context_manager.get_current_context()
+        
+        if not current_context:
+            # 컨텍스트가 없으면 기본 흐름
+            return "compress"
+        
+        # 컨텍스트 완전성 평가
+        completeness = self.context_manager.evaluate_context_completeness(current_context.context_id)
+        
+        # 실행 결과 확인
+        execution_results = state.get("execution_results", [])
+        successful_results = [r for r in execution_results if r.get("status") == "completed"]
+        success_rate = len(successful_results) / max(len(execution_results), 1)
+        
+        logger.debug(f"Context completeness: {completeness:.2f}, Success rate: {success_rate:.2f}")
+        
+        if completeness < 0.5 or success_rate < 0.5:
+            # 컨텍스트가 불완전하거나 성공률이 낮으면 추가 연구
+            logger.info("🔄 Context incomplete or low success rate - continuing research")
+            return "continue_research"
+        elif completeness < 0.8:
+            # 컨텍스트가 거의 완전하면 압축 후 검증
+            logger.info("📦 Context nearly complete - compressing")
+            return "compress"
+        else:
+            # 컨텍스트가 완전하면 검증
+            logger.info("✅ Context complete - verifying")
+            return "verify"
     
     def _calculate_context_usage(self, state: ResearchState, content: str) -> Dict[str, Any]:
         """컨텍스트 윈도우 사용량 계산."""

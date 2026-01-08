@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-duckduckgo-search@latest"
+        "mcp-duckduckgo-search@latest"
       ]
     },
     "fetch": {
@@ -18,7 +18,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@docfork/mcp@latest"
+        "docfork@latest"
       ]
     },
     "context7-mcp": {
@@ -41,49 +41,56 @@
       "args": [
         "-y",
         "@hamid-vakilzadeh/mcpsemanticscholar@latest"
-      ]
+      ],
+      "disabled": true
     },
     "parallel-search": {
       "command": "npx",
       "args": [
         "-y",
         "@parallel/search@latest"
-      ]
+      ],
+      "disabled": true
     },
     "tavily-mcp": {
       "command": "npx",
       "args": [
         "-y",
         "@Jeetanshu18/tavily-mcp@latest"
-      ]
+      ],
+      "disabled": true
     },
     "WebSearch-MCP": {
       "command": "npx",
       "args": [
         "-y",
         "@mnhlt/WebSearch-MCP@latest"
-      ]
+      ],
+      "disabled": true
     },
     "Google search console": {
       "command": "npx",
       "args": [
         "-y",
         "google_search_console@latest"
-      ]
+      ],
+      "disabled": true
     },
     "Paper Search": {
       "command": "npx",
       "args": [
         "-y",
         "@adamamer20/paper-search-mcp-openai@latest"
-      ]
+      ],
+      "disabled": true
     },
     "TodoList": {
       "command": "npx",
       "args": [
         "-y",
         "todoist@latest"
-      ]
+      ],
+      "disabled": true
     },
     "arxiv": {
       "command": "npx",
@@ -91,20 +98,23 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-arxiv@latest"
-      ]
+      ],
+      "disabled": true
     },
     "kis MCP": {
       "command": "npx",
       "args": [
         "-y",
         "@KISOpenAPI/kis-code-assistant-mcp@latest"
-      ]
+      ],
+      "disabled": true
     },
     "financial_agent": {
       "command": "python",
       "args": [
         "lang_graph/financial_agent/financial_mcp_server.py"
-      ]
+      ],
+      "disabled": true
     },
     "github": {
       "command": "npx",
