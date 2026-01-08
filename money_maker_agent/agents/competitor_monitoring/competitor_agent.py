@@ -374,3 +374,4 @@ class CompetitorMonitoringAgent(BaseAgent):
         
         return daily_value
 
+
