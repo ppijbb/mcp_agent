@@ -97,3 +97,6 @@
 [submodule "open_researcher/deeotutor"]
 	path = open_researcher/deeotutor
 	url = https://github.com/HKUDS/DeepTutor.git
+[submodule "open_researcher/rlm"]
+	path = open_researcher/rlm
+	url = https://github.com/alexzhang13/rlm.git
