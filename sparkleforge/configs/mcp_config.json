@@ -128,16 +128,72 @@
     },
     "mcp_search": {
       "type": "stdio",
-      "command": "python",
+      "command": "python3",
       "args": [
         "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_search/server.py"
       ]
     },
     "mcp_service": {
       "type": "stdio",
-      "command": "python",
+      "command": "python3",
       "args": [
         "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_service/server.py"
+      ]
+    },
+    "ai_search_service": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/ai_search_service/server.py"
+      ]
+    },
+    "web_search_service": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/web_search_service/server.py"
+      ]
+    },
+    "tavily_search_server": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/tavily_search_server/server.py"
+      ]
+    },
+    "google_serper": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/google_serper/server.py"
+      ]
+    },
+    "web_search_server": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/web_search_server/server.py"
+      ]
+    },
+    "serper_search": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/serper_search/server.py"
+      ]
+    },
+    "serper_search_service": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/serper_search_service/server.py"
+      ]
+    },
+    "google_custom_search": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/google_custom_search/server.py"
       ]
     }
   }
