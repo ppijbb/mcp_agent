@@ -2067,33 +2067,33 @@ Return only the queries, one per line, without numbering or bullets."""
                                     json_str = json_match.group().strip()
                                     if not json_str or json_str == "[]":
                                         logger.warning(f"[{self.name}] ⚠️ Empty JSON array in review result")
-                                        continue
-                                    review_data = json.loads(json_str)
-                                    
-                                    # 검토 결과를 결과에 추가
-                                    for review_item in review_data:
-                                        idx = review_item.get('index', 0) - 1
-                                        if 0 <= idx < len(results):
-                                            results[idx]['review'] = {
-                                                'relevance_score': review_item.get('relevance_score', 5),
-                                                'recency': review_item.get('recency', '보통'),
-                                                'reliability': review_item.get('reliability', '보통'),
-                                                'recommend': review_item.get('recommend', '보통'),
-                                                'reason': review_item.get('reason', '')
-                                            }
-                                    
-                                    # 추천 결과만 필터링 (선택적)
-                                    recommended_results = [r for r in results if r.get('review', {}).get('recommend') == '추천']
-                                    if recommended_results:
-                                        logger.info(f"[{self.name}] ✅ Found {len(recommended_results)} highly recommended results")
-                                        # 추천 결과를 우선적으로 사용하되, 최소 5개는 유지
-                                        if len(recommended_results) >= 5:
-                                            results = recommended_results
-                                        else:
-                                            # 추천 결과 + 일반 결과 혼합
-                                            results = recommended_results + [r for r in results if r not in recommended_results][:5-len(recommended_results)]
-                                    
-                                    logger.info(f"[{self.name}] ✅ Reviewed {len(review_data)} search results")
+                                    else:
+                                        review_data = json.loads(json_str)
+                                        
+                                        # 검토 결과를 결과에 추가
+                                        for review_item in review_data:
+                                            idx = review_item.get('index', 0) - 1
+                                            if 0 <= idx < len(results):
+                                                results[idx]['review'] = {
+                                                    'relevance_score': review_item.get('relevance_score', 5),
+                                                    'recency': review_item.get('recency', '보통'),
+                                                    'reliability': review_item.get('reliability', '보통'),
+                                                    'recommend': review_item.get('recommend', '보통'),
+                                                    'reason': review_item.get('reason', '')
+                                                }
+                                        
+                                        # 추천 결과만 필터링 (선택적)
+                                        recommended_results = [r for r in results if r.get('review', {}).get('recommend') == '추천']
+                                        if recommended_results:
+                                            logger.info(f"[{self.name}] ✅ Found {len(recommended_results)} highly recommended results")
+                                            # 추천 결과를 우선적으로 사용하되, 최소 5개는 유지
+                                            if len(recommended_results) >= 5:
+                                                results = recommended_results
+                                            else:
+                                                # 추천 결과 + 일반 결과 혼합
+                                                results = recommended_results + [r for r in results if r not in recommended_results][:5-len(recommended_results)]
+                                        
+                                        logger.info(f"[{self.name}] ✅ Reviewed {len(review_data)} search results")
                             except Exception as e:
                                 logger.warning(f"[{self.name}] ⚠️ Failed to parse review result: {e}")
                         except Exception as e:

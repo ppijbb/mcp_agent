@@ -1153,14 +1153,15 @@ Examples:
     )
     
     # Mode selection
-    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group = parser.add_mutually_exclusive_group(required=False)
     mode_group.add_argument("--request", help="Research request (CLI mode)")
     mode_group.add_argument("--web", action="store_true", help="Start web application with streaming")
     mode_group.add_argument("--mcp-server", action="store_true", help="Start MCP server with Universal MCP Hub")
     mode_group.add_argument("--mcp-client", action="store_true", help="Start MCP client with Smart Tool Selection")
     mode_group.add_argument("--health-check", action="store_true", help="Check system health and MCP tools")
     mode_group.add_argument("--check-mcp-servers", action="store_true", help="Check all MCP server connections and list tools")
-    mode_group.add_argument("--interactive", action="store_true", help="Start interactive CLI mode")
+    mode_group.add_argument("--cli", action="store_true", help="Start REPL CLI mode (완전 CLI 환경) - 기본값")
+    mode_group.add_argument("--interactive", action="store_true", help="Start interactive CLI mode (기존)")
     mode_group.add_argument("-p", "--prompt", help="Headless mode: execute prompt directly (non-interactive)")
     mode_group.add_argument("--daemon", action="store_true", help="Start as long-running daemon (24/7 mode)")
     
@@ -1345,7 +1346,21 @@ Examples:
             
             return
         
-        # Interactive 모드
+        # 기본 동작: REPL 모드 (아무 옵션도 없으면)
+        # 또는 --cli 옵션이 있으면
+        has_any_mode = any([
+            args.request, args.web, args.mcp_server, args.mcp_client,
+            args.health_check, args.check_mcp_servers, args.interactive,
+            args.prompt, args.daemon
+        ])
+        
+        if not has_any_mode or args.cli:
+            from src.cli.repl_cli import REPLCLI
+            cli = REPLCLI()
+            await cli.run()
+            return
+        
+        # Interactive 모드 (기존)
         if args.interactive:
             from src.cli.interactive_cli import InteractiveCLI
             from src.core.scheduler import get_scheduler
@@ -1529,5 +1544,10 @@ Examples:
                 logger.debug(f"Error in final cleanup: {e}")
 
 
-if __name__ == "__main__":
+def main_entry():
+    """Entry point for sparkle command."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    main_entry()
