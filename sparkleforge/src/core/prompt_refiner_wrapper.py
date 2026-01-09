@@ -28,11 +28,19 @@ try:
         NormalizeWhitespace,
         Deduplicate,
         TruncateTokens,
-        CountTokens,
     )
+    # CountTokens는 analyzer 모듈에 있음
+    try:
+        from prompt_refiner.analyzer import TokenTracker
+        CountTokens = TokenTracker  # CountTokens는 TokenTracker의 별칭
+    except ImportError:
+        # TokenTracker도 없으면 간단한 클래스로 대체
+        class CountTokens:
+            def __init__(self, *args, **kwargs):
+                pass
     PROMPT_REFINER_AVAILABLE = True
-except ImportError as e:
-    logging.warning(f"prompt-refiner not available: {e}. Prompt optimization will be disabled.")
+except ImportError:
+    # 로그 출력 없이 조용히 처리
     PROMPT_REFINER_AVAILABLE = False
     # Fallback classes
     class Pipeline:
@@ -117,10 +125,10 @@ class PromptRefinerWrapper:
         
         if self.enabled:
             self.refiner = self._build_pipeline(strategy)
-            logger.info(f"PromptRefinerWrapper initialized with strategy: {strategy}")
+            # 로그 출력 없음 (조용히 초기화)
         else:
             self.refiner = None
-            logger.warning("PromptRefinerWrapper disabled (prompt-refiner not available or explicitly disabled)")
+            # 로그 출력 없음 (조용히 비활성화)
     
     def _build_pipeline(self, strategy: str) -> Pipeline:
         """

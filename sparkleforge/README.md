@@ -8,7 +8,9 @@
 > **Where Ideas Sparkle and Get Forged** ⚒️✨
 > 
 > Revolutionary multi-agent system that forges sparkling insights through real-time collaboration, 
-> creative AI, and 8 core innovations that make every idea sparkle.
+> creative AI, and 9 core innovations that make every idea sparkle.
+> 
+> **현재 상태: Production Level 개발 진행 중** 🚧
 
 ## 🔥 What Makes SparkleForge Special?
 
@@ -21,7 +23,7 @@ Unlike traditional research tools, SparkleForge simulates a **team of master cra
 - 🧠 **Creative Synthesis**: AI generates novel solutions by combining ideas
 - 🔍 **Source Validation**: Every claim is verified with credibility scores
 - 📚 **Research Memory**: Learns from past forges to improve over time
-- 🎯 **Production Ready**: Enterprise-grade reliability and error handling
+- 🎯 **Production Level 개발 진행 중**: Enterprise-grade reliability 기반 구조 완료, 지속적 개선 중
 
 ## 🚀 Quick Start
 
@@ -113,7 +115,30 @@ python main.py --request "Latest AI trends in 2025"
 - Citations and sources are properly attributed
 - Final deliverable sparkles with quality
 
-## ✨ Core Innovations
+## 📊 프로젝트 상태
+
+**🚧 Production Level 개발 진행 중**
+
+SparkleForge는 현재 프로덕션 수준의 안정성과 성능을 목표로 지속적으로 개선 중입니다.
+
+### 현재 완료된 기능 ✅
+- 9가지 핵심 혁신 구현 완료
+- Multi-Agent Orchestration 시스템
+- Universal MCP Hub 통합
+- Production-Grade Reliability 기반 구조
+
+### 진행 중인 작업 🔄
+- CLI 인자 파싱 개선 (`--format json` 지원)
+- ChromaDB 벡터 데이터베이스 통합
+- 의존성 문제 해결
+- 실제 실행 파이프라인 테스트
+
+### 향후 계획 📋
+- 프로덕션 환경 배포 준비
+- 성능 벤치마크 완료
+- 문서화 완성
+
+## ✨ Core Innovations (9가지 핵심 혁신)
 
 ### 1. **Adaptive Forge Master**
 - Dynamically allocates 1-10 craftsmen based on complexity
@@ -305,23 +330,32 @@ The Streamlit web interface provides:
 
 ## 📊 Performance Benchmarks
 
-### 🚀 **Comprehensive Performance Metrics** (Measured via Production Benchmark System)
+### ⚠️ 성능 측정 상태
 
-| Metric Category | Traditional Tools | SparkleForge | Improvement |
-|-----------------|------------------|--------------|-------------|
-| **Response Time** | 5-10 minutes | **30-60 seconds** | **10x faster** |
-| **Information Loss** | 20-30% | **<5%** | **90% reduction** |
-| **Source Verification** | Manual | **100% automated** | **Complete automation** |
-| **Creative Insights** | None | **AI-generated** | **New capability** |
-| **Real-time Updates** | No | **Live streaming** | **Live monitoring** |
+**현재 상태: 성능 벤치마크 측정 진행 중**
 
-### 🏆 **Agent Performance Comparison** (Academic Standards)
+SparkleForge의 성능 벤치마크는 현재 측정 및 검증 중입니다.
+아래 수치는 목표 지표이며, 실제 측정 결과는 벤치마크 완료 후 업데이트될 예정입니다.
+
+### 🎯 목표 성능 지표 (측정 진행 중)
+
+| Metric Category | 목표 | 측정 상태 |
+|-----------------|------|-----------|
+| **Response Time** | 30-60 seconds | 🔄 측정 중 |
+| **Information Loss** | <5% | 🔄 측정 중 |
+| **Source Verification** | 100% automated | ✅ 구현 완료 |
+| **Creative Insights** | AI-generated | ✅ 구현 완료 |
+| **Real-time Updates** | Live streaming | ✅ 구현 완료 |
+
+### 🏆 **Agent Performance Comparison** (AgentBench 기준)
+
+**⚠️ 주의: SparkleForge 수치는 아직 제대로 측정되지 않았습니다.**
 
 #### **LLM Models Performance**
 
-| Model/System | Web Navigation | Tool Usage | Multi-Agent | Reasoning | Overall Score | Benchmark |
+| Model/System | Web Navigation | Tool Usage | Multi-Agent | Reasoning | Overall Score | 측정 상태 |
 |--------------|----------------|------------|-------------|-----------|---------------|-----------|
-| **SparkleForge** | **58.0%** | **59.0%** | **59.5%** | **56.8%** | **58.3%** | AgentBench |
+| **SparkleForge** | **미측정** | **미측정** | **미측정** | **미측정** | **미측정** | 🔄 측정 예정 |
 | GPT-4o | 85.2% | 88.1% | 82.3% | 89.4% | 86.2% | AgentBench |
 | Claude 3.5 Sonnet | 83.7% | 86.9% | 81.8% | 87.6% | 85.0% | AgentBench |
 | Gemini 2.5 Flash | 79.4% | 82.1% | 78.9% | 84.2% | 81.2% | AgentBench |
@@ -332,9 +366,9 @@ The Streamlit web interface provides:
 
 #### **Research Agent Services Performance**
 
-| Service | Research Quality | Source Accuracy | Response Time | User Rating | Specialization |
-|---------|------------------|-----------------|---------------|-------------|----------------|
-| **SparkleForge** | **58.3%** | **75%** | **15.4s** | **N/A** | Multi-domain Research |
+| Service | Research Quality | Source Accuracy | Response Time | User Rating | Specialization | 측정 상태 |
+|---------|------------------|-----------------|---------------|-------------|----------------|-----------|
+| **SparkleForge** | **미측정** | **미측정** | **미측정** | **N/A** | Multi-domain Research | 🔄 측정 예정 |
 | **Perplexity Pro** | 85.2% | 88.1% | 2.1s | 4.7/5 | Real-time Web Search |
 | **You.com** | 82.3% | 85.4% | 1.8s | 4.5/5 | AI-powered Search |
 | **Consensus AI** | 89.1% | 92.3% | 3.2s | 4.8/5 | Scientific Research |
@@ -345,34 +379,34 @@ The Streamlit web interface provides:
 
 *Benchmark scores based on WebArena, ToolBench, AgentBench, ALFWorld standards*
 
-### 🚀 **Parallel Agent System Performance** (Improved Benchmark Results)
+### 🚀 **Parallel Agent System Performance**
 
-The parallel agent execution system demonstrates **significantly improved performance with new optimizations**:
+**⚠️ 주의: 아래 수치는 아직 제대로 측정되지 않았습니다. 구현된 기능 목록입니다.**
 
-#### **Parallel Execution Performance (With Performance Improvements)**
+#### **구현된 기능 (측정 진행 중)**
 
-| Metric | SparkleForge (Improved) | Previous (Baseline) | Improvement | Advantage |
-|--------|------------------------|---------------------|-------------|-----------|
-| **Execution Speed** | **8.0x+ faster** (with caching) | 6.0x (baseline) | **+33%** | **8.0x** |
-| **Time Savings** | **85%+** | 78.9% | **+6%** | **85%+** |
-| **Throughput** | **100x+ improvement** (with dynamic concurrency) | 49.6x | **+100%** | **100x+** |
-| **Result Sharing Throughput** | **230,456+ results/sec** | 230,456 | Maintained | **High Performance** |
-| **Query Throughput** | **499,322+ queries/sec** | 499,322 | Maintained | **High Performance** |
-| **Cache Hit Rate** | **50-96%** (depending on query patterns) | N/A | **New Feature** | **Significant Speedup** |
-| **Cache Speedup** | **11.6x** (cache hit vs miss) | N/A | **New Feature** | **11.6x** |
+| Metric | 구현 상태 | 측정 상태 |
+|--------|-----------|-----------|
+| **Execution Speed** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Time Savings** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Throughput** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Result Sharing Throughput** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Query Throughput** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Cache Hit Rate** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Cache Speedup** | ✅ 구현 완료 | 🔄 측정 중 |
 
-#### **Reliability & Error Handling (Improved)**
+#### **Reliability & Error Handling (구현 완료)**
 
-| Metric | SparkleForge (Improved) | Previous (Baseline) | Improvement | Advantage |
-|--------|------------------------|---------------------|-------------|-----------|
-| **Success Rate** | **80-90%+** (with retry & error handler) | 75.0% | **+5-15%** | **Improved** |
-| **Error Handling Rate** | **100.0%** | 100.0% | Maintained | **Full Coverage** |
-| **Error Recovery Rate** | **60-70%** (for recoverable errors) | N/A | **New Feature** | **Auto-Recovery** |
-| **Max Retry Attempts** | **5** (increased from 3) | 3 | **+67%** | **Better Recovery** |
-| **Circuit Breaker** | **✅ Active** (with enhanced retry) | ✅ Active | Enhanced | **Improved** |
-| **Connection Pooling** | **✅ Active** (60-80% reuse) | ❌ None | **New Feature** | **Reduced Latency** |
-| **Dynamic Concurrency** | **✅ Active** (auto-optimization) | ❌ Fixed | **New Feature** | **Optimal Resource Usage** |
-| **Supported Error Types** | **4 types** (actual measurement) | 2-3 types | 2-3 types | **1-2 types advantage** |
+| Metric | 구현 상태 | 측정 상태 |
+|--------|-----------|-----------|
+| **Success Rate** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Error Handling Rate** | ✅ 구현 완료 | ✅ 100% (코드 검증) |
+| **Error Recovery Rate** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Max Retry Attempts** | ✅ 구현 완료 | ✅ 5회 (코드 확인) |
+| **Circuit Breaker** | ✅ 구현 완료 | ✅ 활성화 (코드 확인) |
+| **Connection Pooling** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Dynamic Concurrency** | ✅ 구현 완료 | 🔄 측정 중 |
+| **Supported Error Types** | ✅ 구현 완료 | ✅ 4가지 타입 (코드 확인) |
 
 #### **Parallel Execution vs Competitors Comparison**
 
@@ -384,40 +418,48 @@ The parallel agent execution system demonstrates **significantly improved perfor
 4. **Scalability**: Competitors have linear scaling, SparkleForge achieves **49.6x throughput improvement**
 5. **Error Handling**: Competitors have basic handling, SparkleForge provides **100% handling rate + Circuit Breaker**
 
-**📊 Performance Analysis (Improved):**
-- **SparkleForge Parallel Execution**: 8.0x+ speed improvement, 85%+ time savings, 100x+ throughput improvement (with improvements)
-- **Cache Performance**: 50-96% hit rate, 11.6x speedup on cache hits (new feature)
-- **Dynamic Concurrency**: Auto-optimization based on CPU/memory load (new feature)
-- **Error Recovery**: 60-70% recovery rate for transient errors (new feature)
+**📊 구현된 기능:**
+- ✅ **Parallel Execution**: 병렬 실행 시스템 구현 완료
+- ✅ **Result Caching**: 캐싱 시스템 구현 완료
+- ✅ **Dynamic Concurrency**: 동적 동시성 제어 구현 완료
+- ✅ **Error Recovery**: 에러 복구 시스템 구현 완료
+- ✅ **Connection Pooling**: 연결 풀링 구현 완료
+- ✅ **Agent Collaboration**: 에이전트 협업 시스템 구현 완료
+
+**📈 벤치마크 측정 계획:**
+1. **성능 측정 도구**: `tests/benchmark/run_benchmarks.py`
+2. **측정 범위**: Response Time, Information Loss, Source Verification Accuracy, Creative Insights Quality
+3. **측정 일정**: 진행 중
+
+**참고 (공개 벤치마크):**
 - **SOTA Models**: GPT-4o (86.2%), Claude 3.5 Sonnet (85.0%), Gemini 2.5 Flash (81.2%)
 - **Research Services**: Consensus AI (89.1%), Elicit (87.6%), Perplexity Pro (85.2%)
-- **SparkleForge Strengths**: Parallel execution, caching, dynamic concurrency, connection pooling, error recovery, agent collaboration (significantly differentiated vs competitors)
 
-### 🔧 **Current Status & Issues**
+### 🔧 **현재 상태 및 진행 중인 작업**
 
-**⚠️ Development Phase Issues:**
-- CLI argument parsing: `--format json` not recognized
-- ChromaDB dependency missing: Vector database not available
-- Mock data fallback: Actual execution failures trigger simulation
+**✅ 구현 완료된 기능:**
+- 9가지 핵심 혁신 구현 완료
+- Multi-Agent Orchestration 시스템
+- Universal MCP Hub 통합
+- Production-Grade Reliability 기반 구조
+- Parallel Agent Execution System
+- Inter-Agent Result Sharing & Discussion
+- Result Caching
+- Dynamic Concurrency
+- Connection Pooling
+- Error Recovery 시스템
 
-**✅ Code Improvements Completed:**
-- Fallback/simulation code removed from core logic
-- Real external API integration (DuckDuckGo, arXiv, Tavily, Exa)
-- Production-grade error handling and retry logic
-- OpenRouter + Gemini 2.5 Flash Lite integration
-- **Parallel Agent Execution System** (improved benchmark: 8.0x+ speed improvement)
-- **Inter-Agent Result Sharing & Discussion** (maintained: 230,456+ results/sec)
-- **Production Readiness Verification** (improved: 80-90%+ success rate, 100% error handling rate)
-- **Result Caching** (new: 50-96% hit rate, 11.6x speedup)
-- **Dynamic Concurrency** (new: auto-optimization based on system load)
-- **Connection Pooling** (new: 60-80% connection reuse)
-- **Enhanced Error Recovery** (new: 60-70% recovery rate)
+**🔄 진행 중인 작업:**
+- CLI 인자 파싱 개선 (`--format json` 지원)
+- ChromaDB 벡터 데이터베이스 통합
+- 의존성 문제 해결
+- 실제 실행 파이프라인 테스트
+- 성능 벤치마크 측정
 
-**🔧 Next Steps for Production:**
-- Fix CLI argument parsing in main.py
-- Install and configure ChromaDB
-- Resolve dependency issues
-- Test actual execution pipeline
+**📋 향후 계획:**
+- 프로덕션 환경 배포 준비
+- 성능 벤치마크 완료 및 결과 공개
+- 문서화 완성
 
 #### **🔍 Research Agent Services Comparison**
 
@@ -526,6 +568,15 @@ python tests/benchmark/run_benchmarks.py --format all --output-dir results/
 
 ## 🔧 Configuration
 
+### 기본 설정
+
+**모든 기능이 기본적으로 활성화됩니다.**
+
+선택적 기능은 작업 중 Human-in-Loop로 처리됩니다:
+- Guardrails 검증 실패 시 사용자 확인
+- YAML 설정 로드 실패 시 사용자 확인
+- MCP 서버 연결 실패 시 사용자 확인
+
 ### Environment Variables
 
 ```bash
@@ -538,6 +589,29 @@ MAX_SOURCES=20
 ENABLE_STREAMING=true
 ENABLE_CREATIVE_FORGE=true
 ```
+
+### 기능 비활성화 (선택 사항)
+
+특정 기능을 비활성화하려면 환경 변수를 설정하세요:
+
+```bash
+# MCP 안정성 서비스 비활성화
+export DISABLE_MCP_STABILITY=true
+
+# Guardrails 검증 비활성화
+export DISABLE_GUARDRAILS=true
+
+# Agent Tool Wrapper 비활성화
+export DISABLE_AGENT_TOOLS=true
+
+# YAML 설정 로더 비활성화
+export DISABLE_YAML_CONFIG=true
+
+# MCP 백그라운드 헬스체크 비활성화
+export DISABLE_MCP_HEALTH_BACKGROUND=true
+```
+
+**기본값: 모든 기능 활성화**
 
 ### Advanced Settings
 
@@ -552,6 +626,15 @@ MAX_SOURCES=20
 SEARCH_TIMEOUT=30
 ENABLE_ACADEMIC_FORGE=true
 ```
+
+## 🔒 Security & Compliance Posture
+
+- **Minimal Fallback Policy**: LLM 모델 요청 실패 시에만 fallback 사용 (Agent 서비스 안정성 필수)
+- 다른 모든 경우에는 명확한 에러 반환 (NO FALLBACK)
+- Fallback 사용 시 상세 로깅 필수
+- External MCP servers are configured via explicit env vars; trust/timeouts can be tuned per server
+- Audit trail: 모든 작업 로그 기록
+- Secrets via environment variables or dedicated secret files; do not hardcode keys
 
 ## 📈 Use Cases
 

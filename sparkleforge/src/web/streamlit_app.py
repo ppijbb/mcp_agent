@@ -60,6 +60,14 @@ if 'update_flag' not in st.session_state:
     st.session_state.update_flag = False
 if 'log_handler' not in st.session_state:
     st.session_state.log_handler = None
+if 'pending_questions' not in st.session_state:
+    st.session_state.pending_questions = []
+if 'waiting_for_user' not in st.session_state:
+    st.session_state.waiting_for_user = False
+if 'user_responses' not in st.session_state:
+    st.session_state.user_responses = {}
+if 'workflow_resume' not in st.session_state:
+    st.session_state.workflow_resume = False
 
 
 class StreamlitLogHandler(logging.Handler):
@@ -464,7 +472,15 @@ async def execute_research_stream(query: str, session_id: str):
         
         # 스트리밍 실행
         event_count = 0
-        async for state_update in orchestrator.stream(query, session_id=session_id):
+        
+        # 사용자 응답이 있으면 initial_state에 포함
+        initial_state = {}
+        if st.session_state.get('user_responses'):
+            initial_state['user_responses'] = st.session_state['user_responses']
+        if st.session_state.get('clarification_context'):
+            initial_state['clarification_context'] = st.session_state['clarification_context']
+        
+        async for state_update in orchestrator.stream(query, session_id=session_id, initial_state=initial_state):
             event_count += 1
             st.session_state.streaming_queue.put(("log", "system", f"이벤트 수신: {event_count}", "progress"))
             
@@ -519,6 +535,11 @@ async def execute_research_stream(query: str, session_id: str):
                         waiting_for_user = node_state.get('waiting_for_user', False)
                         
                         if waiting_for_user and pending_questions:
+                            # session_state에 질문 저장
+                            st.session_state['pending_questions'] = pending_questions
+                            st.session_state['waiting_for_user'] = True
+                            st.session_state['user_responses'] = node_state.get('user_responses', {})
+                            
                             # 질문을 채팅에 추가
                             from src.core.a2ui_generator import get_a2ui_generator
                             a2ui_generator = get_a2ui_generator()

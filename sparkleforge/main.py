@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 Autonomous Multi-Agent Research System - Main Entry Point
-Implements 8 Core Innovations: Production-Grade Reliability, Universal MCP Hub, Streaming Pipeline
+Implements 9 Core Innovations: Production-Grade Reliability, Universal MCP Hub, Streaming Pipeline
 
 MCP agent 라이브러리 기반의 자율 리서처 시스템.
 모든 하드코딩, fallback, mock 코드를 제거하고 실제 MCP agent를 사용.
+
+현재 상태: Production Level 개발 진행 중 🚧
 
 Usage:
     python main.py --request "연구 주제"                    # CLI 모드
@@ -44,6 +46,10 @@ from src.monitoring.system_monitor import HealthMonitor
 log_dir = project_root / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "researcher.log"
+
+# Streamlit 경고 필터링 (CLI 모드에서 streamlit이 import될 때 발생하는 경고 무시)
+logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
+logging.getLogger("streamlit").setLevel(logging.ERROR)
 
 # HTTP 에러 메시지 필터링 클래스
 class HTTPErrorFilter(logging.Filter):
@@ -205,7 +211,7 @@ class WebAppManager:
 
 
 class AutonomousResearchSystem:
-    """자율 리서처 시스템 - 8가지 핵심 혁신 통합 메인 클래스"""
+    """자율 리서처 시스템 - 9가지 핵심 혁신 통합 메인 클래스"""
     
     def __init__(self):
         # Load configurations from environment - ALL REQUIRED, NO DEFAULTS
@@ -249,54 +255,59 @@ class AutonomousResearchSystem:
             logger.error(f"❌ MCP Hub initialization failed: {e}")
             raise
         
-        # 새로운 기능 모듈 선택적 활성화 (기존 코드 수정 없음)
+        # 새로운 기능 모듈 기본 활성화 (모든 기능 기본 ON)
         try:
             from src.core.feature_flags import FeatureFlags
             FeatureFlags.log_status()
             
-            # MCP 안정성 서비스 (선택적)
+            # MCP 안정성 서비스 (기본 활성화)
             if FeatureFlags.ENABLE_MCP_STABILITY:
                 from src.core.mcp_stability_service import MCPStabilityService
                 self.mcp_stability_service = MCPStabilityService()
-                logger.info("✅ MCP Stability Service enabled")
+                logger.info("✅ MCP Stability Service enabled (default)")
             else:
                 self.mcp_stability_service = None
+                logger.info("⚠️ MCP Stability Service disabled (via DISABLE_MCP_STABILITY)")
             
-            # MCP 백그라운드 헬스체크 (선택적)
+            # MCP 백그라운드 헬스체크 (기본 활성화)
             if FeatureFlags.ENABLE_MCP_HEALTH_BACKGROUND:
                 from src.core.mcp_health_background import MCPHealthBackgroundService
                 self.mcp_health_service = MCPHealthBackgroundService(self.mcp_hub, interval=60)
-                # 백그라운드 서비스는 나중에 시작 (execute 시점)
-                logger.info("✅ MCP Health Background Service enabled (will start on first execution)")
+                logger.info("✅ MCP Health Background Service enabled (default, will start on first execution)")
             else:
                 self.mcp_health_service = None
+                logger.info("⚠️ MCP Health Background Service disabled (via DISABLE_MCP_HEALTH_BACKGROUND)")
             
-            # Guardrails 검증 (선택적)
+            # Guardrails 검증 (기본 활성화)
             if FeatureFlags.ENABLE_GUARDRAILS:
                 from src.core.guardrails_validator import GuardrailsValidator
                 self.guardrails_validator = GuardrailsValidator()
-                logger.info("✅ Guardrails Validator enabled")
+                logger.info("✅ Guardrails Validator enabled (default)")
             else:
                 self.guardrails_validator = None
+                logger.info("⚠️ Guardrails Validator disabled (via DISABLE_GUARDRAILS)")
             
-            # Agent Tool Wrapper (선택적)
+            # Agent Tool Wrapper (기본 활성화)
             if FeatureFlags.ENABLE_AGENT_TOOLS:
                 from src.core.agent_tool_wrapper import AgentToolWrapper
                 # 에이전트는 나중에 할당 (execute 시점)
                 self.agent_tool_wrapper = None
-                logger.info("✅ Agent Tool Wrapper enabled (will be initialized on first execution)")
+                logger.info("✅ Agent Tool Wrapper enabled (default, will be initialized on first execution)")
             else:
                 self.agent_tool_wrapper = None
+                logger.info("⚠️ Agent Tool Wrapper disabled (via DISABLE_AGENT_TOOLS)")
             
-            # YAML 설정 로더 (선택적)
+            # YAML 설정 로더 (기본 활성화)
             if FeatureFlags.ENABLE_YAML_CONFIG:
                 from src.core.yaml_config_loader import YAMLConfigLoader
                 self.yaml_config_loader = YAMLConfigLoader()
-                logger.info("✅ YAML Config Loader enabled")
+                logger.info("✅ YAML Config Loader enabled (default)")
             else:
                 self.yaml_config_loader = None
+                logger.info("⚠️ YAML Config Loader disabled (via DISABLE_YAML_CONFIG)")
         except Exception as e:
-            logger.warning(f"⚠️ Feature flags initialization failed: {e} - continuing without new features")
+            logger.warning(f"⚠️ Feature initialization failed: {e} - continuing with core features only")
+            # 기본값: 모든 기능 None (에러 발생 시)
             self.mcp_stability_service = None
             self.mcp_health_service = None
             self.guardrails_validator = None
@@ -467,8 +478,8 @@ class AutonomousResearchSystem:
     
     async def run_research(self, request: str, output_path: Optional[str] = None, 
                           streaming: bool = False, output_format: Optional[str] = None) -> Dict[str, Any]:
-        """연구 실행 - 8가지 핵심 혁신 적용"""
-        logger.info("🤖 Starting Autonomous Research System with 8 Core Innovations")
+        """연구 실행 - 9가지 핵심 혁신 적용"""
+        logger.info("🤖 Starting Autonomous Research System with 9 Core Innovations")
         logger.info("=" * 80)
         logger.info(f"Request: {request}")
         logger.info(f"Primary LLM: {self.config.llm.primary_model}")
@@ -696,7 +707,7 @@ class AutonomousResearchSystem:
             health_status = self.health_monitor.get_system_health()
             result['system_health'] = health_status
             
-            logger.info("✅ Research completed successfully with 8 Core Innovations")
+            logger.info("✅ Research completed successfully with 9 Core Innovations")
             return result
             
         except Exception as e:
@@ -944,7 +955,7 @@ class AutonomousResearchSystem:
     
     def _display_results(self, result: Dict[str, Any]):
         """Display results with enhanced formatting."""
-        print("\n📋 Research Results with 8 Core Innovations:")
+        print("\n📋 Research Results with 9 Core Innovations:")
         print("=" * 80)
         
         # 실패 상태 확인 및 표시
@@ -1115,7 +1126,7 @@ class AutonomousResearchSystem:
 
 
 async def main():
-    """Main function - 8가지 핵심 혁신 통합 실행 진입점"""
+    """Main function - 9가지 핵심 혁신 통합 실행 진입점"""
     # Python 종료 시 발생하는 async generator 정리 오류 무시
     def ignore_async_gen_errors(loop, context):
         """anyio cancel scope 및 async generator 종료 오류 무시"""
@@ -1138,7 +1149,7 @@ async def main():
     loop.set_exception_handler(ignore_async_gen_errors)
     
     parser = argparse.ArgumentParser(
-        description="Autonomous Multi-Agent Research System with 8 Core Innovations",
+        description="Autonomous Multi-Agent Research System with 9 Core Innovations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1183,9 +1194,37 @@ Examples:
     
     args = parser.parse_args()
     
-    # Set logging level
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+    # REPL 모드 체크 (초기화 전에 로깅 억제)
+    has_any_mode = any([
+        args.request, args.web, args.mcp_server, args.mcp_client,
+        args.health_check, args.check_mcp_servers, args.interactive,
+        args.prompt, args.daemon
+    ])
+    
+    is_repl_mode = not has_any_mode or args.cli
+    
+    # REPL 모드에서는 모든 로그를 완전히 억제 (ERROR만 표시)
+    if is_repl_mode:
+        import warnings
+        # 모든 로거를 ERROR 레벨로 설정 (WARNING, INFO, DEBUG 모두 억제)
+        logging.getLogger().setLevel(logging.ERROR)
+        
+        # 특정 모듈들의 로거도 ERROR로 설정
+        for logger_name in [
+            '__main__', 'src', 'src.core', 'src.core.era_server_manager',
+            'src.core.agent_orchestrator', 'src.core.mcp_integration',
+            'src.core.shared_memory', 'src.core.skills_manager',
+            'src.core.prompt_refiner_wrapper', 'root',
+            'streamlit', 'streamlit.runtime', 'local_researcher'
+        ]:
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
+        
+        # warnings도 완전히 억제
+        warnings.filterwarnings('ignore')
+    else:
+        # Set logging level
+        if args.verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
     
     # Create logs directory
     logs_dir = project_root / "logs"
@@ -1263,31 +1302,29 @@ Examples:
 
     progress_tracker.add_progress_callback(progress_callback)
     
-    # ERA 서버 초기화 및 시작 (모든 모드에서)
-    try:
-        from src.core.researcher_config import get_era_config
-        from src.core.era_server_manager import get_era_server_manager
-        
-        era_config = get_era_config()
-        if era_config.enabled:
-            logger.info("🚀 Initializing ERA server...")
-            era_manager = get_era_server_manager()
-            if await era_manager.ensure_server_running_with_retry():
-                logger.info("✅ ERA server is ready")
+    # 시스템 초기화 (REPL 모드가 아닐 때만 전체 초기화)
+    system = None
+    if not is_repl_mode:
+        # ERA 서버 초기화 및 시작
+        try:
+            from src.core.researcher_config import get_era_config
+            from src.core.era_server_manager import get_era_server_manager
+            
+            era_config = get_era_config()
+            if era_config.enabled:
+                # ERA server 초기화
+                era_manager = get_era_server_manager()
+                await era_manager.ensure_server_running_with_retry()
             else:
-                logger.error("❌ Failed to start ERA server - code execution will fail")
-                logger.error(f"   Binary path: {era_manager.agent_binary_path or 'not found'}")
-                logger.error(f"   Server URL: {era_config.server_url}")
-        else:
-            logger.debug("ERA is disabled in configuration")
-    except ImportError as e:
-        logger.debug(f"ERA modules not available: {e}")
-    except Exception as e:
-        logger.warning(f"⚠️ ERA initialization failed: {e}")
-        logger.debug("Code execution features may be limited", exc_info=True)
-    
-    # Initialize system
-    system = AutonomousResearchSystem()
+                logger.debug("ERA is disabled in configuration")
+        except ImportError as e:
+            logger.debug(f"ERA modules not available: {e}")
+        except Exception as e:
+            logger.warning(f"⚠️ ERA initialization failed: {e}")
+            logger.debug("Code execution features may be limited", exc_info=True)
+        
+        # Initialize system
+        system = AutonomousResearchSystem()
     
     try:
         # 체크포인트 복원 (있는 경우)
@@ -1307,7 +1344,7 @@ Examples:
             from src.core.autonomous_orchestrator import AutonomousOrchestrator
             orchestrator = AutonomousOrchestrator()
             
-            result = await orchestrator.execute_full_research_workflow(args.prompt)
+            result = await orchestrator.run_research(args.prompt)
             
             # 출력 형식에 따라 결과 출력
             if args.output_format == "json":
@@ -1348,16 +1385,16 @@ Examples:
         
         # 기본 동작: REPL 모드 (아무 옵션도 없으면)
         # 또는 --cli 옵션이 있으면
-        has_any_mode = any([
-            args.request, args.web, args.mcp_server, args.mcp_client,
-            args.health_check, args.check_mcp_servers, args.interactive,
-            args.prompt, args.daemon
-        ])
-        
-        if not has_any_mode or args.cli:
-            from src.cli.repl_cli import REPLCLI
-            cli = REPLCLI()
-            await cli.run()
+        if is_repl_mode:
+            try:
+                from src.cli.repl_cli import REPLCLI
+                cli = REPLCLI()
+                await cli.run()
+            except (EOFError, KeyboardInterrupt, SystemExit):
+                # 정상 종료
+                pass
+            finally:
+                pass
             return
         
         # Interactive 모드 (기존)
@@ -1463,20 +1500,22 @@ Examples:
             
     except KeyboardInterrupt:
         logger.info("Operation cancelled by user (KeyboardInterrupt)")
-        system._shutdown_requested = True
-        try:
-            await system._graceful_shutdown()
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
+        if system is not None:
+            system._shutdown_requested = True
+            try:
+                await system._graceful_shutdown()
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
         # sys.exit(0) 제거 - asyncio.run()이 자동으로 처리
     except asyncio.CancelledError:
         # 취소된 경우 정리 후 종료
         logger.info("Operation cancelled")
-        system._shutdown_requested = True
-        try:
-            await system._graceful_shutdown()
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
+        if system is not None:
+            system._shutdown_requested = True
+            try:
+                await system._graceful_shutdown()
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
         # asyncio.CancelledError는 다시 raise하여 정상적인 취소 흐름 유지
         raise
     except Exception as e:
@@ -1498,11 +1537,12 @@ Examples:
             custom_message=f"시스템 실행 중 치명적 오류 발생: {str(e)}"
         )
 
-        system._shutdown_requested = True
-        try:
-            await system._graceful_shutdown()
-        except Exception as e2:
-            logger.error(f"Error during shutdown: {e2}")
+        if system is not None:
+            system._shutdown_requested = True
+            try:
+                await system._graceful_shutdown()
+            except Exception as e2:
+                logger.error(f"Error during shutdown: {e2}")
         # 에러 발생 시 종료 코드 1로 종료
         sys.exit(1)
     finally:
@@ -1526,8 +1566,8 @@ Examples:
         except Exception as e:
             logger.warning(f"Failed to finalize progress tracking: {e}")
 
-        # 최종 정리 보장
-        if hasattr(system, 'mcp_hub') and system.mcp_hub and hasattr(system.mcp_hub, 'mcp_sessions'):
+        # 최종 정리 보장 (system이 초기화된 경우에만)
+        if system is not None and hasattr(system, 'mcp_hub') and system.mcp_hub and hasattr(system.mcp_hub, 'mcp_sessions'):
             try:
                 if system.mcp_hub.mcp_sessions:
                     logger.info("Final cleanup of MCP connections...")

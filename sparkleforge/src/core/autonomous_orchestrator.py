@@ -304,9 +304,8 @@ class AutonomousOrchestrator:
         # 입력 로깅
         self._log_node_input("analyze_objectives", state)
         
-        logger.info("🔍 Analyzing objectives with Multi-Model Orchestration")
+        logger.info("🔍 Thinking: Analyzing research objectives and requirements")
         logger.info(f"📝 Research Request: {state['user_request']}")
-        logger.info(f"📋 Context: {state.get('context', {})}")
         
         # 초기 컨텍스트 생성 (재귀적 컨텍스트 사용)
         initial_context_data = {
@@ -438,7 +437,7 @@ class AutonomousOrchestrator:
         # 입력 로깅
         self._log_node_input("planning_agent", state)
         
-        logger.info("🎯 Planning Agent: MCP-based research planning")
+        logger.info("📋 Thinking: Creating research plan and task breakdown")
         logger.info(f"📊 Complexity Score: {state.get('complexity_score', 5.0)}")
         logger.info(f"🎯 Objectives: {len(state.get('analyzed_objectives', []))}")
         
@@ -934,7 +933,7 @@ class AutonomousOrchestrator:
         # 입력 로깅
         self._log_node_input("execute_research", state)
         
-        logger.info("🔍 Executing research with Universal MCP Hub, Streaming Pipeline, and Parallel Execution")
+        logger.info("⚙️ Thinking: Executing research tasks and gathering information")
         
         # Planning Agent에서 생성된 tasks 사용
         tasks = state.get("planned_tasks", [])
@@ -1877,6 +1876,17 @@ class AutonomousOrchestrator:
         """복잡도 기반 task 분해 (9번째 혁신: Adaptive Research Depth 통합)."""
         logger.info("📋 Decomposing research into specific tasks")
         
+        # complexity와 num_tasks를 함수 시작 부분에서 항상 초기화 (스코프 문제 방지)
+        complexity_raw = state.get('complexity_score', 5.0)
+        if isinstance(complexity_raw, dict):
+            complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
+        elif isinstance(complexity_raw, (int, float)):
+            complexity = float(complexity_raw)
+        else:
+            complexity = 5.0
+        
+        num_tasks = 5  # 기본값
+        
         # 9번째 혁신: depth_config가 있으면 사용
         if depth_config:
             planning_config = depth_config.planning.get("decompose", {})
@@ -1884,14 +1894,6 @@ class AutonomousOrchestrator:
             
             if mode == "auto":
                 # 자동 모드: 복잡도 기반
-                complexity_raw = state.get('complexity_score', 5.0)
-                if isinstance(complexity_raw, dict):
-                    complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
-                elif isinstance(complexity_raw, (int, float)):
-                    complexity = float(complexity_raw)
-                else:
-                    complexity = 5.0
-                
                 # 복잡도에 따른 task 개수 결정
                 if complexity <= 5:
                     num_tasks = 3 + int(complexity)  # 3-8개
@@ -1909,14 +1911,6 @@ class AutonomousOrchestrator:
                 logger.info(f"📊 Using preset subtopics: {num_tasks}")
         else:
             # 기존 로직 (depth_config가 없는 경우)
-            complexity_raw = state.get('complexity_score', 5.0)
-            if isinstance(complexity_raw, dict):
-                complexity = complexity_raw.get('score', complexity_raw.get('value', 5.0))
-            elif isinstance(complexity_raw, (int, float)):
-                complexity = float(complexity_raw)
-            else:
-                complexity = 5.0
-            
             # 복잡도에 따른 task 개수 결정
             if complexity <= 5:
                 num_tasks = 3 + int(complexity)  # 3-8개

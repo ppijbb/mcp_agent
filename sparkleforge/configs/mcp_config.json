@@ -125,7 +125,20 @@
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       }
+    },
+    "mcp_search": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_search/server.py"
+      ]
+    },
+    "mcp_service": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_service/server.py"
+      ]
     }
   }
 }
-

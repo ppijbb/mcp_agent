@@ -445,6 +445,40 @@ class PlannerAgent:
         logger.info(f"Session: {state['session_id']}")
         logger.info(f"=" * 80)
         
+        # 사용자 응답 대기 중이면 응답 처리
+        if state.get("waiting_for_user", False):
+            user_responses = state.get("user_responses", {})
+            if user_responses:
+                # 응답이 있으면 명확화 정보 적용
+                from src.core.human_clarification_handler import get_clarification_handler
+                clarification_handler = get_clarification_handler()
+                
+                for question_id, response_data in user_responses.items():
+                    clarification = response_data.get("clarification", {})
+                    # 명확화 정보를 state에 저장
+                    state["clarification_context"] = state.get("clarification_context", {})
+                    state["clarification_context"][question_id] = clarification
+                    
+                    # 응답에 따라 작업 방향 조정
+                    response = response_data.get("response", "")
+                    if response == "top_5":
+                        # 상위 5개 결과만 사용하도록 설정
+                        state["max_results"] = 5
+                    elif response == "top_10":
+                        # 상위 10개 결과만 사용하도록 설정
+                        state["max_results"] = 10
+                    elif response == "expand":
+                        # 검색 범위 확대
+                        state["expand_search"] = True
+                    elif response == "modify":
+                        # 검색어 수정 필요
+                        state["modify_query"] = True
+                
+                # 대기 상태 해제
+                state["waiting_for_user"] = False
+                state["pending_questions"] = []
+                logger.info("✅ User responses processed, continuing execution")
+        
         # Read from shared memory - ONLY search within current session to prevent cross-task contamination
         memory = self.context.shared_memory
         current_session_id = state['session_id']
@@ -1036,6 +1070,40 @@ class ExecutorAgent:
         logger.info(f"Query: {state['user_query']}")
         logger.info(f"Session: {state['session_id']}")
         logger.info(f"=" * 80)
+        
+        # 사용자 응답 대기 중이면 응답 처리
+        if state.get("waiting_for_user", False):
+            user_responses = state.get("user_responses", {})
+            if user_responses:
+                # 응답이 있으면 명확화 정보 적용
+                from src.core.human_clarification_handler import get_clarification_handler
+                clarification_handler = get_clarification_handler()
+                
+                for question_id, response_data in user_responses.items():
+                    clarification = response_data.get("clarification", {})
+                    # 명확화 정보를 state에 저장
+                    state["clarification_context"] = state.get("clarification_context", {})
+                    state["clarification_context"][question_id] = clarification
+                    
+                    # 응답에 따라 작업 방향 조정
+                    response = response_data.get("response", "")
+                    if response == "top_5":
+                        # 상위 5개 결과만 사용하도록 설정
+                        state["max_results"] = 5
+                    elif response == "top_10":
+                        # 상위 10개 결과만 사용하도록 설정
+                        state["max_results"] = 10
+                    elif response == "expand":
+                        # 검색 범위 확대
+                        state["expand_search"] = True
+                    elif response == "modify":
+                        # 검색어 수정 필요
+                        state["modify_query"] = True
+                
+                # 대기 상태 해제
+                state["waiting_for_user"] = False
+                state["pending_questions"] = []
+                logger.info("✅ User responses processed, continuing execution")
         
         # 작업 할당: assigned_task가 있으면 사용, 없으면 state에서 찾기
         if assigned_task is None:
@@ -5209,13 +5277,16 @@ class AgentOrchestrator:
         """
         return self.session_manager.restore_from_snapshot(session_id, snapshot_id)
     
-    async def stream(self, user_query: str, session_id: Optional[str] = None):
+    async def stream(self, user_query: str, session_id: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None):
         """Stream workflow execution."""
         if session_id is None:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         # Initialize state
-        initial_state = AgentState(
+        if initial_state is None:
+            initial_state = {}
+        
+        agent_initial_state = AgentState(
             messages=[],
             user_query=user_query,
             research_plan=None,
@@ -5229,11 +5300,15 @@ class AgentOrchestrator:
             research_failed=False,
             verification_failed=False,
             report_failed=False,
-            error=None
+            error=None,
+            pending_questions=initial_state.get('pending_questions'),
+            user_responses=initial_state.get('user_responses'),
+            clarification_context=initial_state.get('clarification_context'),
+            waiting_for_user=initial_state.get('waiting_for_user', False)
         )
         
         # Stream execution
-        async for event in self.graph.astream(initial_state):
+        async for event in self.graph.astream(agent_initial_state):
             yield event
 
 

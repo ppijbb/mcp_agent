@@ -1076,8 +1076,22 @@ class UniversalMCPHub:
                     return False
         
         # stdio 방식 서버는 API 키 불필요 (npx로 실행)
+        # 단, github 서버는 GITHUB_TOKEN이 필요함
         if "command" in server_config and "httpUrl" not in server_config and "url" not in server_config:
-            logger.debug(f"[MCP][check.req] server={server_name} stdio mode, no API key required")
+            # github 서버는 GITHUB_TOKEN 체크
+            if server_name == "github" or "github" in server_name.lower():
+                github_token = os.getenv("GITHUB_TOKEN")
+                if not github_token:
+                    logger.debug(f"[MCP][check.req] server={server_name} requires GITHUB_TOKEN but not set")
+                    return False
+                # env 설정에서도 확인
+                env_config = server_config.get("env", {})
+                if "GITHUB_PERSONAL_ACCESS_TOKEN" in env_config:
+                    env_value = env_config["GITHUB_PERSONAL_ACCESS_TOKEN"]
+                    # 환경변수 치환이 안된 경우 (${GITHUB_TOKEN} 형태)
+                    if isinstance(env_value, str) and "${" in env_value and not github_token:
+                        return False
+            logger.debug(f"[MCP][check.req] server={server_name} stdio mode, requirements checked")
             return True
         
         # HTTP 서버는 설정에 따라 API 키가 필요할 수 있음 (서버별로 다름)
@@ -1307,18 +1321,105 @@ class UniversalMCPHub:
                     logger.error(f"No command provided for stdio server {server_name}")
                     return False
                 
+                # 환경변수 처리 (github 등 env가 필요한 서버)
+                env_vars = server_config.get("env", {})
+                resolved_env = {}
+                if env_vars:
+                    for env_key, env_value in env_vars.items():
+                        # 환경변수 치환 (${VAR} 형식)
+                        if isinstance(env_value, str) and "${" in env_value:
+                            import re
+                            env_var_pattern = r'\$\{([^}]+)\}'
+                            matches = re.findall(env_var_pattern, env_value)
+                            resolved_value = env_value
+                            for env_var in matches:
+                                actual_value = os.getenv(env_var)
+                                if actual_value:
+                                    resolved_value = resolved_value.replace(f"${{{env_var}}}", actual_value)
+                                else:
+                                    logger.warning(f"[MCP][stdio.connect] server={server_name} env var {env_var} not found, keeping placeholder")
+                            resolved_env[env_key] = resolved_value
+                        else:
+                            resolved_env[env_key] = env_value
+                    
+                    # 환경변수가 모두 비어있으면 서버 스킵
+                    if all(not v or (isinstance(v, str) and "${" in v) for v in resolved_env.values()):
+                        logger.warning(f"[MCP][stdio.connect] server={server_name} required env vars not set, skipping")
+                        self.connection_diagnostics[server_name].update({
+                            "ok": False,
+                            "error": "Required environment variables not set",
+                            "stage": "failed"
+                        })
+                        return False
+                
                 # FastMCP stdio 서버 설정
+                server_config_dict = {
+                    "transport": "stdio",
+                    "command": command,
+                    "args": args
+                }
+                
+                # env가 있으면 추가
+                if resolved_env:
+                    server_config_dict["env"] = resolved_env
+                
                 mcp_config = {
                     "mcpServers": {
-                        server_name: {
-                            "transport": "stdio",
-                            "command": command,
-                            "args": args
-                        }
+                        server_name: server_config_dict
                     }
                 }
                 
-                logger.info(f"[MCP][stdio.connect] server={server_name} command={command} args={args}")
+                logger.info(f"[MCP][stdio.connect] server={server_name} command={command} args={args} env={list(resolved_env.keys()) if resolved_env else 'none'}")
+                
+                # npm 캐시 손상 문제 해결: npx 캐시 정리
+                if command == "npx":
+                    try:
+                        import shutil
+                        import subprocess
+                        # npx 캐시 디렉토리 정리 시도
+                        npx_cache_dir = os.path.expanduser("~/.npm/_npx")
+                        
+                        # ERR_MODULE_NOT_FOUND 오류가 발생하는 경우, 손상된 캐시 디렉토리 전체 삭제
+                        # 문제가 있는 특정 패키지 디렉토리 찾기 및 삭제
+                        if os.path.exists(npx_cache_dir):
+                            # zod 모듈 오류가 있는 디렉토리 찾기
+                            for item in os.listdir(npx_cache_dir):
+                                item_path = os.path.join(npx_cache_dir, item)
+                                if os.path.isdir(item_path):
+                                    # zod 모듈이 손상된 경우 해당 디렉토리 전체 삭제
+                                    zod_path = os.path.join(item_path, "node_modules", "zod")
+                                    if os.path.exists(zod_path):
+                                        # zod 파일들이 없는 경우 (TAR_ENTRY_ERROR)
+                                        zod_external = os.path.join(zod_path, "v3", "external.js")
+                                        if not os.path.exists(zod_external):
+                                            # 손상된 패키지 디렉토리 전체 삭제
+                                            try:
+                                                shutil.rmtree(item_path, ignore_errors=True)
+                                                logger.info(f"[MCP][stdio.connect] Cleaned corrupted npx cache directory: {item}")
+                                            except Exception as e:
+                                                logger.debug(f"[MCP][stdio.connect] Failed to remove cache dir {item}: {e}")
+                                    
+                                    # ERR_MODULE_NOT_FOUND 오류가 발생한 디렉토리도 삭제
+                                    # (이전 연결 시도에서 오류가 발생한 경우)
+                                    node_modules_path = os.path.join(item_path, "node_modules")
+                                    if os.path.exists(node_modules_path):
+                                        # zod가 있지만 파일이 없는 경우
+                                        if os.path.exists(zod_path):
+                                            try:
+                                                # npm cache clean 시도
+                                                subprocess.run(
+                                                    ["npm", "cache", "clean", "--force"],
+                                                    capture_output=True,
+                                                    timeout=10,
+                                                    check=False
+                                                )
+                                                # 손상된 디렉토리 삭제
+                                                shutil.rmtree(item_path, ignore_errors=True)
+                                                logger.info(f"[MCP][stdio.connect] Cleaned corrupted npx cache and removed directory: {item}")
+                                            except Exception as e:
+                                                logger.debug(f"[MCP][stdio.connect] Failed to clean npm cache: {e}")
+                    except Exception as e:
+                        logger.debug(f"[MCP][stdio.connect] Failed to clean npm cache: {e}")
                 
                 try:
                     # FastMCP Client 생성 (stdio)
@@ -1373,21 +1474,113 @@ class UniversalMCPHub:
                         raise
                     except Exception as e:
                         error_str = str(e).lower()
+                        error_msg = str(e)
+                        
                         # npm 404 에러는 패키지가 존재하지 않으므로 재시도 불필요
                         is_npm_404 = "404" in error_str and ("npm" in error_str or "not found" in error_str or "not in this registry" in error_str)
+                        
+                        # npm 오류 감지
+                        is_npm_enotempty = "enotempty" in error_str or ("npm error" in error_str and "directory not empty" in error_str)
+                        is_npm_tar_error = "tar_entry_error" in error_str or ("enoent" in error_str and "zod" in error_str)
+                        is_module_not_found = "err_module_not_found" in error_str or ("cannot find module" in error_str and "zod" in error_str)
+                        
+                        # Connection closed 오류는 서버 연결 실패
+                        is_connection_closed = "connection closed" in error_str or "client failed to connect" in error_str
+                        
+                        # npm 캐시 손상 오류 해결: 캐시 정리 후 재시도
+                        if (is_npm_enotempty or is_npm_tar_error or is_module_not_found) and command == "npx":
+                            try:
+                                import shutil
+                                import subprocess
+                                # npm cache clean --force 실행
+                                try:
+                                    subprocess.run(
+                                        ["npm", "cache", "clean", "--force"],
+                                        capture_output=True,
+                                        timeout=10,
+                                        check=False
+                                    )
+                                except Exception:
+                                    pass
+                                
+                                # npx 캐시 디렉토리 전체 정리 시도
+                                npx_cache_dir = os.path.expanduser("~/.npm/_npx")
+                                if os.path.exists(npx_cache_dir):
+                                    # 손상된 패키지 디렉토리 찾기 및 삭제
+                                    for item in os.listdir(npx_cache_dir):
+                                        item_path = os.path.join(npx_cache_dir, item)
+                                        if os.path.isdir(item_path):
+                                            try:
+                                                # zod 모듈이 손상된 경우 해당 디렉토리 전체 삭제
+                                                zod_path = os.path.join(item_path, "node_modules", "zod")
+                                                if os.path.exists(zod_path):
+                                                    # zod 파일들이 없는 경우 (TAR_ENTRY_ERROR 또는 MODULE_NOT_FOUND)
+                                                    zod_external = os.path.join(zod_path, "v3", "external.js")
+                                                    if not os.path.exists(zod_external):
+                                                        # 손상된 패키지 디렉토리 전체 삭제
+                                                        shutil.rmtree(item_path, ignore_errors=True)
+                                                        logger.info(f"[MCP][stdio.connect] Cleaned corrupted npx cache directory: {item}")
+                                            except Exception:
+                                                pass
+                                    
+                                    # 재시도 (한 번만)
+                                    logger.info(f"[MCP][stdio.connect] Retrying connection to {server_name} after npm cache cleanup...")
+                                    try:
+                                        # 새로운 FastMCP Client 생성
+                                        retry_fastmcp_client = FastMCPClient(mcp_config)
+                                        async with retry_fastmcp_client:
+                                            tools_task = retry_fastmcp_client.list_tools()
+                                            tools = await asyncio.wait_for(tools_task, timeout=timeout)
+                                            
+                                            # 도구 등록
+                                            for tool in tools:
+                                                self.registry.register_mcp_tool(server_name, tool, tool)
+                                                if server_name not in self.mcp_tools_map:
+                                                    self.mcp_tools_map[server_name] = {}
+                                                tool_info = MCPToolInfo(
+                                                    server_guess=server_name,
+                                                    name=f"{server_name}::{tool.name}",
+                                                    description=tool.description or "",
+                                                    input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+                                                )
+                                                self.mcp_tools_map[server_name][tool.name] = tool_info
+                                            
+                                            logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name} after cache cleanup, tools: {len(tools)}")
+                                            self.fastmcp_clients[server_name] = retry_fastmcp_client
+                                            self.mcp_sessions[server_name] = retry_fastmcp_client
+                                            self.connection_diagnostics[server_name].update({
+                                                "ok": True,
+                                                "stage": "connected",
+                                                "tools_count": len(tools)
+                                            })
+                                            return True
+                                    except Exception as retry_e:
+                                        logger.warning(f"[MCP][stdio.connect] Retry failed for {server_name}: {retry_e}")
+                            except Exception as cleanup_e:
+                                logger.debug(f"[MCP][stdio.connect] Cache cleanup failed: {cleanup_e}")
+                        
+                        # 조용히 처리할 오류들 (WARNING 레벨로만 로깅)
                         if is_npm_404:
-                            logger.warning(f"[MCP][stdio.connect] Package not found for {server_name} (npm 404), skipping retries")
+                            logger.warning(f"[MCP][stdio.connect] Package not found for {server_name} (npm 404), skipping")
+                        elif is_connection_closed:
+                            logger.warning(f"[MCP][stdio.connect] Connection closed for {server_name}, skipping")
                         else:
-                            logger.error(f"[MCP][stdio.connect] Failed to connect to {server_name}: {e}", exc_info=True)
+                            # 다른 오류는 WARNING 레벨로 로깅
+                            logger.warning(f"[MCP][stdio.connect] Failed to connect to {server_name}: {error_msg[:200]}")
+                        
                         self.connection_diagnostics[server_name].update({
                             "ok": False,
-                            "error": str(e),
+                            "error": error_msg[:200],  # 긴 에러 메시지 자르기
                             "stage": "failed",
-                            "is_npm_404": is_npm_404
+                            "is_npm_404": is_npm_404,
+                            "is_npm_enotempty": is_npm_enotempty,
+                            "is_connection_closed": is_connection_closed
                         })
-                        # npm 404는 재시도 불필요하므로 특별한 플래그 반환
-                        if is_npm_404:
-                            raise RuntimeError(f"Package not found (npm 404) for {server_name}") from e
+                        
+                        # npm 404, Connection closed는 재시도 불필요
+                        if is_npm_404 or is_connection_closed:
+                            return False
+                        
                         return False
                         
                 except Exception as e:
@@ -1886,11 +2079,26 @@ class UniversalMCPHub:
                                     
                             except Exception as e:
                                 error_str = str(e).lower()
+                                error_msg = str(e)
                                 
                                 # npm 404 에러는 패키지가 존재하지 않으므로 재시도 불필요
                                 is_npm_404 = "404" in error_str and ("npm" in error_str or "not found" in error_str or "not in this registry" in error_str or "package not found" in error_str)
+                                
+                                # npm ENOTEMPTY 오류는 디렉토리 관련 문제로, 재시도 불필요
+                                is_npm_enotempty = "enotempty" in error_str or ("npm error" in error_str and "directory not empty" in error_str)
+                                
+                                # Connection closed 오류는 서버 연결 실패로, 재시도 불필요
+                                is_connection_closed = "connection closed" in error_str or "client failed to connect" in error_str
+                                
+                                # 조용히 처리할 오류들 (재시도 불필요)
                                 if is_npm_404:
-                                    logger.warning(f"[MCP][init.skip] server={name} package not found (npm 404), skipping retries")
+                                    logger.warning(f"[MCP][init.skip] server={name} package not found (npm 404), skipping")
+                                    break
+                                elif is_npm_enotempty:
+                                    logger.warning(f"[MCP][init.skip] server={name} npm directory issue (ENOTEMPTY), skipping")
+                                    break
+                                elif is_connection_closed:
+                                    logger.warning(f"[MCP][init.skip] server={name} connection closed, skipping")
                                     break
                                 
                                 # 504, 502, 503 등 서버 에러는 재시도
@@ -1898,12 +2106,12 @@ class UniversalMCPHub:
                                 
                                 if is_retryable and retry_attempt < max_connection_retries - 1:
                                     wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
-                                    logger.warning(f"[MCP][init.retry] server={name} error (attempt {retry_attempt + 1}/{max_connection_retries}): {str(e)[:100]}, retrying in {wait_time}s...")
+                                    logger.warning(f"[MCP][init.retry] server={name} error (attempt {retry_attempt + 1}/{max_connection_retries}): {error_msg[:100]}, retrying in {wait_time}s...")
                                     await asyncio.sleep(wait_time)
                                     continue
                                 else:
                                     # 재시도 불가능한 에러 또는 최대 재시도 횟수 초과
-                                    logger.exception(f"[MCP][connect.error] server={name} unexpected err={e}")
+                                    logger.warning(f"[MCP][connect.error] server={name} error: {error_msg[:200]}")
                                     break
                         
                         return name, connection_success
@@ -3860,6 +4068,40 @@ def _get_ddg_lock():
         _ddg_request_lock = asyncio.Lock()
     return _ddg_request_lock
 
+async def _fallback_to_ddg_search(query: str, max_results: int) -> ToolResult:
+    """MCP 서버 실패 시 DDG search로 fallback."""
+    try:
+        from src.core.tools.native_search import search_duckduckgo_json
+        
+        logger.info(f"[MCP][fallback] Using DDG search fallback for query: {query}")
+        result = search_duckduckgo_json(query, max_results)
+        
+        if result and isinstance(result, dict):
+            results = result.get("results", [])
+            if results:
+                return ToolResult(
+                    success=True,
+                    data={"results": results, "total_results": len(results)},
+                    tool_name="ddg_search",
+                    source="native_ddg_fallback"
+                )
+        
+        # 결과가 없거나 형식이 잘못된 경우
+        return ToolResult(
+            success=False,
+            error="DDG search fallback returned no results",
+            tool_name="ddg_search",
+            source="native_ddg_fallback"
+        )
+    except Exception as e:
+        logger.error(f"[MCP][fallback] DDG search fallback failed: {e}")
+        return ToolResult(
+            success=False,
+            error=f"DDG search fallback error: {str(e)}",
+            tool_name="ddg_search",
+            source="native_ddg_fallback"
+        )
+
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
     """MCP 서버를 통한 검색 도구 실행 (with caching and bot detection bypass)."""
     import time
@@ -3905,24 +4147,25 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                 except Exception as e:
                     logger.warning(f"Failed to initialize MCP servers: {e}")
             
-            # 검색 서버 우선순위 설정 (DuckDuckGo를 우선 사용, 봇 감지 우회 로직 적용)
-            search_server_priority = [
-                "ddg_search",  # DuckDuckGo 우선 사용 (봇 감지 우회 로직 적용)
-                "tavily-mcp",  # TAVILY API 키 사용, 대안
-                "exa",  # Exa 검색, 대안
-                "WebSearch-MCP",  # 대안 검색
-            ]
-            
-            # 우선순위 서버 먼저, 나머지는 나중에
-            # fetch는 search 도구가 없으므로 제외
-            all_servers = list(mcp_hub.mcp_server_configs.keys())
-            priority_servers = [s for s in search_server_priority if s in all_servers]
-            # fetch, docfork, context7-mcp 등은 search 도구가 없으므로 제외
+            # 검색 서버 목록 (github 등 실패하는 서버 제외)
+            # fetch, docfork, context7-mcp, github 등은 search 도구가 없거나 실패하므로 제외
             non_search_servers = {"fetch", "docfork", "context7-mcp", "github", "financial_agent", "TodoList"}
-            other_servers = [s for s in all_servers if s not in search_server_priority and s not in non_search_servers]
-            server_order = priority_servers + other_servers
             
-            logger.info(f"[MCP][_execute_search_tool] Trying search servers in order: {server_order}")
+            # 검색 가능한 서버만 필터링
+            all_servers = list(mcp_hub.mcp_server_configs.keys())
+            search_servers = [s for s in all_servers if s not in non_search_servers]
+            
+            # 이미 연결된 서버 우선 사용
+            connected_servers = [s for s in search_servers if s in mcp_hub.mcp_sessions]
+            unconnected_servers = [s for s in search_servers if s not in mcp_hub.mcp_sessions]
+            server_order = connected_servers + unconnected_servers
+            
+            logger.info(f"[MCP][_execute_search_tool] Trying search servers: {server_order}")
+            
+            # MCP 서버가 없거나 모두 실패하면 DDG search로 즉시 fallback
+            if not server_order:
+                logger.warning("[MCP][_execute_search_tool] No MCP search servers available, using DDG search fallback")
+                return await _fallback_to_ddg_search(query, max_results)
             
             # mcp_config.json에 정의된 모든 서버 확인 (우선순위 순서로)
             failed_servers = []  # 실패한 서버 추적
@@ -3975,21 +4218,37 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
 
                         except Exception as e:
                             error_str = str(e).lower()
+                            error_msg = str(e)
+                            
+                            # npm ENOTEMPTY 오류는 디렉토리 관련 문제로, 재시도 불필요
+                            is_npm_enotempty = "enotempty" in error_str or ("npm error" in error_str and "directory not empty" in error_str)
+                            
+                            # Connection closed 오류는 서버 연결 실패로, 재시도 불필요
+                            is_connection_closed = "connection closed" in error_str or "client failed to connect" in error_str
+                            
+                            # 조용히 처리할 오류들 (재시도 불필요)
+                            if is_npm_enotempty or is_connection_closed:
+                                logger.debug(f"[MCP][_execute_search_tool] server={server_name} connection issue, skipping")
+                                failed_servers.append({"server": server_name, "reason": "connection_issue"})
+                                break
+                            
                             # 504, 502, 503 등 서버 에러는 재시도
                             is_retryable = any(code in error_str for code in ["504", "502", "503", "500", "gateway", "timeout", "unavailable"])
 
                             if is_retryable and retry_attempt < max_connection_retries - 1:
                                 wait_time = 2 ** retry_attempt  # 지수 백오프: 1초, 2초
-                                logger.warning(f"[MCP][_execute_search_tool] ⚠️ Error connecting to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries}): {str(e)[:100]}, retrying in {wait_time}s...")
+                                logger.warning(f"[MCP][_execute_search_tool] ⚠️ Error connecting to {server_name} (attempt {retry_attempt + 1}/{max_connection_retries}): {error_msg[:100]}, retrying in {wait_time}s...")
                                 await asyncio.sleep(wait_time)
                                 continue
                             else:
-                                logger.warning(f"[MCP][_execute_search_tool] ❌ Error connecting to MCP server {server_name}: {e}, skipping...")
-                                failed_servers.append({"server": server_name, "reason": f"connection_error: {str(e)[:100]}"})
+                                logger.debug(f"[MCP][_execute_search_tool] Error connecting to MCP server {server_name}: {error_msg[:100]}, skipping...")
+                                failed_servers.append({"server": server_name, "reason": f"connection_error: {error_msg[:100]}"})
                                 break
                     
                     if not connection_success:
-                        continue  # 다음 서버로
+                        # 연결 실패 시 즉시 DDG search로 fallback
+                        logger.warning(f"[MCP][_execute_search_tool] Failed to connect to {server_name}, falling back to DDG search")
+                        return await _fallback_to_ddg_search(query, max_results)
                 
                 # 도구 맵 확인
                 if server_name not in mcp_hub.mcp_tools_map:
@@ -4445,89 +4704,10 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
             logger.info(f"[MCP][_execute_search_tool] 📋 Failed servers summary:")
             for i, failed in enumerate(failed_servers, 1):
                 logger.info(f"[MCP][_execute_search_tool]   {i}. {failed['server']}: {failed['reason']}")
-            logger.warning(f"[MCP][_execute_search_tool] 🔄 Trying duckduckgo_search library fallback...")
             
-            try:
-                logger.info(f"[MCP][_execute_search_tool] 📦 Importing duckduckgo_search library...")
-                from duckduckgo_search import DDGS
-                logger.info(f"[MCP][_execute_search_tool] ✅ duckduckgo_search library imported successfully")
-                
-                # 동기 함수를 비동기로 실행
-                def run_ddg_search():
-                    logger.debug(f"[MCP][_execute_search_tool] 🔄 Running duckduckgo_search for query: '{query}'")
-                    with DDGS() as ddgs:
-                        results = list(ddgs.text(query, max_results=max_results))
-                        logger.debug(f"[MCP][_execute_search_tool] 🔄 duckduckgo_search returned {len(results)} results")
-                        return results
-                
-                # 별도 스레드에서 실행 (동기 함수이므로)
-                # asyncio는 파일 상단에서 이미 import됨
-                try:
-                    loop = asyncio.get_running_loop()
-                    logger.debug(f"[MCP][_execute_search_tool] ✅ Got running event loop")
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    logger.debug(f"[MCP][_execute_search_tool] ✅ Created new event loop")
-                
-                logger.info(f"[MCP][_execute_search_tool] 🔄 Executing duckduckgo_search in executor...")
-                ddg_results = await loop.run_in_executor(None, run_ddg_search)
-                logger.info(f"[MCP][_execute_search_tool] ✅ duckduckgo_search executor completed: {len(ddg_results) if ddg_results else 0} results")
-                
-                if ddg_results and len(ddg_results) > 0:
-                    # 결과 형식 변환 (duckduckgo_search 형식 -> 표준 형식)
-                    formatted_results = []
-                    for result in ddg_results:
-                        formatted_results.append({
-                            "title": result.get("title", ""),
-                            "url": result.get("href", ""),
-                            "snippet": result.get("body", "")[:500] if result.get("body") else "",
-                            "source": "duckduckgo_search-library"
-                        })
-                    
-                    logger.info(f"✅ Fallback search successful via duckduckgo_search library: {len(formatted_results)} results")
-                    
-                    tool_result = ToolResult(
-                        success=True,
-                        data={
-                            "query": query,
-                            "results": formatted_results,
-                            "total_results": len(formatted_results),
-                            "source": "duckduckgo_search-library-fallback"
-                        },
-                        execution_time=time.time() - start_time,
-                        confidence=0.85  # 라이브러리 fallback이므로 약간 낮은 신뢰도
-                    )
-                    
-                    # 캐시에 저장
-                    cache_dict = {
-                        "success": tool_result.success,
-                        "data": tool_result.data,
-                        "error": tool_result.error,
-                        "execution_time": tool_result.execution_time,
-                        "confidence": tool_result.confidence
-                    }
-                    await result_cache.set(
-                        tool_name=tool_name,
-                        parameters=parameters,
-                        value=cache_dict,
-                        ttl=3600
-                    )
-                    
-                    return tool_result
-                else:
-                    logger.error(f"duckduckgo_search library also returned no results for query: {query}")
-                    raise RuntimeError(f"All search methods failed (MCP servers and duckduckgo_search library) for query: {query}")
-                    
-            except ImportError as import_err:
-                logger.error(f"[MCP][_execute_search_tool] ❌ duckduckgo_search library not available: {import_err}")
-                logger.error(f"[MCP][_execute_search_tool] 💡 Install with: pip install duckduckgo-search")
-                raise RuntimeError(f"All MCP search tools failed and duckduckgo_search library not available. Install with: pip install duckduckgo-search")
-            except Exception as fallback_error:
-                logger.error(f"[MCP][_execute_search_tool] ❌ duckduckgo_search library fallback also failed: {fallback_error}")
-                import traceback
-                logger.error(f"[MCP][_execute_search_tool] 📋 Fallback error traceback:\n{traceback.format_exc()}")
-                raise RuntimeError(f"All search methods failed (MCP servers and duckduckgo_search library) for query: {query}. Error: {str(fallback_error)}")
+            # 모든 MCP 서버 실패 시 DDG search로 fallback
+            logger.warning(f"[MCP][_execute_search_tool] 🔄 Falling back to DDG search...")
+            return await _fallback_to_ddg_search(query, max_results)
         
         elif tool_name == "tavily":
             # MCP 서버를 통해 tavily 사용 (mcp_config.json에 정의된 서버)

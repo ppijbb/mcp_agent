@@ -190,6 +190,12 @@ class MultiModelOrchestrator:
         self.performance_tracker = ModelPerformanceTracker()
         self.model_clients: Dict[str, Any] = {}
         
+        # Provider 로테이션 추적
+        self.provider_rotation_index = 0  # 현재 Provider 인덱스
+        self.provider_rotation_order = ["openrouter", "groq", "cerebras"]  # 로테이션 순서
+        self.provider_rate_limited = {}  # Rate limit에 걸린 Provider (timestamp)
+        self.provider_usage_count = {provider: 0 for provider in self.provider_rotation_order}  # 사용 횟수 추적
+        
         self._initialize_models()
         self._initialize_clients()
     
@@ -418,6 +424,79 @@ class MultiModelOrchestrator:
         else:
             return 8.0
     
+    def _get_valid_openrouter_model_id(self, model_id: str, model_name: str) -> str:
+        """OpenRouter에 실제 존재하는 모델 ID 반환."""
+        # 이미 OpenRouter 형식인 경우 (provider/model:tag)
+        if "/" in model_id or ":" in model_id:
+            # OpenRouter 형식 확인
+            if model_id.startswith(("google/", "openai/", "anthropic/", "meta-llama/", 
+                                   "mistralai/", "cerebras/", "groq/", "moonshotai/")):
+                return model_id
+        
+        # Google 모델 ID를 OpenRouter 형식으로 변환
+        google_to_openrouter = {
+            "gemini-2.5-flash-lite": "google/gemini-2.0-flash-exp:free",
+            "gemini-2.5-flash": "google/gemini-2.0-flash-exp:free",
+            "gemini-2.5-pro": "google/gemini-2.0-flash-thinking-exp:free",
+            "gemini-flash-lite": "google/gemini-2.0-flash-exp:free",
+            "gemini-flash": "google/gemini-2.0-flash-exp:free",
+            "gemini-pro": "google/gemini-2.0-flash-thinking-exp:free",
+        }
+        
+        if model_id in google_to_openrouter:
+            return google_to_openrouter[model_id]
+        
+        # 모델 이름에서 추론
+        if "gemini" in model_name.lower() or "gemini" in model_id.lower():
+            # 기본적으로 무료 Gemini 모델 사용
+            return "google/gemini-2.0-flash-exp:free"
+        
+        # 최소 Fallback 정책: LLM 모델 요청 실패 시에만 fallback 사용
+        # Fallback은 Agent 서비스 안정성을 위해 필수적이지만, 명확한 로깅과 함께 최소한으로만 사용됩니다.
+        fallback_models = [
+            "google/gemini-2.0-flash-exp:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
+        ]
+        
+        logger.warning(
+            f"Model ID {model_id} not in OpenRouter format. "
+            f"Using minimal fallback for agent service stability: {fallback_models[0]}"
+        )
+        return fallback_models[0]
+    
+    def _get_valid_groq_model_id(self, model_id: str) -> str:
+        """Groq에 실제 존재하는 모델 ID 반환."""
+        # Groq에 실제 존재하는 모델 목록
+        valid_groq_models = [
+            "llama-3.1-8b-instant",
+            "llama-3.1-70b-versatile",
+            "mixtral-8x7b-32768",
+            "llama-3.3-70b-versatile",
+            "llama-3.2-90b-vision-preview",
+            "llama-3.2-11b-vision-preview",
+            "llama-3.2-3b-text-preview",
+            "llama-3.2-1b-text-preview",
+        ]
+        
+        # 이미 유효한 Groq 모델 ID인 경우
+        if model_id in valid_groq_models:
+            return model_id
+        
+        # OpenRouter 형식인 경우 Groq 모델 ID 추출
+        if "/" in model_id:
+            parts = model_id.split("/")
+            if len(parts) == 2:
+                groq_id = parts[1].split(":")[0]  # 태그 제거
+                if groq_id in valid_groq_models:
+                    return groq_id
+        
+        # 최소 Fallback 정책: LLM 모델 요청 실패 시에만 fallback 사용
+        # Fallback은 Agent 서비스 안정성을 위해 필수적이지만, 명확한 로깅과 함께 최소한으로만 사용됩니다.
+        logger.warning(
+            f"Model ID {model_id} not a valid Groq model. "
+            f"Using minimal fallback for agent service stability: llama-3.1-8b-instant"
+        )
+        return "llama-3.1-8b-instant"
     
     def _load_groq_models(self):
         """Groq 모델 로딩."""
@@ -425,34 +504,28 @@ class MultiModelOrchestrator:
         # 참고: llama-3.1-70b-versatile과 llama-3.2-70b-versatile은 존재하지 않음
         # 실제 사용 가능한 모델: llama-3.1-70b-versatile (decommissioned), llama-3.1-8b-instant, mixtral-8x7b-32768
         # llama-3.1-70b-versatile 대체: mixtral-8x7b-32768 사용 (더 안정적)
+        # 실제 Groq에 존재하는 모델만 사용
         groq_models = [
             {
-                "name": "meta-llama/llama-4-maverick-17b-128e-instruct",
-                "model_id": "meta-llama/llama-4-maverick-17b-128e-instruct",  # llama-3.1-70b-versatile은 decommissioned, 8b-instant 사용
+                "name": "llama-3.1-8b-instant",
+                "model_id": "llama-3.1-8b-instant",  # 실제 존재하는 모델
                 "speed_rating": 9.5,
-                "quality_rating": 8.5,
+                "quality_rating": 8.0,
                 "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS]
             },
             {
-                "name": "moonshotai/kimi-k2-instruct-0905",
-                "model_id": "moonshotai/kimi-k2-instruct-0905",
-                "speed_rating": 9.5,
+                "name": "mixtral-8x7b-32768",
+                "model_id": "mixtral-8x7b-32768",  # 실제 존재하는 모델
+                "speed_rating": 9.0,
                 "quality_rating": 8.5,
-                "capabilities": [TaskType.PLANNING, TaskType.COMPRESSION, TaskType.RESEARCH]
+                "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS, TaskType.PLANNING]
             },
             {
-                "name": "openai/gpt-oss-120b",
-                "model_id": "openai/gpt-oss-120b",
+                "name": "llama-3.3-70b-versatile",
+                "model_id": "llama-3.3-70b-versatile",  # 실제 존재하는 모델
                 "speed_rating": 8.5,
-                "quality_rating": 8.0,
-                "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
-            },
-            {
-                "name": "groq/compound",
-                "model_id": "groq/compound",
-                "speed_rating": 8.5,
-                "quality_rating": 8.0,
-                "capabilities": [TaskType.GENERATION, TaskType.VERIFICATION, TaskType.RESEARCH]
+                "quality_rating": 9.0,
+                "capabilities": [TaskType.GENERATION, TaskType.RESEARCH, TaskType.ANALYSIS, TaskType.DEEP_REASONING]
             }
         ]
         
@@ -586,13 +659,52 @@ class MultiModelOrchestrator:
             logger.error(f"Failed to initialize model clients: {e}")
             raise
     
+    def _is_provider_rate_limited(self, provider: str) -> bool:
+        """Provider가 rate limit에 걸렸는지 확인 (5분 후 자동 해제)."""
+        if provider not in self.provider_rate_limited:
+            return False
+        
+        # Rate limit 타임스탬프 확인 (5분 = 300초)
+        rate_limit_time = self.provider_rate_limited[provider]
+        if time.time() - rate_limit_time > 300:
+            # 5분 경과 시 자동 해제
+            del self.provider_rate_limited[provider]
+            logger.info(f"Provider {provider} rate limit automatically cleared after 5 minutes")
+            return False
+        
+        return True
+    
+    def _mark_provider_rate_limited(self, provider: str):
+        """Provider를 rate limit 상태로 표시."""
+        self.provider_rate_limited[provider] = time.time()
+        logger.warning(f"Provider {provider} marked as rate-limited (will retry after 5 minutes)")
+    
+    def _get_available_providers(self) -> List[str]:
+        """Rate limit되지 않은 사용 가능한 Provider 목록 반환."""
+        available = []
+        for provider in self.provider_rotation_order:
+            # Cerebras는 OpenRouter를 통해 접근하므로 openrouter로 처리
+            check_provider = "openrouter" if provider == "cerebras" else provider
+            
+            # Rate limit 확인
+            if not self._is_provider_rate_limited(check_provider):
+                # Provider에 사용 가능한 모델이 있는지 확인
+                has_models = any(
+                    config.provider == check_provider 
+                    for config in self.models.values()
+                )
+                if has_models:
+                    available.append(provider)
+        
+        return available
+    
     def select_model(
         self,
         task_type: TaskType,
         complexity: float = 5.0,
         budget: float = None
     ) -> str:
-        """작업에 최적 모델 선택 - 우선순위: OpenRouter -> Groq -> Gemini -> GPT."""
+        """작업에 최적 모델 선택 - Provider 로테이션: OpenRouter -> Groq -> Cerebras."""
         if budget is None:
             budget = self.llm_config.budget_limit
         
@@ -606,71 +718,71 @@ class MultiModelOrchestrator:
             # 기본 모델 사용
             return "gemini-flash-lite"
         
-        # 우선순위 1: OpenRouter 모델
-        openrouter_models = [
-            name for name in suitable_models
-            if self.models[name].provider == "openrouter"
-        ]
-        if openrouter_models:
-            logger.info(f"Selected OpenRouter model: {openrouter_models[0]}")
-            return openrouter_models[0]
+        # 사용 가능한 Provider 목록 가져오기
+        available_providers = self._get_available_providers()
         
-        # 우선순위 2: Groq 모델
-        groq_models = [
-            name for name in suitable_models
-            if self.models[name].provider == "groq"
-        ]
-        if groq_models:
-            # 복잡도에 따라 Groq 모델 선택
-            if complexity > 7.0 and "meta-llama/llama-4-maverick-17b-128e-instruct" in groq_models:
-                logger.info(f"Selected Groq model: meta-ll ama/llama-4-maverick-17b-128e-instruct")
-                return "meta-llama/llama-4-maverick-17b-128e-instruct"
-            elif complexity > 5.0 and "moonshotai/kimi-k2-instruct-0905" in groq_models:
-                logger.info(f"Selected Groq model: moonshotai/kimi-k2-instruct-0905")
-                return "moonshotai/kimi-k2-instruct-0905"
-            elif complexity > 5.0 and "openai/gpt-oss-120b" in groq_models:
-                logger.info(f"Selected Groq model: openai/gpt-oss-120b")
-                return "openai/gpt-oss-120b"
-            elif complexity > 5.0 and "groq/compound" in groq_models:
-                logger.info(f"Selected Groq model: groq/compound")
-                return "groq/compound"
+        if not available_providers:
+            # 모든 Provider가 rate limit에 걸린 경우, 가장 오래된 것부터 재시도
+            logger.warning("All providers are rate-limited, using oldest rate-limited provider")
+            if self.provider_rate_limited:
+                oldest_provider = min(self.provider_rate_limited.items(), key=lambda x: x[1])[0]
+                available_providers = [oldest_provider]
             else:
-                logger.info(f"Selected Groq model: {groq_models[0]}")
-                return groq_models[0]
+                # 폴백: Gemini 모델 사용
+                gemini_models = [
+                    name for name in suitable_models
+                    if self.models[name].provider == "google"
+                ]
+                if gemini_models:
+                    return gemini_models[0]
+                return "gemini-flash-lite"
         
-        # 우선순위 3: Gemini 모델
+        # Provider 로테이션: 사용 횟수가 가장 적은 Provider 선택
+        provider_usage = {
+            provider: self.provider_usage_count.get(provider, 0)
+            for provider in available_providers
+        }
+        
+        # 사용 횟수가 가장 적은 Provider 선택 (동일하면 순서대로)
+        selected_provider = min(available_providers, key=lambda p: (provider_usage[p], available_providers.index(p)))
+        
+        # 사용 횟수 증가
+        self.provider_usage_count[selected_provider] = provider_usage[selected_provider] + 1
+        
+        # Cerebras는 OpenRouter를 통해 접근
+        check_provider = "openrouter" if selected_provider == "cerebras" else selected_provider
+        
+        # 해당 Provider의 모델 선택
+        provider_models = [
+            name for name in suitable_models
+            if self.models[name].provider == check_provider
+        ]
+        
+        # Cerebras인 경우 cerebras 모델 필터링
+        if selected_provider == "cerebras":
+            provider_models = [
+                name for name in provider_models
+                if "cerebras" in self.models[name].model_id.lower()
+            ]
+        
+        if provider_models:
+            selected_model = provider_models[0]
+            logger.info(f"Selected {selected_provider.upper()} model (rotation #{self.provider_usage_count[selected_provider]}): {selected_model}")
+            return selected_model
+        
+        # 해당 Provider에 모델이 없으면 다음 Provider 시도
+        remaining_providers = [p for p in available_providers if p != selected_provider]
+        if remaining_providers:
+            return self.select_model(task_type, complexity, budget)
+        
+        # 모든 Provider 실패 시 폴백: Gemini 모델 사용
         gemini_models = [
             name for name in suitable_models
             if self.models[name].provider == "google"
         ]
         if gemini_models:
-            if complexity > 7.0 and "gemini-pro" in gemini_models:
-                return "gemini-pro"
-            elif complexity > 5.0 and "gemini-flash" in gemini_models:
-                return "gemini-flash"
-            else:
-                return "gemini-flash-lite" if "gemini-flash-lite" in gemini_models else gemini_models[0]
+            return gemini_models[0]
         
-        # 우선순위 4: GPT 모델
-        gpt_models = [
-            name for name in suitable_models
-            if self.models[name].provider == "openai"
-        ]
-        if gpt_models:
-            if complexity > 7.0 and "gpt-5.2-mini" in gpt_models:
-                logger.info(f"Selected GPT model: gpt-5.2-mini")
-                return "gpt-5.2-mini"
-            elif "gpt-5-nano" in gpt_models:
-                logger.info(f"Selected GPT model: gpt-5-nano")
-                return "gpt-5-nano"
-            elif "gpt-4o-mini" in gpt_models:
-                logger.info(f"Selected GPT model: gpt-4o-mini")
-                return "gpt-4o-mini"
-            else:
-                logger.info(f"Selected GPT model: {gpt_models[0]}")
-                return gpt_models[0]
-        
-        # 모든 모델이 없으면 기본 모델 사용
         return "gemini-flash-lite"
     
     async def execute_with_model(
@@ -745,6 +857,10 @@ class MultiModelOrchestrator:
                         model_name_clean, prompt, system_message, **kwargs
                     )
                 except Exception as error:
+                    error_str = str(error).lower()
+                    # Rate limit 에러인 경우 Provider를 rate-limited로 표시
+                    if "rate-limited" in error_str or "429" in error_str:
+                        self._mark_provider_rate_limited("openrouter")
                     logger.warning(f"OpenRouter model {model_name_clean} failed: {error}, trying fallback...")
                     result, actual_model_used = await self._try_fallback_models(
                         task_type, prompt, system_message, skip_providers=["openrouter"], **kwargs
@@ -756,6 +872,10 @@ class MultiModelOrchestrator:
                         model_name_clean, prompt, system_message, **kwargs
                     )
                 except Exception as error:
+                    error_str = str(error).lower()
+                    # Rate limit 에러인 경우 Provider를 rate-limited로 표시
+                    if "rate limit" in error_str or "429" in error_str or "quota" in error_str:
+                        self._mark_provider_rate_limited("groq")
                     logger.warning(f"Groq model {model_name_clean} failed: {error}, trying fallback...")
                     result, actual_model_used = await self._try_fallback_models(
                         task_type, prompt, system_message, skip_providers=["openrouter", "groq"], **kwargs
@@ -968,6 +1088,9 @@ class MultiModelOrchestrator:
         """OpenRouter 모델 실행."""
         model_config = self.models[model_name]
         
+        # OpenRouter에 실제 존재하는 모델 ID 확인 및 변환
+        model_id = self._get_valid_openrouter_model_id(model_config.model_id, model_name)
+        
         # 메시지 구성
         messages = []
         if system_message:
@@ -987,7 +1110,7 @@ class MultiModelOrchestrator:
         }
         
         payload = {
-            "model": model_config.model_id,
+            "model": model_id,  # 실제 OpenRouter 모델 ID 사용
             "messages": messages,
             "temperature": model_config.temperature,
             "max_tokens": model_config.max_tokens,
@@ -1033,31 +1156,61 @@ class MultiModelOrchestrator:
                 else:
                     error_msg = f"HTTP {response.status_code}: {error_text[:200]}"
                 
-                # 재시도 가능한 에러인지 확인
+                # Rate limit (429) 에러 처리: Provider를 rate-limited로 표시하고 다음 Provider로 전환
+                if response.status_code == 429:
+                    # OpenRouter Provider를 rate-limited로 표시
+                    self._mark_provider_rate_limited("openrouter")
+                    logger.warning(f"OpenRouter rate-limited (429), will use next provider in rotation")
+                    # Rate limit은 재시도하지 않고 즉시 다음 Provider로 전환
+                    raise RuntimeError(f"OpenRouter API rate-limited (429): {error_msg}")
+                
+                # 재시도 가능한 에러인지 확인 (429는 이미 처리했으므로 제외)
                 if response.status_code in retryable_status_codes and attempt < max_retries - 1:
-                    # Rate limit (429)은 더 긴 대기 시간 필요
-                    if response.status_code == 429:
-                        # Rate limit 헤더에서 reset 시간 확인 시도
-                        reset_time = response.headers.get('X-RateLimit-Reset')
-                        if reset_time:
-                            try:
-                                reset_timestamp = int(reset_time) / 1000  # 밀리초를 초로 변환
-                                current_time = time.time()
-                                wait_time = max(5.0, reset_timestamp - current_time + 1)  # 최소 5초, reset 시간까지 + 1초 여유
-                                logger.warning(f"OpenRouter API rate limit (429) - waiting until reset: {wait_time:.1f}s")
-                            except (ValueError, TypeError):
-                                wait_time = 5 * (2 ** attempt)  # 지수 백오프: 5초, 10초, 20초
-                        else:
-                            wait_time = 5 * (2 ** attempt)  # 지수 백오프: 5초, 10초, 20초
-                    else:
-                        wait_time = 2 ** attempt  # 지수 백오프: 1초, 2초, 4초
+                    wait_time = 2 ** attempt  # 지수 백오프: 1초, 2초, 4초
                     logger.warning(f"OpenRouter API error (attempt {attempt + 1}/{max_retries}): {error_msg}, retrying in {wait_time:.1f}s...")
                     await asyncio.sleep(wait_time)
                     continue  # 재시도
                 else:
                     # 재시도 불가능한 에러 (401, 403, 404 등) 또는 최대 재시도 횟수 초과
-                    logger.error(f"OpenRouter API error: {error_msg}")
-                    raise RuntimeError(f"OpenRouter API error: {error_msg}")
+                    # 400 에러는 모델 ID가 잘못된 경우일 수 있음
+                    if response.status_code == 400 and ("not a valid model ID" in error_text.lower() or "400" in error_text):
+                        # OpenRouter에 존재하는 모델로 자동 대체 시도
+                        logger.warning(f"Model {model_id} not found in OpenRouter, trying fallback models...")
+                        fallback_models = [
+                            "google/gemini-2.0-flash-exp:free",
+                            "meta-llama/llama-3.2-3b-instruct:free",
+                            "mistralai/mistral-7b-instruct:free",
+                        ]
+                        
+                        for fallback_model in fallback_models:
+                            try:
+                                logger.info(f"Trying fallback model: {fallback_model}")
+                                payload["model"] = fallback_model
+                                fallback_response = await asyncio.get_event_loop().run_in_executor(
+                                    None,
+                                    lambda: requests.post(
+                                        "https://openrouter.ai/api/v1/chat/completions",
+                                        headers=headers,
+                                        json=payload,
+                                        timeout=30
+                                    )
+                                )
+                                
+                                if fallback_response.status_code == 200:
+                                    response = fallback_response
+                                    model_id = fallback_model  # 실제 사용된 모델 ID 업데이트
+                                    logger.info(f"✅ Successfully used fallback model: {fallback_model}")
+                                    break
+                            except Exception as fallback_error:
+                                logger.debug(f"Fallback model {fallback_model} failed: {fallback_error}")
+                                continue
+                        
+                        if response.status_code != 200:
+                            logger.error(f"OpenRouter API error: {error_msg}")
+                            raise RuntimeError(f"OpenRouter API error: {error_msg}")
+                    else:
+                        logger.error(f"OpenRouter API error: {error_msg}")
+                        raise RuntimeError(f"OpenRouter API error: {error_msg}")
                     
             except requests.exceptions.RequestException as e:
                 # 네트워크 에러도 재시도
@@ -1463,6 +1616,9 @@ class MultiModelOrchestrator:
         client = self.model_clients[model_name]
         model_config = self.models[model_name]
         
+        # Groq에 실제 존재하는 모델 ID 사용
+        model_id = self._get_valid_groq_model_id(model_config.model_id)
+        
         # 메시지 구성
         messages = []
         if system_message:
@@ -1474,7 +1630,7 @@ class MultiModelOrchestrator:
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
-                    model=model_config.model_id,
+                    model=model_id,  # 실제 Groq 모델 ID 사용
                     messages=messages,
                     temperature=model_config.temperature,
                     max_tokens=model_config.max_tokens,
@@ -1491,7 +1647,8 @@ class MultiModelOrchestrator:
                 "metadata": {
                     "model": model_name,
                     "provider": "groq",
-                    "model_id": model_config.model_id,
+                    "model_id": model_id,  # 실제 사용된 모델 ID (변환된 것일 수 있음)
+                    "original_model_id": model_config.model_id,  # 원래 요청한 모델 ID
                     "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else len(content.split())
                 }
             }

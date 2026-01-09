@@ -16,4 +16,4 @@ node_modules
 *.sqlite3
 storage
 reports
-temp/mcp_servers
+*temp/mcp_servers

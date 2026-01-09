@@ -11,14 +11,22 @@ prompt_toolkit 기반의 완전한 REPL 환경 제공.
 import asyncio
 import logging
 import shlex
+import sys
+import locale
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+import pytz
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from rich.spinner import Spinner
+from rich.live import Live
+from rich.status import Status
 
 from src.cli.completion import SparkleForgeCompleter
 from src.cli.history import SparkleForgeHistory
@@ -31,6 +39,25 @@ class REPLCLI:
     
     def __init__(self):
         """초기화."""
+        import logging
+        import warnings
+        
+        # REPL 모드에서는 모든 로그를 완전히 억제 (ERROR만 표시)
+        logging.getLogger().setLevel(logging.ERROR)
+        
+        # 모든 주요 모듈의 로거를 ERROR로 설정
+        for logger_name in [
+            '__main__', 'src', 'src.core', 'src.core.era_server_manager',
+            'src.core.agent_orchestrator', 'src.core.mcp_integration',
+            'src.core.shared_memory', 'src.core.skills_manager',
+            'src.core.prompt_refiner_wrapper', 'root',
+            'streamlit', 'streamlit.runtime', 'local_researcher'
+        ]:
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
+        
+        # warnings도 완전히 억제
+        warnings.filterwarnings('ignore')
+        
         self.console = Console()
         
         # 히스토리 초기화
@@ -133,23 +160,24 @@ class REPLCLI:
     async def run(self):
         """REPL 루프 실행."""
         # 시작 배너
-        self._show_banner()
+        await self._show_banner()
         
-        # 컨텍스트 로드
-        if self.context_loader:
-            try:
-                context = await self.context_loader.load_context()
-                if context:
-                    self.console.print("[dim]📄 Project context loaded from SPARKLEFORGE.md[/dim]\n")
-            except Exception as e:
-                logger.debug(f"Failed to load context: {e}")
+        # 로딩 표시와 함께 컨텍스트 로드
+        with self.console.status("[bold cyan]Initializing SparkleForge...", spinner="dots"):
+            if self.context_loader:
+                try:
+                    context = await self.context_loader.load_context()
+                    if context:
+                        self.console.print("[dim]📄 Project context loaded from SPARKLEFORGE.md[/dim]\n")
+                except Exception as e:
+                    logger.debug(f"Failed to load context: {e}")
         
         # REPL 루프
         while True:
             try:
-                text = await self.session.prompt_async(
-                    "[bold cyan]sparkleforge[/bold cyan]> ",
-                )
+                # ANSI 색상 코드를 사용하여 프롬프트 색상 적용
+                prompt_text = ANSI("\033[1;36msparkleforge\033[0m> ")
+                text = await self.session.prompt_async(prompt_text)
                 
                 if not text.strip():
                     continue
@@ -160,21 +188,175 @@ class REPLCLI:
                 self.console.print("\n[yellow]Interrupted. Type 'exit' to quit.[/yellow]")
                 continue
             except EOFError:
-                self.console.print("\n[bold]Goodbye! 👋[/bold]")
+                # exit 명령어 또는 Ctrl+D로 종료
+                # _handle_exit에서 이미 "Goodbye!" 메시지를 출력했으므로 여기서는 중복 출력하지 않음
+                # 단, Ctrl+D로 직접 종료한 경우를 위해 확인
                 break
             except Exception as e:
                 logger.error(f"Error in REPL CLI: {e}", exc_info=True)
                 self.console.print(f"[red]❌ Error: {e}[/red]")
+        
+        # 루프 종료 후 정리 작업
+        try:
+            # PromptSession 정리
+            if hasattr(self, 'session') and self.session:
+                # prompt_toolkit 세션은 자동으로 정리됨
+                pass
+        except Exception as e:
+            logger.debug(f"Final cleanup error (ignored): {e}")
     
-    def _show_banner(self):
+    async def _get_greeting_message(self) -> str:
+        """현재 시간과 지역에 맞는 인사 메시지를 LLM으로 생성."""
+        try:
+            # 시간대 감지
+            try:
+                local_tz = pytz.timezone('Asia/Seoul')  # 기본값
+                # 시스템 시간대 가져오기
+                import time
+                local_tz_name = time.tzname[0] if time.tzname else 'UTC'
+                # 주요 시간대 매핑
+                tz_mapping = {
+                    'KST': 'Asia/Seoul',
+                    'JST': 'Asia/Tokyo',
+                    'CST': 'Asia/Shanghai',
+                    'PST': 'America/Los_Angeles',
+                    'EST': 'America/New_York',
+                    'GMT': 'Europe/London',
+                    'CET': 'Europe/Paris',
+                }
+                for tz_abbr, tz_name in tz_mapping.items():
+                    if tz_abbr in local_tz_name:
+                        local_tz = pytz.timezone(tz_name)
+                        break
+            except:
+                local_tz = pytz.UTC
+            
+            # 현재 시간
+            now = datetime.now(local_tz)
+            hour = now.hour
+            date_str = now.strftime("%Y-%m-%d %H:%M")
+            
+            # 언어 감지
+            try:
+                lang_code = locale.getlocale()[0] or 'en_US'
+                if lang_code.startswith('ko'):
+                    language = 'Korean'
+                elif lang_code.startswith('ja'):
+                    language = 'Japanese'
+                elif lang_code.startswith('zh'):
+                    language = 'Chinese'
+                elif lang_code.startswith('es'):
+                    language = 'Spanish'
+                elif lang_code.startswith('fr'):
+                    language = 'French'
+                elif lang_code.startswith('de'):
+                    language = 'German'
+                else:
+                    language = 'English'
+            except:
+                language = 'English'
+            
+            # 시간대 이름
+            tz_name = str(local_tz)
+            
+            # LLM 호출
+            from src.core.llm_manager import execute_llm_task, TaskType
+            
+            prompt = f"""Generate a brief, friendly greeting message for SparkleForge (an autonomous multi-agent research system).
+
+Current time: {date_str} ({tz_name})
+Time of day: {"Morning" if 5 <= hour < 12 else "Afternoon" if 12 <= hour < 18 else "Evening" if 18 <= hour < 22 else "Night"}
+Language: {language}
+
+Requirements:
+- Keep it very brief (maximum 10 words)
+- Use the appropriate language ({language})
+- Match the time of day (morning/afternoon/evening/night)
+- Be professional but friendly
+- Do NOT include "REPL Mode" or "SparkleForge" in the message
+- Return ONLY the greeting message, nothing else
+
+Example outputs:
+- Morning in Korean: "좋은 아침입니다"
+- Afternoon in English: "Good afternoon"
+- Evening in Japanese: "こんばんは"
+
+Generate the greeting:"""
+
+            result = await execute_llm_task(
+                prompt=prompt,
+                task_type=TaskType.CREATIVE,
+                system_message="You are a helpful assistant that generates brief, culturally appropriate greetings."
+            )
+            
+            greeting = result.content.strip()
+            # 따옴표 제거
+            greeting = greeting.strip('"\'')
+            # 첫 줄만 사용
+            if '\n' in greeting:
+                greeting = greeting.split('\n')[0].strip()
+            
+            return greeting if greeting else "Welcome"
+            
+        except Exception as e:
+            logger.debug(f"Failed to generate greeting: {e}")
+            # 기본 인사 메시지
+            hour = datetime.now().hour
+            if 5 <= hour < 12:
+                return "Good morning"
+            elif 12 <= hour < 18:
+                return "Good afternoon"
+            elif 18 <= hour < 22:
+                return "Good evening"
+            else:
+                return "Good night"
+    
+    async def _show_banner(self):
         """시작 배너 표시."""
+        # 인사 메시지 가져오기
+        greeting = await self._get_greeting_message()
+        
+        # 배너 내용 구성
+        banner_content = Text()
+        banner_content.append("⚒️  ", style="bold yellow")
+        banner_content.append(greeting, style="bold cyan")
+        
+        # Available Commands를 박스 안에 포함
+        commands_text = Text()
+        commands_text.append("Available Commands:\n", style="bold")
+        commands_text.append("  ", style="dim")
+        commands_text.append("research <query>", style="cyan")
+        commands_text.append("  - Start a research task\n", style="dim")
+        commands_text.append("  ", style="dim")
+        commands_text.append("session list", style="cyan")
+        commands_text.append("      - List all sessions\n", style="dim")
+        commands_text.append("  ", style="dim")
+        commands_text.append("context show", style="cyan")
+        commands_text.append("     - Show project context\n", style="dim")
+        commands_text.append("  ", style="dim")
+        commands_text.append("help", style="cyan")
+        commands_text.append("             - Show help message\n", style="dim")
+        commands_text.append("  ", style="dim")
+        commands_text.append("exit", style="cyan")
+        commands_text.append("             - Exit REPL\n", style="dim")
+        commands_text.append("\n", style="dim")
+        commands_text.append("Type 'help' for detailed command information", style="dim")
+        
+        # 전체 내용 합치기
+        full_content = Text()
+        full_content.append(banner_content)
+        full_content.append("\n\n", style="dim")
+        full_content.append(commands_text)
+        
         banner = Panel(
-            Text("⚒️  SparkleForge - REPL Mode", style="bold cyan"),
+            full_content,
             border_style="cyan",
             padding=(1, 2),
+            title="[bold cyan]Autonomous Multi-Agent Research System[/bold cyan]",
+            subtitle="[dim]Version 1.0.0[/dim]"
         )
         self.console.print(banner)
-        self.console.print("[dim]Type 'help' for commands, 'exit' to quit[/dim]\n")
+        self.console.print()
     
     async def handle_command(self, text: str):
         """명령어 처리."""
@@ -220,8 +402,12 @@ class REPLCLI:
                     await handler(self, parts[1:])
             else:
                 # 연구 요청으로 처리 (명령어가 없으면)
+                # 중복 출력 방지: research_command에서 이미 출력하므로 여기서는 호출만
                 await self.command_handlers['research'](self, [text])
                 
+        except EOFError:
+            # exit 명령어에서 발생한 EOFError는 다시 raise하여 run()에서 처리
+            raise
         except Exception as e:
             logger.error(f"Error handling command: {e}", exc_info=True)
             self.console.print(f"[red]❌ Error: {e}[/red]")
@@ -229,6 +415,7 @@ class REPLCLI:
     async def _handle_exit(self):
         """종료 처리."""
         self.console.print("[bold]Goodbye! 👋[/bold]")
+        # EOFError를 raise하여 run() 메서드의 루프를 종료
         raise EOFError()
     
     async def _handle_clear(self):
