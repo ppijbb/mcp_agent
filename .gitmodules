@@ -100,3 +100,9 @@
 [submodule "open_researcher/rlm"]
 	path = open_researcher/rlm
 	url = https://github.com/alexzhang13/rlm.git
+[submodule "open_researcher/zeroshot"]
+	path = open_researcher/zeroshot
+	url = https://github.com/covibes/zeroshot.git
+[submodule "open_researcher/OpenAgnets"]
+	path = open_researcher/OpenAgnets
+	url = https://github.com/darrenhinde/OpenAgents.git
