@@ -26,6 +26,7 @@ import random
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+    from mcp.client.sse import sse_client
     from mcp.client.streamable_http import streamablehttp_client
     from mcp.types import ListToolsResult, TextContent
     from mcp.shared.exceptions import McpError
@@ -39,6 +40,7 @@ except ImportError:
     ClientSession = None
     StdioServerParameters = None
     stdio_client = None
+    sse_client = None
     streamablehttp_client = None
     urlencode = None
     ListToolsResult = None
@@ -276,10 +278,12 @@ class ToolInfo:
 class ToolResult:
     """도구 실행 결과."""
     success: bool
-    data: Any
+    data: Any = None
     error: Optional[str] = None
     execution_time: float = 0.0
     confidence: float = 0.0
+    tool_name: Optional[str] = None
+    source: Optional[str] = None
 
 
 class ToolRegistry:
@@ -1310,9 +1314,9 @@ class UniversalMCPHub:
             is_stdio = server_type == "stdio" or ("command" in server_config and "httpUrl" not in server_config and "url" not in server_config)
             
             if is_stdio:
-                # stdio 서버 연결 (FastMCP 지원)
-                if not FASTMCP_AVAILABLE or FastMCPClient is None:
-                    logger.error(f"FastMCP client not available for stdio server {server_name}")
+                # stdio 서버 연결 (표준 MCP 방식 - OpenManus 스타일)
+                if not MCP_AVAILABLE or ClientSession is None or StdioServerParameters is None or stdio_client is None:
+                    logger.error(f"MCP package not available for stdio server {server_name}")
                     return False
                 
                 command = server_config.get("command")
@@ -1352,23 +1356,6 @@ class UniversalMCPHub:
                         })
                         return False
                 
-                # FastMCP stdio 서버 설정
-                server_config_dict = {
-                    "transport": "stdio",
-                    "command": command,
-                    "args": args
-                }
-                
-                # env가 있으면 추가
-                if resolved_env:
-                    server_config_dict["env"] = resolved_env
-                
-                mcp_config = {
-                    "mcpServers": {
-                        server_name: server_config_dict
-                    }
-                }
-                
                 logger.info(f"[MCP][stdio.connect] server={server_name} command={command} args={args} env={list(resolved_env.keys()) if resolved_env else 'none'}")
                 
                 # npm 캐시 손상 문제 해결: npx 캐시 정리
@@ -1380,7 +1367,6 @@ class UniversalMCPHub:
                         npx_cache_dir = os.path.expanduser("~/.npm/_npx")
                         
                         # ERR_MODULE_NOT_FOUND 오류가 발생하는 경우, 손상된 캐시 디렉토리 전체 삭제
-                        # 문제가 있는 특정 패키지 디렉토리 찾기 및 삭제
                         if os.path.exists(npx_cache_dir):
                             # zod 모듈 오류가 있는 디렉토리 찾기
                             for item in os.listdir(npx_cache_dir):
@@ -1398,81 +1384,64 @@ class UniversalMCPHub:
                                                 logger.info(f"[MCP][stdio.connect] Cleaned corrupted npx cache directory: {item}")
                                             except Exception as e:
                                                 logger.debug(f"[MCP][stdio.connect] Failed to remove cache dir {item}: {e}")
-                                    
-                                    # ERR_MODULE_NOT_FOUND 오류가 발생한 디렉토리도 삭제
-                                    # (이전 연결 시도에서 오류가 발생한 경우)
-                                    node_modules_path = os.path.join(item_path, "node_modules")
-                                    if os.path.exists(node_modules_path):
-                                        # zod가 있지만 파일이 없는 경우
-                                        if os.path.exists(zod_path):
-                                            try:
-                                                # npm cache clean 시도
-                                                subprocess.run(
-                                                    ["npm", "cache", "clean", "--force"],
-                                                    capture_output=True,
-                                                    timeout=10,
-                                                    check=False
-                                                )
-                                                # 손상된 디렉토리 삭제
-                                                shutil.rmtree(item_path, ignore_errors=True)
-                                                logger.info(f"[MCP][stdio.connect] Cleaned corrupted npx cache and removed directory: {item}")
-                                            except Exception as e:
-                                                logger.debug(f"[MCP][stdio.connect] Failed to clean npm cache: {e}")
                     except Exception as e:
                         logger.debug(f"[MCP][stdio.connect] Failed to clean npm cache: {e}")
                 
                 try:
-                    # FastMCP Client 생성 (stdio)
-                    fastmcp_client = FastMCPClient(mcp_config)
-                    self.fastmcp_configs[server_name] = mcp_config
+                    # 표준 MCP 방식으로 연결 (OpenManus 스타일)
+                    # StdioServerParameters에 env 전달
+                    server_params = StdioServerParameters(
+                        command=command,
+                        args=args,
+                        env=resolved_env if resolved_env else None
+                    )
                     
-                    # Context Manager로 사용하여 연결 테스트 및 도구 목록 가져오기
-                    try:
-                        async with fastmcp_client:
-                            # 도구 목록 가져오기 (타임아웃 설정)
-                            if self.stopping:
-                                raise asyncio.CancelledError("Stopping flag is set, skipping list_tools")
-                            
-                            tools_task = fastmcp_client.list_tools()
-                            if not self.stopping:
-                                tools = await asyncio.shield(asyncio.wait_for(tools_task, timeout=timeout))
-                            else:
-                                # If stopping, allow cancellation of the task
-                                tools = await asyncio.wait_for(tools_task, timeout=timeout)
-                            
-                            # 도구 등록
-                            for tool in tools:
-                                # register_mcp_tool 사용
-                                self.registry.register_mcp_tool(server_name, tool, tool)
-                                
-                                if server_name not in self.mcp_tools_map:
-                                    self.mcp_tools_map[server_name] = {}
-                                # MCPToolInfo 생성 (자동 발견용)
-                                tool_info = MCPToolInfo(
-                                    server_guess=server_name,
-                                    name=f"{server_name}::{tool.name}",
-                                    description=tool.description or "",
-                                    input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
-                                )
-                                self.mcp_tools_map[server_name][tool.name] = tool_info
-                            
-                            logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name}, tools: {len(tools)}")
-                            
-                            # FastMCP Client 저장 (context manager 밖에서도 사용 가능하도록)
-                            self.fastmcp_clients[server_name] = fastmcp_client
-                            self.mcp_sessions[server_name] = fastmcp_client
-                            
-                            self.connection_diagnostics[server_name].update({
-                                "ok": True,
-                                "stage": "connected",
-                                "tools_count": len(tools)
-                            })
-                            
-                            return True
-                    except asyncio.CancelledError:
-                        logger.debug(f"[MCP][stdio.connect] Connection cancelled for {server_name}")
-                        raise
-                    except Exception as e:
+                    # AsyncExitStack으로 연결 유지 (OpenManus 방식)
+                    stdio_transport = await exit_stack.enter_async_context(
+                        stdio_client(server_params)
+                    )
+                    read, write = stdio_transport
+                    session = await exit_stack.enter_async_context(ClientSession(read, write))
+                    
+                    # 세션 초기화 및 도구 목록 가져오기
+                    if self.stopping:
+                        raise asyncio.CancelledError("Stopping flag is set, skipping initialize")
+                    
+                    await session.initialize()
+                    response = await asyncio.wait_for(session.list_tools(), timeout=timeout)
+                    
+                    # 도구 등록
+                    for tool in response.tools:
+                        # register_mcp_tool 사용
+                        self.registry.register_mcp_tool(server_name, tool, tool)
+                        
+                        if server_name not in self.mcp_tools_map:
+                            self.mcp_tools_map[server_name] = {}
+                        # MCPToolInfo 생성 (자동 발견용)
+                        tool_info = MCPToolInfo(
+                            server_guess=server_name,
+                            name=f"{server_name}::{tool.name}",
+                            description=tool.description or "",
+                            input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+                        )
+                        self.mcp_tools_map[server_name][tool.name] = tool_info
+                    
+                    # 세션 저장 (연결 유지)
+                    self.mcp_sessions[server_name] = session
+                    
+                    logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name}, tools: {len(response.tools)}")
+                    
+                    self.connection_diagnostics[server_name].update({
+                        "ok": True,
+                        "stage": "connected",
+                        "tools_count": len(response.tools)
+                    })
+                    
+                    return True
+                except asyncio.CancelledError:
+                    logger.debug(f"[MCP][stdio.connect] Connection cancelled for {server_name}")
+                    raise
+                except Exception as e:
                         error_str = str(e).lower()
                         error_msg = str(e)
                         
@@ -1523,37 +1492,48 @@ class UniversalMCPHub:
                                             except Exception:
                                                 pass
                                     
-                                    # 재시도 (한 번만)
+                                    # 재시도 (한 번만) - 표준 MCP 방식으로
                                     logger.info(f"[MCP][stdio.connect] Retrying connection to {server_name} after npm cache cleanup...")
                                     try:
-                                        # 새로운 FastMCP Client 생성
-                                        retry_fastmcp_client = FastMCPClient(mcp_config)
-                                        async with retry_fastmcp_client:
-                                            tools_task = retry_fastmcp_client.list_tools()
-                                            tools = await asyncio.wait_for(tools_task, timeout=timeout)
-                                            
-                                            # 도구 등록
-                                            for tool in tools:
-                                                self.registry.register_mcp_tool(server_name, tool, tool)
-                                                if server_name not in self.mcp_tools_map:
-                                                    self.mcp_tools_map[server_name] = {}
-                                                tool_info = MCPToolInfo(
-                                                    server_guess=server_name,
-                                                    name=f"{server_name}::{tool.name}",
-                                                    description=tool.description or "",
-                                                    input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
-                                                )
-                                                self.mcp_tools_map[server_name][tool.name] = tool_info
-                                            
-                                            logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name} after cache cleanup, tools: {len(tools)}")
-                                            self.fastmcp_clients[server_name] = retry_fastmcp_client
-                                            self.mcp_sessions[server_name] = retry_fastmcp_client
-                                            self.connection_diagnostics[server_name].update({
-                                                "ok": True,
-                                                "stage": "connected",
-                                                "tools_count": len(tools)
-                                            })
-                                            return True
+                                        # 표준 MCP 방식으로 재시도
+                                        retry_server_params = StdioServerParameters(
+                                            command=command,
+                                            args=args,
+                                            env=resolved_env if resolved_env else None
+                                        )
+                                        
+                                        retry_stdio_transport = await exit_stack.enter_async_context(
+                                            stdio_client(retry_server_params)
+                                        )
+                                        retry_read, retry_write = retry_stdio_transport
+                                        retry_session = await exit_stack.enter_async_context(ClientSession(retry_read, retry_write))
+                                        
+                                        await retry_session.initialize()
+                                        retry_response = await asyncio.wait_for(retry_session.list_tools(), timeout=timeout)
+                                        
+                                        # 도구 등록
+                                        for tool in retry_response.tools:
+                                            self.registry.register_mcp_tool(server_name, tool, tool)
+                                            if server_name not in self.mcp_tools_map:
+                                                self.mcp_tools_map[server_name] = {}
+                                            tool_info = MCPToolInfo(
+                                                server_guess=server_name,
+                                                name=f"{server_name}::{tool.name}",
+                                                description=tool.description or "",
+                                                input_schema=tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+                                            )
+                                            self.mcp_tools_map[server_name][tool.name] = tool_info
+                                        
+                                        # 세션 저장
+                                        self.mcp_sessions[server_name] = retry_session
+                                        
+                                        logger.info(f"[MCP][stdio.connect] ✅ Connected to {server_name} after cache cleanup, tools: {len(retry_response.tools)}")
+                                        self.connection_diagnostics[server_name].update({
+                                            "ok": True,
+                                            "stage": "connected",
+                                            "tools_count": len(retry_response.tools)
+                                        })
+                                        return True
                                     except Exception as retry_e:
                                         logger.warning(f"[MCP][stdio.connect] Retry failed for {server_name}: {retry_e}")
                             except Exception as cleanup_e:
@@ -2234,8 +2214,8 @@ class UniversalMCPHub:
                     logger.error(f"Cannot reconnect to {server_name}: no config found")
                     return None
         
-        if server_name not in self.mcp_sessions and server_name not in self.fastmcp_clients:
-            logger.error(f"Server {server_name} still not in mcp_sessions or fastmcp_clients after connection attempt")
+        if server_name not in self.mcp_sessions:
+            logger.error(f"Server {server_name} still not in mcp_sessions after connection attempt")
             return None
         
         if server_name not in self.mcp_tools_map:
@@ -2253,86 +2233,8 @@ class UniversalMCPHub:
         
         for attempt in range(max_attempts):
             try:
-                # FastMCP Client 사용 (가이드에 따른 올바른 사용법)
-                if server_name in self.fastmcp_clients:
-                    fastmcp_client = self.fastmcp_clients[server_name]
-                    logger.debug(f"Calling tool {tool_name} on server {server_name} using FastMCP Client (attempt {attempt+1}/{max_attempts})")
-                    
-                    # Context Manager로 사용 (가이드에 따른 올바른 사용법)
-                    try:
-                        async with fastmcp_client:
-                            # 타임아웃 설정 (기본값 30초)
-                            try:
-                                from src.core.researcher_config import get_agent_tool_config
-                                tool_config = get_agent_tool_config()
-                                tool_timeout = tool_config.mcp_command_timeout
-                            except (ImportError, AttributeError):
-                                # 기본 타임아웃 사용
-                                tool_timeout = 30.0
-                            
-                            # stopping 플래그 체크
-                            if self.stopping:
-                                logger.info(f"[MCP][exec.skip] server={server_name} tool={tool_name} stopping flag is set, skipping execution")
-                                return None
-                            
-                            # shield 제거하여 취소 가능하도록 (stopping 플래그로 제어)
-                            result = await asyncio.wait_for(
-                                fastmcp_client.call_tool(tool_name, params),
-                                timeout=tool_timeout
-                            )
-                            
-                            # FastMCP Client의 결과 처리
-                            # FastMCP는 결과를 직접 반환하지만, 형식이 다를 수 있음
-                            logger.debug(f"Tool {tool_name} returned result type: {type(result)}")
-                            
-                            # 결과가 dict이고 content 키가 있으면 추출
-                            if isinstance(result, dict):
-                                # MCP 표준 형식: {"content": [...]}
-                                if "content" in result:
-                                    content_items = result["content"]
-                                    if content_items:
-                                        # TextContent 형식인지 확인
-                                        if isinstance(content_items, list):
-                                            content_parts = []
-                                            for item in content_items:
-                                                if isinstance(item, dict) and "text" in item:
-                                                    content_parts.append(item["text"])
-                                                elif isinstance(item, str):
-                                                    content_parts.append(item)
-                                                else:
-                                                    content_parts.append(str(item))
-                                            return " ".join(content_parts) if content_parts else None
-                                        elif isinstance(content_items, str):
-                                            return content_items
-                                # 그 외의 경우 dict 그대로 반환
-                                return result
-                            elif isinstance(result, str):
-                                return result
-                            else:
-                                # 기타 타입은 문자열로 변환
-                                return str(result) if result is not None else None
-                    except asyncio.TimeoutError:
-                        logger.warning(f"[MCP][exec.timeout] server={server_name} tool={tool_name} timeout after {tool_timeout}s")
-                        if attempt < max_attempts - 1:
-                            wait = backoff_seconds[attempt]
-                            logger.info(f"[MCP][exec.retry] Retrying in {wait}s (attempt {attempt+2}/{max_attempts})")
-                            await asyncio.sleep(wait)
-                            continue
-                        return None
-                    except asyncio.CancelledError as e:
-                        if self.stopping:
-                            logger.info(f"[MCP][exec.cancelled] server={server_name} tool={tool_name} cancelled due to stopping flag")
-                            return None
-                        else:
-                            logger.warning(f"[MCP][exec.cancelled] server={server_name} tool={tool_name} was cancelled unexpectedly")
-                            if attempt < max_attempts - 1:
-                                wait = backoff_seconds[attempt]
-                                await asyncio.sleep(wait)
-                                continue
-                            return None
-                
-                # Fallback: 기존 ClientSession 방식 (하위 호환성)
-                elif server_name in self.mcp_sessions:
+                # 표준 MCP ClientSession 방식 (우선)
+                if server_name in self.mcp_sessions:
                     session = self.mcp_sessions[server_name]
                     logger.debug(f"Calling tool {tool_name} on server {server_name} using ClientSession (attempt {attempt+1}/{max_attempts})")
                     
@@ -2781,8 +2683,8 @@ class UniversalMCPHub:
                     "source": "academic_routing_failed"
                 }
         
-        # g-search, tavily, exa는 먼저 라우팅 확인 (도구 찾기 전에)
-        if tool_name in ["g-search", "tavily", "exa"]:
+        # 검색 도구는 먼저 라우팅 확인 (도구 찾기 전에)
+        if tool_name in ["g-search", "ddg_search", "mcp_search", "tavily", "exa"]:
             logger.info(f"[MCP][exec.route] Routing {tool_name} to _execute_search_tool (tool_name type: {type(tool_name)})")
             try:
                 from src.core.mcp_integration import _execute_search_tool, ToolResult
@@ -4089,6 +3991,7 @@ async def _fallback_to_ddg_search(query: str, max_results: int) -> ToolResult:
         # 결과가 없거나 형식이 잘못된 경우
         return ToolResult(
             success=False,
+            data=None,
             error="DDG search fallback returned no results",
             tool_name="ddg_search",
             source="native_ddg_fallback"
@@ -4097,6 +4000,7 @@ async def _fallback_to_ddg_search(query: str, max_results: int) -> ToolResult:
         logger.error(f"[MCP][fallback] DDG search fallback failed: {e}")
         return ToolResult(
             success=False,
+            data=None,
             error=f"DDG search fallback error: {str(e)}",
             tool_name="ddg_search",
             source="native_ddg_fallback"
@@ -4135,7 +4039,8 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
         )
     
     try:
-        if tool_name == "g-search":
+        # 모든 검색 도구를 g-search와 동일하게 처리
+        if tool_name in ["g-search", "ddg_search", "mcp_search"]:
             # mcp_config.json에 정의된 모든 MCP 서버에서 검색 시도
             mcp_hub = get_mcp_hub()
             
@@ -4246,9 +4151,10 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
                                 break
                     
                     if not connection_success:
-                        # 연결 실패 시 즉시 DDG search로 fallback
-                        logger.warning(f"[MCP][_execute_search_tool] Failed to connect to {server_name}, falling back to DDG search")
-                        return await _fallback_to_ddg_search(query, max_results)
+                        # 연결 실패 시 다음 서버 시도
+                        logger.warning(f"[MCP][_execute_search_tool] Failed to connect to {server_name}, trying next server...")
+                        failed_servers.append({"server": server_name, "reason": "connection_failed"})
+                        continue
                 
                 # 도구 맵 확인
                 if server_name not in mcp_hub.mcp_tools_map:
