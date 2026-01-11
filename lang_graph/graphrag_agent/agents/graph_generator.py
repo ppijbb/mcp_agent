@@ -28,6 +28,8 @@ try:
     from utils.neo4j_connector import Neo4jConnector, Neo4jConfig
     from models.ontology_schema import OntologySchemaGenerator
     from .ontology_builder import OntologyBuilder
+    from .goal_ontology_builder import GoalOntologyBuilder
+    from models.system_ontology import SystemOntology
     NEO4J_AVAILABLE = True
 except ImportError:
     NEO4J_AVAILABLE = False
@@ -35,6 +37,8 @@ except ImportError:
     Neo4jConfig = None
     OntologySchemaGenerator = None
     OntologyBuilder = None
+    GoalOntologyBuilder = None
+    SystemOntology = None
 
 
 class GraphStructureType(Enum):
@@ -88,18 +92,23 @@ class GraphGeneratorNode:
         self.learning_enabled = True
         self.adaptation_threshold = 0.7
         self.quality_threshold = 0.6
-        
+    
         # Neo4j and ontology components
         self.use_neo4j = NEO4J_AVAILABLE and neo4j_config is not None
         self.neo4j_connector = None
         self.ontology_schema_generator = None
         self.ontology_builder = None
+        self.goal_ontology_builder = None
+        self.use_system_ontology = False
         
         if self.use_neo4j:
             try:
                 self.neo4j_connector = Neo4jConnector(neo4j_config)
                 self.ontology_schema_generator = OntologySchemaGenerator(self.llm_processor)
                 self.ontology_builder = OntologyBuilder(config, self.llm_processor)
+                if GoalOntologyBuilder:
+                    self.goal_ontology_builder = GoalOntologyBuilder(config, self.llm_processor)
+                    self.use_system_ontology = True
                 self.logger.info("Neo4j and ontology components initialized")
             except Exception as e:
                 self.logger.warning(f"Failed to initialize Neo4j/ontology components: {e}")
@@ -130,7 +139,24 @@ class GraphGeneratorNode:
             user_intent = state.get("user_intent", "")
             construction_plan = self._create_dynamic_construction_plan(state["text_units"], user_intent)
             
-            # Step 2.5: Generate ontology schema if using Neo4j
+            # Step 2.5: Generate system ontology if enabled
+            system_ontology = None
+            if self.use_system_ontology and self.goal_ontology_builder:
+                try:
+                    # Extract goals from user intent or data
+                    goals = self._extract_goals_from_context(user_intent, state.get("data_analysis", {}))
+                    if goals:
+                        context = {
+                            "user_intent": user_intent,
+                            "domain": state.get("data_analysis", {}).get("data_understanding", {}).get("domain_context", "general")
+                        }
+                        system_ontology = self.goal_ontology_builder.build_ontology_from_goals(goals, context)
+                        state["system_ontology"] = system_ontology
+                        self.logger.info(f"System ontology generated: {len(system_ontology.goals)} goals, {len(system_ontology.tasks)} tasks")
+                except Exception as e:
+                    self.logger.warning(f"Failed to generate system ontology: {e}")
+            
+            # Step 2.6: Generate knowledge ontology schema if using Neo4j
             ontology_schema = None
             if self.use_neo4j and self.ontology_schema_generator:
                 try:
@@ -140,7 +166,7 @@ class GraphGeneratorNode:
                         data_sample, domain, user_intent
                     )
                     state["ontology_schema"] = ontology_schema
-                    self.logger.info(f"Ontology schema generated: {len(ontology_schema.entity_types)} entity types, {len(ontology_schema.relationship_types)} relationship types")
+                    self.logger.info(f"Knowledge ontology schema generated: {len(ontology_schema.entity_types)} entity types, {len(ontology_schema.relationship_types)} relationship types")
                 except Exception as e:
                     self.logger.warning(f"Failed to generate ontology schema: {e}")
             
@@ -165,6 +191,14 @@ class GraphGeneratorNode:
                         clear_existing=True
                     )
                     if success:
+                        # Save system ontology if available
+                        if system_ontology:
+                            system_success = await self.neo4j_connector.save_system_ontology(
+                                system_ontology
+                            )
+                            if system_success:
+                                self.logger.info(f"System ontology saved to Neo4j")
+                        
                         # Create indexes for better query performance
                         await self.neo4j_connector.create_indexes()
                         state["neo4j_saved"] = True
@@ -969,4 +1003,42 @@ Guidelines:
             "relationship_types": relationship_types,
             "average_degree": sum(dict(graph.degree()).values()) / nodes if nodes > 0 else 0.0
         }
+    
+    def _extract_goals_from_context(self, user_intent: str, data_analysis: Dict[str, Any]) -> List[str]:
+        """Extract goals from user intent or data analysis"""
+        goals = []
+        
+        # Extract from user intent
+        if user_intent:
+            # Use LLM to extract goals from intent
+            prompt = f"""
+Extract system goals from this user intent.
+
+User Intent: "{user_intent}"
+
+Return JSON:
+{{
+    "goals": ["goal1", "goal2", "goal3"]
+}}
+
+Focus on actionable, system-level goals that can be achieved through tasks.
+"""
+            try:
+                response = self.llm_processor._call_llm(prompt)
+                data = json.loads(response)
+                goals.extend(data.get("goals", []))
+            except Exception as e:
+                self.logger.warning(f"Failed to extract goals from intent: {e}")
+        
+        # Extract from data analysis if no goals found
+        if not goals and data_analysis:
+            graph_potential = data_analysis.get("graph_potential", {})
+            recommendations = data_analysis.get("recommendations", [])
+            
+            # Convert recommendations to goals
+            for rec in recommendations[:3]:  # Top 3 recommendations
+                if isinstance(rec, str) and len(rec) > 10:
+                    goals.append(rec)
+        
+        return goals
     

@@ -108,7 +108,7 @@ class RAGAgentNode:
         self.learning_enabled = True
         self.adaptation_threshold = 0.7
         self.reasoning_depth = 3
-        
+    
         # Neo4j and query translation components
         self.use_neo4j = NEO4J_AVAILABLE and neo4j_config is not None
         self.neo4j_connector = None
@@ -162,11 +162,11 @@ class RAGAgentNode:
                 )
             else:
                 # Fallback to NetworkX graph traversal
-                retrieval_results = self._retrieve_information_intelligently(
-                    state["knowledge_graph"], 
-                    query_analysis,
-                    state.get("user_intent", "")
-                )
+            retrieval_results = self._retrieve_information_intelligently(
+                state["knowledge_graph"], 
+                query_analysis,
+                state.get("user_intent", "")
+            )
             
             # Step 3: Context-aware response generation
             response = self._generate_intelligent_response(

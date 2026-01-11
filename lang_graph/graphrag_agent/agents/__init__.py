@@ -36,6 +36,12 @@ try:
 except ImportError:
     QUERY_TRANSLATOR_AVAILABLE = False
 
+try:
+    from .goal_ontology_builder import GoalOntologyBuilder
+    GOAL_ONTOLOGY_BUILDER_AVAILABLE = True
+except ImportError:
+    GOAL_ONTOLOGY_BUILDER_AVAILABLE = False
+
 __all__ = [
     "GraphGeneratorNode",
     "RAGAgentNode",
@@ -57,3 +63,33 @@ if ONTOLOGY_BUILDER_AVAILABLE:
 
 if QUERY_TRANSLATOR_AVAILABLE:
     __all__.append("QueryTranslator")
+
+if GOAL_ONTOLOGY_BUILDER_AVAILABLE:
+    __all__.append("GoalOntologyBuilder")
+
+try:
+    from .task_executor import TaskExecutor, ExecutionResult
+    TASK_EXECUTOR_AVAILABLE = True
+except ImportError:
+    TASK_EXECUTOR_AVAILABLE = False
+
+if TASK_EXECUTOR_AVAILABLE:
+    __all__.extend(["TaskExecutor", "ExecutionResult"])
+
+try:
+    from .goal_path_finder import GoalPathFinder, AchievementPath
+    GOAL_PATH_FINDER_AVAILABLE = True
+except ImportError:
+    GOAL_PATH_FINDER_AVAILABLE = False
+
+if GOAL_PATH_FINDER_AVAILABLE:
+    __all__.extend(["GoalPathFinder", "AchievementPath"])
+
+try:
+    from .system_query_translator import SystemQueryTranslator, SystemQueryTranslation
+    SYSTEM_QUERY_TRANSLATOR_AVAILABLE = True
+except ImportError:
+    SYSTEM_QUERY_TRANSLATOR_AVAILABLE = False
+
+if SYSTEM_QUERY_TRANSLATOR_AVAILABLE:
+    __all__.extend(["SystemQueryTranslator", "SystemQueryTranslation"])

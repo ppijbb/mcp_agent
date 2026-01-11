@@ -26,6 +26,12 @@ class EntityCategory(str, Enum):
     CONCEPT = "concept"
     OBJECT = "object"
     DOCUMENT = "document"
+    # System ontology categories
+    GOAL = "goal"
+    TASK = "task"
+    STATE = "state"
+    RESOURCE = "resource"
+    CONSTRAINT = "constraint"
     OTHER = "other"
 
 
@@ -39,6 +45,14 @@ class RelationshipSemantic(str, Enum):
     OWNERSHIP = "ownership"  # owns, belongs_to
     FUNCTIONAL = "functional"  # uses, implements
     SEMANTIC = "semantic"  # related_to, similar_to
+    # System ontology relationships
+    ACHIEVEMENT = "achievement"  # goal achieved by task
+    DEPENDENCY = "dependency"  # task depends on task
+    PRECONDITION = "precondition"  # task requires precondition
+    POSTCONDITION = "postcondition"  # task produces postcondition
+    STATE_TRANSITION = "state_transition"  # task transitions to state
+    RESOURCE_CONSUMPTION = "resource_consumption"  # task consumes resource
+    CONSTRAINT_APPLICATION = "constraint_application"  # task constrained by constraint
     OTHER = "other"
 
 
@@ -316,7 +330,7 @@ Return the schema in JSON format:
     "entity_types": {{
         "EntityTypeName": {{
             "name": "EntityTypeName",
-            "category": "person|organization|location|time|event|concept|object|document|other",
+            "category": "person|organization|location|time|event|concept|object|document|goal|task|state|resource|constraint|other",
             "description": "description of this entity type",
             "properties": {{
                 "property_name": "property_type"
@@ -330,7 +344,7 @@ Return the schema in JSON format:
     "relationship_types": {{
         "RelationshipTypeName": {{
             "name": "RelationshipTypeName",
-            "semantic_type": "hierarchical|temporal|causal|spatial|social|ownership|functional|semantic|other",
+            "semantic_type": "hierarchical|temporal|causal|spatial|social|ownership|functional|semantic|achievement|dependency|precondition|postcondition|state_transition|resource_consumption|constraint_application|other",
             "description": "description of this relationship type",
             "source_entity_types": ["EntityType1", "EntityType2"],
             "target_entity_types": ["EntityType3", "EntityType4"],

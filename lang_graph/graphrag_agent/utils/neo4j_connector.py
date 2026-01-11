@@ -12,6 +12,7 @@ import asyncio
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 import networkx as nx
 
 try:
@@ -487,8 +488,523 @@ class Neo4jConnector:
                 except Exception as e:
                     self.logger.warning(f"Index creation failed (may already exist): {e}")
             
+            # System ontology indexes
+            system_indexes = [
+                "CREATE INDEX goal_id IF NOT EXISTS FOR (g:Goal) ON (g.id)",
+                "CREATE INDEX goal_name IF NOT EXISTS FOR (g:Goal) ON (g.name)",
+                "CREATE INDEX goal_status IF NOT EXISTS FOR (g:Goal) ON (g.status)",
+                "CREATE INDEX task_id IF NOT EXISTS FOR (t:Task) ON (t.id)",
+                "CREATE INDEX task_name IF NOT EXISTS FOR (t:Task) ON (t.name)",
+                "CREATE INDEX task_status IF NOT EXISTS FOR (t:Task) ON (t.status)",
+                "CREATE INDEX state_id IF NOT EXISTS FOR (s:State) ON (s.id)",
+                "CREATE INDEX state_name IF NOT EXISTS FOR (s:State) ON (s.name)",
+                "CREATE INDEX resource_id IF NOT EXISTS FOR (r:Resource) ON (r.id)",
+                "CREATE INDEX precondition_id IF NOT EXISTS FOR (p:Precondition) ON (p.id)",
+                "CREATE INDEX postcondition_id IF NOT EXISTS FOR (p:Postcondition) ON (p.id)"
+            ]
+            
+            for index_query in system_indexes:
+                try:
+                    await self.execute_query(index_query, database=database)
+                    self.logger.debug(f"Created system index: {index_query}")
+                except Exception as e:
+                    self.logger.warning(f"System index creation failed (may already exist): {e}")
+            
             self.logger.info("Indexes created successfully")
             
         except Exception as e:
             self.logger.error(f"Failed to create indexes: {e}")
+    
+    async def save_system_ontology(
+        self,
+        ontology,
+        database: Optional[str] = None
+    ) -> bool:
+        """
+        Save system ontology to Neo4j
+        
+        Args:
+            ontology: SystemOntology instance
+            database: Database name (defaults to config database)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not await self.connect():
+            return False
+        
+        try:
+            # Save Goals
+            for goal_id, goal in ontology.goals.items():
+                properties = {
+                    "id": goal.id,
+                    "name": goal.name,
+                    "description": goal.description,
+                    "priority": float(goal.priority),
+                    "status": goal.status.value,
+                    "created_at": goal.created_at.isoformat(),
+                    "achieved_at": goal.achieved_at.isoformat() if goal.achieved_at else None
+                }
+                
+                # Add metadata
+                for key, value in goal.metadata.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        properties[f"meta_{key}"] = value
+                
+                query = """
+                MERGE (g:Goal {id: $id})
+                SET g += $properties
+                RETURN g
+                """
+                await self.execute_query(query, {"id": goal.id, "properties": properties}, database)
+            
+            # Save Tasks
+            for task_id, task in ontology.tasks.items():
+                properties = {
+                    "id": task.id,
+                    "name": task.name,
+                    "description": task.description,
+                    "executable": task.executable,
+                    "status": task.status.value,
+                    "priority": float(task.priority),
+                    "execution_time": task.execution_time,
+                    "success_rate": float(task.success_rate),
+                    "created_at": task.created_at.isoformat(),
+                    "started_at": task.started_at.isoformat() if task.started_at else None,
+                    "completed_at": task.completed_at.isoformat() if task.completed_at else None
+                }
+                
+                # Add metadata
+                for key, value in task.metadata.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        properties[f"meta_{key}"] = value
+                
+                query = """
+                MERGE (t:Task {id: $id})
+                SET t += $properties
+                RETURN t
+                """
+                await self.execute_query(query, {"id": task.id, "properties": properties}, database)
+            
+            # Save Preconditions
+            for pre_id, pre in ontology.preconditions.items():
+                properties = {
+                    "id": pre.id,
+                    "description": pre.description,
+                    "condition": pre.condition,
+                    "satisfied": pre.satisfied,
+                    "required_by": pre.required_by,
+                    "satisfied_by": pre.satisfied_by
+                }
+                
+                query = """
+                MERGE (p:Precondition {id: $id})
+                SET p += $properties
+                RETURN p
+                """
+                await self.execute_query(query, {"id": pre.id, "properties": properties}, database)
+            
+            # Save Postconditions
+            for post_id, post in ontology.postconditions.items():
+                properties = {
+                    "id": post.id,
+                    "description": post.description,
+                    "condition": post.condition,
+                    "achieved": post.achieved,
+                    "produced_by": post.produced_by
+                }
+                
+                query = """
+                MERGE (p:Postcondition {id: $id})
+                SET p += $properties
+                RETURN p
+                """
+                await self.execute_query(query, {"id": post.id, "properties": properties}, database)
+            
+            # Save States
+            for state_id, state in ontology.states.items():
+                properties = {
+                    "id": state.id,
+                    "name": state.name,
+                    "state_type": state.state_type.value,
+                    "value": str(state.value),
+                    "timestamp": state.timestamp.isoformat()
+                }
+                
+                query = """
+                MERGE (s:State {id: $id})
+                SET s += $properties
+                RETURN s
+                """
+                await self.execute_query(query, {"id": state.id, "properties": properties}, database)
+            
+            # Save Resources
+            for res_id, resource in ontology.resources.items():
+                properties = {
+                    "id": resource.id,
+                    "name": resource.name,
+                    "resource_type": resource.resource_type,
+                    "availability": float(resource.availability),
+                    "capacity": float(resource.capacity),
+                    "current_usage": float(resource.current_usage)
+                }
+                
+                query = """
+                MERGE (r:Resource {id: $id})
+                SET r += $properties
+                RETURN r
+                """
+                await self.execute_query(query, {"id": resource.id, "properties": properties}, database)
+            
+            # Save Constraints
+            for const_id, constraint in ontology.constraints.items():
+                properties = {
+                    "id": constraint.id,
+                    "constraint_type": constraint.constraint_type.value,
+                    "condition": constraint.condition,
+                    "severity": constraint.severity.value,
+                    "violated": constraint.violated
+                }
+                
+                query = """
+                MERGE (c:Constraint {id: $id})
+                SET c += $properties
+                RETURN c
+                """
+                await self.execute_query(query, {"id": constraint.id, "properties": properties}, database)
+            
+            # Create relationships: Goal -> SubGoal
+            for goal_id, goal in ontology.goals.items():
+                parent_goal_id = goal.metadata.get("parent_goal")
+                if parent_goal_id and parent_goal_id in ontology.goals:
+                    query = """
+                    MATCH (parent:Goal {id: $parent_id})
+                    MATCH (child:Goal {id: $child_id})
+                    MERGE (parent)-[r:HAS_SUBGOAL]->(child)
+                    RETURN r
+                    """
+                    await self.execute_query(
+                        query,
+                        {"parent_id": parent_goal_id, "child_id": goal_id},
+                        database
+                    )
+            
+            # Create relationships: Goal -> Task (ACHIEVED_BY)
+            for task_id, task in ontology.tasks.items():
+                for goal_id in task.metadata.get("achieves_goals", []):
+                    if goal_id in ontology.goals:
+                        query = """
+                        MATCH (g:Goal {id: $goal_id})
+                        MATCH (t:Task {id: $task_id})
+                        MERGE (g)-[r:ACHIEVED_BY]->(t)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"goal_id": goal_id, "task_id": task_id},
+                            database
+                        )
+            
+            # Create relationships: Task -> Precondition (REQUIRES)
+            for task_id, task in ontology.tasks.items():
+                for pre_id in task.preconditions:
+                    if pre_id in ontology.preconditions:
+                        query = """
+                        MATCH (t:Task {id: $task_id})
+                        MATCH (p:Precondition {id: $pre_id})
+                        MERGE (t)-[r:REQUIRES]->(p)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"task_id": task_id, "pre_id": pre_id},
+                            database
+                        )
+            
+            # Create relationships: Task -> Postcondition (PRODUCES)
+            for task_id, task in ontology.tasks.items():
+                for post_id in task.postconditions:
+                    if post_id in ontology.postconditions:
+                        query = """
+                        MATCH (t:Task {id: $task_id})
+                        MATCH (p:Postcondition {id: $post_id})
+                        MERGE (t)-[r:PRODUCES]->(p)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"task_id": task_id, "post_id": post_id},
+                            database
+                        )
+            
+            # Create relationships: Task -> Task (DEPENDS_ON)
+            for task_id, task in ontology.tasks.items():
+                for dep_id in task.dependencies:
+                    if dep_id in ontology.tasks:
+                        query = """
+                        MATCH (dependent:Task {id: $task_id})
+                        MATCH (dependency:Task {id: $dep_id})
+                        MERGE (dependent)-[r:DEPENDS_ON]->(dependency)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"task_id": task_id, "dep_id": dep_id},
+                            database
+                        )
+            
+            # Create relationships: Task -> Resource (CONSUMES)
+            for task_id, task in ontology.tasks.items():
+                for req_id in task.resource_requirements:
+                    if req_id in ontology.resource_requirements:
+                        req = ontology.resource_requirements[req_id]
+                        if req.resource_id in ontology.resources:
+                            query = """
+                            MATCH (t:Task {id: $task_id})
+                            MATCH (r:Resource {id: $resource_id})
+                            MERGE (t)-[rel:CONSUMES {amount: $amount}]->(r)
+                            RETURN rel
+                            """
+                            await self.execute_query(
+                                query,
+                                {
+                                    "task_id": task_id,
+                                    "resource_id": req.resource_id,
+                                    "amount": req.required_amount
+                                },
+                                database
+                            )
+            
+            # Create relationships: Task -> State (TRANSITIONS_TO)
+            for task_id, task in ontology.tasks.items():
+                for trans_id in task.state_transitions:
+                    if trans_id in ontology.state_transitions:
+                        trans = ontology.state_transitions[trans_id]
+                        query = """
+                        MATCH (t:Task {id: $task_id})
+                        MATCH (s:State {id: $state_id})
+                        MERGE (t)-[r:TRANSITIONS_TO]->(s)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"task_id": task_id, "state_id": trans.to_state},
+                            database
+                        )
+            
+            # Create relationships: State -> State (PRECEDES)
+            for trans_id, trans in ontology.state_transitions.items():
+                query = """
+                MATCH (from:State {id: $from_id})
+                MATCH (to:State {id: $to_id})
+                MERGE (from)-[r:PRECEDES]->(to)
+                RETURN r
+                """
+                await self.execute_query(
+                    query,
+                    {"from_id": trans.from_state, "to_id": trans.to_state},
+                    database
+                )
+            
+            # Create relationships: Task -> Constraint (CONSTRAINED_BY)
+            for task_id, task in ontology.tasks.items():
+                for const_id in task.constraints:
+                    if const_id in ontology.constraints:
+                        query = """
+                        MATCH (t:Task {id: $task_id})
+                        MATCH (c:Constraint {id: $const_id})
+                        MERGE (t)-[r:CONSTRAINED_BY]->(c)
+                        RETURN r
+                        """
+                        await self.execute_query(
+                            query,
+                            {"task_id": task_id, "const_id": const_id},
+                            database
+                        )
+            
+            self.logger.info(f"System ontology saved to Neo4j: {len(ontology.goals)} goals, {len(ontology.tasks)} tasks")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save system ontology to Neo4j: {e}")
+            return False
+    
+    async def load_system_ontology(
+        self,
+        database: Optional[str] = None
+    ):
+        """
+        Load system ontology from Neo4j
+        
+        Args:
+            database: Database name (defaults to config database)
+            
+        Returns:
+            SystemOntology or None if failed
+        """
+        if not await self.connect():
+            return None
+        
+        try:
+            from models.system_ontology import SystemOntology, Goal, Task, Precondition, Postcondition, State, Resource, Constraint, StateTransition, GoalStatus, TaskStatus, StateType, ConstraintType, ConstraintSeverity
+            
+            ontology = SystemOntology()
+            
+            # Load Goals
+            query = "MATCH (g:Goal) RETURN g"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["g"]
+                props = dict(node)
+                goal = Goal(
+                    id=props["id"],
+                    name=props.get("name", ""),
+                    description=props.get("description", ""),
+                    priority=float(props.get("priority", 0.5)),
+                    status=GoalStatus(props.get("status", "pending")),
+                    created_at=datetime.fromisoformat(props.get("created_at", datetime.now().isoformat())),
+                    achieved_at=datetime.fromisoformat(props["achieved_at"]) if props.get("achieved_at") else None,
+                    metadata={k.replace("meta_", ""): v for k, v in props.items() if k.startswith("meta_")}
+                )
+                ontology.add_goal(goal)
+            
+            # Load Tasks
+            query = "MATCH (t:Task) RETURN t"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["t"]
+                props = dict(node)
+                task = Task(
+                    id=props["id"],
+                    name=props.get("name", ""),
+                    description=props.get("description", ""),
+                    executable=props.get("executable", True),
+                    status=TaskStatus(props.get("status", "pending")),
+                    priority=float(props.get("priority", 0.5)),
+                    execution_time=props.get("execution_time"),
+                    success_rate=float(props.get("success_rate", 1.0)),
+                    metadata={k.replace("meta_", ""): v for k, v in props.items() if k.startswith("meta_")},
+                    created_at=datetime.fromisoformat(props.get("created_at", datetime.now().isoformat())),
+                    started_at=datetime.fromisoformat(props["started_at"]) if props.get("started_at") else None,
+                    completed_at=datetime.fromisoformat(props["completed_at"]) if props.get("completed_at") else None
+                )
+                ontology.add_task(task)
+            
+            # Load Preconditions and link to tasks
+            query = "MATCH (p:Precondition) RETURN p"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["p"]
+                props = dict(node)
+                pre = Precondition(
+                    id=props["id"],
+                    description=props.get("description", ""),
+                    condition=props.get("condition", ""),
+                    satisfied=props.get("satisfied", False),
+                    required_by=props.get("required_by"),
+                    satisfied_by=props.get("satisfied_by")
+                )
+                ontology.add_precondition(pre)
+                
+                # Link to task
+                if pre.required_by and pre.required_by in ontology.tasks:
+                    if pre.id not in ontology.tasks[pre.required_by].preconditions:
+                        ontology.tasks[pre.required_by].preconditions.append(pre.id)
+            
+            # Load Postconditions and link to tasks
+            query = "MATCH (p:Postcondition) RETURN p"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["p"]
+                props = dict(node)
+                post = Postcondition(
+                    id=props["id"],
+                    description=props.get("description", ""),
+                    condition=props.get("condition", ""),
+                    achieved=props.get("achieved", False),
+                    produced_by=props.get("produced_by")
+                )
+                ontology.add_postcondition(post)
+                
+                # Link to task
+                if post.produced_by and post.produced_by in ontology.tasks:
+                    if post.id not in ontology.tasks[post.produced_by].postconditions:
+                        ontology.tasks[post.produced_by].postconditions.append(post.id)
+            
+            # Load States
+            query = "MATCH (s:State) RETURN s"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["s"]
+                props = dict(node)
+                state = State(
+                    id=props["id"],
+                    name=props.get("name", ""),
+                    state_type=StateType(props.get("state_type", "system")),
+                    value=props.get("value", ""),
+                    timestamp=datetime.fromisoformat(props.get("timestamp", datetime.now().isoformat()))
+                )
+                ontology.add_state(state)
+            
+            # Load Resources
+            query = "MATCH (r:Resource) RETURN r"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["r"]
+                props = dict(node)
+                resource = Resource(
+                    id=props["id"],
+                    name=props.get("name", ""),
+                    resource_type=props.get("resource_type", "generic"),
+                    availability=float(props.get("availability", 1.0)),
+                    capacity=float(props.get("capacity", 1.0)),
+                    current_usage=float(props.get("current_usage", 0.0))
+                )
+                ontology.add_resource(resource)
+            
+            # Load Constraints
+            query = "MATCH (c:Constraint) RETURN c"
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                node = record["c"]
+                props = dict(node)
+                constraint = Constraint(
+                    id=props["id"],
+                    constraint_type=ConstraintType(props.get("constraint_type", "logical")),
+                    condition=props.get("condition", ""),
+                    severity=ConstraintSeverity(props.get("severity", "hard")),
+                    violated=props.get("violated", False)
+                )
+                ontology.add_constraint(constraint)
+            
+            # Load relationships: Task dependencies
+            query = """
+            MATCH (t1:Task)-[r:DEPENDS_ON]->(t2:Task)
+            RETURN t1.id as task_id, t2.id as depends_on_id
+            """
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                task_id = record["task_id"]
+                dep_id = record["depends_on_id"]
+                if task_id in ontology.tasks and dep_id not in ontology.tasks[task_id].dependencies:
+                    ontology.tasks[task_id].dependencies.append(dep_id)
+            
+            # Load relationships: Task constraints
+            query = """
+            MATCH (t:Task)-[r:CONSTRAINED_BY]->(c:Constraint)
+            RETURN t.id as task_id, c.id as constraint_id
+            """
+            records, _ = await self.execute_query(query, database=database)
+            for record in records:
+                task_id = record["task_id"]
+                const_id = record["constraint_id"]
+                if task_id in ontology.tasks and const_id not in ontology.tasks[task_id].constraints:
+                    ontology.tasks[task_id].constraints.append(const_id)
+            
+            self.logger.info(f"System ontology loaded from Neo4j: {len(ontology.goals)} goals, {len(ontology.tasks)} tasks")
+            return ontology
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load system ontology from Neo4j: {e}")
+            return None
 
