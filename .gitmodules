@@ -106,3 +106,6 @@
 [submodule "open_researcher/OpenAgnets"]
 	path = open_researcher/OpenAgnets
 	url = https://github.com/darrenhinde/OpenAgents.git
+[submodule "open_researcher/opencode"]
+	path = open_researcher/opencode
+	url = https://github.com/anomalyco/opencode.git
