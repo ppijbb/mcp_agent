@@ -113,85 +113,59 @@ class SparkleForgeA2AWrapper(A2AAdapter):
         streaming: bool = False
     ) -> Dict[str, Any]:
         """
-        sparkleforge 요청 실행
+        sparkleforge 연구 요청 실행
 
         Args:
             request: 연구 요청
-            output_path: 출력 파일 경로 (선택)
+            output_path: 결과 출력 파일 경로
             streaming: 스트리밍 모드
 
         Returns:
             실행 결과
         """
+        # 현재 작업 디렉토리 저장
+        original_cwd = os.getcwd()
+
         try:
-            # 현재 작업 디렉토리 저장
-            original_cwd = os.getcwd()
+            # sparkleforge 디렉토리로 이동
+            os.chdir(sparkleforge_path)
 
-            try:
-                # sparkleforge 디렉토리로 이동
-                os.chdir(sparkleforge_path)
+            # orchestrator 가져오기
+            orchestrator = await self._get_orchestrator()
 
-                # orchestrator 가져오기
-                orchestrator = await self._get_orchestrator()
+            # 연구 실행
+            logger.info(f"SparkleForge 연구 시작: {request}")
 
-                # 연구 실행
-                logger.info(f"SparkleForge 연구 시작: {request}")
+            if streaming:
+                # 스트리밍 모드로 실행
+                result = await self._execute_streaming_request(orchestrator, request)
+            else:
+                # 일반 모드로 실행
+                result = await orchestrator.execute(request)
 
-                if streaming:
-                    # 스트리밍 모드로 실행
-                    result = await self._execute_streaming_request(orchestrator, request)
-                else:
-                    # 일반 모드로 실행
-                    result = await orchestrator.execute_full_research_workflow(request)
+            # 결과 포맷팅
+            formatted_result = self._format_sparkleforge_result(result)
 
-                # 결과 포맷팅
-                formatted_result = self._format_sparkleforge_result(result)
+            # 출력 파일 저장 (요청된 경우)
+            if output_path:
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(formatted_result, f, ensure_ascii=False, indent=2)
 
-                # 출력 파일 저장 (요청된 경우)
-                if output_path:
-                    with open(output_path, 'w', encoding='utf-8') as f:
-                        json.dump(formatted_result, f, ensure_ascii=False, indent=2)
-
-                logger.info("SparkleForge 연구 완료")
-                return formatted_result
-
-            finally:
-                # 원래 작업 디렉토리 복원
-                os.chdir(original_cwd)
+            logger.info("SparkleForge 연구 완료")
+            return formatted_result
 
         except Exception as e:
             logger.error(f"SparkleForge 실행 실패: {e}")
             import traceback
             logger.error(traceback.format_exc())
-
             return {
                 'success': False,
-                'error': str(e),
-                'agent': 'sparkleforge',
-                'request': request
+                'error': f'SparkleForge 실행 실패: {str(e)}',
+                'agent': 'sparkleforge'
             }
-
-    async def _execute_streaming_request(self, orchestrator, request: str) -> Dict[str, Any]:
-        """스트리밍 모드로 요청 실행"""
-        # 스트리밍 결과 수집을 위한 리스트
-        streaming_results = []
-
-        try:
-            # 스트리밍 콜백 함수
-            async def streaming_callback(result: Dict[str, Any]):
-                streaming_results.append(result)
-                logger.info(f"Streaming result: {len(result)} chars")
-
-            # 스트리밍 실행 (가정 - 실제 API에 맞게 조정 필요)
-            # 현재 sparkleforge의 streaming 모드 확인 필요
-            result = await orchestrator.execute_full_research_workflow(request)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Streaming execution failed: {e}")
-            # fallback to non-streaming
-            return await orchestrator.execute_full_research_workflow(request)
+        finally:
+            # 원래 작업 디렉토리 복원
+            os.chdir(original_cwd)
 
     def _format_sparkleforge_result(self, raw_result: Any) -> Dict[str, Any]:
         """sparkleforge 결과를 표준 포맷으로 변환"""

@@ -1,259 +1,36 @@
 {
   "mcpServers": {
-    "ddg_search": {
-      "command": "ddg_search",
-      "disabled": true
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "env": {}
     },
-    "fetch": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@smithery-ai/fetch/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+    "github-local": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       }
     },
-    "docfork": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@docfork/mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
-    },
-    "context7-mcp": {
-      "type": "http",
-      "httpUrl": "https://server.smithery.ai/@upstash/context7-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${SMITHERY_API_KEY}"
-      }
-    },
-    "semantic_scholar": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
-      ],
-      "disabled": true
-    },
-    "parallel-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@parallel/search@latest"
-      ],
-      "disabled": true
-    },
-    "WebSearch-MCP": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@mnhlt/WebSearch-MCP@latest"
-      ],
-      "disabled": true
-    },
-    "Google search console": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "google_search_console@latest"
-      ],
-      "disabled": true
-    },
-    "Paper Search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@adamamer20/paper-search-mcp-openai@latest"
-      ],
-      "disabled": true
-    },
-    "TodoList": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "todoist@latest"
-      ],
-      "disabled": true
-    },
-    "arxiv": {
-      "command": "npx",
-      "transport": "stdio",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-arxiv@latest"
-      ],
-      "disabled": true
-    },
-    "kis MCP": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@KISOpenAPI/kis-code-assistant-mcp@latest"
-      ],
-      "disabled": true
-    }
-  }
-}
-    },
-    "semantic_scholar": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
-      ],
-      "disabled": true
-    },
-    "parallel-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@parallel/search@latest"
-      ],
-      "disabled": true
-    },
-    "tavily-mcp": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@Jeetanshu18/tavily-mcp@latest"
-      ],
-      "disabled": true
-    },
-    "WebSearch-MCP": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@mnhlt/WebSearch-MCP@latest"
-      ],
-      "disabled": true
-    },
-    "Google search console": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "google_search_console@latest"
-      ],
-      "disabled": true
-    },
-    "Paper Search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@adamamer20/paper-search-mcp-openai@latest"
-      ],
-      "disabled": true
-    },
-    "TodoList": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "todoist@latest"
-      ],
-      "disabled": true
-    },
-    "arxiv": {
-      "command": "npx",
-      "transport": "stdio",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-arxiv@latest"
-      ],
-      "disabled": true
-    },
-    "kis MCP": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@KISOpenAPI/kis-code-assistant-mcp@latest"
-      ],
-      "disabled": true
-    },
-    "financial_agent": {
+    "local-search": {
       "command": "python",
-      "args": [
-        "lang_graph/financial_agent/financial_mcp_server.py"
-      ],
-      "disabled": true
-    },
-    "github": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-github@latest"
-      ],
+      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.search_server import run_server; run_server()"],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+        "PYTHONPATH": "/home/user/workspace/mcp_agent"
       }
     },
-    "mcp_search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-duckduckgo-search@latest"
-      ]
-    },
-    "mcp_service": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "fetch-mcp@latest"
-      ]
-    },
-    "ai_search_service": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
-      ]
-    },
-    "web_search_service": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@parallel/search@latest"
-      ]
-    },
-    "tavily_search_server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@Jeetanshu18/tavily-mcp@latest"
-      ]
-    },
-    "google_serper": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@mnhlt/WebSearch-MCP@latest"
-      ]
-    },
-    "web_search_server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@adamamer20/paper-search-mcp-openai@latest"
-      ]
-    },
-    "serper_search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "google_search_console@latest"
-      ]
-    },
-    "serper_search_service": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@KISOpenAPI/kis-code-assistant-mcp@latest"
-      ]
-    },
-    "google_custom_search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-github@latest"
-      ],
+    "code-executor": {
+      "command": "python",
+      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.code_executor import run_server; run_server()"],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+        "PYTHONPATH": "/home/user/workspace/mcp_agent"
+      }
+    },
+    "data-analyzer": {
+      "command": "python",
+      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.data_analyzer import run_server; run_server()"],
+      "env": {
+        "PYTHONPATH": "/home/user/workspace/mcp_agent"
       }
     }
   }
