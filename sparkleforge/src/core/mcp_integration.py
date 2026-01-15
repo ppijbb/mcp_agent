@@ -2542,6 +2542,17 @@ class UniversalMCPHub:
         import uuid
         start_time = time.time()
         
+        # 실행 컨텍스트에서 execution_id 가져오기 (ROMA 스타일)
+        execution_id = None
+        try:
+            from src.core.recursive_context_manager import ExecutionContext
+            ctx = ExecutionContext.get()
+            if ctx:
+                execution_id = ctx.execution_id
+                logger.debug(f"Tool execution in execution context: {execution_id}")
+        except Exception as e:
+            logger.debug(f"Failed to get ExecutionContext: {e}")
+        
         # 9대 혁신: ToolTrace 추적 준비
         tool_id = f"tool_{uuid.uuid4().hex[:8]}"
         tool_type = _infer_tool_type(tool_name)

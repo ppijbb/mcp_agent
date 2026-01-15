@@ -2082,6 +2082,9 @@ class AutonomousOrchestrator:
         # 하위 태스크 개수 결정 (복잡도 기반)
         num_subtasks = min(3 + int(task_complexity / 2), 5)  # 최대 5개
         
+        # parent_task_id 추출 (프롬프트에서 사용하기 전에 정의)
+        parent_task_id = task.get('task_id', 'unknown')
+        
         logger.info(f"  🔄 Recursive decomposition (depth {current_depth + 1}/{max_depth}): {task.get('name', 'Unknown')} -> {num_subtasks} subtasks")
         
         # 하위 태스크 생성 프롬프트
@@ -2107,7 +2110,7 @@ class AutonomousOrchestrator:
         
         For each subtask, provide:
         {{
-            "task_id": "subtask_{parent_id}_1",
+            "task_id": "subtask_{parent_task_id}_1",
             "name": "Specific subtask name",
             "description": "Detailed subtask description",
             "type": "{task.get('type', 'research')}",
@@ -2117,7 +2120,7 @@ class AutonomousOrchestrator:
             "estimated_complexity": 3-6,
             "priority": "{task.get('priority', 'medium')}",
             "success_criteria": ["specific measurable criteria"],
-            "parent_task_id": "{task.get('task_id', '')}"
+            "parent_task_id": "{parent_task_id}"
         }}
         
         Return as JSON array of subtask objects.
@@ -2132,8 +2135,7 @@ class AutonomousOrchestrator:
         # 하위 태스크 파싱
         subtasks = self._parse_tasks_result(result.content)
         
-        # 하위 태스크에 parent_task_id 추가
-        parent_task_id = task.get('task_id', 'unknown')
+        # 하위 태스크에 parent_task_id 추가 (이미 위에서 정의됨)
         for subtask in subtasks:
             subtask['parent_task_id'] = parent_task_id
             subtask['decomposition_depth'] = current_depth + 1
