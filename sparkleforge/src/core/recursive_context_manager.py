@@ -3,6 +3,8 @@ Recursive Context Manager
 
 RLM의 재귀적 컨텍스트 관리 아이디어를 sparkleforge 연구 워크플로우에 통합.
 각 연구 단계에서 context를 재귀적으로 확장하고 활용하여 완전 자동형 처리를 수행.
+
+ROMA의 ExecutionContext 아이디어를 참고하여 contextvars 기반 컨텍스트 전파 추가.
 """
 
 import logging
@@ -11,8 +13,14 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
 from collections import deque
+from contextvars import ContextVar
 
 logger = logging.getLogger(__name__)
+
+# ContextVar for execution-scoped context propagation (ROMA-style)
+_execution_context: ContextVar[Optional['ExecutionContext']] = ContextVar(
+    "execution_context", default=None
+)
 
 
 @dataclass
@@ -52,12 +60,73 @@ class RecursiveContext:
         )
 
 
+class ExecutionContext:
+    """
+    실행 컨텍스트 (ROMA 스타일, contextvars 기반).
+    
+    실행별 고유 컨텍스트를 제공하며, thread-safe, async-safe하게 전파됩니다.
+    명시적 파라미터 전달 없이 현재 실행 컨텍스트에 접근할 수 있습니다.
+    """
+    
+    def __init__(self, execution_id: str, context_manager: 'RecursiveContextManager'):
+        """
+        초기화.
+        
+        Args:
+            execution_id: 실행 고유 ID
+            context_manager: RecursiveContextManager 인스턴스
+        """
+        self.execution_id = execution_id
+        self.context_manager = context_manager
+        self.created_at = datetime.now()
+    
+    @classmethod
+    def set(cls, execution_id: str, context_manager: 'RecursiveContextManager') -> 'ContextVar.Token':
+        """
+        실행 컨텍스트 설정.
+        
+        Args:
+            execution_id: 실행 고유 ID
+            context_manager: RecursiveContextManager 인스턴스
+        
+        Returns:
+            ContextVar 토큰 (reset에 사용)
+        """
+        ctx = cls(execution_id, context_manager)
+        token = _execution_context.set(ctx)
+        logger.debug(f"ExecutionContext set for execution: {execution_id}")
+        return token
+    
+    @classmethod
+    def get(cls) -> Optional['ExecutionContext']:
+        """
+        현재 실행 컨텍스트 반환.
+        
+        Returns:
+            ExecutionContext 인스턴스 또는 None
+        """
+        return _execution_context.get()
+    
+    @classmethod
+    def reset(cls, token: 'ContextVar.Token'):
+        """
+        실행 컨텍스트 리셋.
+        
+        Args:
+            token: set()에서 반환된 토큰
+        """
+        _execution_context.reset(token)
+        logger.debug("ExecutionContext reset")
+
+
 class RecursiveContextManager:
     """
     재귀적 컨텍스트 관리 시스템.
     
     각 연구 단계에서 context를 재귀적으로 확장하고 활용하여
     완전 자동형 처리를 수행합니다.
+    
+    ExecutionContext와 통합하여 contextvars 기반 컨텍스트 전파를 지원합니다.
     """
     
     def __init__(self, max_depth: int = 10):
@@ -73,6 +142,15 @@ class RecursiveContextManager:
         self.current_context_id: Optional[str] = None
         
         logger.info(f"RecursiveContextManager initialized (max_depth: {max_depth})")
+    
+    def get_current_execution_context(self) -> Optional[ExecutionContext]:
+        """
+        현재 실행 컨텍스트 반환 (contextvars 기반).
+        
+        Returns:
+            ExecutionContext 인스턴스 또는 None
+        """
+        return ExecutionContext.get()
     
     def push_context(
         self,

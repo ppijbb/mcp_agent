@@ -57,8 +57,13 @@ class ParallelAgentExecutor:
         
         logger.info(f"ParallelAgentExecutor initialized with max_concurrent={self.max_concurrent}")
         
-        # Start concurrency monitoring
-        asyncio.create_task(self.concurrency_manager.start_monitoring())
+        # Start concurrency monitoring (only if event loop is running)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.concurrency_manager.start_monitoring())
+        except RuntimeError:
+            # No event loop running, will be started later
+            logger.debug("No event loop running, concurrency monitoring will start later")
     
     async def execute_parallel_tasks(
         self,
@@ -67,8 +72,8 @@ class ParallelAgentExecutor:
         execution_plan: Dict[str, Any],
         objective_id: str
     ) -> Dict[str, Any]:
-        """병렬 작업 실행."""
-        logger.info(f"Starting parallel execution of {len(tasks)} tasks")
+        """병렬 작업 실행 (의존성 그래프 기반 스마트 스케줄링)."""
+        logger.info(f"Starting parallel execution of {len(tasks)} tasks (with dependency graph)")
         
         # 결과 공유 및 토론 시스템 초기화
         if self.agent_config.enable_agent_communication:
@@ -79,8 +84,31 @@ class ParallelAgentExecutor:
             )
             logger.info("✅ Agent result sharing and discussion enabled")
         
-        # 작업 큐 초기화
-        self.task_queue.add_tasks(tasks)
+        # 의존성 그래프 구축
+        try:
+            from src.core.task_dependency_graph import TaskDependencyGraph
+            dependency_graph = TaskDependencyGraph(tasks)
+            logger.info(f"✅ Dependency graph built: {dependency_graph.get_statistics()}")
+            use_dependency_graph = True
+            
+            # DAG 시각화 초기화
+            try:
+                from src.core.dag_visualizer import get_dag_visualizer
+                visualizer = get_dag_visualizer()
+                visualizer.initialize(tasks)
+                logger.info("✅ DAG Visualizer initialized")
+            except Exception as e:
+                logger.debug(f"DAG Visualizer initialization failed: {e}")
+        except ImportError as e:
+            logger.warning(f"⚠️ TaskDependencyGraph not available: {e}. Falling back to simple parallel groups.")
+            use_dependency_graph = False
+            dependency_graph = None
+            # 작업 큐 초기화 (fallback)
+            self.task_queue.add_tasks(tasks)
+            parallel_groups = execution_plan.get('parallel_groups', [])
+            if parallel_groups:
+                logger.info(f"Using {len(parallel_groups)} parallel groups from execution plan")
+                self.task_queue.parallel_groups = parallel_groups
         
         # 스트리밍 이벤트: 실행 시작
         await self.streaming_manager.stream_event(
@@ -92,24 +120,27 @@ class ParallelAgentExecutor:
                 'message': 'Starting parallel task execution',
                 'total_tasks': len(tasks),
                 'max_concurrent': self.max_concurrent,
-                'strategy': execution_plan.get('strategy', 'sequential')
+                'strategy': execution_plan.get('strategy', 'sequential'),
+                'use_dependency_graph': use_dependency_graph
             },
             priority=1
         )
         
-        # 병렬 그룹 정보 활용
-        parallel_groups = execution_plan.get('parallel_groups', [])
-        if parallel_groups:
-            logger.info(f"Using {len(parallel_groups)} parallel groups from execution plan")
-            self.task_queue.parallel_groups = parallel_groups
-        
         # 병렬 실행 시작
         execution_start = datetime.now()
-        results = await self._execute_with_parallel_groups(
-            agent_assignments,
-            execution_plan,
-            objective_id
-        )
+        if use_dependency_graph:
+            results = await self._execute_with_dependency_graph(
+                dependency_graph,
+                agent_assignments,
+                execution_plan,
+                objective_id
+            )
+        else:
+            results = await self._execute_with_parallel_groups(
+                agent_assignments,
+                execution_plan,
+                objective_id
+            )
         execution_time = (datetime.now() - execution_start).total_seconds()
         
         # Record performance for concurrency optimization
@@ -131,14 +162,164 @@ class ParallelAgentExecutor:
                 'completed_tasks': len(final_results.get('execution_results', [])),
                 'failed_tasks': len(self.failed_tasks),
                 'execution_time': execution_time,
-                'success_rate': len(final_results.get('execution_results', [])) / max(len(tasks), 1)
+                'success_rate': len(final_results.get('execution_results', [])) / max(len(tasks), 1),
+                'dependency_graph_stats': dependency_graph.get_statistics() if dependency_graph else None
             },
             priority=1
         )
         
         logger.info(f"Parallel execution completed: {len(final_results.get('execution_results', []))} tasks completed in {execution_time:.2f}s")
         
+        # DAG 시각화 종료
+        try:
+            from src.core.dag_visualizer import get_dag_visualizer
+            visualizer = get_dag_visualizer()
+            visualizer.finalize()
+            
+            # DAG 요약을 스트리밍 이벤트로 전송
+            dag_summary = visualizer.get_dag_summary()
+            await self.streaming_manager.stream_event(
+                event_type=EventType.PROGRESS_UPDATE,
+                agent_id="parallel_executor",
+                workflow_id=objective_id,
+                data={
+                    'stage': 'dag_summary',
+                    'message': 'DAG execution summary',
+                    'summary': dag_summary,
+                    'visualization_data': visualizer.get_visualization_data()
+                },
+                priority=1
+            )
+        except Exception as e:
+            logger.debug(f"Failed to finalize DAG visualizer: {e}")
+        
         return final_results
+    
+    async def _execute_with_dependency_graph(
+        self,
+        dependency_graph,
+        agent_assignments: Dict[str, List[str]],
+        execution_plan: Dict[str, Any],
+        objective_id: str
+    ) -> List[Dict[str, Any]]:
+        """의존성 그래프 기반 스마트 병렬 실행."""
+        results = []
+        
+        # Get dynamic concurrency
+        current_concurrency = self.concurrency_manager.get_current_concurrency()
+        semaphore = asyncio.Semaphore(current_concurrency)
+        
+        # 실행 레벨별로 처리
+        execution_levels = dependency_graph.get_execution_levels()
+        logger.info(f"📊 Execution levels: {len(execution_levels)} levels")
+        
+        for level_idx, level_tasks in enumerate(execution_levels):
+            logger.info(f"📊 Processing level {level_idx + 1}/{len(execution_levels)}: {len(level_tasks)} tasks")
+            
+            # 현재 레벨의 실행 가능한 태스크만 필터링 (의존성이 해결된 태스크)
+            ready_tasks = dependency_graph.get_ready_tasks()
+            level_ready_tasks = [t for t in level_tasks if t in ready_tasks]
+            
+            if not level_ready_tasks:
+                # 의존성이 아직 해결되지 않은 태스크는 다음 사이클에서 처리
+                logger.debug(f"  No ready tasks in level {level_idx + 1}, waiting for dependencies...")
+                continue
+            
+            # 동적 동시성에 맞춰 태스크 그룹 생성
+            current_concurrency = self.concurrency_manager.get_current_concurrency()
+            task_groups = []
+            for i in range(0, len(level_ready_tasks), current_concurrency):
+                task_groups.append(level_ready_tasks[i:i + current_concurrency])
+            
+            # 각 그룹을 순차적으로 실행 (그룹 내에서는 병렬)
+            for group_idx, task_group in enumerate(task_groups):
+                logger.info(f"  Executing group {group_idx + 1}/{len(task_groups)}: {len(task_group)} tasks")
+                
+                # 그룹 내 작업들을 병렬로 실행
+                group_tasks = []
+                for task_id in task_group:
+                    task = dependency_graph.get_task(task_id)
+                    if task:
+                        dependency_graph.mark_running(task_id)
+                        group_tasks.append(
+                            self._execute_single_task(
+                                task_id,
+                                task,
+                                agent_assignments,
+                                semaphore,
+                                objective_id
+                            )
+                        )
+                
+                # 그룹 실행 완료 대기
+                group_results = await asyncio.gather(*group_tasks, return_exceptions=True)
+                
+                # 결과 처리
+                for i, result in enumerate(group_results):
+                    task_id = task_group[i]
+                    if isinstance(result, Exception):
+                        logger.error(f"Task {task_id} failed with exception: {result}")
+                        self.failed_tasks.append({
+                            'task_id': task_id,
+                            'error': str(result)
+                        })
+                        dependency_graph.mark_completed(task_id)  # 실패해도 완료로 표시
+                        
+                        # DAG 시각화 업데이트
+                        try:
+                            from src.core.dag_visualizer import get_dag_visualizer
+                            visualizer = get_dag_visualizer()
+                            visualizer.mark_task_failed(task_id, str(result))
+                        except Exception as e:
+                            logger.debug(f"Failed to update DAG visualizer: {e}")
+                    else:
+                        results.append(result)
+                        dependency_graph.mark_completed(task_id)
+                        logger.info(f"  ✅ Task {task_id} completed")
+                        
+                        # DAG 시각화 업데이트
+                        try:
+                            from src.core.dag_visualizer import get_dag_visualizer
+                            visualizer = get_dag_visualizer()
+                            visualizer.mark_task_completed(task_id, result)
+                        except Exception as e:
+                            logger.debug(f"Failed to update DAG visualizer: {e}")
+        
+        # 남은 태스크 처리 (의존성 문제로 레벨에 포함되지 않은 태스크)
+        remaining_ready = dependency_graph.get_ready_tasks()
+        if remaining_ready:
+            logger.info(f"📊 Processing remaining {len(remaining_ready)} ready tasks")
+            current_concurrency = self.concurrency_manager.get_current_concurrency()
+            semaphore = asyncio.Semaphore(current_concurrency)
+            
+            remaining_tasks = []
+            for task_id in remaining_ready[:current_concurrency]:
+                task = dependency_graph.get_task(task_id)
+                if task:
+                    dependency_graph.mark_running(task_id)
+                    remaining_tasks.append(
+                        self._execute_single_task(
+                            task_id,
+                            task,
+                            agent_assignments,
+                            semaphore,
+                            objective_id
+                        )
+                    )
+            
+            if remaining_tasks:
+                remaining_results = await asyncio.gather(*remaining_tasks, return_exceptions=True)
+                for i, result in enumerate(remaining_results):
+                    task_id = remaining_ready[i]
+                    if isinstance(result, Exception):
+                        logger.error(f"Task {task_id} failed: {result}")
+                        self.failed_tasks.append({'task_id': task_id, 'error': str(result)})
+                        dependency_graph.mark_completed(task_id)
+                    else:
+                        results.append(result)
+                        dependency_graph.mark_completed(task_id)
+        
+        return results
     
     async def _execute_with_parallel_groups(
         self,
@@ -146,7 +327,7 @@ class ParallelAgentExecutor:
         execution_plan: Dict[str, Any],
         objective_id: str
     ) -> List[Dict[str, Any]]:
-        """병렬 그룹 기반 실행."""
+        """병렬 그룹 기반 실행 (fallback - 의존성 그래프 없을 때)."""
         results = []
         
         # Get dynamic concurrency

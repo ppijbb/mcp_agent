@@ -124,4 +124,7 @@ sphinx-rtd-theme>=2.0.0
 # Production-Grade Reliability (혁신 8)
 circuit-breaker>=1.4.0
 redis>=5.0.0  # State persistence
-asyncio-mqtt>=0.16.0  # Health monitoring 
+asyncio-mqtt>=0.16.0  # Health monitoring
+
+# Dependency graph (ROMA integration)
+networkx>=3.0  # Task dependency graph for smart parallel execution 

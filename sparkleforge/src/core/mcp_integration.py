@@ -434,6 +434,10 @@ class UniversalMCPHub:
 
         # ToolRegistry 통합 관리
         self.registry = ToolRegistry()
+        
+        # 실행 컨텍스트별 MCP 세션 관리 (ROMA 스타일)
+        # 각 실행마다 독립적인 MCP 세션 풀을 유지
+        self._execution_sessions: Dict[str, Dict[str, Any]] = {}
         self.tools: Dict[str, ToolInfo] = {}  # 하위 호환성을 위해 유지 (registry.tools 참조)
         self.openrouter_client: Optional[OpenRouterClient] = None
 
@@ -3616,6 +3620,79 @@ class UniversalMCPHub:
         """사용 가능한 도구 목록 반환 - Registry 기반."""
         # Registry의 모든 Tool 이름 반환
         return self.registry.get_all_tool_names()
+    
+    async def get_tool_for_execution(self, tool_name: str, execution_id: Optional[str] = None) -> Optional[Any]:
+        """
+        실행 컨텍스트별 도구 반환 (ROMA 스타일).
+        
+        각 실행마다 독립적인 도구 인스턴스를 관리하여 실행 간 격리를 보장합니다.
+        
+        Args:
+            tool_name: 도구 이름
+            execution_id: 실행 ID (None이면 ExecutionContext에서 가져옴)
+        
+        Returns:
+            도구 인스턴스 또는 None
+        """
+        # ExecutionContext에서 execution_id 가져오기
+        if execution_id is None:
+            try:
+                from src.core.recursive_context_manager import ExecutionContext
+                ctx = ExecutionContext.get()
+                if ctx:
+                    execution_id = ctx.execution_id
+            except Exception:
+                pass
+        
+        # execution_id가 없으면 기본 도구 반환 (하위 호환성)
+        if not execution_id:
+            return self.registry.get_tool(tool_name)
+        
+        # 실행별 세션 초기화
+        if execution_id not in self._execution_sessions:
+            self._execution_sessions[execution_id] = {
+                'tools': {},
+                'created_at': datetime.now()
+            }
+        
+        execution_session = self._execution_sessions[execution_id]
+        
+        # 도구가 이미 캐시되어 있으면 반환
+        if tool_name in execution_session['tools']:
+            return execution_session['tools'][tool_name]
+        
+        # 도구 초기화 및 캐싱
+        # LangChain Tool이 있으면 반환, 없으면 ToolInfo 반환
+        tool = self.registry.get_langchain_tool(tool_name)
+        if not tool:
+            # LangChain Tool이 없으면 ToolInfo 반환
+            tool = self.registry.get_tool_info(tool_name)
+        
+        if tool:
+            execution_session['tools'][tool_name] = tool
+            logger.debug(f"Tool {tool_name} cached for execution {execution_id}")
+        
+        return tool
+    
+    async def cleanup_execution(self, execution_id: str):
+        """
+        실행 종료 시 세션 정리 (ROMA 스타일).
+        
+        실행별로 관리된 도구 인스턴스와 세션을 정리합니다.
+        
+        Args:
+            execution_id: 정리할 실행 ID
+        """
+        if execution_id in self._execution_sessions:
+            session = self._execution_sessions[execution_id]
+            tools_count = len(session.get('tools', {}))
+            
+            # 세션 정리
+            del self._execution_sessions[execution_id]
+            
+            logger.info(f"Cleaned up execution session {execution_id} ({tools_count} tools)")
+        else:
+            logger.debug(f"Execution session {execution_id} not found (already cleaned up?)")
     
     def get_all_langchain_tools(self) -> List[BaseTool]:
         """모든 LangChain Tool 리스트 반환."""

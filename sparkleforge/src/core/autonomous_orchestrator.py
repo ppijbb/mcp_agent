@@ -1873,8 +1873,8 @@ class AutonomousOrchestrator:
         preliminary_research: Dict[str, Any],
         depth_config: Optional[Any] = None
     ) -> List[Dict[str, Any]]:
-        """복잡도 기반 task 분해 (9번째 혁신: Adaptive Research Depth 통합)."""
-        logger.info("📋 Decomposing research into specific tasks")
+        """복잡도 기반 task 분해 (9번째 혁신: Adaptive Research Depth 통합 + 재귀적 분해)."""
+        logger.info("📋 Decomposing research into specific tasks (with recursive decomposition)")
         
         # complexity와 num_tasks를 함수 시작 부분에서 항상 초기화 (스코프 문제 방지)
         complexity_raw = state.get('complexity_score', 5.0)
@@ -1921,6 +1921,46 @@ class AutonomousOrchestrator:
         
         logger.info(f"📊 Target task count: {num_tasks}")
         
+        # 초기 태스크 생성
+        initial_tasks = await self._create_initial_tasks(state, preliminary_research, num_tasks, complexity)
+        
+        # 재귀적 분해 적용
+        final_tasks = []
+        max_recursion_depth = depth_config.planning.get("max_recursion_depth", 3) if depth_config else 3
+        
+        for task in initial_tasks:
+            if await self._is_atomic_task(task, depth_config, complexity):
+                final_tasks.append(task)
+                logger.info(f"  ✅ Atomic task: {task.get('name', 'Unknown')} (no further decomposition needed)")
+            else:
+                # 재귀적 분해
+                logger.info(f"  🔄 Non-atomic task detected: {task.get('name', 'Unknown')} - starting recursive decomposition")
+                subtasks = await self._recursive_decompose(
+                    task, 
+                    state, 
+                    preliminary_research, 
+                    depth_config, 
+                    current_depth=0,
+                    max_depth=max_recursion_depth
+                )
+                final_tasks.extend(subtasks)
+                logger.info(f"  ✅ Decomposed into {len(subtasks)} subtasks")
+        
+        # Task 검증 및 로깅
+        logger.info(f"📋 Final task count: {len(final_tasks)} (from {len(initial_tasks)} initial tasks)")
+        for i, task in enumerate(final_tasks):
+            logger.info(f"  Task {i+1}: {task.get('name', 'Unknown')} ({task.get('type', 'research')}) - {task.get('assigned_agent_type', 'unknown')} agent")
+        
+        return final_tasks
+    
+    async def _create_initial_tasks(
+        self,
+        state: ResearchState,
+        preliminary_research: Dict[str, Any],
+        num_tasks: int,
+        complexity: float
+    ) -> List[Dict[str, Any]]:
+        """초기 태스크 생성 (기존 로직)."""
         # LLM으로 task 생성 (사전 조사 결과 포함)
         decomposition_prompt = f"""
         Based on preliminary research, decompose the research into {num_tasks} specific, executable tasks:
@@ -1946,16 +1986,12 @@ class AutonomousOrchestrator:
             "dependencies": ["task_0"],
             "estimated_complexity": 1-10,
             "priority": "high|medium|low",
-                        "success_criteria": ["specific measurable criteria"]
+            "success_criteria": ["specific measurable criteria"]
         }}
         
         Ensure tasks cover all research objectives and have logical dependencies.
         Return as JSON array of task objects.
         """
-        
-        # DEBUG LOG: Verify what Planner sees
-        logger.info(f"📋 Decomposition Context - Request: '{state.get('user_request', 'N/A')}'")
-        logger.info(f"📋 Decomposition Prompt Head:\n{decomposition_prompt[:500]}...")
         
         result = await execute_llm_task(
             prompt=decomposition_prompt,
@@ -1963,16 +1999,163 @@ class AutonomousOrchestrator:
             system_message="You are an expert research project manager with deep knowledge of task decomposition and resource allocation."
         )
         
-        logger.info(f"✅ Task decomposition completed using model: {result.model_used}")
-        
         # Task 결과 파싱
         tasks = self._parse_tasks_result(result.content)
-        
-        # Task 검증 및 로깅
-        for i, task in enumerate(tasks):
-            logger.info(f"  Task {i+1}: {task.get('name', 'Unknown')} ({task.get('type', 'research')}) - {task.get('assigned_agent_type', 'unknown')} agent")
-        
         return tasks
+    
+    async def _is_atomic_task(
+        self,
+        task: Dict[str, Any],
+        depth_config: Optional[Any],
+        complexity: float
+    ) -> bool:
+        """
+        태스크가 원자적(atomic)인지 판단 (ROMA의 Atomizer 개념).
+        
+        원자적 태스크는 직접 실행 가능한 태스크로, 더 이상 분해할 필요가 없습니다.
+        판단 기준:
+        - 복잡도가 낮음 (estimated_complexity <= 5)
+        - 의존성이 적음 (<= 1)
+        - 도구 요구사항이 적음 (<= 2)
+        - 명확한 성공 기준
+        """
+        # 복잡도 기반 판단
+        task_complexity = task.get('estimated_complexity', 5)
+        if isinstance(task_complexity, dict):
+            task_complexity = task_complexity.get('score', task_complexity.get('value', 5))
+        elif not isinstance(task_complexity, (int, float)):
+            task_complexity = 5
+        
+        # 복잡도가 매우 높으면 (>= 8) 비원자적
+        if task_complexity >= 8:
+            return False
+        
+        # 의존성 체크: 의존성이 많으면 (>= 2) 비원자적
+        dependencies = task.get('dependencies', [])
+        if len(dependencies) >= 2:
+            return False
+        
+        # 도구 요구사항 체크: 도구가 많으면 (>= 3) 비원자적
+        required_tools = task.get('required_tools', [])
+        if len(required_tools) >= 3:
+            return False
+        
+        # 복잡도가 낮으면 (<= 5) 원자적
+        if task_complexity <= 5:
+            return True
+        
+        # 복잡도가 중간이면 (6-7) 추가 조건 확인
+        # 성공 기준이 명확하고, 의존성이 없고, 도구가 적으면 원자적
+        success_criteria = task.get('success_criteria', [])
+        if len(success_criteria) >= 2 and len(dependencies) == 0 and len(required_tools) <= 2:
+            return True
+        
+        # 기본값: 복잡도가 중간 이상이면 비원자적
+        return False
+    
+    async def _recursive_decompose(
+        self,
+        task: Dict[str, Any],
+        state: ResearchState,
+        preliminary_research: Dict[str, Any],
+        depth_config: Optional[Any],
+        current_depth: int,
+        max_depth: int
+    ) -> List[Dict[str, Any]]:
+        """
+        비원자 태스크를 재귀적으로 분해 (ROMA의 재귀적 분해 개념).
+        
+        복잡한 태스크를 더 작은 하위 태스크로 분해합니다.
+        최대 재귀 깊이를 제한하여 무한 루프를 방지합니다.
+        """
+        if current_depth >= max_depth:
+            logger.warning(f"  ⚠️ Maximum recursion depth ({max_depth}) reached for task: {task.get('name', 'Unknown')}")
+            # 최대 깊이에 도달하면 원자적 태스크로 간주
+            return [task]
+        
+        task_complexity = task.get('estimated_complexity', 5)
+        if isinstance(task_complexity, dict):
+            task_complexity = task_complexity.get('score', task_complexity.get('value', 5))
+        elif not isinstance(task_complexity, (int, float)):
+            task_complexity = 5
+        
+        # 하위 태스크 개수 결정 (복잡도 기반)
+        num_subtasks = min(3 + int(task_complexity / 2), 5)  # 최대 5개
+        
+        logger.info(f"  🔄 Recursive decomposition (depth {current_depth + 1}/{max_depth}): {task.get('name', 'Unknown')} -> {num_subtasks} subtasks")
+        
+        # 하위 태스크 생성 프롬프트
+        decomposition_prompt = f"""
+        Decompose the following complex task into {num_subtasks} smaller, more manageable subtasks:
+        
+        Parent Task:
+        - Name: {task.get('name', '')}
+        - Description: {task.get('description', '')}
+        - Type: {task.get('type', 'research')}
+        - Complexity: {task_complexity}
+        - Required Tools: {task.get('required_tools', [])}
+        
+        Research Context:
+        - Request: {state.get('user_request', '')}
+        - Objectives: {state.get('analyzed_objectives', [])}
+        
+        Create subtasks that:
+        1. Are more specific and focused than the parent task
+        2. Can be executed independently or with minimal dependencies
+        3. Together accomplish the parent task's goal
+        4. Have lower complexity scores (target: 3-6 each)
+        
+        For each subtask, provide:
+        {{
+            "task_id": "subtask_{parent_id}_1",
+            "name": "Specific subtask name",
+            "description": "Detailed subtask description",
+            "type": "{task.get('type', 'research')}",
+            "assigned_agent_type": "{task.get('assigned_agent_type', 'academic_researcher')}",
+            "required_tools": ["g-search", "arxiv"],
+            "dependencies": [],
+            "estimated_complexity": 3-6,
+            "priority": "{task.get('priority', 'medium')}",
+            "success_criteria": ["specific measurable criteria"],
+            "parent_task_id": "{task.get('task_id', '')}"
+        }}
+        
+        Return as JSON array of subtask objects.
+        """
+        
+        result = await execute_llm_task(
+            prompt=decomposition_prompt,
+            task_type=TaskType.PLANNING,
+            system_message="You are an expert at breaking down complex research tasks into manageable subtasks."
+        )
+        
+        # 하위 태스크 파싱
+        subtasks = self._parse_tasks_result(result.content)
+        
+        # 하위 태스크에 parent_task_id 추가
+        parent_task_id = task.get('task_id', 'unknown')
+        for subtask in subtasks:
+            subtask['parent_task_id'] = parent_task_id
+            subtask['decomposition_depth'] = current_depth + 1
+        
+        # 각 하위 태스크에 대해 재귀적으로 원자성 확인
+        final_subtasks = []
+        for subtask in subtasks:
+            if await self._is_atomic_task(subtask, depth_config, task_complexity):
+                final_subtasks.append(subtask)
+            else:
+                # 더 깊이 분해
+                deeper_subtasks = await self._recursive_decompose(
+                    subtask,
+                    state,
+                    preliminary_research,
+                    depth_config,
+                    current_depth + 1,
+                    max_depth
+                )
+                final_subtasks.extend(deeper_subtasks)
+        
+        return final_subtasks
     
     async def _assign_agents_dynamically(
         self,
@@ -2984,8 +3167,18 @@ class AutonomousOrchestrator:
             }
     
     async def run_research(self, user_request: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """연구 실행 (Production-Grade Reliability)."""
+        """연구 실행 (Production-Grade Reliability + ExecutionContext)."""
         logger.info(f"🚀 Starting research with 8 core innovations: {user_request}")
+        
+        # ExecutionContext 설정 (ROMA 스타일)
+        execution_id = f"exec_{int(datetime.now().timestamp())}"
+        context_token = None
+        try:
+            from src.core.recursive_context_manager import ExecutionContext
+            context_token = ExecutionContext.set(execution_id, self.context_manager)
+            logger.debug(f"ExecutionContext set for execution: {execution_id}")
+        except Exception as e:
+            logger.debug(f"Failed to set ExecutionContext: {e}")
         
         # CLI 모드 감지 및 autopilot 모드 설정
         import sys
@@ -2999,7 +3192,7 @@ class AutonomousOrchestrator:
         initial_state = ResearchState(
             user_request=user_request,
             context=context or {},
-            objective_id=f"obj_{int(datetime.now().timestamp())}",
+            objective_id=execution_id,  # execution_id 사용
             analyzed_objectives=[],
             intent_analysis={},
             domain_analysis={},
@@ -3081,6 +3274,24 @@ class AutonomousOrchestrator:
         }
         
         logger.info("✅ Research completed successfully with 8 core innovations")
+        
+        # ExecutionContext 및 MCP Hub 정리 (ROMA 스타일)
+        try:
+            from src.core.recursive_context_manager import ExecutionContext
+            if context_token:
+                ExecutionContext.reset(context_token)
+                logger.debug(f"ExecutionContext reset for execution: {execution_id}")
+        except Exception as e:
+            logger.debug(f"Failed to reset ExecutionContext: {e}")
+        
+        # MCP Hub 실행 세션 정리
+        try:
+            from src.core.mcp_integration import get_mcp_hub
+            mcp_hub = get_mcp_hub()
+            await mcp_hub.cleanup_execution(execution_id)
+        except Exception as e:
+            logger.debug(f"Failed to cleanup MCP Hub execution session: {e}")
+        
         return result
     
     async def _search_similar_research(self, query: str, user_id: str) -> List[Dict[str, Any]]:
