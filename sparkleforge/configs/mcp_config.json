@@ -1,40 +1,97 @@
 {
   "mcpServers": {
     "ddg_search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-duckduckgo-search@latest"
-      ]
+      "command": "ddg_search",
+      "disabled": true
     },
     "fetch": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "fetch-mcp@latest"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@smithery-ai/fetch/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "docfork": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "docfork@latest"
-      ]
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@docfork/mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
     },
     "context7-mcp": {
+      "type": "http",
+      "httpUrl": "https://server.smithery.ai/@upstash/context7-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SMITHERY_API_KEY}"
+      }
+    },
+    "semantic_scholar": {
       "command": "npx",
       "args": [
         "-y",
-        "@upstash/context7-mcp@latest"
-      ]
+        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
+      ],
+      "disabled": true
     },
-    "exa": {
-      "type": "http",
+    "parallel-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@parallel/search@latest"
+      ],
+      "disabled": true
+    },
+    "WebSearch-MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mnhlt/WebSearch-MCP@latest"
+      ],
+      "disabled": true
+    },
+    "Google search console": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "google_search_console@latest"
+      ],
+      "disabled": true
+    },
+    "Paper Search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@adamamer20/paper-search-mcp-openai@latest"
+      ],
+      "disabled": true
+    },
+    "TodoList": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "todoist@latest"
+      ],
+      "disabled": true
+    },
+    "arxiv": {
+      "command": "npx",
       "transport": "stdio",
-      "httpUrl": "https://mcp.exa.ai/mcp",
-      "headers": {
-        "Remove-Me": "Disable web_search_exa tool if you're just coding. To 100% call exa-code, say 'use exa-code'."
-      }
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-arxiv@latest"
+      ],
+      "disabled": true
+    },
+    "kis MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@KISOpenAPI/kis-code-assistant-mcp@latest"
+      ],
+      "disabled": true
+    }
+  }
+}
     },
     "semantic_scholar": {
       "command": "npx",
@@ -127,74 +184,77 @@
       }
     },
     "mcp_search": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_search/server.py"
+        "-y",
+        "@modelcontextprotocol/server-duckduckgo-search@latest"
       ]
     },
     "mcp_service": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/mcp_service/server.py"
+        "-y",
+        "fetch-mcp@latest"
       ]
     },
     "ai_search_service": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/ai_search_service/server.py"
+        "-y",
+        "@hamid-vakilzadeh/mcpsemanticscholar@latest"
       ]
     },
     "web_search_service": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/web_search_service/server.py"
+        "-y",
+        "@parallel/search@latest"
       ]
     },
     "tavily_search_server": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/tavily_search_server/server.py"
+        "-y",
+        "@Jeetanshu18/tavily-mcp@latest"
       ]
     },
     "google_serper": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/google_serper/server.py"
+        "-y",
+        "@mnhlt/WebSearch-MCP@latest"
       ]
     },
     "web_search_server": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/web_search_server/server.py"
+        "-y",
+        "@adamamer20/paper-search-mcp-openai@latest"
       ]
     },
     "serper_search": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/serper_search/server.py"
+        "-y",
+        "google_search_console@latest"
       ]
     },
     "serper_search_service": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/serper_search_service/server.py"
+        "-y",
+        "@KISOpenAPI/kis-code-assistant-mcp@latest"
       ]
     },
     "google_custom_search": {
-      "type": "stdio",
-      "command": "python3",
+      "command": "npx",
       "args": [
-        "/home/user/workspace/mcp_agent/sparkleforge/temp/mcp_servers/google_custom_search/server.py"
-      ]
+        "-y",
+        "@modelcontextprotocol/server-github@latest"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
     }
   }
 }

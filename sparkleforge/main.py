@@ -1154,7 +1154,9 @@ async def main():
         epilog="""
 Examples:
   python main.py --request "인공지능의 미래 전망"
+  python main.py --query "인공지능의 미래 전망"  # --request와 동일
   python main.py --request "연구 주제" --output results/report.json
+  python main.py --query "연구 주제" --output results/report.json  # --request와 동일
   python main.py --request "연구 주제" --streaming
   python main.py --web
   python main.py --mcp-server
@@ -1165,7 +1167,7 @@ Examples:
     
     # Mode selection
     mode_group = parser.add_mutually_exclusive_group(required=False)
-    mode_group.add_argument("--request", help="Research request (CLI mode)")
+    mode_group.add_argument("--request", "--query", dest="request", help="Research request (CLI mode)")
     mode_group.add_argument("--web", action="store_true", help="Start web application with streaming")
     mode_group.add_argument("--mcp-server", action="store_true", help="Start MCP server with Universal MCP Hub")
     mode_group.add_argument("--mcp-client", action="store_true", help="Start MCP client with Smart Tool Selection")

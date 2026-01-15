@@ -21,7 +21,6 @@ from srcs.core.agent.base import BaseAgent
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
-from mcp_agent.workflows.llm.google_augmented_llm import GoogleAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
@@ -98,11 +97,11 @@ class DevOpsProductivityAgent(BaseAgent):
                 logger.info(f"Created {len(agents)} specialized agents: {list(agents.keys())}")
                 
                 # Orchestrator 생성
-                orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+                orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                    primary_model="gemini-2.5-flash-lite",
+                    logger_instance=logger
+                )
+                orchestrator = Orchestrator(
                     llm_factory=orchestrator_llm_factory,
                     available_agents=list(agents.values()),
                     plan_type="full"

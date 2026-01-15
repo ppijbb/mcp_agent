@@ -12,7 +12,7 @@ import os
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field, ConfigDict, field_validator, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class TaskType(Enum):
@@ -26,7 +26,6 @@ class TaskType(Enum):
 
 class LLMConfig(BaseModel):
     """LLM configuration settings - Multi-Model Orchestration (혁신 3)."""
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
     
     # Primary provider (OpenRouter + Gemini 2.5 Flash Lite) - NO DEFAULTS
     provider: str = Field(description="LLM provider")
@@ -625,7 +624,10 @@ def load_config_from_env() -> ResearcherSystemConfig:
     
     # Load .env file if it exists
     from pathlib import Path
-    from dotenv import load_dotenv
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        load_dotenv = lambda: None
     
     project_root = Path(__file__).parent.parent.parent
     env_file = project_root / ".env"

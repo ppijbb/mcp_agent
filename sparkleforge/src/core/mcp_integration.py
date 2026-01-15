@@ -21,6 +21,11 @@ import os
 from datetime import datetime, timedelta
 from contextlib import AsyncExitStack
 import random
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # MCP imports
 try:
