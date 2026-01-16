@@ -13,22 +13,22 @@
       }
     },
     "local-search": {
-      "command": "python",
-      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.search_server import run_server; run_server()"],
+      "command": "/home/user/miniconda3/envs/mcp/bin/python3",
+      "args": ["/home/user/workspace/mcp_agent/local_mcp_servers/search_server.py"],
       "env": {
         "PYTHONPATH": "/home/user/workspace/mcp_agent"
       }
     },
     "code-executor": {
-      "command": "python",
-      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.code_executor import run_server; run_server()"],
+      "command": "/home/user/miniconda3/envs/mcp/bin/python3",
+      "args": ["/home/user/workspace/mcp_agent/local_mcp_servers/code_executor.py"],
       "env": {
         "PYTHONPATH": "/home/user/workspace/mcp_agent"
       }
     },
     "data-analyzer": {
-      "command": "python",
-      "args": ["-c", "import sys; sys.path.insert(0, '/home/user/workspace/mcp_agent'); from local_mcp_servers.data_analyzer import run_server; run_server()"],
+      "command": "/home/user/miniconda3/envs/mcp/bin/python3",
+      "args": ["/home/user/workspace/mcp_agent/local_mcp_servers/data_analyzer.py"],
       "env": {
         "PYTHONPATH": "/home/user/workspace/mcp_agent"
       }

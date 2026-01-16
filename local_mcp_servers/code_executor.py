@@ -1,8 +1,7 @@
 import asyncio
-from mcp import Tool
-from mcp.server import Server
+from mcp.server.fastmcp import FastMCP
 
-server = Server("code_executor")
+server = FastMCP("code_executor")
 
 @server.tool()
 async def execute_python(code: str) -> str:
@@ -15,5 +14,4 @@ async def execute_python(code: str) -> str:
         return f"Execution error: {str(e)}"
 
 if __name__ == "__main__":
-    import mcp.server.stdio
-    mcp.server.stdio.run_server(server)
+    server.run()
