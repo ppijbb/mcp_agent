@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
 from ..llm.fallback_handler import FallbackHandler
+from ..config.petcare_config import PetCareConfig
 from ..tools.mcp_tools import MCPToolsWrapper
 from ..tools.physical_ai_tools import PhysicalAITools
 from ..tools.pet_tools import PetTools
@@ -30,7 +31,8 @@ class PhysicalAIControllerAgent:
         model_manager: ModelManager,
         fallback_handler: FallbackHandler,
         preferred_provider: Optional[ModelProvider] = None,
-        data_dir: str = "petcare_data"
+        data_dir: str = "petcare_data",
+        config: Optional[PetCareConfig] = None
     ):
         """
         PhysicalAIControllerAgent 초기화
@@ -40,14 +42,16 @@ class PhysicalAIControllerAgent:
             fallback_handler: FallbackHandler 인스턴스
             preferred_provider: 선호하는 Provider
             data_dir: 데이터 저장 디렉토리
+            config: PetCareConfig 인스턴스 (최신 Physical AI 기술 사용)
         """
         self.model_manager = model_manager
         self.fallback_handler = fallback_handler
         self.preferred_provider = preferred_provider
+        self.config = config
         
-        # 도구 초기화
+        # 도구 초기화 (최신 기술: MQTT v5, Home Assistant API)
         self.mcp_tools = MCPToolsWrapper()
-        self.physical_ai_tools = PhysicalAITools(data_dir=data_dir)
+        self.physical_ai_tools = PhysicalAITools(data_dir=data_dir, config=config)
         self.pet_tools = PetTools(data_dir=data_dir)
         self.tools = self.mcp_tools.get_tools() + self.physical_ai_tools.get_tools() + self.pet_tools.get_tools()
         

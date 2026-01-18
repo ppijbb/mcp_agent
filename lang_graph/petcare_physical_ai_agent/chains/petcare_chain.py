@@ -63,13 +63,13 @@ class PetCareChain:
         self.preferred_provider = preferred_provider
         self.memory = MemorySaver()
 
-        # 에이전트 초기화
+        # 에이전트 초기화 (config 전달하여 최신 Physical AI 기술 사용)
         self.profile_analyzer = PetProfileAnalyzerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
         self.health_monitor = HealthMonitorAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
         self.behavior_analyzer = BehaviorAnalyzerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
-        self.care_planner = CarePlannerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
-        self.physical_ai_controller = PhysicalAIControllerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
-        self.pet_assistant = PetAssistantAgent(model_manager, fallback_handler, preferred_provider, config.data_dir)
+        self.care_planner = CarePlannerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir, config)
+        self.physical_ai_controller = PhysicalAIControllerAgent(model_manager, fallback_handler, preferred_provider, config.data_dir, config)
+        self.pet_assistant = PetAssistantAgent(model_manager, fallback_handler, preferred_provider, config.data_dir, config)
 
         self.workflow = self._setup_langgraph_workflow()
         logger.info("PetCareChain initialized with LangGraph workflow.")

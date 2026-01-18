@@ -25,6 +25,22 @@ class PetCareConfig(BaseModel):
     auto_feeder_enabled: bool = Field(default=True, description="자동급식기 연동 활성화")
     smart_environment_enabled: bool = Field(default=True, description="스마트 환경 제어 활성화")
     
+    # Physical AI 통신 프로토콜 설정
+    mqtt_broker_host: Optional[str] = Field(default=None, description="MQTT 브로커 호스트 (예: localhost, mqtt.example.com)")
+    mqtt_broker_port: int = Field(default=1883, description="MQTT 브로커 포트")
+    mqtt_use_tls: bool = Field(default=False, description="MQTT TLS 사용 여부")
+    mqtt_username: Optional[str] = Field(default=None, description="MQTT 사용자명")
+    mqtt_password: Optional[str] = Field(default=None, description="MQTT 비밀번호")
+    mqtt_protocol_version: int = Field(default=5, ge=3, le=5, description="MQTT 프로토콜 버전 (3 또는 5)")
+    
+    # Home Assistant 설정
+    home_assistant_url: Optional[str] = Field(default=None, description="Home Assistant URL (예: http://homeassistant.local:8123)")
+    home_assistant_token: Optional[str] = Field(default=None, description="Home Assistant Long-Lived Access Token")
+    
+    # Matter 설정 (향후 지원)
+    matter_enabled: bool = Field(default=False, description="Matter 표준 지원 활성화")
+    matter_controller_url: Optional[str] = Field(default=None, description="Matter Controller URL")
+    
     # 에이전트별 프롬프트 템플릿
     profile_analyzer_prompt_template: str = Field(
         default="You are an expert pet profile analyst. Analyze pet information and create comprehensive profiles for personalized care.",
@@ -64,5 +80,15 @@ class PetCareConfig(BaseModel):
         return cls(
             output_dir=os.getenv("PETCARE_OUTPUT_DIR", "petcare_reports"),
             data_dir=os.getenv("PETCARE_DATA_DIR", "petcare_data"),
+            mqtt_broker_host=os.getenv("MQTT_BROKER_HOST"),
+            mqtt_broker_port=int(os.getenv("MQTT_BROKER_PORT", "1883")),
+            mqtt_use_tls=os.getenv("MQTT_USE_TLS", "false").lower() == "true",
+            mqtt_username=os.getenv("MQTT_USERNAME"),
+            mqtt_password=os.getenv("MQTT_PASSWORD"),
+            mqtt_protocol_version=int(os.getenv("MQTT_PROTOCOL_VERSION", "5")),
+            home_assistant_url=os.getenv("HOME_ASSISTANT_URL"),
+            home_assistant_token=os.getenv("HOME_ASSISTANT_TOKEN"),
+            matter_enabled=os.getenv("MATTER_ENABLED", "false").lower() == "true",
+            matter_controller_url=os.getenv("MATTER_CONTROLLER_URL"),
         )
 
