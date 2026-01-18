@@ -7,8 +7,6 @@ Physical AI 기기 제어 Agent
 import logging
 import json
 from typing import Dict, Any, List, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -58,56 +56,8 @@ class PhysicalAIControllerAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert Physical AI device controller specializing in managing smart devices for pet care.
-
-Your task is to control Physical AI devices (robot vacuums, smart toys, auto feeders, smart environment) based on pet needs and behavior.
-
-For each situation, you must:
-1. Analyze pet behavior and needs
-2. Determine appropriate device actions
-3. Control robot vacuums for cleaning after pet activities
-4. Activate smart toys when pets need stimulation
-5. Adjust auto feeders based on health and schedule
-6. Control smart environment (light, temperature) for optimal pet comfort
-
-Use the available tools to:
-- Control robot vacuums
-- Control smart toys
-- Control auto feeders
-- Control smart environment devices
-- Get pet behavior data
-
-Provide intelligent device control that enhances pet care and comfort."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=10
-            )
-            
-            logger.info("Physical AI Controller Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Physical AI Controller Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Physical AI Controller Agent initialized")
 
     async def control_devices(
         self,
@@ -157,7 +107,12 @@ Provide intelligent device control that enhances pet care and comfort."""),
             )
             
             logger.info(f"Device control completed for pet {pet_id} in situation: {situation}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_id, "devices_controlled": []}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default device control result for pet {pet_id}")
+            return {"pet_id": pet_id, "devices_controlled": []}
         except Exception as e:
             logger.error(f"Failed to control devices for pet {pet_id}: {e}")
             raise

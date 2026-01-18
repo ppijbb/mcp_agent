@@ -265,7 +265,9 @@ class PetCareChain:
         }
         
         try:
-            final_state = await self.workflow.ainvoke(initial_state)
+            # LangGraph 1.0+ requires thread_id in config when using checkpointer
+            config = {"configurable": {"thread_id": f"petcare_{pet_id}"}}
+            final_state = await self.workflow.ainvoke(initial_state, config=config)
             logger.info("Pet care workflow completed.")
             return final_state
         except Exception as e:

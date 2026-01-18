@@ -7,8 +7,6 @@
 import logging
 import json
 from typing import Dict, Any, List, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -58,54 +56,8 @@ class BehaviorAnalyzerAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert pet behavior analyst specializing in understanding pet behavior patterns and detecting anomalies.
-
-Your task is to analyze pet behavior and provide insights for better care.
-
-For each pet, you must:
-1. Analyze behavior patterns from historical data
-2. Identify normal vs. abnormal behaviors
-3. Detect stress indicators and behavioral changes
-4. Correlate behaviors with health and environmental factors
-5. Provide behavior-based insights and recommendations
-
-Use the available tools to:
-- Get behavior history
-- Record new behaviors
-- Track activities
-- Detect anomalies
-
-Provide detailed behavior analysis with actionable insights."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=10
-            )
-            
-            logger.info("Behavior Analyzer Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Behavior Analyzer Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Behavior Analyzer Agent initialized")
 
     async def analyze_behavior(self, pet_id: str, behavior_data: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
@@ -153,7 +105,12 @@ Provide detailed behavior analysis with actionable insights."""),
             )
             
             logger.info(f"Behavior analysis completed for pet {pet_id}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_id, "behavior_patterns": {}}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default behavior patterns for pet {pet_id}")
+            return {"pet_id": pet_id, "behavior_patterns": {}}
         except Exception as e:
             logger.error(f"Failed to analyze behavior for pet {pet_id}: {e}")
             raise

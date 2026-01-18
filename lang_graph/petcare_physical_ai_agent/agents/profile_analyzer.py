@@ -7,8 +7,6 @@
 import logging
 import json
 from typing import Dict, Any, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -56,53 +54,8 @@ class PetProfileAnalyzerAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert pet profile analyst specializing in understanding pet characteristics, behavior patterns, and care needs.
-
-Your task is to analyze pet information and create comprehensive profiles that can be used for personalized care.
-
-For each pet, you must:
-1. Analyze species, breed, age, and basic characteristics
-2. Identify personality traits and behavior patterns
-3. Assess health status and care requirements
-4. Determine preferences and stress factors
-5. Create a comprehensive profile for personalized care
-
-Use the available tools to:
-- Get and update pet profiles
-- Record and analyze behavior patterns
-- Track activities
-
-Provide detailed, actionable profile analysis based on real pet data."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=10
-            )
-            
-            logger.info("Pet Profile Analyzer Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Pet Profile Analyzer Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Pet Profile Analyzer Agent initialized")
 
     async def analyze_profile(self, pet_info: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -155,7 +108,12 @@ Provide detailed, actionable profile analysis based on real pet data."""),
             
             # LLM 응답에서 프로필 정보 추출 및 파싱
             logger.info(f"Profile analysis completed for pet {pet_info.get('pet_id')}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_info.get('pet_id'), "profile": {}}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default profile for pet {pet_info.get('pet_id')}")
+            return {"pet_id": pet_info.get('pet_id'), "profile": {}}
         except Exception as e:
             logger.error(f"Failed to analyze profile for pet {pet_info.get('pet_id')}: {e}")
             raise

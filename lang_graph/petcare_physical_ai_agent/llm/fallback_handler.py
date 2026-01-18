@@ -40,14 +40,14 @@ class FallbackHandler:
         self.fallback_history: List[Dict[str, Any]] = []
         self.max_retries = 3
     
-    def invoke_with_fallback(
+    async def invoke_with_fallback(
         self,
         messages: List[BaseMessage],
         preferred_provider: Optional[ModelProvider] = None,
         **kwargs
     ) -> Any:
         """
-        Fallback 메커니즘을 사용하여 LLM 호출
+        Fallback 메커니즘을 사용하여 LLM 호출 (async)
         
         Args:
             messages: 입력 메시지 리스트
@@ -67,7 +67,7 @@ class FallbackHandler:
         if preferred_provider:
             llm = self.model_manager.get_llm(preferred_provider)
             if llm:
-                result = self._try_invoke(llm, messages, tried_models, **kwargs)
+                result = await self._try_invoke(llm, messages, tried_models, **kwargs)
                 if result is not None:
                     return result
         
@@ -82,7 +82,7 @@ class FallbackHandler:
             if model_name in tried_models:
                 continue
             
-            result = self._try_invoke(llm, messages, tried_models, **kwargs)
+            result = await self._try_invoke(llm, messages, tried_models, **kwargs)
             if result is not None:
                 return result
         
@@ -92,7 +92,7 @@ class FallbackHandler:
         self._log_fallback_failure(tried_models, last_error)
         raise FallbackError(error_msg)
     
-    def _try_invoke(
+    async def _try_invoke(
         self,
         llm: BaseChatModel,
         messages: List[BaseMessage],
@@ -100,7 +100,7 @@ class FallbackHandler:
         **kwargs
     ) -> Optional[Any]:
         """
-        LLM 호출 시도
+        LLM 호출 시도 (async)
         
         Args:
             llm: LLM 인스턴스
@@ -115,12 +115,13 @@ class FallbackHandler:
         
         try:
             logger.info(f"Attempting to invoke model: {model_name}")
-            response = llm.invoke(messages, **kwargs)
+            # langchain 1.0+에서는 ainvoke 사용
+            response = await llm.ainvoke(messages, **kwargs)
             
             logger.info(f"Successfully invoked model: {model_name}")
             self._log_fallback_success(model_name)
             return response
-        
+            
         except LangChainException as e:
             logger.warning(f"LangChain error with {model_name}: {e}")
             tried_models.append(model_name)

@@ -7,8 +7,6 @@
 import logging
 import json
 from typing import Dict, Any, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -65,47 +63,8 @@ class PetAssistantAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a comprehensive Pet Care Assistant powered by Physical AI. Your role is to understand pet care needs and orchestrate various specialized agents and tools to provide the best possible pet care experience.
-
-Your tasks include:
-1. Interpreting user requests related to pet care (e.g., "my dog seems sad", "clean up after my cat", "schedule feeding time", "check my pet's health").
-2. Coordinating with Physical AI devices (robot vacuums, smart toys, auto feeders, smart environment) to provide automated care.
-3. Monitoring pet health and behavior patterns.
-4. Creating and managing personalized care plans.
-5. Providing proactive recommendations and alerts.
-
-Always aim to provide personalized, intelligent, and automated pet care. Use Physical AI devices to enhance pet comfort and reduce owner burden. If a specific tool is needed, call it with precise arguments. If information is missing, try to infer or ask clarifying questions.
-"""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=15  # Increased for orchestration
-            )
-            
-            logger.info("Pet Assistant Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Pet Assistant Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Pet Assistant Agent initialized")
 
     async def assist_pet_care(self, user_request: str, pet_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -153,7 +112,12 @@ Always aim to provide personalized, intelligent, and automated pet care. Use Phy
             )
             
             logger.info(f"Pet care assistance completed for pet {pet_id}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_id, "summary": "처리 완료"}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default summary for pet {pet_id}")
+            return {"pet_id": pet_id, "summary": "처리 완료"}
         except Exception as e:
             logger.error(f"Failed to assist pet care for pet {pet_id}: {e}")
             raise

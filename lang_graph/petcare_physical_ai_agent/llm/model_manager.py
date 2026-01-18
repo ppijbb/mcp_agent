@@ -92,8 +92,9 @@ class ModelManager:
     """
     Multi-Model LLM Manager
     
-    우선순위: Groq → OpenRouter → Gemini → OpenAI → Claude
+    우선순위: Groq (Llama 4, GPT-OSS) → OpenRouter (GLM-4.5 Air, MiMo-V2-Flash) → Gemini → OpenAI → Claude
     오류 발생 시 자동으로 다음 모델로 Fallback
+    최신 무료 모델 우선 사용: Llama 4 Scout/Maverick, GPT-OSS-20B, GLM-4.5 Air free, MiMo-V2-Flash free
     """
     
     def __init__(self, budget_limit: Optional[float] = None):
@@ -119,40 +120,58 @@ class ModelManager:
         self._initialize_clients()
     
     def _initialize_models(self):
-        """모델 설정 초기화"""
-        # 1. Groq 모델 (무료, 우선순위 1)
-        self.models["groq-llama-70b"] = ModelConfig(
-            name="groq-llama-70b",
+        """모델 설정 초기화 - 최신 무료 모델 우선"""
+        # 1. Groq 모델 (무료, 우선순위 1) - 최신 Llama 4 및 GPT-OSS 모델
+        self.models["groq-llama-4-scout"] = ModelConfig(
+            name="groq-llama-4-scout",
             provider=ModelProvider.GROQ,
-            model_id="llama-3.1-70b-versatile",
+            model_id="meta-llama/llama-4-scout-17b-16e-instruct",
             temperature=0.1,
             max_tokens=4000,
             cost_per_1k_tokens=0.0,
         )
         
-        self.models["groq-mixtral"] = ModelConfig(
-            name="groq-mixtral",
+        self.models["groq-gpt-oss-20b"] = ModelConfig(
+            name="groq-gpt-oss-20b",
             provider=ModelProvider.GROQ,
-            model_id="mixtral-8x7b-32768",
+            model_id="openai/gpt-oss-20b",
             temperature=0.1,
             max_tokens=4000,
             cost_per_1k_tokens=0.0,
         )
         
-        # 2. OpenRouter 모델 (무료 모델 우선, 우선순위 2)
+        self.models["groq-llama-4-maverick"] = ModelConfig(
+            name="groq-llama-4-maverick",
+            provider=ModelProvider.GROQ,
+            model_id="meta-llama/llama-4-maverick-17b-128e-instruct",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_1k_tokens=0.0,
+        )
+        
+        # 2. OpenRouter 모델 (무료 모델 우선, 우선순위 2) - 최신 무료 모델
+        self.models["openrouter-glm-4.5-air-free"] = ModelConfig(
+            name="openrouter-glm-4.5-air-free",
+            provider=ModelProvider.OPENROUTER,
+            model_id="z-ai/glm-4.5-air:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_1k_tokens=0.0,
+        )
+        
+        self.models["openrouter-mimo-v2-flash-free"] = ModelConfig(
+            name="openrouter-mimo-v2-flash-free",
+            provider=ModelProvider.OPENROUTER,
+            model_id="xiaomi/mimo-v2-flash:free",
+            temperature=0.1,
+            max_tokens=4000,
+            cost_per_1k_tokens=0.0,
+        )
+        
         self.models["openrouter-gemini-flash"] = ModelConfig(
             name="openrouter-gemini-flash",
             provider=ModelProvider.OPENROUTER,
             model_id="google/gemini-2.0-flash-exp",
-            temperature=0.1,
-            max_tokens=4000,
-            cost_per_1k_tokens=0.0,
-        )
-        
-        self.models["openrouter-llama-3b"] = ModelConfig(
-            name="openrouter-llama-3b",
-            provider=ModelProvider.OPENROUTER,
-            model_id="meta-llama/llama-3.2-3b-instruct",
             temperature=0.1,
             max_tokens=4000,
             cost_per_1k_tokens=0.0,

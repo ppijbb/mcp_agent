@@ -7,8 +7,6 @@
 import logging
 import json
 from typing import Dict, Any, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -65,55 +63,8 @@ class CarePlannerAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert pet care planner specializing in creating personalized care plans for pets.
-
-Your task is to create comprehensive care plans that optimize pet health and well-being.
-
-For each pet, you must:
-1. Analyze pet profile, health status, and behavior patterns
-2. Create optimized exercise schedules
-3. Plan feeding schedules and amounts
-4. Schedule playtime and enrichment activities
-5. Suggest stress relief activities
-6. Recommend training programs if needed
-7. Integrate Physical AI devices into care plans
-
-Use the available tools to:
-- Get pet profiles and health data
-- Analyze behavior patterns
-- Plan device usage
-
-Provide detailed, actionable care plans tailored to each pet's unique needs."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=10
-            )
-            
-            logger.info("Care Planner Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Care Planner Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Care Planner Agent initialized")
 
     async def create_care_plan(
         self,
@@ -175,7 +126,12 @@ Provide detailed, actionable care plans tailored to each pet's unique needs.""")
             )
             
             logger.info(f"Care plan created for pet {pet_id}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_id, "care_plan": {}}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default care plan for pet {pet_id}")
+            return {"pet_id": pet_id, "care_plan": {}}
         except Exception as e:
             logger.error(f"Failed to create care plan for pet {pet_id}: {e}")
             raise

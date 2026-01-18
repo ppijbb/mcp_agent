@@ -7,8 +7,6 @@
 import logging
 import json
 from typing import Dict, Any, List, Optional
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage
 
 from ..llm.model_manager import ModelManager, ModelProvider
@@ -58,54 +56,8 @@ class HealthMonitorAgent:
         if not self.llm:
             raise ValueError("No available LLM found")
         
-        # Agent 초기화
-        self._initialize_agent()
-    
-    def _initialize_agent(self):
-        """LangChain Agent 초기화"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert pet health monitor specializing in tracking pet health, detecting anomalies, and providing health insights.
-
-Your task is to monitor pet health status and identify potential issues early.
-
-For each pet, you must:
-1. Record and track health metrics (weight, temperature, activity level, etc.)
-2. Analyze behavior patterns for anomalies
-3. Detect early warning signs of health issues
-4. Provide health summaries and recommendations
-5. Alert owners when veterinary attention may be needed
-
-Use the available tools to:
-- Record health data
-- Detect anomalies in behavior
-- Analyze health trends
-- Get health summaries
-
-Provide detailed health monitoring with actionable insights and recommendations."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        try:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm,
-                tools=self.tools,
-                prompt=prompt
-            )
-            
-            self.agent_executor = AgentExecutor(
-                agent=self.agent,
-                tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
-                max_iterations=10
-            )
-            
-            logger.info("Health Monitor Agent initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Health Monitor Agent: {e}")
-            raise
+        # Agent는 fallback_handler를 통해 직접 LLM 호출하므로 별도 초기화 불필요
+        logger.info("Health Monitor Agent initialized")
 
     async def monitor_health(self, pet_id: str, health_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -146,7 +98,12 @@ Provide detailed health monitoring with actionable insights and recommendations.
             )
             
             logger.info(f"Health monitoring completed for pet {pet_id}")
-            return json.loads(response.content) if hasattr(response, 'content') else {"pet_id": pet_id, "health_status": "unknown"}
+            if hasattr(response, 'content') and response.content:
+                try:
+                    return json.loads(response.content)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning(f"Failed to parse JSON response, using default health status for pet {pet_id}")
+            return {"pet_id": pet_id, "health_status": "unknown"}
         except Exception as e:
             logger.error(f"Failed to monitor health for pet {pet_id}: {e}")
             raise
