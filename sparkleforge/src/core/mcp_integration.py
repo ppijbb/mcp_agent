@@ -4100,6 +4100,61 @@ async def _fallback_to_ddg_search(query: str, max_results: int) -> ToolResult:
         )
 
 async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+    """검색 도구 실행 - src/utils에서 직접 사용."""
+    import time
+    start_time = time.time()
+    
+    # src/utils에서 직접 사용 (MCP 서버로 실행하지 않음)
+    try:
+        from src.utils.search_utils import search_duckduckgo
+        
+        query = parameters.get("query", "")
+        num_results = parameters.get("num_results", 10) or parameters.get("max_results", 10)
+        
+        if not query:
+            return ToolResult(
+                success=False,
+                data=None,
+                error="query parameter is required",
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+        
+        # src/utils의 search_duckduckgo 직접 호출
+        result = await search_duckduckgo(query, num_results)
+        
+        if result.get("success"):
+            return ToolResult(
+                success=True,
+                data={
+                    "query": query,
+                    "results": result.get("results", []),
+                    "count": result.get("count", 0),
+                    "provider": result.get("provider", "duckduckgo"),
+                    "source": "embedded_search"
+                },
+                execution_time=time.time() - start_time,
+                confidence=0.9
+            )
+        else:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=result.get("error", "Search failed"),
+                execution_time=time.time() - start_time,
+                confidence=0.0
+            )
+    except ImportError:
+        # embedded_mcp_servers가 없으면 기존 로직 사용
+        logger.debug("src.utils.search_utils not available, using existing MCP server logic")
+    except Exception as e:
+        logger.warning(f"Embedded search failed: {e}, falling back to MCP servers")
+        # 기존 로직으로 fallback
+    else:
+        # src/utils 성공적으로 실행됨
+        return
+    
+    # 기존 로직 (MCP 서버 연결 시도) - src/utils 실패 시에만 실행
     """MCP 서버를 통한 검색 도구 실행 (with caching and bot detection bypass)."""
     import time
     from src.core.result_cache import get_result_cache
@@ -4991,13 +5046,57 @@ async def _execute_search_tool(tool_name: str, parameters: Dict[str, Any]) -> To
 
 
 async def _execute_academic_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """실제 무료 학술 API를 사용한 학술 도구 실행."""
+    """학술 도구 실행 - src/utils에서 직접 사용."""
     import time
     
     start_time = time.time()
     query = parameters.get("query", "")
     max_results = parameters.get("max_results", 10) or parameters.get("num_results", 10)
     
+    # src/utils에서 직접 사용 (MCP 서버로 실행하지 않음)
+    if tool_name == "arxiv":
+        try:
+            from src.utils.academic_utils import search_arxiv
+            
+            if not query:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="query parameter is required",
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+            
+            # src/utils의 search_arxiv 직접 호출
+            result = await search_arxiv(query, max_results)
+            
+            if result.get("success"):
+                return ToolResult(
+                    success=True,
+                    data={
+                        "query": query,
+                        "results": result.get("results", []),
+                        "total_results": result.get("total_results", 0),
+                        "count": result.get("count", 0),
+                        "source": "embedded_arxiv"
+                    },
+                    execution_time=time.time() - start_time,
+                    confidence=0.95
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error=result.get("error", "arXiv search failed"),
+                    execution_time=time.time() - start_time,
+                    confidence=0.0
+                )
+        except ImportError:
+            logger.debug("src.utils.academic_utils not available, using existing logic")
+        except Exception as e:
+            logger.warning(f"Embedded arXiv search failed: {e}, falling back to existing logic")
+    
+    # 기존 로직 (src/utils 실패 시 또는 다른 tool_name)
     try:
         if tool_name == "arxiv":
             # arXiv API (100% 무료)
@@ -5087,7 +5186,48 @@ async def _execute_data_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
     
     try:
         if tool_name == "fetch":
-            # 실제 웹페이지 가져오기
+            # src/utils에서 직접 사용
+            try:
+                from src.utils.web_utils import fetch_url
+                
+                url = parameters.get("url", "")
+                max_length = parameters.get("max_length", 50000)
+                timeout = parameters.get("timeout", 30)
+                
+                if not url:
+                    raise ValueError("URL parameter is required for fetch tool")
+                
+                # src/utils의 fetch_url 직접 호출
+                result = await fetch_url(url, max_length, timeout)
+                
+                if result.get("success"):
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "url": url,
+                            "content": result.get("content", ""),
+                            "content_type": result.get("content_type", "unknown"),
+                            "status_code": result.get("status_code", 200),
+                            "character_count": result.get("character_count", 0),
+                            "source": "embedded_fetch"
+                        },
+                        execution_time=time.time() - start_time,
+                        confidence=0.9
+                    )
+                else:
+                    return ToolResult(
+                        success=False,
+                        data=None,
+                        error=result.get("error", "Fetch failed"),
+                        execution_time=time.time() - start_time,
+                        confidence=0.0
+                    )
+            except ImportError:
+                logger.debug("src.utils.web_utils not available, using existing logic")
+            except Exception as e:
+                logger.warning(f"Embedded fetch failed: {e}, falling back to existing logic")
+            
+            # 기존 로직 (fallback)
             url = parameters.get("url", "")
             if not url:
                 raise ValueError("URL parameter is required for fetch tool")
