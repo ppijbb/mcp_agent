@@ -5,6 +5,9 @@ from typing import Dict, Any, List, Optional
 from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 from datetime import datetime
 
+# Import LLM provider configuration
+from core.llm import get_llm_config, get_llm_manager, LLMProvider
+
 # Logger 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -15,8 +18,63 @@ logger = logging.getLogger(__name__)
 class HSPAutoGenAgents:
     """AutoGen 기반 전문 에이전트들"""
     
-    def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
-        self.llm_config = llm_config or {"model": "gemini-4", "temperature": 0.7}
+    def __init__(self, llm_config: Optional[Dict[str, Any]] = None, use_random_free: bool = True):
+        """
+        Initialize AutoGen agents
+        
+        Args:
+            llm_config: Optional dict config (legacy support)
+            use_random_free: If True (default), uses random free provider (OpenRouter, Groq, Cerebras)
+                            If False, uses primary provider from environment
+        """
+        # Support both legacy dict config and new LLM provider system
+        if llm_config is None:
+            if use_random_free:
+                # DEFAULT: Use random free provider (OpenRouter, Groq, Cerebras)
+                from core.llm import get_random_free_config
+                config = get_random_free_config()
+                if config:
+                    self.llm_config = {
+                        "model": config.model,
+                        "temperature": config.temperature,
+                        "base_url": config.base_url,
+                        "api_key": config.api_key
+                    }
+                    logger.info(f"🎲 Using random free provider: {config.provider.value} - {config.model}")
+                else:
+                    # Fallback to primary provider
+                    from core.llm import get_llm_config
+                    config = get_llm_config()
+                    if config:
+                        self.llm_config = {
+                            "model": config.model,
+                            "temperature": config.temperature,
+                            "base_url": config.base_url,
+                            "api_key": config.api_key
+                        }
+                        logger.info(f"Using primary provider: {config.provider.value} - {config.model}")
+                    else:
+                        self.llm_config = {"model": "gemini-4", "temperature": 0.7}
+                        logger.warning("No LLM provider configured, using default: gemini-4")
+            else:
+                # Use primary provider from environment
+                from core.llm import get_llm_config
+                config = get_llm_config()
+                if config:
+                    self.llm_config = {
+                        "model": config.model,
+                        "temperature": config.temperature,
+                        "base_url": config.base_url,
+                        "api_key": config.api_key
+                    }
+                    logger.info(f"Using primary provider: {config.provider.value} - {config.model}")
+                else:
+                    self.llm_config = {"model": "gemini-4", "temperature": 0.7}
+                    logger.warning("No LLM provider configured, using default: gemini-4")
+        else:
+            # Legacy support for dict config
+            self.llm_config = llm_config
+        
         self.agents = self._initialize_agents()
         logger.info("HSPAutoGenAgents 초기화 완료")
         

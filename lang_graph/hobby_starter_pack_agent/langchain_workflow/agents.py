@@ -1,6 +1,7 @@
 """
 LangChain 기반 에이전트 시스템
 복잡한 작업 자동화 및 도구 통합
+Multi-LLM Provider Support: OpenRouter, Groq, Cerebras, OpenAI, Anthropic, Google
 """
 
 import logging
@@ -17,6 +18,10 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 import json
 from datetime import datetime
+
+# Import LLM provider configuration
+import os
+from core.llm import get_llm_config, get_llm_manager
 
 logger = logging.getLogger(__name__)
 
@@ -162,36 +167,89 @@ def optimize_schedule(current_schedule: Dict[str, Any], new_activities: List[Dic
 class HSPLangChainAgent:
     """HSP Agent 전용 LangChain 에이전트"""
     
-    def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
-        self.llm_config = llm_config or {"model": "gpt-5-mini", "temperature": 0.7}
+    def __init__(self, llm_config: Optional[Dict[str, Any]] = None, use_random_free: bool = True):
+        """
+        Initialize LangChain agent
+        
+        Args:
+            llm_config: Optional dict config (legacy support)
+            use_random_free: If True (default), uses random free provider (OpenRouter, Groq, Cerebras)
+                            If False, uses primary provider from environment
+        """
+        # Support both legacy dict config and new LLM provider system
+        self.llm_config = llm_config
         self.llm = None
         self.tools = []
         self.agent = None
         self.agent_executor = None
         self.memory = None
         
-        # 초기화
-        self._initialize_llm()
+        # Initialize LLM and agent
+        self._initialize_llm(use_random_free=use_random_free)
         self._initialize_tools()
         self._initialize_agent()
         
         logger.info("HSP LangChain Agent 초기화 완료")
     
-    def _initialize_llm(self):
-        """LLM 초기화"""
+    def _initialize_llm(self, use_random_free: bool = True):
+        """LLM 초기화 - Supports OpenRouter, Groq, Cerebras, OpenAI, Anthropic, Google"""
         try:
-            # OpenAI 모델 사용 (환경변수에서 API 키 로드)
-            import os
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
-            
-            self.llm = ChatOpenAI(
-                model=self.llm_config.get("model", "gpt-5-mini"),
-                temperature=self.llm_config.get("temperature", 0.7),
-                openai_api_key=api_key
-            )
-            logger.info(f"LLM 초기화 완료: {self.llm_config.get('model')}")
+            if use_random_free:
+                # DEFAULT: Use random free provider (OpenRouter, Groq, Cerebras)
+                from core.llm import get_random_free_config
+                config = get_random_free_config()
+                if config:
+                    # Create OpenAI-compatible client (works with OpenRouter, Groq, Cerebras)
+                    self.llm = ChatOpenAI(
+                        model=config.model,
+                        temperature=config.temperature,
+                        openai_api_key=config.api_key,
+                        openai_api_base=config.base_url,
+                        max_tokens=config.max_tokens
+                    )
+                    logger.info(f"🎲 LLM 초기화 완료 (random free): {config.provider.value} - {config.model}")
+                else:
+                    # Fallback to primary provider
+                    from core.llm import get_llm_config
+                    config = get_llm_config()
+                    if config:
+                        self.llm = ChatOpenAI(
+                            model=config.model,
+                            temperature=config.temperature,
+                            openai_api_key=config.api_key,
+                            openai_api_base=config.base_url,
+                            max_tokens=config.max_tokens
+                        )
+                        logger.info(f"LLM 초기화 완료 (fallback): {config.provider.value} - {config.model}")
+                    else:
+                        raise ValueError("No LLM provider configured")
+            else:
+                # Use primary provider from environment
+                from core.llm import get_llm_config
+                config = get_llm_config()
+                if config:
+                    self.llm = ChatOpenAI(
+                        model=config.model,
+                        temperature=config.temperature,
+                        openai_api_key=config.api_key,
+                        openai_api_base=config.base_url,
+                        max_tokens=config.max_tokens
+                    )
+                    logger.info(f"LLM 초기화 완료: {config.provider.value} - {config.model}")
+                else:
+                    # Fallback to environment variables (legacy support)
+                    import os
+                    api_key = os.getenv("OPENAI_API_KEY")
+                    if not api_key:
+                        raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
+                    
+                    model = os.getenv("LLM_MODEL", "gpt-4o")
+                    self.llm = ChatOpenAI(
+                        model=model,
+                        temperature=0.7,
+                        openai_api_key=api_key
+                    )
+                    logger.info(f"LLM 초기화 완료 (legacy): {model}")
             
         except Exception as e:
             logger.error(f"LLM 초기화 실패: {e}")

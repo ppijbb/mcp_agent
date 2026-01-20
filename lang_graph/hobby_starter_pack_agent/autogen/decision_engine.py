@@ -6,6 +6,9 @@ import hashlib
 import logging
 from .agents import HSPAutoGenAgents
 
+# Import LLM provider configuration
+from core.llm import get_llm_config, get_llm_manager, LLMClientFactory
+
 # Logger 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -19,36 +22,76 @@ class AutoGenDecisionEngine:
     def __init__(self):
         self.agents = HSPAutoGenAgents()
         self.llm_cache = {}  # LLM 응답 캐시
+        self._llm_client = None
+        self._llm_config = None
+        self._initialize_llm()
         logger.info("AutoGenDecisionEngine 초기화 완료")
-        
+    
+    def _initialize_llm(self):
+        """LLM 클라이언트 초기화 - OpenRouter, Groq, Cerebras, OpenAI 지원 (랜덤 무료 기본)"""
+        try:
+            # DEFAULT: Use random free provider (OpenRouter, Groq, Cerebras)
+            from core.llm import get_random_free_config
+            config = get_random_free_config()
+            
+            if config:
+                self._llm_client = LLMClientFactory.create_async_client(config)
+                self._llm_config = config
+                logger.info(f"🎲 LLM 클라이언트 초기화 (random free): {config.provider.value} - {config.model}")
+            else:
+                # Fallback to primary provider
+                from core.llm import get_llm_config
+                config = get_llm_config()
+                if config:
+                    self._llm_client = LLMClientFactory.create_async_client(config)
+                    self._llm_config = config
+                    logger.info(f"LLM 클라이언트 초기화 (fallback): {config.provider.value} - {config.model}")
+                else:
+                    # Fallback to legacy OpenAI
+                    import openai
+                    import os
+                    api_key = os.getenv("OPENAI_API_KEY")
+                    if api_key:
+                        self._llm_client = openai.AsyncOpenAI(api_key=api_key)
+                        self._llm_config = None
+                        logger.warning("Using legacy OpenAI client - no free provider configured")
+                    else:
+                        logger.warning("No LLM provider configured")
+        except Exception as e:
+            logger.error(f"LLM 클라이언트 초기화 실패: {e}")
+    
     async def _call_llm_with_cache(self, prompt: str, agent_type: str = "general") -> str:
-        """캐시가 적용된 LLM 호출"""
+        """캐시가 적용된 LLM 호출 - 다중 Provider 지원"""
         cache_key = hashlib.md5(f"{prompt}:{agent_type}".encode()).hexdigest()
         
         if cache_key in self.llm_cache:
             return self.llm_cache[cache_key]
         
         try:
-            # 실제 LLM API 호출 (환경변수에서 모델 설정)
-            import openai
-            import os
+            if self._llm_client is None:
+                raise ValueError("LLM 클라이언트가 초기화되지 않았습니다")
             
-            model_name = os.getenv("LLM_MODEL", "gpt-5-mini")
-            api_key = os.getenv("OPENAI_API_KEY")
+            # Determine model and parameters
+            if self._llm_config:
+                model = self._llm_config.model
+                temperature = self._llm_config.temperature
+                max_tokens = self._llm_config.max_tokens
+            else:
+                # Legacy fallback
+                import os
+                model = os.getenv("LLM_MODEL", "gpt-4o")
+                temperature = 0.7
+                max_tokens = 500
             
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다")
-            
-            client = openai.AsyncOpenAI(api_key=api_key)
-            
-            response = await client.chat.completions.create(
-                model=model_name,
+            # OpenAI-compatible API call (works with OpenRouter, Groq, Cerebras)
+            response = await self._llm_client.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": f"{agent_type} 전문가로서 답변해주세요."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=500,
-                temperature=0.7
+                max_tokens=max_tokens,
+                temperature=temperature
             )
             
             result = response.choices[0].message.content
@@ -398,11 +441,23 @@ class AgentDecisionEngine:
             }
     
     async def _call_llm(self, prompt: str) -> str:
-        """LLM 호출 - 실제 구현 시 사용할 LLM API"""
-        # 실제 LLM API 호출 로직
-        # OpenAI, Anthropic, Google Gemini 등
+        """LLM 호출 - 다중 Provider 지원 (OpenRouter, Groq, Cerebras, OpenAI, Anthropic, Google)"""
         try:
-            # LLM API 호출
-            return ""  # 실제 응답
-        except Exception:
-            return ""  # 실패 시 빈 문자열 
+            config = get_llm_config()
+            if config is None:
+                logger.warning("No LLM provider configured")
+                return ""
+            
+            client = LLMClientFactory.create_async_client(config)
+            
+            response = await client.chat.completions.create(
+                model=config.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=config.temperature,
+                max_tokens=config.max_tokens
+            )
+            
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            logger.error(f"LLM 호출 실패: {e}")
+            return "" 
