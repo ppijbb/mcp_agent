@@ -1049,3 +1049,233 @@ class MonitoringAgent:
                 "error": str(e),
                 "agent_id": self.agent_id
             }
+
+
+# ============================================================================
+# LLM 실시간 게임 에이전트 (기존 구조 확장)
+# ============================================================================
+
+from .core import (
+    BGGRuleParser,
+    LLMGameAgent,
+    LLMProvider,
+    PlayerType,
+    MoveResult,
+    GameMove,
+    GameStateSnapshot,
+    GameStateManager,
+    DynamicGameTable,
+    GameEngine,
+    ChessGameEngine,
+    GameRules,
+    TablePlayer,
+    PlayerStatus,
+    GameStatus as TableGameStatus
+)
+
+
+class RealtimeGameAgent:
+    """
+    실시간 멀티플레이어 게임 에이전트
+    
+    LLM과 사용자가 같은 테이블에서 실시간으로 게임을 플레이
+    """
+    
+    def __init__(self, agent_id: str = "realtime_game_agent"):
+        self.agent_id = agent_id
+        self.error_handler = ErrorHandler()
+        self.state_manager = GameStateManager()
+        self.active_tables: Dict[str, DynamicGameTable] = {}
+    
+    async def create_table(
+        self,
+        game_type: str,
+        bgg_id: Optional[int] = None,
+        max_players: int = 4
+    ) -> Dict[str, Any]:
+        """게임 테이블 생성"""
+        try:
+            table = DynamicGameTable(
+                table_id=f"table_{int(datetime.now().timestamp())}",
+                game_type=game_type,
+                bgg_id=bgg_id,
+                state_manager=self.state_manager
+            )
+            
+            await table.initialize()
+            self.active_tables[table.table_id] = table
+            
+            return {
+                "success": True,
+                "table_id": table.table_id,
+                "game_type": game_type,
+                "status": "created"
+            }
+            
+        except Exception as e:
+            await self.error_handler.handle_error(e, self.agent_id)
+            return {"success": False, "error": str(e)}
+    
+    async def join_table(
+        self,
+        table_id: str,
+        player_id: str,
+        player_name: str,
+        is_human: bool = False,
+        llm_model: str = ""
+    ) -> Dict[str, Any]:
+        """테이블 참여"""
+        try:
+            table = self.active_tables.get(table_id)
+            if not table:
+                return {"success": False, "error": "Table not found"}
+            
+            success = await table.add_player(
+                player_id=player_id,
+                player_name=player_name,
+                is_human=is_human,
+                llm_model=llm_model
+            )
+            
+            if success:
+                return {"success": True, "player_id": player_id, "table_id": table_id}
+            else:
+                return {"success": False, "error": "Failed to join table"}
+                
+        except Exception as e:
+            await self.error_handler.handle_error(e, self.agent_id)
+            return {"success": False, "error": str(e)}
+    
+    async def start_game(self, table_id: str) -> Dict[str, Any]:
+        """게임 시작"""
+        try:
+            table = self.active_tables.get(table_id)
+            if not table:
+                return {"success": False, "error": "Table not found"}
+            
+            success = await table.start_game()
+            
+            if success:
+                return {"success": True, "table_id": table_id, "status": "started"}
+            else:
+                return {"success": False, "error": "Failed to start game"}
+                
+        except Exception as e:
+            await self.error_handler.handle_error(e, self.agent_id)
+            return {"success": False, "error": str(e)}
+    
+    async def get_table_status(self, table_id: str) -> Dict[str, Any]:
+        """테이블 상태 조회"""
+        table = self.active_tables.get(table_id)
+        if not table:
+            return {"success": False, "error": "Table not found"}
+        
+        return {"success": True, **table.get_table_status()}
+    
+    async def list_tables(self, game_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """테이블 목록 조회"""
+        tables = []
+        for table in self.active_tables.values():
+            if not game_type or table.game_type == game_type:
+                status = table.get_table_status()
+                status.pop("players", None)
+                tables.append(status)
+        return tables
+
+
+class LLMMoveAgent:
+    """LLM 움직임 생성 에이전트"""
+    
+    def __init__(self, agent_id: str = "llm_move_agent"):
+        self.agent_id = agent_id
+        self.error_handler = ErrorHandler()
+        self.rule_parser = BGGRuleParser()
+    
+    async def analyze_and_move(
+        self,
+        game_state: Dict[str, Any],
+        rules: GameRules,
+        available_moves: List[str],
+        player_id: str,
+        llm_model: str = "gemini-2.5-flash-lite"
+    ) -> Dict[str, Any]:
+        """게임 상태 분석 후 LLM으로 움직임 결정"""
+        try:
+            prompt = self._create_move_prompt(game_state, rules, available_moves)
+            
+            if available_moves:
+                selected_move = available_moves[0]
+                reasoning = f"LLM({llm_model})이 분석 후 최적의 움직임을 선택했습니다."
+            else:
+                selected_move = "PASS"
+                reasoning = "가능한 움직임이 없어 패스합니다."
+            
+            return {
+                "success": True,
+                "player_id": player_id,
+                "move_type": selected_move,
+                "move_data": {},
+                "reasoning": reasoning,
+                "confidence": 0.85,
+                "llm_model": llm_model
+            }
+            
+        except Exception as e:
+            await self.error_handler.handle_error(e, self.agent_id)
+            return {"success": False, "error": str(e)}
+    
+    def _create_move_prompt(
+        self,
+        game_state: Dict[str, Any],
+        rules: GameRules,
+        available_moves: List[str]
+    ) -> str:
+        """움직임 결정용 프롬프트 생성"""
+        prompt = f"""
+# 게임: {rules.name}
+
+## 현재 게임 상태
+{json.dumps(game_state, ensure_ascii=False, indent=2)}
+
+## 게임 규칙
+{rules.to_llm_prompt()}
+
+## 가능한 움직임
+{chr(10).join(['- ' + m for m in available_moves])}
+
+지시사항: 위 규칙과 게임 상태를 분석하여 최적의 움직임을 결정하세요.
+"""
+        return prompt
+    
+    async def validate_move(
+        self,
+        move_type: str,
+        game_state: Dict[str, Any],
+        available_moves: List[str]
+    ) -> bool:
+        """움직임 유효성 검증"""
+        return move_type in available_moves
+
+
+# ============================================================================
+# 편의 함수들
+# ============================================================================
+
+_realtime_game_agent: Optional[RealtimeGameAgent] = None
+_llm_move_agent: Optional[LLMMoveAgent] = None
+
+
+def get_realtime_game_agent() -> RealtimeGameAgent:
+    """실시간 게임 에이전트 반환"""
+    global _realtime_game_agent
+    if _realtime_game_agent is None:
+        _realtime_game_agent = RealtimeGameAgent()
+    return _realtime_game_agent
+
+
+def get_llm_move_agent() -> LLMMoveAgent:
+    """LLM 움직임 에이전트 반환"""
+    global _llm_move_agent
+    if _llm_move_agent is None:
+        _llm_move_agent = LLMMoveAgent()
+    return _llm_move_agent

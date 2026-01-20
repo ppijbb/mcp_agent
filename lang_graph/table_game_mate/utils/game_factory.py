@@ -22,9 +22,44 @@ class GameType(Enum):
     CARD = "card"
     DICE = "dice"
     SOCIAL = "social"
+    SOCIAL_DEDUCTION = "social_deduction"
     PARTY = "party"
     COOPERATIVE = "cooperative"
     COMPETITIVE = "competitive"
+
+
+class PersonaArchetype(Enum):
+    """페르소나 아키타입"""
+    STRATEGIC = "strategic"
+    ANALYTICAL = "analytical"
+    SOCIAL = "social"
+    DECEPTIVE = "deceptive"
+    AGGRESSIVE = "aggressive"
+    DIPLOMATIC = "diplomatic"
+
+
+@dataclass
+class GameMetadata:
+    """게임 메타데이터"""
+    name: str
+    min_players: int
+    max_players: int
+    estimated_duration: int
+    complexity: float
+    game_type: GameType
+    description: str
+
+
+@dataclass
+class GameInfo:
+    """게임 정보"""
+    game_id: str
+    name: str
+    description: str
+    player_count: int
+    avg_play_time: int
+    game_mechanics: List[str]
+    recommended_personas: List[PersonaArchetype]
 
 
 class GameComplexity(Enum):
@@ -56,8 +91,8 @@ class GameTemplate:
     hidden_information: bool = False
     player_elimination: bool = False
     
-    # 추천 페르소나 타입 (현재 사용되지 않음)
-    recommended_personas: List[str] = None
+    # 추천 페르소나 타입
+    recommended_personas: List[PersonaArchetype] = None
     
     # 특수 규칙 힌트
     special_mechanics: List[str] = None
@@ -65,7 +100,7 @@ class GameTemplate:
     
     def __post_init__(self):
         if self.recommended_personas is None:
-            self.recommended_personas = ["social", "strategic"]
+            self.recommended_personas = [PersonaArchetype.SOCIAL, PersonaArchetype.STRATEGIC]
         if self.special_mechanics is None:
             self.special_mechanics = []
         if self.victory_conditions is None:
