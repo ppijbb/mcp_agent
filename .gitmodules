@@ -112,3 +112,6 @@
 [submodule "open_researcher/ROMA"]
 	path = open_researcher/ROMA
 	url = https://github.com/sentient-agi/ROMA.git
+[submodule "open_researcher/suna"]
+	path = open_researcher/suna
+	url = https://github.com/kortix-ai/suna.git
