@@ -1252,6 +1252,24 @@ EXAMPLES:
     setup_parser = subparsers.add_parser('setup', help='System setup and configuration')
     setup_parser.add_argument('--force', action='store_true', help='Force reinstallation')
 
+    # cli 커맨드 (CLI 에이전트 관리)
+    cli_parser = subparsers.add_parser('cli', help='CLI agent management')
+    cli_subparsers = cli_parser.add_subparsers(dest='cli_command', help='CLI agent commands')
+
+    # cli list
+    cli_list_parser = cli_subparsers.add_parser('list', help='List available CLI agents')
+
+    # cli test
+    cli_test_parser = cli_subparsers.add_parser('test', help='Test CLI agent')
+    cli_test_parser.add_argument('agent_name', help='CLI agent name to test')
+
+    # cli run
+    cli_run_parser = cli_subparsers.add_parser('run', help='Run query with CLI agent')
+    cli_run_parser.add_argument('agent_name', help='CLI agent name')
+    cli_run_parser.add_argument('query', help='Query to execute')
+    cli_run_parser.add_argument('--mode', help='Execution mode')
+    cli_run_parser.add_argument('--files', nargs='*', help='Related files')
+
     # 하위 호환성을 위한 기존 인자들 (deprecated)
     parser.add_argument("--request", "--query", dest="legacy_request", help="Legacy: Use 'run' command instead")
     parser.add_argument("--web", action="store_true", dest="legacy_web", help="Legacy: Use 'web' command instead")
@@ -1316,6 +1334,8 @@ EXAMPLES:
         await handle_docker_command(args)
     elif args.command == 'setup':
         await handle_setup_command(args)
+    elif args.command == 'cli':
+        await handle_cli_command(args)
     elif args.command == 'interactive':
         await handle_interactive_command(args)
     else:
@@ -2163,6 +2183,124 @@ async def handle_interactive_command(args):
     except Exception as e:
         logger.error(f"❌ Interactive mode failed: {e}")
         return 1
+    return 0
+
+
+async def handle_cli_command(args):
+    """CLI 에이전트 관리 커맨드 처리"""
+    from src.core.cli_agents.cli_agent_manager import get_cli_agent_manager
+    from src.core.researcher_config import initialize_cli_agents
+
+    # CLI 에이전트 초기화
+    if not initialize_cli_agents():
+        logger.warning("⚠️ CLI agents not enabled or failed to initialize")
+
+    cli_manager = get_cli_agent_manager()
+
+    if args.cli_command == 'list':
+        logger.info("🤖 Available CLI Agents:")
+
+        try:
+            available_agents = cli_manager.get_available_agents()
+            if not available_agents:
+                logger.info("  No CLI agents configured")
+                return 0
+
+            for agent_name in available_agents:
+                agent_info = cli_manager.get_agent_info(agent_name)
+                if agent_info:
+                    status = "✅ Available" if agent_info.get('instance') else "⚠️ Configured"
+                    logger.info(f"  - {agent_name}: {status}")
+                    if agent_info.get('type'):
+                        logger.info(f"    Type: {agent_info['type']}")
+                    if agent_info.get('command'):
+                        logger.info(f"    Command: {agent_info['command']}")
+                else:
+                    logger.info(f"  - {agent_name}: ❌ Not configured")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to list CLI agents: {e}")
+            return 1
+
+    elif args.cli_command == 'test':
+        agent_name = args.agent_name
+        logger.info(f"🧪 Testing CLI agent: {agent_name}")
+
+        try:
+            # 헬스체크
+            agent = cli_manager.create_agent(agent_name)
+            if not agent:
+                logger.error(f"❌ CLI agent not available: {agent_name}")
+                return 1
+
+            is_healthy = await agent.health_check()
+            if is_healthy:
+                logger.info(f"✅ CLI agent {agent_name} is healthy")
+                # 추가 정보 표시
+                info = agent.get_info()
+                logger.info(f"   Name: {info.get('name')}")
+                logger.info(f"   Command: {info.get('command')}")
+                logger.info(f"   Timeout: {info.get('timeout')}s")
+            else:
+                logger.error(f"❌ CLI agent {agent_name} is not healthy")
+                return 1
+
+        except Exception as e:
+            logger.error(f"❌ CLI agent test failed: {e}")
+            return 1
+
+    elif args.cli_command == 'run':
+        agent_name = args.agent_name
+        query = args.query
+        logger.info(f"🚀 Running query with CLI agent: {agent_name}")
+        logger.info(f"   Query: {query}")
+
+        try:
+            # 실행 옵션 준비
+            kwargs = {}
+            if hasattr(args, 'mode') and args.mode:
+                kwargs['mode'] = args.mode
+            if hasattr(args, 'files') and args.files:
+                kwargs['files'] = args.files
+
+            # CLI 에이전트로 쿼리 실행
+            result = await cli_manager.execute_with_agent(agent_name, query, **kwargs)
+
+            if result.get('success'):
+                logger.info("✅ CLI agent execution successful")
+                logger.info("📄 Response:")
+                print(result.get('response', ''))
+
+                # 메타데이터 표시
+                metadata = result.get('metadata', {})
+                if metadata:
+                    logger.info("📊 Metadata:")
+                    for key, value in metadata.items():
+                        if key != 'execution_time':  # 실행 시간은 별도로 표시
+                            logger.info(f"   {key}: {value}")
+
+                execution_time = metadata.get('execution_time', 0)
+                if execution_time:
+                    logger.info(f"⏱️ Execution time: {execution_time:.2f}s")
+
+                confidence = result.get('confidence', 0)
+                logger.info(f"🎯 Confidence: {confidence:.2f}")
+
+            else:
+                logger.error("❌ CLI agent execution failed")
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"   Error: {error_msg}")
+                return 1
+
+        except Exception as e:
+            logger.error(f"❌ CLI agent execution failed: {e}")
+            return 1
+
+    else:
+        logger.error(f"❌ Unknown CLI command: {args.cli_command}")
+        logger.info("Available commands: list, test, run")
+        return 1
+
     return 0
 
 

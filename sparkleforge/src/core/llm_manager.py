@@ -1960,8 +1960,15 @@ async def execute_llm_task(
     use_ensemble: bool = False,
     **kwargs
 ) -> ModelResult:
-    """LLM 작업 실행."""
+    """LLM 작업 실행 (API 모델 + CLI 에이전트 지원)."""
     try:
+        # CLI 에이전트 체크
+        if model_name and _is_cli_agent(model_name):
+            return await _execute_cli_agent_task(
+                prompt, task_type, model_name, system_message, **kwargs
+            )
+
+        # 기존 API 모델 처리
         if use_ensemble:
             return await get_llm_orchestrator().weighted_ensemble(
                 prompt, task_type, model_name, system_message, **kwargs
@@ -1983,3 +1990,77 @@ def get_best_model_for_task(task_type: TaskType) -> str:
 def get_model_performance_stats() -> Dict[str, Any]:
     """모델 성능 통계 반환."""
     return get_llm_orchestrator().get_model_performance_stats()
+
+
+# CLI 에이전트 지원 함수들
+def _is_cli_agent(model_name: str) -> bool:
+    """모델 이름이 CLI 에이전트인지 확인"""
+    cli_agents = {
+        'claude_code', 'open_code', 'gemini_cli', 'cline_cli',
+        'claudecode', 'opencode', 'gemini-cli', 'cline-cli'
+    }
+    return model_name.lower() in cli_agents
+
+
+async def _execute_cli_agent_task(
+    prompt: str,
+    task_type: TaskType,
+    agent_name: str,
+    system_message: str = None,
+    **kwargs
+) -> ModelResult:
+    """CLI 에이전트 작업 실행"""
+    from src.core.cli_agents.cli_agent_manager import get_cli_agent_manager
+
+    try:
+        cli_manager = get_cli_agent_manager()
+
+        # 시스템 메시지와 프롬프트 결합
+        full_query = prompt
+        if system_message:
+            full_query = f"{system_message}\n\n{prompt}"
+
+        # 작업 유형에 따른 추가 파라미터 설정
+        agent_kwargs = kwargs.copy()
+
+        # 작업 유형별 특화 파라미터
+        if task_type == TaskType.GENERATION:
+            agent_kwargs.setdefault('mode', 'generate')
+        elif task_type == TaskType.ANALYSIS:
+            agent_kwargs.setdefault('mode', 'analyze')
+        elif task_type == TaskType.RESEARCH:
+            agent_kwargs.setdefault('mode', 'chat')
+
+        # CLI 에이전트 실행
+        result = await cli_manager.execute_with_agent(agent_name, full_query, **agent_kwargs)
+
+        # ModelResult 형식으로 변환
+        return ModelResult(
+            success=result.get('success', False),
+            response=result.get('response', ''),
+            model_name=f"cli:{agent_name}",
+            confidence=result.get('confidence', 0.0),
+            usage=result.get('usage', {}),
+            metadata={
+                'agent_type': 'cli',
+                'agent_name': agent_name,
+                'task_type': task_type.value,
+                'execution_time': result.get('metadata', {}).get('execution_time', 0),
+                **result.get('metadata', {})
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"CLI agent execution failed: {agent_name} - {e}")
+        return ModelResult(
+            success=False,
+            response="",
+            model_name=f"cli:{agent_name}",
+            confidence=0.0,
+            usage={},
+            metadata={
+                'agent_type': 'cli',
+                'agent_name': agent_name,
+                'error': str(e)
+            }
+        )

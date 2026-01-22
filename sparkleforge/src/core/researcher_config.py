@@ -47,6 +47,23 @@ class LLMConfig(BaseModel):
     # Cost optimization - NO DEFAULTS
     budget_limit: float = Field(ge=0.0, description="Budget limit")
     enable_cost_optimization: bool = Field(description="Enable cost optimization")
+
+    # CLI Agent Support - 선택적 설정
+    enable_cli_agents: bool = Field(default=False, description="Enable CLI agents")
+    cli_agents_config: Dict[str, Any] = Field(default_factory=dict, description="CLI agent configurations")
+
+    # Claude Code settings
+    claude_code_api_key: Optional[str] = Field(default=None, description="Claude Code API key")
+
+    # OpenCode settings
+    open_code_model_path: Optional[str] = Field(default=None, description="OpenCode model path")
+
+    # Gemini CLI settings
+    gemini_cli_api_key: Optional[str] = Field(default=None, description="Gemini CLI API key")
+    gemini_cli_model: str = Field(default="gemini-pro", description="Gemini CLI model")
+
+    # Cline CLI settings
+    cline_cli_config_path: Optional[str] = Field(default=None, description="Cline CLI config path")
     
     @field_validator('openrouter_api_key')
     @classmethod
@@ -535,6 +552,65 @@ def get_llm_config() -> LLMConfig:
     if config is None:
         raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
     return config.llm
+
+
+def get_cli_agents_config() -> Dict[str, Any]:
+    """Get CLI agents configuration."""
+    if config is None:
+        raise RuntimeError("Configuration not loaded. Call load_config_from_env() first.")
+
+    cli_config = {}
+
+    # CLI 에이전트 활성화 여부
+    cli_config['enabled'] = config.llm.enable_cli_agents
+
+    # 각 CLI 에이전트 설정
+    cli_config['agents'] = {
+        'claude_code': {
+            'enabled': bool(os.getenv('CLAUDE_CODE_API_KEY') or config.llm.claude_code_api_key),
+            'api_key': os.getenv('CLAUDE_CODE_API_KEY') or config.llm.claude_code_api_key,
+        },
+        'open_code': {
+            'enabled': bool(os.getenv('OPEN_CODE_MODEL_PATH') or config.llm.open_code_model_path),
+            'model_path': os.getenv('OPEN_CODE_MODEL_PATH') or config.llm.open_code_model_path,
+        },
+        'gemini_cli': {
+            'enabled': bool(os.getenv('GEMINI_CLI_API_KEY') or config.llm.gemini_cli_api_key),
+            'api_key': os.getenv('GEMINI_CLI_API_KEY') or config.llm.gemini_cli_api_key,
+            'model': os.getenv('GEMINI_CLI_MODEL', config.llm.gemini_cli_model),
+        },
+        'cline_cli': {
+            'enabled': bool(os.getenv('CLINE_CLI_CONFIG_PATH') or config.llm.cline_cli_config_path),
+            'config_path': os.getenv('CLINE_CLI_CONFIG_PATH') or config.llm.cline_cli_config_path,
+        }
+    }
+
+    return cli_config
+
+
+def initialize_cli_agents():
+    """CLI 에이전트들을 초기화하고 설정"""
+    cli_config = get_cli_agents_config()
+
+    if not cli_config['enabled']:
+        return False
+
+    try:
+        from src.core.cli_agents.cli_agent_manager import get_cli_agent_manager
+        cli_manager = get_cli_agent_manager()
+
+        # 각 CLI 에이전트 설정
+        for agent_name, agent_config in cli_config['agents'].items():
+            if agent_config['enabled']:
+                cli_manager.configure_agent(agent_name, agent_config)
+
+        return True
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to initialize CLI agents: {e}")
+        return False
 
 
 def get_agent_config() -> AgentConfig:
