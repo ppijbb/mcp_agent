@@ -38,7 +38,7 @@ st.set_page_config(
     page_title="SparkleForge",
     page_icon="⚒️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Initialize session state
@@ -151,7 +151,66 @@ def initialize_orchestrator():
 
 
 def main():
-    """메인 애플리케이션 - 좌우 분할 레이아웃."""
+    """메인 애플리케이션 - 좌우 분할 레이아웃 with sidebar."""
+
+    # Sidebar - 시스템 관리
+    with st.sidebar:
+        st.title("🔧 System Control")
+
+        # 시스템 상태
+        with st.expander("🏥 System Health", expanded=True):
+            health_status = get_system_health()
+            if health_status.get('healthy'):
+                st.success("✅ System Healthy")
+            else:
+                st.error("❌ System Issues")
+
+            # 세부 상태
+            st.metric("CPU Usage", f"{health_status.get('cpu_percent', 0):.1f}%")
+            st.metric("Memory Usage", f"{health_status.get('memory_percent', 0):.1f}%")
+
+        # 도구 관리
+        with st.expander("🔧 Tools Management"):
+            if st.button("🔍 Check Tool Status"):
+                with st.spinner("Checking tools..."):
+                    tool_status = check_tools_status()
+                    st.json(tool_status)
+
+        # 설정
+        with st.expander("⚙️ Settings"):
+            st.checkbox("Enable Streaming", value=True, key="enable_streaming")
+            st.checkbox("Show Debug Info", value=False, key="show_debug")
+            st.selectbox("Response Format", ["markdown", "json", "html"], key="response_format")
+
+        # Docker 관리 (Docker가 사용 가능한 경우)
+        if check_docker_available():
+            with st.expander("🐳 Docker Services"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🚀 Start Services"):
+                        start_docker_services()
+                        st.success("Services started!")
+                with col2:
+                    if st.button("🛑 Stop Services"):
+                        stop_docker_services()
+                        st.success("Services stopped!")
+
+                if st.button("📊 Service Status"):
+                    status = get_docker_status()
+                    st.code(status, language="bash")
+
+        # 샌드박스 테스트
+        with st.expander("🧪 Code Sandbox"):
+            sandbox_code = st.text_area("Test Code", "print('Hello from sandbox!')", height=100)
+            if st.button("▶️ Run in Sandbox"):
+                with st.spinner("Running code..."):
+                    result = test_sandbox_execution(sandbox_code)
+                    if result.get('success'):
+                        st.success("✅ Execution successful")
+                        st.code(result.get('output', ''), language='text')
+                    else:
+                        st.error(f"❌ Execution failed: {result.get('error', '')}")
+
     st.title("⚒️ SparkleForge - Multi-Agent Research System")
     st.markdown("---")
     
@@ -922,6 +981,124 @@ async def get_agent_response(prompt: str, agent_type: str) -> str:
         error_detail = traceback.format_exc()
         logger.error(f"Error details: {error_detail}")
         return f"⚠️ 오류 발생: {str(e)}\n\n자세한 내용은 로그를 확인해주세요."
+
+
+# Sidebar 헬퍼 함수들
+def get_system_health() -> Dict[str, Any]:
+    """시스템 상태 확인"""
+    try:
+        import psutil
+
+        return {
+            'healthy': True,
+            'cpu_percent': psutil.cpu_percent(interval=1),
+            'memory_percent': psutil.virtual_memory().percent,
+            'disk_usage': psutil.disk_usage('/').percent
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {'healthy': False, 'error': str(e)}
+
+
+def check_tools_status() -> Dict[str, Any]:
+    """도구 상태 확인"""
+    try:
+        from src.core.mcp_integration import get_mcp_hub
+        mcp_hub = get_mcp_hub()
+
+        # MCP Hub 초기화 시도
+        asyncio.run(mcp_hub.initialize_mcp())
+
+        # 서버 상태 확인
+        server_status = asyncio.run(mcp_hub.check_mcp_servers())
+
+        return {
+            'mcp_servers': len(server_status.get('servers', {})),
+            'connected_servers': server_status.get('connected_servers', 0),
+            'total_tools': server_status.get('summary', {}).get('total_tools_available', 0),
+            'local_tools': {
+                'browser_tools': ['navigate', 'extract', 'screenshot', 'interact'],
+                'file_tools': ['create', 'read', 'write', 'edit', 'list', 'delete'],
+                'shell_tools': ['run_command', 'interactive', 'background'],
+                'code_tools': ['execute_python', 'execute_javascript']
+            }
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def check_docker_available() -> bool:
+    """Docker 사용 가능 여부 확인"""
+    try:
+        import subprocess
+        result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
+        return result.returncode == 0
+    except:
+        return False
+
+
+def start_docker_services():
+    """Docker 서비스 시작"""
+    try:
+        import subprocess
+        # docker compose up -d 실행
+        result = subprocess.run(['docker', 'compose', 'up', '-d'], cwd=str(project_root))
+        return result.returncode == 0
+    except Exception as e:
+        st.error(f"Docker start failed: {e}")
+        return False
+
+
+def stop_docker_services():
+    """Docker 서비스 중지"""
+    try:
+        import subprocess
+        # docker compose down 실행
+        result = subprocess.run(['docker', 'compose', 'down'], cwd=str(project_root))
+        return result.returncode == 0
+    except Exception as e:
+        st.error(f"Docker stop failed: {e}")
+        return False
+
+
+def get_docker_status() -> str:
+    """Docker 서비스 상태 확인"""
+    try:
+        import subprocess
+        result = subprocess.run(['docker', 'compose', 'ps'], cwd=str(project_root), capture_output=True, text=True)
+        return result.stdout if result.returncode == 0 else f"Error: {result.stderr}"
+    except Exception as e:
+        return f"Failed to get status: {e}"
+
+
+def test_sandbox_execution(code: str) -> Dict[str, Any]:
+    """샌드박스 코드 실행 테스트"""
+    try:
+        from src.core.sandbox.docker_sandbox import get_sandbox
+
+        async def run_test():
+            sandbox = get_sandbox()
+            result = await sandbox.execute_code(code, "python")
+            return {
+                'success': result.success,
+                'output': result.output,
+                'error': result.error,
+                'execution_time': result.execution_time
+            }
+
+        # 이벤트 루프에서 실행
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(run_test())
+        loop.close()
+
+        return result
+
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Sandbox test failed: {str(e)}"
+        }
 
 
 if __name__ == "__main__":

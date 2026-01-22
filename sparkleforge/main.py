@@ -1126,7 +1126,7 @@ class AutonomousResearchSystem:
 
 
 async def main():
-    """Main function - 9가지 핵심 혁신 통합 실행 진입점"""
+    """Main function - 9가지 핵심 혁신 통합 실행 진입점 (Suna-style CLI)"""
     # Python 종료 시 발생하는 async generator 정리 오류 무시
     def ignore_async_gen_errors(loop, context):
         """anyio cancel scope 및 async generator 종료 오류 무시"""
@@ -1143,39 +1143,121 @@ async def main():
         loop.set_exception_handler(None)
         loop.call_exception_handler(context)
         loop.set_exception_handler(ignore_async_gen_errors)
-    
+
     # asyncio exception handler 설정
     loop = asyncio.get_running_loop()
     loop.set_exception_handler(ignore_async_gen_errors)
-    
+
+    # Suna-style 서브커맨드 구조로 개선
     parser = argparse.ArgumentParser(
-        description="Autonomous Multi-Agent Research System with 9 Core Innovations",
+        description="SparkleForge - Autonomous Multi-Agent Research System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  python main.py --request "인공지능의 미래 전망"
-  python main.py --query "인공지능의 미래 전망"  # --request와 동일
-  python main.py --request "연구 주제" --output results/report.json
-  python main.py --query "연구 주제" --output results/report.json  # --request와 동일
-  python main.py --request "연구 주제" --streaming
-  python main.py --web
-  python main.py --mcp-server
-  python main.py --mcp-client
-  python main.py --health-check
+SparkleForge: Where Ideas Sparkle and Get Forged ⚒️✨
+
+EXAMPLES:
+  # 연구 실행
+  python main.py run "인공지능의 미래 전망"
+
+  # 웹 대시보드 시작
+  python main.py web
+
+  # 시스템 헬스체크
+  python main.py health
+
+  # MCP 서버 상태 확인
+  python main.py mcp status
+
+  # 도구 목록 확인
+  python main.py tools list
+
+  # Docker 서비스 관리
+  python main.py docker up
         """
     )
-    
-    # Mode selection
-    mode_group = parser.add_mutually_exclusive_group(required=False)
-    mode_group.add_argument("--request", "--query", dest="request", help="Research request (CLI mode)")
-    mode_group.add_argument("--web", action="store_true", help="Start web application with streaming")
-    mode_group.add_argument("--mcp-server", action="store_true", help="Start MCP server with Universal MCP Hub")
-    mode_group.add_argument("--mcp-client", action="store_true", help="Start MCP client with Smart Tool Selection")
-    mode_group.add_argument("--health-check", action="store_true", help="Check system health and MCP tools")
-    mode_group.add_argument("--check-mcp-servers", action="store_true", help="Check all MCP server connections and list tools")
-    mode_group.add_argument("--cli", action="store_true", help="Start REPL CLI mode (완전 CLI 환경) - 기본값")
-    mode_group.add_argument("--interactive", action="store_true", help="Start interactive CLI mode (기존)")
-    mode_group.add_argument("-p", "--prompt", help="Headless mode: execute prompt directly (non-interactive)")
+
+    # 서브커맨드 추가
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    # run 커맨드
+    run_parser = subparsers.add_parser('run', help='Execute research request')
+    run_parser.add_argument('query', help='Research query')
+    run_parser.add_argument('--output', '-o', help='Output file path')
+    run_parser.add_argument('--format', choices=['json', 'markdown', 'html'], default='markdown', help='Output format')
+    run_parser.add_argument('--streaming', action='store_true', help='Enable streaming output')
+
+    # web 커맨드
+    web_parser = subparsers.add_parser('web', help='Start web dashboard')
+    web_parser.add_argument('--port', default='8501', help='Web server port')
+    web_parser.add_argument('--host', default='0.0.0.0', help='Web server host')
+
+    # mcp 커맨드
+    mcp_parser = subparsers.add_parser('mcp', help='MCP server management')
+    mcp_subparsers = mcp_parser.add_subparsers(dest='mcp_command', help='MCP commands')
+
+    # mcp status
+    mcp_status_parser = mcp_subparsers.add_parser('status', help='Check MCP server status')
+    mcp_status_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+
+    # mcp server
+    mcp_server_parser = mcp_subparsers.add_parser('server', help='Start MCP server')
+
+    # health 커맨드
+    health_parser = subparsers.add_parser('health', help='System health check')
+    health_parser.add_argument('--detailed', action='store_true', help='Detailed health report')
+
+    # tools 커맨드
+    tools_parser = subparsers.add_parser('tools', help='Tool management')
+    tools_subparsers = tools_parser.add_subparsers(dest='tools_command', help='Tool commands')
+
+    # tools list
+    tools_list_parser = tools_subparsers.add_parser('list', help='List available tools')
+    tools_list_parser.add_argument('--category', help='Filter by category')
+
+    # tools test
+    tools_test_parser = tools_subparsers.add_parser('test', help='Test tool functionality')
+    tools_test_parser.add_argument('tool_name', help='Tool name to test')
+
+    # docker 커맨드
+    docker_parser = subparsers.add_parser('docker', help='Docker service management')
+    docker_subparsers = docker_parser.add_subparsers(dest='docker_command', help='Docker commands')
+
+    # docker up
+    docker_up_parser = docker_subparsers.add_parser('up', help='Start Docker services')
+    docker_up_parser.add_argument('--build', action='store_true', help='Rebuild images')
+    docker_up_parser.add_argument('--profile', action='append', help='Enable specific profiles (e.g., sandbox)')
+
+    # docker down
+    docker_down_parser = docker_subparsers.add_parser('down', help='Stop Docker services')
+    docker_down_parser.add_argument('--volumes', action='store_true', help='Remove volumes')
+    docker_down_parser.add_argument('--images', action='store_true', help='Remove images')
+
+    # docker logs
+    docker_logs_parser = docker_subparsers.add_parser('logs', help='Show service logs')
+    docker_logs_parser.add_argument('service', nargs='?', help='Specific service name')
+    docker_logs_parser.add_argument('--follow', '-f', action='store_true', help='Follow log output')
+
+    # docker status
+    docker_status_parser = docker_subparsers.add_parser('status', help='Show service status')
+
+    # docker build
+    docker_build_parser = docker_subparsers.add_parser('build', help='Build Docker images')
+    docker_build_parser.add_argument('--no-cache', action='store_true', help='Build without cache')
+
+    # docker restart
+    docker_restart_parser = docker_subparsers.add_parser('restart', help='Restart Docker services')
+    docker_restart_parser.add_argument('service', nargs='?', help='Specific service name')
+
+    # setup 커맨드
+    setup_parser = subparsers.add_parser('setup', help='System setup and configuration')
+    setup_parser.add_argument('--force', action='store_true', help='Force reinstallation')
+
+    # 하위 호환성을 위한 기존 인자들 (deprecated)
+    parser.add_argument("--request", "--query", dest="legacy_request", help="Legacy: Use 'run' command instead")
+    parser.add_argument("--web", action="store_true", dest="legacy_web", help="Legacy: Use 'web' command instead")
+    parser.add_argument("--mcp-server", action="store_true", dest="legacy_mcp_server", help="Legacy: Use 'mcp server' command instead")
+    parser.add_argument("--health-check", action="store_true", dest="legacy_health", help="Legacy: Use 'health' command instead")
+    parser.add_argument("--check-mcp-servers", action="store_true", dest="legacy_mcp_status", help="Legacy: Use 'mcp status' command instead")
     mode_group.add_argument("--daemon", action="store_true", help="Start as long-running daemon (24/7 mode)")
     
     # Optional arguments
@@ -1195,15 +1277,49 @@ Examples:
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     
     args = parser.parse_args()
-    
-    # REPL 모드 체크 (초기화 전에 로깅 억제)
-    has_any_mode = any([
-        args.request, args.web, args.mcp_server, args.mcp_client,
-        args.health_check, args.check_mcp_servers, args.interactive,
-        args.prompt, args.daemon
-    ])
-    
-    is_repl_mode = not has_any_mode or args.cli
+
+    # 하위 호환성 처리
+    if args.legacy_request:
+        args.command = 'run'
+        args.query = args.legacy_request
+        args.streaming = True
+    elif args.legacy_web:
+        args.command = 'web'
+    elif args.legacy_mcp_server:
+        args.command = 'mcp'
+        args.mcp_command = 'server'
+    elif args.legacy_health:
+        args.command = 'health'
+    elif args.legacy_mcp_status:
+        args.command = 'mcp'
+        args.mcp_command = 'status'
+
+    # 기본값 설정
+    if not args.command:
+        args.command = 'run'  # 기본은 run 커맨드
+        if not hasattr(args, 'query') or not args.query:
+            # 쿼리가 없으면 인터랙티브 모드로 전환
+            args.command = 'interactive'
+
+    # 서브커맨드 처리
+    if args.command == 'run':
+        await handle_run_command(args)
+    elif args.command == 'web':
+        await handle_web_command(args)
+    elif args.command == 'mcp':
+        await handle_mcp_command(args)
+    elif args.command == 'health':
+        await handle_health_command(args)
+    elif args.command == 'tools':
+        await handle_tools_command(args)
+    elif args.command == 'docker':
+        await handle_docker_command(args)
+    elif args.command == 'setup':
+        await handle_setup_command(args)
+    elif args.command == 'interactive':
+        await handle_interactive_command(args)
+    else:
+        parser.print_help()
     
     # REPL 모드에서는 모든 로그를 완전히 억제 (ERROR만 표시)
     if is_repl_mode:
@@ -1584,6 +1700,470 @@ Examples:
                         logger.debug(f"Error stopping MCP health service: {e}")
             except Exception as e:
                 logger.debug(f"Error in final cleanup: {e}")
+
+
+# 서브커맨드 핸들러 함수들
+async def handle_run_command(args):
+    """연구 실행 커맨드 처리"""
+    logger.info(f"🔬 Starting research: {args.query}")
+
+    try:
+        # Autonomous Orchestrator 초기화
+        orchestrator = AutonomousOrchestrator()
+
+        # 연구 실행
+        result = await orchestrator.execute_research(
+            research_query=args.query,
+            output_format=args.format,
+            streaming=args.streaming
+        )
+
+        # 결과 출력
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                if args.format == 'json':
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                else:
+                    f.write(result)
+            logger.info(f"✅ Results saved to {args.output}")
+        else:
+            print(result)
+
+    except Exception as e:
+        logger.error(f"❌ Research failed: {e}")
+        return 1
+    return 0
+
+
+async def handle_web_command(args):
+    """웹 대시보드 시작 커맨드 처리"""
+    logger.info("🌐 Starting web dashboard...")
+
+    web_manager = WebAppManager()
+    os.environ["STREAMLIT_PORT"] = args.port
+    os.environ["STREAMLIT_ADDRESS"] = args.host
+
+    try:
+        web_manager.start_web_app()
+    except KeyboardInterrupt:
+        logger.info("🛑 Web dashboard stopped")
+    except Exception as e:
+        logger.error(f"❌ Failed to start web dashboard: {e}")
+        return 1
+    return 0
+
+
+async def handle_mcp_command(args):
+    """MCP 관리 커맨드 처리"""
+    if args.mcp_command == 'status':
+        logger.info("🔍 Checking MCP server status...")
+
+        try:
+            # MCP Hub 초기화 및 상태 확인
+            from src.core.mcp_integration import get_mcp_hub
+            mcp_hub = get_mcp_hub()
+
+            if args.verbose:
+                await mcp_hub.initialize_mcp()
+
+            server_status = await mcp_hub.check_mcp_servers()
+            mcp_hub.print_server_status(server_status, verbose=args.verbose)
+
+        except Exception as e:
+            logger.error(f"❌ MCP status check failed: {e}")
+            return 1
+
+    elif args.mcp_command == 'server':
+        logger.info("🚀 Starting MCP server...")
+
+        try:
+            # MCP 서버 시작
+            mcp_manager = MCPManager()
+            await mcp_manager.start_mcp_server()
+        except KeyboardInterrupt:
+            logger.info("🛑 MCP server stopped")
+        except Exception as e:
+            logger.error(f"❌ Failed to start MCP server: {e}")
+            return 1
+
+    return 0
+
+
+async def handle_health_command(args):
+    """시스템 헬스체크 커맨드 처리"""
+    logger.info("🏥 Running system health check...")
+
+    try:
+        health_monitor = HealthMonitor()
+
+        if args.detailed:
+            # 상세 헬스체크
+            health_report = await health_monitor.run_comprehensive_health_check()
+            health_monitor.print_detailed_health_report(health_report)
+        else:
+            # 간단한 헬스체크
+            is_healthy = await health_monitor.quick_health_check()
+            if is_healthy:
+                logger.info("✅ System is healthy")
+            else:
+                logger.error("❌ System has issues")
+                return 1
+
+    except Exception as e:
+        logger.error(f"❌ Health check failed: {e}")
+        return 1
+    return 0
+
+
+async def handle_tools_command(args):
+    """도구 관리 커맨드 처리"""
+    if args.tools_command == 'list':
+        logger.info("🔧 Listing available tools...")
+
+        try:
+            from src.core.mcp_integration import get_mcp_hub
+            mcp_hub = get_mcp_hub()
+            await mcp_hub.initialize_mcp()
+
+            # 도구 목록 출력
+            tools_by_category = {}
+            for tool_name, tool_info in mcp_hub.tools.items():
+                category = tool_info.get('category', 'unknown')
+                if category not in tools_by_category:
+                    tools_by_category[category] = []
+                tools_by_category[category].append(tool_name)
+
+            for category, tools in tools_by_category.items():
+                if not args.category or args.category == category:
+                    print(f"\n📂 {category.upper()}:")
+                    for tool in sorted(tools):
+                        print(f"  - {tool}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to list tools: {e}")
+            return 1
+
+    elif args.tools_command == 'test':
+        logger.info(f"🧪 Testing tool: {args.tool_name}")
+
+        try:
+            from src.core.mcp_integration import get_mcp_hub
+            mcp_hub = get_mcp_hub()
+            await mcp_hub.initialize_mcp()
+
+            # 도구 테스트
+            result = await mcp_hub.test_tool(args.tool_name)
+            if result.get('success'):
+                print(f"✅ Tool {args.tool_name} is working")
+            else:
+                print(f"❌ Tool {args.tool_name} failed: {result.get('error')}")
+                return 1
+
+        except Exception as e:
+            logger.error(f"❌ Tool test failed: {e}")
+            return 1
+
+    return 0
+
+
+async def handle_docker_command(args):
+    """Docker 서비스 관리 커맨드 처리 (Suna-style)"""
+    import subprocess
+    import os
+
+    # Docker Compose 명령어 자동 감지
+    def get_docker_compose_cmd():
+        """Docker Compose 명령어 자동 감지"""
+        # Docker Compose v2 (docker compose)
+        try:
+            subprocess.run(['docker', 'compose', 'version'], capture_output=True, check=True)
+            return ['docker', 'compose']
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+        # Docker Compose v1 (docker-compose)
+        try:
+            subprocess.run(['docker-compose', 'version'], capture_output=True, check=True)
+            return ['docker-compose']
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+        return None
+
+    # Docker 설치 확인
+    def check_docker():
+        """Docker 설치 상태 확인"""
+        try:
+            subprocess.run(['docker', '--version'], capture_output=True, check=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    # Docker Compose 파일 존재 확인
+    def check_compose_file():
+        """docker-compose.yaml 파일 존재 확인"""
+        compose_files = ['docker-compose.yaml', 'docker-compose.yml']
+        for filename in compose_files:
+            if (project_root / filename).exists():
+                return filename
+        return None
+
+    # Docker 환경 확인
+    if not check_docker():
+        logger.error("❌ Docker is not installed or not running")
+        logger.info("Please install Docker: https://docs.docker.com/get-docker/")
+        return 1
+
+    compose_cmd = get_docker_compose_cmd()
+    if not compose_cmd:
+        logger.error("❌ Docker Compose is not installed")
+        logger.info("Please install Docker Compose: https://docs.docker.com/compose/install/")
+        return 1
+
+    compose_file = check_compose_file()
+    if not compose_file:
+        logger.error("❌ docker-compose.yaml file not found")
+        logger.info("Please ensure docker-compose.yaml exists in the project root")
+        return 1
+
+    if args.docker_command == 'up':
+        logger.info("🐳 Starting Docker services...")
+        logger.info(f"Using Docker Compose: {' '.join(compose_cmd)}")
+        logger.info(f"Compose file: {compose_file}")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'up', '-d']
+            if args.build:
+                cmd.append('--build')
+                logger.info("🔨 Building images...")
+
+            # 프로필 지원 (예: sandbox)
+            if hasattr(args, 'profile') and args.profile:
+                for profile in args.profile:
+                    cmd.extend(['--profile', profile])
+                    logger.info(f"🔧 Enabling profile: {profile}")
+
+            # 환경 변수 로드 (.env 파일)
+            env = os.environ.copy()
+            env_file = project_root / '.env'
+            if env_file.exists():
+                logger.info("📄 Loading environment from .env file")
+                # .env 파일에서 환경 변수 로드 (간단한 구현)
+                with open(env_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            env[key] = value
+
+            result = subprocess.run(cmd, cwd=str(project_root), env=env)
+            if result.returncode == 0:
+                logger.info("✅ Docker services started successfully")
+                logger.info("🌐 Services:")
+                logger.info("   - Backend API: http://localhost:8000")
+                logger.info("   - Frontend: http://localhost:8501")
+                logger.info("   - Redis: localhost:6379")
+                logger.info("📊 View logs: python main.py docker logs")
+                logger.info("📊 Check status: python main.py docker status")
+            else:
+                logger.error("❌ Failed to start Docker services")
+                return 1
+
+        except Exception as e:
+            logger.error(f"❌ Docker command failed: {e}")
+            return 1
+
+    elif args.docker_command == 'down':
+        logger.info("🐳 Stopping Docker services...")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'down']
+            if hasattr(args, 'volumes') and args.volumes:
+                cmd.append('--volumes')
+                logger.info("🗑️ Removing volumes...")
+            if hasattr(args, 'images') and args.images:
+                cmd.append('--rmi')
+                cmd.append('all')
+                logger.info("🖼️ Removing images...")
+
+            result = subprocess.run(cmd, cwd=str(project_root))
+            if result.returncode == 0:
+                logger.info("✅ Docker services stopped successfully")
+            else:
+                logger.error("❌ Failed to stop Docker services")
+                return 1
+
+        except Exception as e:
+            logger.error(f"❌ Docker command failed: {e}")
+            return 1
+
+    elif args.docker_command == 'logs':
+        service_name = getattr(args, 'service', None)
+        logger.info(f"📊 Showing Docker service logs{f' for {service_name}' if service_name else ''}...")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'logs']
+            if service_name:
+                cmd.append(service_name)
+            if hasattr(args, 'follow') and args.follow:
+                cmd.append('-f')
+
+            if hasattr(args, 'follow') and args.follow:
+                subprocess.run(cmd, cwd=str(project_root))
+            else:
+                result = subprocess.run(cmd, cwd=str(project_root), capture_output=True, text=True)
+                if result.returncode == 0:
+                    print(result.stdout)
+                else:
+                    logger.error("❌ Failed to get logs")
+                    return 1
+        except KeyboardInterrupt:
+            logger.info("🛑 Stopped log monitoring")
+        except Exception as e:
+            logger.error(f"❌ Failed to show logs: {e}")
+            return 1
+
+    elif args.docker_command == 'status':
+        logger.info("📊 Checking Docker service status...")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'ps']
+            result = subprocess.run(cmd, cwd=str(project_root), capture_output=True, text=True)
+            if result.returncode == 0:
+                print("🐳 Docker Services Status:")
+                print("=" * 50)
+                print(result.stdout)
+            else:
+                logger.error("❌ Failed to get service status")
+                return 1
+        except Exception as e:
+            logger.error(f"❌ Failed to check status: {e}")
+            return 1
+
+    elif args.docker_command == 'build':
+        logger.info("🔨 Building Docker images...")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'build']
+            if hasattr(args, 'no_cache') and args.no_cache:
+                cmd.append('--no-cache')
+                logger.info("🧹 Building without cache...")
+
+            result = subprocess.run(cmd, cwd=str(project_root))
+            if result.returncode == 0:
+                logger.info("✅ Docker images built successfully")
+            else:
+                logger.error("❌ Failed to build Docker images")
+                return 1
+        except Exception as e:
+            logger.error(f"❌ Build failed: {e}")
+            return 1
+
+    elif args.docker_command == 'restart':
+        service_name = getattr(args, 'service', None)
+        logger.info(f"🔄 Restarting Docker services{f' ({service_name})' if service_name else ''}...")
+
+        try:
+            cmd = compose_cmd + ['-f', compose_file, 'restart']
+            if service_name:
+                cmd.append(service_name)
+
+            result = subprocess.run(cmd, cwd=str(project_root))
+            if result.returncode == 0:
+                logger.info("✅ Docker services restarted successfully")
+            else:
+                logger.error("❌ Failed to restart Docker services")
+                return 1
+        except Exception as e:
+            logger.error(f"❌ Restart failed: {e}")
+            return 1
+
+    else:
+        logger.error(f"❌ Unknown Docker command: {args.docker_command}")
+        logger.info("Available commands: up, down, logs, status, build, restart")
+        return 1
+
+    return 0
+
+
+async def handle_setup_command(args):
+    """시스템 설정 커맨드 처리"""
+    logger.info("⚙️ Running system setup...")
+
+    try:
+        # 간단한 설정 확인
+        required_files = [
+            'pyproject.toml',
+            'requirements.txt',
+            'src/core/configs/researcher_config.yaml'
+        ]
+
+        missing_files = []
+        for file_path in required_files:
+            if not (project_root / file_path).exists():
+                missing_files.append(file_path)
+
+        if missing_files:
+            logger.error(f"❌ Missing required files: {missing_files}")
+            return 1
+
+        # 환경 변수 확인
+        required_env_vars = ['OPENROUTER_API_KEY']
+        missing_env_vars = []
+        for env_var in required_env_vars:
+            if not os.getenv(env_var):
+                missing_env_vars.append(env_var)
+
+        if missing_env_vars:
+            logger.warning(f"⚠️ Missing environment variables: {missing_env_vars}")
+            logger.info("Please set these in your .env file or environment")
+
+        logger.info("✅ System setup completed")
+
+    except Exception as e:
+        logger.error(f"❌ Setup failed: {e}")
+        return 1
+    return 0
+
+
+async def handle_interactive_command(args):
+    """인터랙티브 모드 처리"""
+    logger.info("💬 Starting interactive mode...")
+
+    try:
+        # 간단한 REPL 구현
+        print("SparkleForge Interactive Mode")
+        print("Type 'help' for commands, 'quit' to exit")
+        print("-" * 50)
+
+        while True:
+            try:
+                query = input("🔍 Research query: ").strip()
+                if not query:
+                    continue
+                if query.lower() in ['quit', 'exit', 'q']:
+                    break
+                if query.lower() == 'help':
+                    print("Commands:")
+                    print("  help  - Show this help")
+                    print("  quit  - Exit interactive mode")
+                    print("  <query> - Execute research query")
+                    continue
+
+                # 연구 실행
+                await handle_run_command(type('Args', (), {'query': query, 'output': None, 'format': 'markdown', 'streaming': True})())
+
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                logger.error(f"❌ Error: {e}")
+
+        logger.info("👋 Goodbye!")
+
+    except Exception as e:
+        logger.error(f"❌ Interactive mode failed: {e}")
+        return 1
+    return 0
 
 
 def main_entry():

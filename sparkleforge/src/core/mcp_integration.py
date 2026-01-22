@@ -2563,6 +2563,50 @@ class UniversalMCPHub:
         tool_type = _infer_tool_type(tool_name)
         query_str = _format_query_string(tool_name, parameters)
         
+        # 로컬 도구 우선 처리 (suna-style: 실제 동작하는 도구 우선)
+        local_tools = {
+            # 실제 동작하는 도구들
+            "browser_navigate", "browser_extract", "browser_screenshot", "browser_interact",
+            "run_shell_command", "run_interactive_command", "run_background_command",
+            "create_file", "read_file", "write_file", "edit_file", "list_files", "delete_file",
+            "filesystem", "browser", "shell"  # 일반적인 이름도 지원
+        }
+
+        if tool_name in local_tools or any(tool_name.startswith(prefix) for prefix in ["browser_", "shell_", "file_"]):
+            logger.debug(f"Executing local tool: {tool_name}")
+            try:
+                # ToolResult를 Dict로 변환하여 반환
+                if tool_name.startswith("browser") or tool_name == "browser":
+                    result = await _execute_browser_tool(tool_name, parameters)
+                elif tool_name.startswith("shell") or tool_name == "shell":
+                    result = await _execute_shell_tool(tool_name, parameters)
+                elif tool_name.startswith(("file", "create_", "read_", "write_", "edit_", "list_", "delete_")) or tool_name == "filesystem":
+                    result = await _execute_file_tool(tool_name, parameters)
+                else:
+                    # 일반적인 경우 data tool로 처리
+                    result = await _execute_data_tool(tool_name, parameters)
+
+                execution_time = time.time() - start_time
+                return {
+                    "success": result.success,
+                    "data": result.data,
+                    "error": result.error,
+                    "execution_time": result.execution_time,
+                    "confidence": result.confidence,
+                    "source": "local_tool"
+                }
+
+            except Exception as e:
+                logger.error(f"Local tool execution failed: {tool_name} - {e}")
+                execution_time = time.time() - start_time
+                return {
+                    "success": False,
+                    "error": f"Local tool execution failed: {str(e)}",
+                    "execution_time": execution_time,
+                    "confidence": 0.0,
+                    "source": "local_tool"
+                }
+
         # MCP 서버 정보 추출
         mcp_server = None
         mcp_tool_name = None
@@ -5251,51 +5295,16 @@ async def _execute_data_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
                 )
         
         elif tool_name == "filesystem":
-            # 파일시스템 접근
-            path = parameters.get("path", "")
-            operation = parameters.get("operation", "read")
-            
-            if not path:
-                raise ValueError("Path parameter is required for filesystem tool")
-            
-            from pathlib import Path
-            file_path = Path(path)
-            
-            if operation == "read":
-                if file_path.exists() and file_path.is_file():
-                    content = file_path.read_text(encoding='utf-8')
-                    return ToolResult(
-                        success=True,
-                        data={
-                            "path": str(file_path),
-                            "operation": operation,
-                            "content": content,
-                            "size": file_path.stat().st_size
-                        },
-                        execution_time=time.time() - start_time,
-                        confidence=0.9
-                    )
-                else:
-                    raise FileNotFoundError(f"File not found: {path}")
-            
-            elif operation == "list":
-                if file_path.exists() and file_path.is_dir():
-                    files = [f.name for f in file_path.iterdir()]
-                    return ToolResult(
-                        success=True,
-                        data={
-                            "path": str(file_path),
-                            "operation": operation,
-                            "files": files
-                        },
-                        execution_time=time.time() - start_time,
-                        confidence=0.9
-                    )
-                else:
-                    raise FileNotFoundError(f"Directory not found: {path}")
-            
-            else:
-                raise ValueError(f"Unsupported operation: {operation}")
+            # 파일시스템 접근 (실제 구현)
+            await _execute_file_tool(tool_name, parameters)
+
+        elif tool_name == "browser":
+            # 브라우저 자동화 (실제 구현)
+            await _execute_browser_tool(tool_name, parameters)
+
+        elif tool_name == "shell":
+            # 쉘 명령 실행 (실제 구현)
+            await _execute_shell_tool(tool_name, parameters)
         
         else:
             raise ValueError(f"Unknown data tool: {tool_name}")
@@ -5312,17 +5321,18 @@ async def _execute_data_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
 
 
 async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
-    """실제 코드 도구 실행 - ERA를 통한 안전한 실행 (무조건 ERA만 사용)."""
+    """실제 코드 도구 실행 - ERA 또는 Docker 샌드박스 선택."""
     import time
-    
+
     start_time = time.time()
     code = parameters.get("code", "")
     language = parameters.get("language", "python")
+    sandbox_type = parameters.get("sandbox", "era")  # "era" or "docker"
     
     # 1. 리소스 제한 체크
     try:
         from src.core.resource_limits import ResourceLimits, CodeSizeLimitError
-        
+
         code_bytes = code.encode('utf-8')
         if ResourceLimits.exceeds_code_limit(len(code_bytes)):
             error_msg = (
@@ -5341,8 +5351,44 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
     except ImportError:
         # ResourceLimits 모듈이 없으면 경고만 하고 계속 진행
         logger.debug("ResourceLimits module not available, skipping size check")
-    
-    # ERA 설정 확인 - 필수
+
+    # 2. 샌드박스 타입에 따른 실행
+    if sandbox_type == "docker":
+        # Docker 샌드박스 사용
+        try:
+            from src.core.sandbox.docker_sandbox import get_sandbox
+            sandbox = get_sandbox()
+
+            result = await sandbox.execute_code(code, language)
+            execution_time = time.time() - start_time
+
+            return ToolResult(
+                success=result.success,
+                data={
+                    "code": code,
+                    "language": language,
+                    "output": result.output,
+                    "error": result.error,
+                    "exit_code": result.exit_code,
+                    "sandbox_type": "docker",
+                    "container_id": result.container_id
+                },
+                execution_time=execution_time,
+                confidence=0.9 if result.success else 0.5
+            )
+
+        except Exception as e:
+            logger.error(f"Docker sandbox execution failed: {e}")
+            execution_time = time.time() - start_time
+            return ToolResult(
+                success=False,
+                data=None,
+                error=f"Docker sandbox failed: {str(e)}",
+                execution_time=execution_time,
+                confidence=0.0
+            )
+
+    # 3. ERA 설정 확인 (기본값)
     try:
         from src.core.researcher_config import get_era_config
         from src.core.era_client import ERAClient
@@ -5461,9 +5507,10 @@ async def _execute_code_tool(tool_name: str, parameters: Dict[str, Any]) -> Tool
                         "language": language,
                         "output": result.stdout,
                         "error": result.stderr,
-                    "return_code": result.exit_code,
-                    "vm_id": result.vm_id,
-                    "duration": result.duration
+                        "return_code": result.exit_code,
+                        "vm_id": result.vm_id,
+                        "duration": result.duration,
+                        "sandbox_type": "era"
                     },
                 execution_time=execution_time,
                 confidence=0.9 if result.exit_code == 0 else 0.5
