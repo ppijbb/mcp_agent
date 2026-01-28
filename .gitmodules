@@ -115,3 +115,9 @@
 [submodule "open_researcher/suna"]
 	path = open_researcher/suna
 	url = https://github.com/kortix-ai/suna.git
+[submodule "open_researcher/OpenManus"]
+	path = open_researcher/OpenManus
+	url = https://github.com/FoundationAgents/OpenManus.git
+[submodule "open_researcher/open_deep_research"]
+	path = open_researcher/open_deep_research
+	url = https://github.com/langchain-ai/open_deep_research.git
