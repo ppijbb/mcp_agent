@@ -1,19 +1,19 @@
 # Core LangChain and LangGraph
-langgraph
-langgraph-cli
-langchain
-langchain-community
-langchain-core
-langchain-openai
-langchain-google-genai
-langchain-google-vertexai
-langchain-groq
-langchain-anthropic
-langchain-mcp-adapters
-langchain-deepseek
-langchain-tavily
-langchain-aws
-langsmith
+langgraph>=0.2.45
+langgraph-cli>=0.2.45
+langchain>=0.3.15
+langchain-community>=0.3.15
+langchain-core>=0.3.15
+langchain-openai>=2.1.5
+langchain-google-genai>=2.1.5
+langchain-google-vertexai>=2.0.25
+langchain-groq>=0.2.5
+langchain-anthropic>=0.2.5
+langchain-mcp-adapters>=0.1.6
+langchain-deepseek>=0.1.5
+langchain-tavily>=0.2.0
+langchain-aws>=0.2.5
+langsmith>=0.1.125
 
 # LLM Providers
 google-genai
@@ -40,15 +40,15 @@ scipy
 scikit-learn
 
 # HTTP Clients
-requests
-aiohttp
-httpx
+requests>=2.32.3
+aiohttp>=3.10.11
+httpx>=0.28.1
 
 # Configuration and Utilities
-python-dotenv
-PyYAML
-pydantic
-pydantic-settings
+python-dotenv>=1.0.1
+PyYAML>=6.0.2
+pydantic>=2.10.4
+pydantic-settings>=2.6.1
 
 # Testing
 pytest
@@ -78,11 +78,11 @@ reportlab
 weasyprint
 
 # Web Scraping
-beautifulsoup4
-markdownify
-selenium
-playwright
-scrapy
+beautifulsoup4>=4.12.3
+markdownify>=0.11.6
+selenium>=4.27.0
+playwright>=1.51.0
+scrapy>=2.11.2
 
 # Database and Vector Stores
 chromadb
@@ -120,9 +120,9 @@ prometheus-client
 tenacity
 
 # Security
-cryptography
-passlib
-PyJWT
+cryptography>=41.0.8
+passlib>=1.7.4
+PyJWT>=2.8.0
 
 # Message Queues and Async
 asyncio-mqtt

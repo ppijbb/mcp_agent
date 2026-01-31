@@ -6,11 +6,36 @@ Cross-Agent Communication을 가능하게 합니다.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Union, TypedDict, Callable, Awaitable
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+class AgentState(TypedDict, total=False):
+    """Agent state definition for cross-agent communication."""
+    # Core fields
+    messages: list[dict[str, Any]]
+    user_query: str
+    research_plan: Optional[str]
+    research_tasks: list[dict[str, Any]]
+    research_results: list[dict[str, Any]]
+    verified_results: list[dict[str, Any]]
+    final_report: Optional[str]
+    current_agent: Optional[str]
+    iteration: int
+    session_id: Optional[str]
+    research_failed: bool
+    verification_failed: bool
+    report_failed: bool
+    error: Optional[Union[Exception, str]]
+    
+    # Additional fields for full compatibility
+    pending_questions: list[str]
+    user_responses: dict[str, str]
+    clarification_context: dict[str, Any]
+    waiting_for_user: bool
 
 
 class AskAgentInput(BaseModel):
@@ -19,15 +44,23 @@ class AskAgentInput(BaseModel):
     context: Optional[str] = Field(default=None, description="Additional context for the agent")
 
 
+class BaseAgent:
+    """Base agent interface for type safety."""
+    
+    async def execute(self, state: AgentState) -> AgentState:
+        """Execute the agent with given state."""
+        raise NotImplementedError
+
+
 class AgentToolWrapper:
     """에이전트를 도구로 노출하는 래퍼 - 기존 에이전트 수정 없음"""
     
     def __init__(
         self,
-        planner_agent=None,
-        executor_agent=None,
-        verifier_agent=None,
-        generator_agent=None
+        planner_agent: Optional[BaseAgent] = None,
+        executor_agent: Optional[BaseAgent] = None,
+        verifier_agent: Optional[BaseAgent] = None,
+        generator_agent: Optional[BaseAgent] = None
     ):
         """
         초기화
@@ -45,6 +78,30 @@ class AgentToolWrapper:
         self.generator = generator_agent
         logger.info("Agent Tool Wrapper initialized")
     
+    def _create_agent_state(self, query: str, context: Optional[str] = None) -> AgentState:
+        """Create a properly formatted AgentState dictionary."""
+        return {
+            'messages': [],
+            'user_query': query,
+            'research_plan': context or None,
+            'research_tasks': [],
+            'research_results': [],
+            'verified_results': [],
+            'final_report': None,
+            'current_agent': None,
+            'iteration': 0,
+            'session_id': None,
+            'research_failed': False,
+            'verification_failed': False,
+            'report_failed': False,
+            'error': None,
+            # Additional required fields
+            'pending_questions': [],
+            'user_responses': {},
+            'clarification_context': {},
+            'waiting_for_user': False,
+        }
+
     def create_tools(self) -> List[BaseTool]:
         """
         기존 에이전트를 도구로 변환
@@ -61,26 +118,12 @@ class AgentToolWrapper:
                 try:
                     # AgentState 생성 (기존 구조 그대로)
                     from src.core.agent_orchestrator import AgentState
-                    state: AgentState = {
-                        'messages': [],
-                        'user_query': query,
-                        'research_plan': None,
-                        'research_tasks': [],
-                        'research_results': [],
-                        'verified_results': [],
-                        'final_report': None,
-                        'current_agent': None,
-                        'iteration': 0,
-                        'session_id': None,
-                        'research_failed': False,
-                        'verification_failed': False,
-                        'report_failed': False,
-                        'error': None
-                    }
+                    state = self._create_agent_state(query, context)
                     
                     # 기존 execute 메서드 그대로 호출
-                    result = await self.planner.execute(state)
-                    return result.get('research_plan', 'No plan generated')
+                    result = await self.planner.execute(state)  # type: ignore
+                    plan = result.get('research_plan')
+                    return plan if plan is not None else 'No plan generated'
                 except Exception as e:
                     logger.error(f"Error calling planner agent: {e}")
                     return f"Error: {str(e)}"
@@ -97,25 +140,10 @@ class AgentToolWrapper:
                 """Ask the executor agent to perform research"""
                 try:
                     from src.core.agent_orchestrator import AgentState
-                    state: AgentState = {
-                        'messages': [],
-                        'user_query': query,
-                        'research_plan': context or '',
-                        'research_tasks': [],
-                        'research_results': [],
-                        'verified_results': [],
-                        'final_report': None,
-                        'current_agent': None,
-                        'iteration': 0,
-                        'session_id': None,
-                        'research_failed': False,
-                        'verification_failed': False,
-                        'report_failed': False,
-                        'error': None
-                    }
+                    state = self._create_agent_state(query, context)
                     
                     # 기존 execute 메서드 그대로 호출
-                    result = await self.executor.execute(state)
+                    result = await self.executor.execute(state)  # type: ignore
                     results = result.get('research_results', [])
                     if results:
                         return str(results[:3])  # 처음 3개 결과만 반환
@@ -136,25 +164,10 @@ class AgentToolWrapper:
                 """Ask the verifier agent to verify research results"""
                 try:
                     from src.core.agent_orchestrator import AgentState
-                    state: AgentState = {
-                        'messages': [],
-                        'user_query': query,
-                        'research_plan': None,
-                        'research_tasks': [],
-                        'research_results': [],
-                        'verified_results': [],
-                        'final_report': None,
-                        'current_agent': None,
-                        'iteration': 0,
-                        'session_id': None,
-                        'research_failed': False,
-                        'verification_failed': False,
-                        'report_failed': False,
-                        'error': None
-                    }
+                    state = self._create_agent_state(query, context)
                     
                     # 기존 execute 메서드 그대로 호출
-                    result = await self.verifier.execute(state)
+                    result = await self.verifier.execute(state)  # type: ignore
                     verified = result.get('verified_results', [])
                     if verified:
                         return str(verified[:3])  # 처음 3개 결과만 반환
@@ -175,26 +188,12 @@ class AgentToolWrapper:
                 """Ask the generator agent to generate a report"""
                 try:
                     from src.core.agent_orchestrator import AgentState
-                    state: AgentState = {
-                        'messages': [],
-                        'user_query': query,
-                        'research_plan': None,
-                        'research_tasks': [],
-                        'research_results': [],
-                        'verified_results': [],
-                        'final_report': None,
-                        'current_agent': None,
-                        'iteration': 0,
-                        'session_id': None,
-                        'research_failed': False,
-                        'verification_failed': False,
-                        'report_failed': False,
-                        'error': None
-                    }
+                    state = self._create_agent_state(query, context)
                     
                     # 기존 execute 메서드 그대로 호출
-                    result = await self.generator.execute(state)
-                    return result.get('final_report', 'No report generated')
+                    result = await self.generator.execute(state)  # type: ignore
+                    report = result.get('final_report')
+                    return report if report is not None else 'No report generated'
                 except Exception as e:
                     logger.error(f"Error calling generator agent: {e}")
                     return f"Error: {str(e)}"

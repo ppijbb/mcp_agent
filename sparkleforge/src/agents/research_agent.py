@@ -9,26 +9,25 @@ No fallback or dummy code - production-level autonomous research only.
 """
 
 import asyncio
-import logging
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
 import json
-import uuid
-from pathlib import Path
-import google.generativeai as genai
+import logging
 import os
+import random
+import sys
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
+
+import base64
+import google.generativeai as genai
+import markdownify
 import requests
 from bs4 import BeautifulSoup
-import base64
-import markdownify
-import time
-import random
 
 # Enhanced browser automation
 from src.automation.browser_manager import BrowserManager
-
-import sys
-from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
