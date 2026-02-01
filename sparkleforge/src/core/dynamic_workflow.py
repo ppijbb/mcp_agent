@@ -103,6 +103,8 @@ class DynamicTaskSpawner:
     """
     
     def __init__(self, max_spawned_per_task: int = 5):
+        if max_spawned_per_task <= 0:
+            raise ValueError("max_spawned_per_task must be positive")
         self.max_spawned_per_task = max_spawned_per_task
         self.spawn_count: Dict[str, int] = defaultdict(int)
     
@@ -422,6 +424,9 @@ class DynamicWorkflowEngine:
         max_concurrent_tasks: int = 5,
         auto_phase_transition: bool = True
     ):
+        if max_concurrent_tasks <= 0:
+            raise ValueError("max_concurrent_tasks must be positive")
+        
         self.task_spawner = DynamicTaskSpawner()
         self.phase_manager = PhaseManager()
         self.task_queue = TaskQueue()

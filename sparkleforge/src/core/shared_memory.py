@@ -1,13 +1,13 @@
 """
 Shared Memory System for Multi-Agent Orchestration
 
-기존 local_researcher는 ChromaDB와 LangGraph를 사용 중이므로
-이 두 가지를 기반으로 구현하여 추가 의존성 없이 통합
+Existing local_researcher uses ChromaDB and LangGraph,
+so this implementation integrates both without additional dependencies.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, OrderedDict
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
 import os

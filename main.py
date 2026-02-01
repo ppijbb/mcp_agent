@@ -48,12 +48,19 @@ try:
 except Exception:
     pass
 
+# Force config reload for fresh imports
 try:
     import mcp_agent.config
-    mcp_agent.config._settings = None  # Force reload from file
+    if hasattr(mcp_agent.config, '_settings'):
+        mcp_agent.config._settings = None
+except (ImportError, AttributeError):
+    pass
+
+try:
     import srcs.core.config.loader
-    srcs.core.config.loader._config = None  # Force reload our custom config too
-except Exception:
+    if hasattr(srcs.core.config.loader, '_config'):
+        srcs.core.config.loader._config = None
+except (ImportError, AttributeError):
     pass
 
 import streamlit as st
