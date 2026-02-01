@@ -16,7 +16,6 @@ langchain-aws>=0.2.5
 langsmith>=0.1.125
 
 # LLM Providers
-google-genai
 groq
 openai
 anthropic

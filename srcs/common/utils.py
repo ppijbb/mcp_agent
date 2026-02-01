@@ -7,8 +7,9 @@ Shared utility functions used across all agents for common operations.
 import os
 import json
 from datetime import datetime
-from mcp_agent.app import MCPApp
-from srcs.core.config.loader import settings
+from typing import Optional
+
+# Defer imports to avoid circular dependencies
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     """
@@ -43,48 +44,45 @@ class EnhancedJSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-def setup_agent_app(app_name: str) -> MCPApp:
+def setup_agent_app(app_name: str):
     """
-    Set up and configure MCPApp with standard settings.
+    Set up and configure agent app with standard settings.
     
-    Creates an MCPApp instance with proper configuration loading from the project's
+    Creates an app instance with proper configuration loading from the project's
     config files. Searches for config files in both the configs directory and project root.
     
     Args:
-        app_name: Name identifier for the MCP application
+        app_name: Name identifier for the application
         
     Returns:
-        Configured MCPApp instance ready for use
+        Configured app instance ready for use
         
-    Raises:
-        FileNotFoundError: If no valid configuration file is found
-        ConfigurationError: If configuration loading fails
-        
-    Example:
-        app = setup_agent_app("research_agent")
-        async with app.run() as context:
-            # Use the agent context
-            pass
+    Note:
+        Function returns None if mcp_agent library is not available
     """
-    from mcp_agent.config import get_settings
-    from pathlib import Path
-    
-    # Find config file path from project root
-    project_root = Path(__file__).resolve().parent.parent.parent
-    
-    # First try configs directory, then project root
-    config_path = project_root / "configs" / "mcp_agent.config.yaml"
-    if not config_path.exists():
-        config_path = project_root / "mcp_agent.config.yaml"
-    
-    # Use mcp_agent library's standard settings
-    app_settings = get_settings(str(config_path))
-    
-    return MCPApp(
-        name=app_name,
-        settings=app_settings,
-        human_input_callback=None
-    )
+    try:
+        from mcp_agent.app import MCPApp
+        from mcp_agent.config import get_settings
+        from pathlib import Path
+        
+        # Find config file path from project root
+        project_root = Path(__file__).resolve().parent.parent.parent
+        
+        # First try configs directory, then project root
+        config_path = project_root / "configs" / "mcp_agent.config.yaml"
+        if not config_path.exists():
+            config_path = project_root / "mcp_agent.config.yaml"
+        
+        # Use mcp_agent library's standard settings
+        app_settings = get_settings(str(config_path))
+        
+        return MCPApp(
+            name=app_name,
+            settings=app_settings,
+            human_input_callback=None
+        )
+    except ImportError:
+        return None
 
 
 def ensure_output_directory(output_dir: str) -> str:
@@ -141,19 +139,30 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     
     if not timestamp:
         timestamp = get_now_formatted()
-    if not company_name:
-        company_name = settings.reporting.default_company_name
+    
+    try:
+        from srcs.core.config.loader import settings
+        if not company_name:
+            company_name = settings.reporting.default_company_name
+        timestamp_format = settings.reporting.timestamp_format
+    except (ImportError, AttributeError):
+        company_name = company_name or "Company"
+        timestamp_format = "%Y-%m-%d %H:%M:%S"
+    
     if not title:
         title = f"{agent_name.title()} Executive Summary"
     
     dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{timestamp}.md")
     
+    overview_title = overview.get('title', 'Transformation Overview') if overview else 'Transformation Overview'
+    overview_content = overview.get('content', 'Comprehensive analysis completed with actionable strategies.') if overview else 'Comprehensive analysis completed with actionable strategies.'
+    
     with open(dashboard_path, 'w') as f:
         f.write(f"""# {title} - {company_name}
-## Generated: {datetime.now().strftime(settings.reporting.timestamp_format)}
+## Generated: {datetime.now().strftime(timestamp_format)}
 
-### 🎯 {overview.get('title', 'Transformation Overview')}
-{overview.get('content', 'Comprehensive analysis completed with actionable strategies.')}
+### 🎯 {overview_title}
+{overview_content}
 
 ### 📈 Expected Business Impact
 {_format_metrics(impact_metrics)}
@@ -314,20 +323,29 @@ def _format_next_steps(next_steps):
     return "\n".join(formatted)
 
 def get_now_formatted() -> str:
-    """현재 시간을 기본 포맷으로 반환합니다."""
+    """Returns current time in default format."""
+    from srcs.core.config.loader import settings
     return datetime.now().strftime(settings.reporting.timestamp_format)
 
 def generate_report_header(company_name: str | None = None) -> str:
     """
-    보고서 헤더를 생성합니다.
+    Generate standardized report header.
+    
+    Args:
+        company_name: Optional company name, uses default if None
+        
+    Returns:
+        Formatted report header string
     """
+    from srcs.core.config.loader import settings
+    
     if company_name is None:
         company_name = settings.reporting.default_company_name
     
     formatted_time = datetime.now().strftime(settings.reporting.timestamp_format)
     
     return f"""
-## {company_name} - 자동 생성 보고서
+## {company_name} - Auto Generated Report
 ## Generated: {formatted_time}
 """
 
