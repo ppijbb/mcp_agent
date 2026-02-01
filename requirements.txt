@@ -41,7 +41,7 @@ scikit-learn
 
 # HTTP Clients
 requests>=2.32.3
-aiohttp>=3.10.11
+aiohttp>=3.11.0
 httpx>=0.28.1
 
 # Configuration and Utilities
@@ -120,7 +120,7 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=41.0.8
+cryptography>=46.0.4
 passlib>=1.7.4
 PyJWT>=2.8.0
 

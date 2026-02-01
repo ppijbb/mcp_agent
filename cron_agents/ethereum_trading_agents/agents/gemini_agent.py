@@ -127,6 +127,16 @@ class GeminiAgent:
                 "cryptocurrency": cryptocurrency
             }
             
+        except Exception as e:
+            logger.error(f"Trading decision generation failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+                "execution_ready": False,
+                "agentic_confidence": 0.0
+            }
+            
     async def analyze_cross_cryptocurrency_market(self, eth_data: Dict, btc_data: Dict) -> Dict[str, Any]:
         """Analyze cross-cryptocurrency market dynamics between ETH and BTC"""
         try:

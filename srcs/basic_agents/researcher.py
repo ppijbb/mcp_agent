@@ -1,3 +1,11 @@
+"""
+Research Agent - Basic research functionality with web search and analysis.
+
+This module provides a research agent that can search the web, analyze information,
+and generate comprehensive reports using various MCP tools including search, 
+filesystem, and Python interpreter capabilities.
+"""
+
 import asyncio
 import time
 import os
@@ -15,7 +23,25 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.utils import setup_agent_app
 
 
-async def main(query):
+async def main(query: str) -> None:
+    """
+    Main entry point for the research agent.
+    
+    Creates and runs a research agent that can search the web, analyze information,
+    and generate comprehensive reports using MCP tools.
+    
+    Args:
+        query: Research query or topic to investigate
+        
+    Returns:
+        None
+        
+    Raises:
+        Exception: If agent initialization or execution fails
+        
+    Example:
+        await main("research about Eutelsat company")
+    """
     app = setup_agent_app("researcher_app")
 
     async with app.run() as app_context:

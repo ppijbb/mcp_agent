@@ -213,6 +213,9 @@ class TradingAgentChain:
             # Validate all components
             self._validate_langchain_components()
             
+        except Exception as e:
+            logger.error(f"Failed to initialize LangChain components: {e}")
+            raise
     def _create_gemini_agent(self):
         """Create Gemini-based agent"""
         try:

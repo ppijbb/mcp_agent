@@ -11,26 +11,73 @@ from mcp_agent.app import MCPApp
 from srcs.core.config.loader import settings
 
 class EnhancedJSONEncoder(json.JSONEncoder):
-    """JSONEncoder를 확장하여 datetime 객체를 문자열로 변환합니다."""
+    """
+    Enhanced JSON encoder that handles datetime objects.
+    
+    Extends the standard JSONEncoder to convert datetime objects to ISO format strings,
+    enabling proper serialization of datetime values in JSON responses.
+    
+    Attributes:
+        Inherits all attributes from json.JSONEncoder
+        
+    Methods:
+        default: Override to handle datetime serialization
+    """
+    
     def default(self, o):
+        """
+        Convert objects to JSON-serializable format.
+        
+        Args:
+            o: Object to serialize
+            
+        Returns:
+            JSON-serializable representation of the object
+            
+        Notes:
+            - datetime objects are converted to ISO format strings
+            - All other objects are handled by the parent class
+        """
         if isinstance(o, datetime):
             return o.isoformat()
         return super().default(o)
 
-def setup_agent_app(app_name):
-    """MCPApp을 표준 설정으로 설정하고 구성합니다."""
+
+def setup_agent_app(app_name: str) -> MCPApp:
+    """
+    Set up and configure MCPApp with standard settings.
+    
+    Creates an MCPApp instance with proper configuration loading from the project's
+    config files. Searches for config files in both the configs directory and project root.
+    
+    Args:
+        app_name: Name identifier for the MCP application
+        
+    Returns:
+        Configured MCPApp instance ready for use
+        
+    Raises:
+        FileNotFoundError: If no valid configuration file is found
+        ConfigurationError: If configuration loading fails
+        
+    Example:
+        app = setup_agent_app("research_agent")
+        async with app.run() as context:
+            # Use the agent context
+            pass
+    """
     from mcp_agent.config import get_settings
     from pathlib import Path
     
-    # 프로젝트 루트에서 설정 파일 경로 찾기
+    # Find config file path from project root
     project_root = Path(__file__).resolve().parent.parent.parent
     
-    # 먼저 configs 디렉토리에서 찾고, 없으면 프로젝트 루트에서 찾기
+    # First try configs directory, then project root
     config_path = project_root / "configs" / "mcp_agent.config.yaml"
     if not config_path.exists():
         config_path = project_root / "mcp_agent.config.yaml"
     
-    # mcp_agent 라이브러리의 표준 설정 사용
+    # Use mcp_agent library's standard settings
     app_settings = get_settings(str(config_path))
     
     return MCPApp(
@@ -39,13 +86,48 @@ def setup_agent_app(app_name):
         human_input_callback=None
     )
 
-def ensure_output_directory(output_dir):
-    """Create output directory if it doesn't exist"""
+
+def ensure_output_directory(output_dir: str) -> str:
+    """
+    Create output directory if it doesn't exist.
+    
+    Ensures the specified directory exists for file output operations.
+    If the directory already exists, no action is taken.
+    
+    Args:
+        output_dir: Path to the directory to create
+        
+    Returns:
+        The same directory path that was provided
+        
+    Raises:
+        OSError: If directory creation fails due to permissions
+        
+    Example:
+        output_path = ensure_output_directory("./reports")
+        # Directory is guaranteed to exist
+    """
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
 
+
 def configure_filesystem_server(context, logger):
-    """Configure filesystem server with current working directory"""
+    """
+    Configure filesystem server with current working directory.
+    
+    Sets up the MCP filesystem server to work with the current working directory,
+    enabling file operations within the agent's execution context.
+    
+    Args:
+        context: MCP application context containing server configuration
+        logger: Logger instance for recording configuration changes
+        
+    Returns:
+        None
+        
+    Side Effects:
+        Modifies context.config.mcp.servers["filesystem"].args to include cwd
+    """
     if "filesystem" in context.config.mcp.servers:
         context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
         logger.info("Filesystem server configured")

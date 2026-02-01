@@ -28,12 +28,49 @@ REPORT_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 # These helper functions can remain as they are general utility.
 
 def get_output_dir(prefix: str, name: str) -> str:
-    """Generates a standardized output directory path."""
+    """
+    Generates a standardized output directory path.
+    
+    Args:
+        prefix: Prefix for the directory name (e.g., agent type)
+        name: Name identifier for the specific agent or task
+        
+    Returns:
+        Standardized directory path with format: {prefix}_{name}_reports
+        
+    Example:
+        get_output_dir("research", "market_analysis") 
+        # Returns: "research_market_analysis_reports"
+    """
     return f"{prefix}_{name}_reports"
 
+
 def get_timestamp(format_str: str = "%Y%m%d_%H%M%S") -> str:
-    """Returns a formatted timestamp string."""
+    """
+    Returns a formatted timestamp string in UTC.
+    
+    Args:
+        format_str: Format string for datetime formatting (default: "%Y%m%d_%H%M%S")
+        
+    Returns:
+        Current UTC timestamp formatted according to format_str
+        
+    Example:
+        get_timestamp()  # Returns: "20250115_143022"
+        get_timestamp("%Y-%m-%d")  # Returns: "2025-01-15"
+    """
     return datetime.now(timezone.utc).strftime(format_str)
+
+
+# Performance optimization constants
+DEFAULT_REQUEST_TIMEOUT = 30.0
+MAX_RETRY_ATTEMPTS = 3
+CONCURRENT_REQUEST_LIMIT = 10
+
+# Cache TTL constants (in seconds)
+CACHE_TTL_SHORT = 300  # 5 minutes
+CACHE_TTL_MEDIUM = 1800  # 30 minutes  
+CACHE_TTL_LONG = 3600  # 1 hour
 
 # The following functions related to the old config system are now deprecated
 # and will be removed.

@@ -267,7 +267,7 @@ class MCPClient:
             low_priority_ops = [
                 self.search_market_news("ethereum"),
                 # Test MCP connection with actual address
-                test_result = await self.get_ethereum_balance(self.config.ETHEREUM_ADDRESS)
+                self.get_ethereum_balance(self.config.ETHEREUM_ADDRESS)
             ]
             
             # Execute operations with priority-based timeouts and enhanced error handling
