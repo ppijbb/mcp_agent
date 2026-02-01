@@ -6,6 +6,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+from srcs.core.errors import MCPError, APIError
+
 # 프로젝트 루트 설정
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -144,7 +146,7 @@ class TravelScoutRunner:
         try:
             print("🔌 Connecting to MCP Server...")
             if not await client.connect_to_mcp_server():
-                raise Exception("Failed to connect to MCP Server.")
+                raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
             print("✅ MCP Server Connected.")
 
             print(f"✈️ Searching flights from {origin} to {destination}...")
@@ -158,9 +160,12 @@ class TravelScoutRunner:
             final_result["search_type"] = "flights"
             final_result["timestamp"] = datetime.now().isoformat()
 
-        except Exception as e:
+        except (MCPError, APIError, ConnectionError, ValueError) as e:
             print(f"❌ An error occurred: {e}")
             final_result["error"] = str(e)
+        except Exception as e:
+            print(f"❌ Unexpected error occurred: {e}")
+            final_result["error"] = f"Unexpected error: {str(e)}"
 
         finally:
             print("🧹 Cleaning up browser instance...")
@@ -224,7 +229,7 @@ class TravelScoutRunner:
         try:
             print("🔌 Connecting to MCP Server...")
             if not await client.connect_to_mcp_server():
-                raise Exception("Failed to connect to MCP Server.")
+                raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
             print("✅ MCP Server Connected.")
 
             print(f"🧳 Searching complete travel package from {origin} to {destination}...")
@@ -238,9 +243,12 @@ class TravelScoutRunner:
             final_result["search_type"] = "complete_travel"
             final_result["timestamp"] = datetime.now().isoformat()
 
-        except Exception as e:
+        except (MCPError, APIError, ConnectionError, ValueError) as e:
             print(f"❌ An error occurred: {e}")
             final_result["error"] = str(e)
+        except Exception as e:
+            print(f"❌ Unexpected error occurred: {e}")
+            final_result["error"] = f"Unexpected error: {str(e)}"
 
         finally:
             print("🧹 Cleaning up browser instance...")
@@ -277,7 +285,7 @@ async def run_agent(args):
     try:
         print("🔌 Connecting to MCP Server...")
         if not await client.connect_to_mcp_server():
-            raise Exception("Failed to connect to MCP Server.")
+            raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
         print("✅ MCP Server Connected.")
 
         data = None
@@ -305,9 +313,12 @@ async def run_agent(args):
         final_result["data"] = data
         final_result["screenshots"] = client.screenshots
 
-    except Exception as e:
+    except (MCPError, APIError, ConnectionError, ValueError) as e:
         print(f"❌ An error occurred: {e}")
         final_result["error"] = str(e)
+    except Exception as e:
+        print(f"❌ Unexpected error occurred: {e}")
+        final_result["error"] = f"Unexpected error: {str(e)}"
 
     finally:
         print("🧹 Cleaning up browser instance...")

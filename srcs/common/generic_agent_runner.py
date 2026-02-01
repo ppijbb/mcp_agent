@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 import importlib
 import asyncio
+from typing import Dict, Any, Optional
+from srcs.core.errors import MCPError, ConfigError, WorkflowError
 
 
 def main():
@@ -65,17 +67,22 @@ def main():
 
         # 에이전트가 반환한 값에 error가 포함되어 있는지 확인
         if isinstance(result_data, dict) and "error" in result_data:
-            raise Exception(f"Agent reported an error: {result_data['error']}")
+            raise WorkflowError(f"Agent reported an error: {result_data['error']}")
 
         print(f"✅ Agent method '{args.method_name}' finished successfully.")
         final_result["success"] = True
         final_result["data"] = result_data
 
-    except Exception as e:
+    except (MCPError, ConfigError, WorkflowError, ImportError, AttributeError, json.JSONDecodeError) as e:
         import traceback
-        error_msg = f"❌ An error occurred during agent execution: {e}\n{traceback.format_exc()}"
+        error_msg = f"❌ An error occurred during agent execution: {e}"
         print(error_msg)
         final_result["error"] = str(error_msg)
+    except Exception as e:
+        import traceback
+        error_msg = f"❌ Unexpected error during agent execution: {e}\n{traceback.format_exc()}"
+        print(error_msg)
+        final_result["error"] = f"Unexpected error: {str(e)}"
 
     finally:
         print(f"💾 Saving final results to {result_json_path}...")

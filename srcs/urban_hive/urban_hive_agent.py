@@ -12,6 +12,7 @@ Replaces fake UrbanAnalystAgent with real MCPAgent implementation using:
 
 import os
 import json
+import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any
 import logging
@@ -54,7 +55,9 @@ class UrbanHiveMCPAgent(BaseAgent):
         self.logger.info(f"Starting Urban Hive workflow for {category.value} in {location}")
 
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = await asyncio.get_event_loop().run_in_executor(
+    None, lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
+)
 
             # Use MCP server to get urban data
             urban_data = await self._get_urban_data_via_mcp(category, location, time_range)

@@ -112,17 +112,33 @@ class BaseAgent(ABC):
             reset_timeout=recovery_timeout,
         )
 
-    @property
-    def session(self) -> aiohttp.ClientSession:
+    async def get_session(self) -> aiohttp.ClientSession:
+        """Get or create an aiohttp session with proper async handling."""
         if self._session is None or self._session.closed:
-            # You can configure the session here if needed
-            self._session = aiohttp.ClientSession()
+            # Configure session with reasonable defaults
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close_session(self):
+        """Close the aiohttp session safely."""
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        """Legacy property for backward compatibility. Use get_session() in async contexts."""
+        import warnings
+        warnings.warn(
+            "session property is deprecated, use get_session() in async contexts",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
 
     def _setup_app(self) -> MCPApp:
         """
