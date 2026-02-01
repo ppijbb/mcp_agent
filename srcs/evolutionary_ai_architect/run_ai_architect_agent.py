@@ -11,7 +11,8 @@ from typing import Dict, Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from srcs.evolutionary_ai_architect.evolutionary_ai_architect_agent import EvolutionaryAIArchitectMCP, ArchitectureEvolutionResult
+from srcs.evolutionary_ai_architect.evolutionary_ai_architect_agent import EvolutionaryAIArchitectMCP
+
 
 def convert_to_serializable(obj):
     """재귀적으로 객체를 JSON 직렬화 가능한 형태로 변환합니다."""
@@ -27,6 +28,7 @@ def convert_to_serializable(obj):
         return convert_to_serializable(obj.__dict__)
     else:
         return obj
+
 
 class DataclassJSONEncoder(json.JSONEncoder):
     """JSONEncoder를 확장하여 dataclass와 datetime 객체를 처리합니다."""
@@ -44,14 +46,14 @@ async def run_ai_architect_agent(
     """
     AI Architect Agent 실행 함수
     Streamlit A2A runner에서 호출되는 함수
-    
+
     Args:
         problem_description: 문제 설명
         max_generations: 최대 세대 수
         population_size: 인구 크기
         result_json_path: 결과 JSON 파일 경로
         **kwargs: 추가 인자
-    
+
     Returns:
         실행 결과 딕셔너리
     """
@@ -59,28 +61,28 @@ async def run_ai_architect_agent(
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         result_json_path = Path("evolutionary_architect_reports") / f"architecture_{timestamp}.json"
-    
+
     result_json_path = Path(result_json_path)
     result_json_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         agent = EvolutionaryAIArchitectMCP(output_dir=str(result_json_path.parent))
-        
+
         result = await agent.evolve_architecture(
             problem_description=problem_description,
             max_generations=max_generations,
             population_size=population_size,
         )
-        
+
         # 결과를 파일로 저장 (JSON 저장)
         result_dict = convert_to_serializable(result)
         with open(result_json_path, 'w', encoding='utf-8') as f:
             json.dump(result_dict, f, indent=2, ensure_ascii=False, cls=DataclassJSONEncoder)
-        
+
         # 간단한 요약만 반환 (전체 JSON 데이터는 반환하지 않음)
         best_arch = result_dict.get('best_architecture', {})
         evolution_history = result_dict.get('evolution_history', [])
-        
+
         return {
             'success': True,
             'data': {
@@ -98,7 +100,7 @@ async def run_ai_architect_agent(
             },
             'message': 'AI Architect Agent 실행 완료'
         }
-        
+
     except Exception as e:
         error_result = {
             'success': False,
@@ -108,6 +110,7 @@ async def run_ai_architect_agent(
         with open(result_json_path, 'w', encoding='utf-8') as f:
             json.dump(error_result, f, indent=2, ensure_ascii=False)
         raise
+
 
 async def run_evolution(args):
     """AI Architect Agent의 진화 프로세스를 실행합니다."""
@@ -120,7 +123,7 @@ async def run_evolution(args):
 
     try:
         agent = EvolutionaryAIArchitectMCP(output_dir=str(result_json_path.parent))
-        
+
         result = await agent.evolve_architecture(
             problem_description=args.problem_description,
             max_generations=args.max_generations,
@@ -133,7 +136,7 @@ async def run_evolution(args):
 
         with open(result_json_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False, cls=DataclassJSONEncoder)
-        
+
         print("🎉 Results saved.")
 
     except Exception as e:
@@ -147,6 +150,7 @@ async def run_evolution(args):
             json.dump(error_result, f, indent=2, ensure_ascii=False)
         sys.exit(1)
 
+
 def main():
     """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
     parser = argparse.ArgumentParser(description="Run the Evolutionary AI Architect Agent from the command line.")
@@ -158,5 +162,6 @@ def main():
     args = parser.parse_args()
     asyncio.run(run_evolution(args))
 
+
 if __name__ == "__main__":
-    main() 
+    main()

@@ -4,10 +4,12 @@ Environment:
     REDIS_URL=redis://localhost:6379
 """
 from __future__ import annotations
-import os, json, logging
+import json
+import logging
 from typing import Any, Dict
 
 logger = logging.getLogger("memory")
+
 
 class MemoryStore:
     def __init__(self):
@@ -23,4 +25,4 @@ class MemoryStore:
         data = self._mem.get(key)
         if data:
             return json.loads(data)
-        return None 
+        return None

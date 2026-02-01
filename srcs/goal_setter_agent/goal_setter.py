@@ -16,7 +16,7 @@ import httpx
 import argparse
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from string import Template
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +25,6 @@ from pathlib import Path
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
-    from mcp.types import TextContent
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
@@ -35,16 +34,17 @@ except ImportError:
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
+
 class MCPGoalSetterAgent:
     """Enhanced Goal Setter Agent with MCP Integration"""
-    
-    def __init__(self, 
+
+    def __init__(self,
                  output_dir: str = "goal_plans",
                  enable_mcp: bool = True,
                  mcp_servers: Optional[Dict[str, str]] = None):
         """
         Initialize the MCP Goal Setter Agent
-        
+
         Args:
             output_dir: Directory to save goal plans
             enable_mcp: Whether to enable MCP functionality
@@ -52,19 +52,19 @@ class MCPGoalSetterAgent:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.enable_mcp = enable_mcp and MCP_AVAILABLE
         self.mcp_servers = mcp_servers or {}
-        
+
         # MCP client sessions
         self.filesystem_session: Optional[ClientSession] = None
         self.search_session: Optional[ClientSession] = None
         self.browser_session: Optional[ClientSession] = None
-        
+
         # Available agents for goal planning
         self.available_agents = [
             "CodeReviewAgent",
-            "DocumentationAgent", 
+            "DocumentationAgent",
             "PerformanceAgent",
             "SecurityAgent",
             "KubernetesAgent",
@@ -73,33 +73,33 @@ class MCPGoalSetterAgent:
             "DataAnalysisAgent",
             "MLOpsAgent"
         ]
-        
+
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(self.__class__.__name__)
-        
+
         # Initialize MCP connections if enabled
         if self.enable_mcp:
             asyncio.create_task(self._initialize_mcp_connections())
-    
+
     async def _initialize_mcp_connections(self):
         """Initialize connections to MCP servers"""
         try:
             # Initialize filesystem MCP server
             if "filesystem" in self.mcp_servers:
                 await self._connect_filesystem_server()
-            
-            # Initialize search MCP server  
+
+            # Initialize search MCP server
             if "search" in self.mcp_servers:
                 await self._connect_search_server()
-                
+
             # Initialize browser MCP server
             if "browser" in self.mcp_servers:
                 await self._connect_browser_server()
-                
+
         except Exception as e:
             self.logger.error(f"Failed to initialize MCP connections: {e}")
-    
+
     async def _connect_filesystem_server(self):
         """Connect to filesystem MCP server"""
         try:
@@ -109,15 +109,15 @@ class MCPGoalSetterAgent:
                 args=server_config.get("args", []),
                 env=server_config.get("env", {})
             )
-            
+
             context = stdio_client(server_params)
             receive_stream, write_stream = await context.__aenter__()
             self.filesystem_session = ClientSession(receive_stream, write_stream)
-            
+
             self.logger.info("✅ Connected to filesystem MCP server")
         except Exception as e:
             self.logger.error(f"Failed to connect to filesystem server: {e}")
-    
+
     async def _connect_search_server(self):
         """Connect to search MCP server"""
         try:
@@ -127,15 +127,15 @@ class MCPGoalSetterAgent:
                 args=server_config.get("args", []),
                 env=server_config.get("env", {})
             )
-            
+
             context = stdio_client(server_params)
             receive_stream, write_stream = await context.__aenter__()
             self.search_session = ClientSession(receive_stream, write_stream)
-            
+
             self.logger.info("✅ Connected to search MCP server")
         except Exception as e:
             self.logger.error(f"Failed to connect to search server: {e}")
-    
+
     async def _connect_browser_server(self):
         """Connect to browser MCP server"""
         try:
@@ -145,29 +145,29 @@ class MCPGoalSetterAgent:
                 args=server_config.get("args", []),
                 env=server_config.get("env", {})
             )
-            
+
             context = stdio_client(server_params)
             receive_stream, write_stream = await context.__aenter__()
             self.browser_session = ClientSession(receive_stream, write_stream)
-            
+
             self.logger.info("✅ Connected to browser MCP server")
         except Exception as e:
             self.logger.error(f"Failed to connect to browser server: {e}")
-    
+
     async def _call_mcp_tool(self, session: ClientSession, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool and return the result"""
         try:
             # List available tools first
             tools_response = await session.call_tool("list_tools", {})
             tools = tools_response.content[0].text if tools_response.content else "[]"
-            
+
             # Call the specific tool
             result = await session.call_tool(tool_name, arguments)
             return json.loads(result.content[0].text) if result.content else {}
         except Exception as e:
             self.logger.error(f"Failed to call MCP tool {tool_name}: {e}")
             return {"error": str(e)}
-    
+
     async def research_goal_context(self, goal: str) -> Dict[str, Any]:
         """Research the goal context using MCP search and browser tools"""
         research_data = {
@@ -177,18 +177,18 @@ class MCPGoalSetterAgent:
             "related_concepts": [],
             "timestamp": datetime.now().isoformat()
         }
-        
+
         try:
             # Use search MCP server if available
             if self.search_session:
                 search_result = await self._call_mcp_tool(
-                    self.search_session, 
-                    "search_web", 
+                    self.search_session,
+                    "search_web",
                     {"query": f"{goal} best practices strategies", "count": 5}
                 )
                 if "error" not in search_result:
                     research_data["search_results"] = search_result.get("results", [])
-            
+
             # Use browser MCP server if available
             if self.browser_session:
                 # Navigate to relevant research sites
@@ -199,25 +199,25 @@ class MCPGoalSetterAgent:
                 )
                 if "error" not in browser_result:
                     research_data["web_data"].append(browser_result)
-                    
+
         except Exception as e:
             self.logger.error(f"Research failed: {e}")
             research_data["error"] = str(e)
-        
+
         return research_data
-    
+
     def create_enhanced_prompt(self, high_level_goal: str, available_agents: List[str], research_data: Optional[Dict[str, Any]] = None) -> str:
         """Create an enhanced prompt with research context and MCP integration"""
         agents_joined = ", ".join(available_agents)
         default_agent = available_agents[0] if available_agents else "GeneralAgent"
-        
+
         # Include research context if available
         research_context = ""
         if research_data and research_data.get("search_results"):
             research_context = f"\n📚 Research Context:\n"
             for i, result in enumerate(research_data["search_results"][:3], 1):
                 research_context += f"{i}. {result.get('title', 'N/A')}: {result.get('snippet', 'N/A')}\n"
-        
+
         tmpl = Template(
             """
 역할: 수석 전략 기획 에이전트 (MCP 통합). 다음 상위 목표를 구체적이고 실행 가능한 계획으로 분해하라.
@@ -283,23 +283,23 @@ $research_context
             default_agent=default_agent,
             research_context=research_context
         )
-    
+
     async def generate_enhanced_goal_plan(self, goal: str, agents: Optional[List[str]] = None, enable_research: bool = True) -> Dict[str, Any]:
         """Generate an enhanced goal plan with MCP integration"""
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY environment variable is not set.")
-        
+
         agents = agents or self.available_agents
-        
+
         # Research phase using MCP tools
         research_data = None
         if enable_research and self.enable_mcp:
             self.logger.info("🔍 Researching goal context using MCP tools...")
             research_data = await self.research_goal_context(goal)
-        
+
         # Create enhanced prompt
         prompt = self.create_enhanced_prompt(goal, agents, research_data)
-        
+
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
         payload = {
             "model": "gpt-5-mini-turbo",
@@ -307,23 +307,23 @@ $research_context
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
         }
-        
+
         async with httpx.AsyncClient(timeout=90.0) as client:
             response = await client.post(OPENAI_API_URL, headers=headers, json=payload)
-        
+
         if response.status_code != 200:
             raise Exception(f"OpenAI API request failed: {response.text}")
-        
+
         message_content = response.json()["choices"][0]["message"]["content"]
         try:
             plan = json.loads(message_content)
         except json.JSONDecodeError:
             self.logger.error(f"Failed to decode JSON from LLM response:\n{message_content}")
             raise
-        
+
         # Validate and enhance the plan
         self._validate_enhanced_plan(plan, agents)
-        
+
         # Add metadata
         plan["metadata"] = {
             "generated_at": datetime.now().isoformat(),
@@ -331,73 +331,73 @@ $research_context
             "research_data": research_data,
             "version": "2.0"
         }
-        
+
         return plan
-    
+
     def _validate_enhanced_plan(self, plan: Dict[str, Any], allowed_agents: List[str]) -> None:
         """Validate the enhanced plan structure"""
         if not isinstance(plan, dict):
             raise ValueError("Plan must be a JSON object.")
-        
+
         required_fields = ["original_goal", "decomposed_plan", "overall_success_criteria"]
         for field in required_fields:
             if not plan.get(field):
                 raise ValueError(f"Missing required field: {field}")
-        
+
         decomposed = plan.get("decomposed_plan")
         if not isinstance(decomposed, list) or not (2 <= len(decomposed) <= 4):
             raise ValueError("'decomposed_plan' must be a list with 2~4 items.")
-        
+
         for idx, sub in enumerate(decomposed, start=1):
             if not isinstance(sub, dict):
                 raise ValueError(f"sub_goal[{idx}] must be an object.")
-            
+
             required_sub_fields = ["sub_goal", "rationale", "priority", "kpis", "action_plan"]
             for key in required_sub_fields:
                 if key not in sub:
                     raise ValueError(f"sub_goal[{idx}] missing '{key}'.")
-            
+
             if sub["priority"] not in ("high", "medium", "low"):
                 raise ValueError(f"sub_goal[{idx}].priority must be one of high|medium|low.")
-            
+
             # Validate KPIs
             kpis = sub.get("kpis", [])
             if not isinstance(kpis, list) or not (1 <= len(kpis) <= 2):
                 raise ValueError(f"sub_goal[{idx}].kpis must contain 1~2 items.")
-            
+
             for k_i, kpi in enumerate(kpis, start=1):
                 required_kpi_fields = ["name", "metric", "target", "data_source"]
                 if not all(k in kpi for k in required_kpi_fields):
                     raise ValueError(f"sub_goal[{idx}].kpis[{k_i}] missing required fields.")
-            
+
             # Validate action plan
             actions = sub.get("action_plan", [])
             if not isinstance(actions, list) or not (2 <= len(actions) <= 5):
                 raise ValueError(f"sub_goal[{idx}].action_plan must contain 2~5 items.")
-            
+
             for a_i, act in enumerate(actions, start=1):
                 required_action_fields = ["action_item", "suggested_agent", "due_days", "acceptance_criteria"]
                 for key in required_action_fields:
                     if key not in act:
                         raise ValueError(f"sub_goal[{idx}].action_plan[{a_i}] missing '{key}'.")
-                
+
                 if act["suggested_agent"] not in allowed_agents:
                     raise ValueError(
                         f"sub_goal[{idx}].action_plan[{a_i}].suggested_agent must be one of {allowed_agents}."
                     )
-                
+
                 if not isinstance(act["due_days"], int) or not (1 <= act["due_days"] <= 30):
                     raise ValueError(f"sub_goal[{idx}].action_plan[{a_i}].due_days must be an integer 1~30.")
-    
+
     async def save_goal_plan(self, plan: Dict[str, Any], filename: Optional[str] = None) -> str:
         """Save the goal plan using MCP filesystem server or local filesystem"""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             goal_name = plan.get("original_goal", "unknown_goal").replace(" ", "_")[:30]
             filename = f"goal_plan_{goal_name}_{timestamp}.json"
-        
+
         file_path = self.output_dir / filename
-        
+
         try:
             # Try to use MCP filesystem server if available
             if self.filesystem_session and self.enable_mcp:
@@ -413,22 +413,22 @@ $research_context
                 if "error" not in result:
                     self.logger.info(f"✅ Goal plan saved via MCP filesystem: {file_path}")
                     return str(file_path)
-            
+
             # Fallback to local filesystem
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(plan, f, ensure_ascii=False, indent=2)
-            
+
             self.logger.info(f"✅ Goal plan saved locally: {file_path}")
             return str(file_path)
-            
+
         except Exception as e:
             self.logger.error(f"Failed to save goal plan: {e}")
             raise
-    
+
     async def load_goal_plan(self, filename: str) -> Dict[str, Any]:
         """Load a goal plan using MCP filesystem server or local filesystem"""
         file_path = self.output_dir / filename
-        
+
         try:
             # Try to use MCP filesystem server if available
             if self.filesystem_session and self.enable_mcp:
@@ -442,15 +442,15 @@ $research_context
                 )
                 if "error" not in result:
                     return json.loads(result.get("content", "{}"))
-            
+
             # Fallback to local filesystem
             with open(file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
-                
+
         except Exception as e:
             self.logger.error(f"Failed to load goal plan: {e}")
             raise
-    
+
     async def list_saved_plans(self) -> List[Dict[str, Any]]:
         """List all saved goal plans using MCP filesystem server or local filesystem"""
         try:
@@ -464,7 +464,7 @@ $research_context
                 if "error" not in result:
                     files = result.get("files", [])
                     return [{"name": f["name"], "path": f["path"]} for f in files if f["name"].endswith(".json")]
-            
+
             # Fallback to local filesystem
             plans = []
             for file_path in self.output_dir.glob("*.json"):
@@ -475,11 +475,11 @@ $research_context
                     "modified": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
                 })
             return plans
-            
+
         except Exception as e:
             self.logger.error(f"Failed to list saved plans: {e}")
             return []
-    
+
     async def execute_mcp_tool_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the MCP tool usage plan from the goal plan"""
         execution_results = {
@@ -488,9 +488,9 @@ $research_context
             "results": {},
             "errors": []
         }
-        
+
         mcp_tool_usage = plan.get("mcp_tool_usage", {})
-        
+
         try:
             # Execute filesystem operations
             if "filesystem_operations" in mcp_tool_usage and self.filesystem_session:
@@ -508,7 +508,7 @@ $research_context
                         execution_results["results"][f"filesystem_{operation}"] = result
                     except Exception as e:
                         execution_results["errors"].append(f"Filesystem operation failed: {e}")
-            
+
             # Execute search queries
             if "search_queries" in mcp_tool_usage and self.search_session:
                 for query in mcp_tool_usage["search_queries"]:
@@ -521,7 +521,7 @@ $research_context
                         execution_results["results"][f"search_{query}"] = result
                     except Exception as e:
                         execution_results["errors"].append(f"Search query failed: {e}")
-            
+
             # Execute browser automation
             if "browser_automation" in mcp_tool_usage and self.browser_session:
                 for automation in mcp_tool_usage["browser_automation"]:
@@ -535,19 +535,19 @@ $research_context
                         execution_results["results"][f"browser_{automation}"] = result
                     except Exception as e:
                         execution_results["errors"].append(f"Browser automation failed: {e}")
-                        
+
         except Exception as e:
             execution_results["errors"].append(f"General execution error: {e}")
-        
+
         execution_results["execution_end"] = datetime.now().isoformat()
         return execution_results
-    
+
     def pretty_print_enhanced_plan(self, plan: Dict[str, Any]):
         """Print the enhanced plan in a human-readable format"""
         print("=" * 80)
         print(f"🎯 Enhanced Goal Plan: {plan.get('original_goal')}")
         print("=" * 80)
-        
+
         # Print metadata
         metadata = plan.get("metadata", {})
         if metadata:
@@ -555,40 +555,40 @@ $research_context
             print(f"  - Generated: {metadata.get('generated_at', 'N/A')}")
             print(f"  - MCP Enabled: {metadata.get('mcp_enabled', False)}")
             print(f"  - Version: {metadata.get('version', 'N/A')}")
-        
+
         # Print research context
         research_context = plan.get("research_context")
         if research_context:
             print(f"\n🔍 Research Context:")
             print(f"  {research_context}")
-        
+
         # Print decomposed plan
         for i, sub_plan in enumerate(plan.get('decomposed_plan', []), 1):
             print(f"\n📋 Sub-Goal {i}: {sub_plan.get('sub_goal')}")
             print(f"  - Rationale: {sub_plan.get('rationale')}")
             print(f"  - Priority: {sub_plan.get('priority')}")
-            
+
             print("  - KPIs:")
             for kpi in sub_plan.get('kpis', []):
                 print(f"    - {kpi.get('name')}: {kpi.get('metric')} → {kpi.get('target')}")
-                
+
             print("  - Action Plan:")
             for action in sub_plan.get('action_plan', []):
                 print(f"    - Task: {action.get('action_item')}")
                 print(f"      -> Agent: [{action.get('suggested_agent')}]")
                 print(f"      -> Due: {action.get('due_days')} days")
                 print(f"      -> Criteria: {action.get('acceptance_criteria')}")
-        
+
         # Print MCP tool usage
         mcp_tool_usage = plan.get('mcp_tool_usage', {})
         if mcp_tool_usage:
             print(f"\n🔧 MCP Tool Usage Plan:")
             for tool_type, operations in mcp_tool_usage.items():
                 print(f"  - {tool_type}: {operations}")
-        
+
         print(f"\n🎯 Overall Success Criteria: {plan.get('overall_success_criteria')}")
         print("\n" + "=" * 80)
-    
+
     async def cleanup(self):
         """Clean up MCP connections"""
         try:
@@ -612,9 +612,9 @@ async def main():
     parser.add_argument("--no-research", action="store_true", help="Disable goal research phase")
     parser.add_argument("--list-plans", action="store_true", help="List existing goal plans")
     parser.add_argument("--load-plan", help="Load a specific goal plan by filename")
-    
+
     args = parser.parse_args()
-    
+
     # MCP server configurations
     mcp_servers = {
         "filesystem": {
@@ -623,7 +623,7 @@ async def main():
             "env": {"ALLOWED_PATHS": f"{args.output_dir},reports/,data/"}
         },
         "search": {
-            "command": "npx", 
+            "command": "npx",
             "args": ["-y", "g-search-mcp"],
             "env": {}
         },
@@ -633,13 +633,13 @@ async def main():
             "env": {}
         }
     }
-    
+
     agent = MCPGoalSetterAgent(
         output_dir=args.output_dir,
         enable_mcp=args.enable_mcp,
         mcp_servers=mcp_servers if args.enable_mcp else {}
     )
-    
+
     try:
         if args.list_plans:
             print("📋 Existing Goal Plans:")
@@ -647,43 +647,43 @@ async def main():
             for plan in plans:
                 print(f"  - {plan['name']}")
             return
-        
+
         if args.load_plan:
             print(f"📖 Loading goal plan: {args.load_plan}")
             plan = await agent.load_goal_plan(args.load_plan)
             agent.pretty_print_enhanced_plan(plan)
             return
-        
+
         print(f"🧠 Decomposing goal: \"{args.goal}\"...")
         if args.enable_mcp:
             print("🔧 MCP integration enabled - using enhanced capabilities")
-        
+
         plan = await agent.generate_enhanced_goal_plan(
-            args.goal, 
+            args.goal,
             enable_research=not args.no_research
         )
-        
+
         print("\n✅ Successfully generated an enhanced strategic plan!")
         agent.pretty_print_enhanced_plan(plan)
-        
+
         # Save the plan
         filename = await agent.save_goal_plan(plan)
         print(f"\n💾 Goal plan saved to: {filename}")
-        
+
         # Execute MCP tool plan if MCP is enabled
         if args.enable_mcp and plan.get("mcp_tool_usage"):
             print("\n🔧 Executing MCP tool usage plan...")
             execution_results = await agent.execute_mcp_tool_plan(plan)
             print(f"✅ MCP execution completed with {len(execution_results.get('errors', []))} errors")
-        
+
     except Exception as e:
         print(f"\n❌ An error occurred: {e}")
         import traceback
         traceback.print_exc()
-    
+
     finally:
         await agent.cleanup()
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

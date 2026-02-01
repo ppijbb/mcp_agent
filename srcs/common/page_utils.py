@@ -7,8 +7,8 @@ Page Utilities Module
 import streamlit as st
 import sys
 from pathlib import Path
-import asyncio
 from .styles import get_common_styles, get_page_header
+
 
 def setup_page(title, icon, layout="wide"):
     """페이지 기본 설정"""
@@ -22,10 +22,12 @@ def setup_page(title, icon, layout="wide"):
         # set_page_config가 이미 호출된 경우 무시
         pass
 
+
 def add_project_root():
     """프로젝트 루트를 Python 경로에 추가"""
     project_root = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(project_root))
+
 
 def setup_page_header(title, subtitle=""):
     """페이지 헤더 설정 (간단 버전)"""
@@ -33,19 +35,23 @@ def setup_page_header(title, subtitle=""):
     if subtitle:
         st.subheader(subtitle)
 
+
 def render_page_header(page_type, title, subtitle):
     """페이지 헤더 렌더링"""
     header_html = get_page_header(page_type, title, subtitle)
     st.markdown(header_html, unsafe_allow_html=True)
 
+
 def render_common_styles():
     """공통 스타일 적용"""
     st.markdown(get_common_styles(), unsafe_allow_html=True)
+
 
 def render_home_button():
     """홈으로 돌아가기 버튼 렌더링"""
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
+
 
 def safe_import_agent(module_path, fallback_name="Agent"):
     """안전한 agent 모듈 임포트"""
@@ -55,35 +61,38 @@ def safe_import_agent(module_path, fallback_name="Agent"):
     except ImportError as e:
         return False, None, str(e)
 
+
 def render_import_error(agent_name, error_message):
     """임포트 오류 표시"""
     st.error(f"{agent_name}을 불러올 수 없습니다.")
     st.error(f"오류 내용: {error_message}")
-    
+
     st.markdown("### 🔧 수동 설치 가이드")
     st.info(f"{agent_name}를 별도로 실행해주세요.")
+
 
 def render_agent_intro(agent_name, features, special_features=None, use_cases=None):
     """에이전트 소개 렌더링"""
     st.markdown(f"### 🎯 {agent_name} 소개")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("#### 📊 주요 기능")
         for feature in features:
             st.markdown(f"- {feature}")
-    
+
     if special_features:
         with col2:
             st.markdown("#### ✨ 스페셜 기능")
             for feature in special_features:
                 st.markdown(f"- {feature}")
-    
+
     if use_cases:
         st.markdown("#### 🎯 사용 사례")
         for use_case in use_cases:
             st.markdown(f"- {use_case}")
+
 
 def create_agent_page(
     agent_name,
@@ -98,29 +107,30 @@ def create_agent_page(
     use_cases=None
 ):
     """통합 에이전트 페이지 생성 함수"""
-    
+
     # 페이지 설정
     setup_page(f"{page_icon} {agent_name}", page_icon)
-    
+
     # 프로젝트 루트 추가
     add_project_root()
-    
+
     # 공통 스타일 적용
     render_common_styles()
-    
+
     # 헤더 렌더링
     render_page_header(page_type, title, subtitle)
-    
+
     # 홈 버튼
     render_home_button()
-    
+
     st.markdown("---")
+
 
 def render_demo_content(demo_data):
     """데모 콘텐츠 렌더링"""
     if "tabs" in demo_data:
         tabs = st.tabs([tab["name"] for tab in demo_data["tabs"]])
-        
+
         for i, tab_data in enumerate(demo_data["tabs"]):
             with tabs[i]:
                 if "markdown" in tab_data:
@@ -130,14 +140,15 @@ def render_demo_content(demo_data):
                 if "dataframe" in tab_data:
                     st.dataframe(tab_data["dataframe"])
 
+
 def render_metrics_row(metrics):
     """메트릭 행 렌더링"""
     cols = st.columns(len(metrics))
-    
+
     for i, metric in enumerate(metrics):
         with cols[i]:
             st.metric(
                 label=metric.get("label", ""),
                 value=metric.get("value", ""),
                 delta=metric.get("delta", None)
-            ) 
+            )

@@ -4,11 +4,11 @@ Urban Hive MCP Server
 
 A Model Context Protocol server that provides access to urban data including:
 - Resource sharing data (available items, requests)
-- Community member and group information  
+- Community member and group information
 - Urban analytics data (illegal dumping, traffic, safety statistics)
 - Public data API integration for real city data
 
-This server connects to real data sources and public APIs to provide 
+This server connects to real data sources and public APIs to provide
 actual urban information rather than simulated data.
 """
 
@@ -16,7 +16,6 @@ import asyncio
 import json
 import os
 from typing import Any, Dict, List, Optional
-import httpx
 from datetime import datetime
 
 # MCP imports
@@ -29,8 +28,6 @@ from mcp.types import (
     Resource,
     Tool,
     TextContent,
-    ImageContent,
-    EmbeddedResource,
 )
 
 # Exception for data unavailability
@@ -45,10 +42,11 @@ API_BASE_URL = os.getenv("URBAN_HIVE_API_BASE", "http://127.0.0.1:8001")
 # Public data API endpoints (example URLs - replace with actual APIs)
 PUBLIC_DATA_APIS = {
     "illegal_dumping": "https://api.data.go.kr/openapi/tn_pubr_public_illegal_dump_api",
-    "traffic_accidents": "https://api.data.go.kr/openapi/tn_pubr_public_trfcacdnt_api", 
+    "traffic_accidents": "https://api.data.go.kr/openapi/tn_pubr_public_trfcacdnt_api",
     "population_stats": "https://kosis.kr/openapi/statisticsData.do",
     "air_quality": "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty"
 }
+
 
 async def fetch_real_data(endpoint: str, params: Optional[Dict] = None) -> Dict:
     """
@@ -86,6 +84,7 @@ async def fetch_real_data(endpoint: str, params: Optional[Dict] = None) -> Dict:
             f"Could not fetch data for endpoint '{endpoint}': {e}"
         )
 
+
 @server.list_resources()
 async def list_resources() -> List[Resource]:
     """List available Urban Hive data resources."""
@@ -97,7 +96,7 @@ async def list_resources() -> List[Resource]:
             mimeType="application/json",
         ),
         Resource(
-            uri="urban-hive://resources/requests", 
+            uri="urban-hive://resources/requests",
             name="Resource Requests",
             description="Community requests for items, services, or help",
             mimeType="application/json",
@@ -122,32 +121,34 @@ async def list_resources() -> List[Resource]:
         ),
         Resource(
             uri="urban-hive://urban-data/traffic",
-            name="Traffic Data", 
+            name="Traffic Data",
             description="Traffic congestion and accident data",
             mimeType="application/json",
         ),
         Resource(
             uri="urban-hive://urban-data/safety",
             name="Public Safety Data",
-            description="Crime statistics and safety information by area", 
+            description="Crime statistics and safety information by area",
             mimeType="application/json",
         ),
     ]
+
 
 @server.read_resource()
 async def read_resource(uri: str) -> str:
     """Read Urban Hive data resource by URI."""
     if not uri.startswith("urban-hive://"):
         raise ValueError(f"Unknown resource: {uri}")
-    
+
     # Extract the endpoint from URI
     endpoint = uri.replace("urban-hive://", "")
-    
+
     try:
         data = await fetch_real_data(endpoint)
         return json.dumps(data, indent=2, ensure_ascii=False)
     except Exception as e:
         raise ValueError(f"Error fetching data from {endpoint}: {str(e)}")
+
 
 @server.list_tools()
 async def list_tools() -> List[Tool]:
@@ -169,7 +170,7 @@ async def list_tools() -> List[Tool]:
             name="find_social_connections",
             description="Find social connections and groups based on interests",
             inputSchema={
-                "type": "object", 
+                "type": "object",
                 "properties": {
                     "user_name": {"type": "string", "description": "User's name"},
                     "interests": {"type": "string", "description": "User's interests and hobbies"},
@@ -204,46 +205,47 @@ async def list_tools() -> List[Tool]:
         )
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Execute Urban Hive tools."""
-    
+
     if name == "match_resources":
         query = arguments["query"]
         query_type = arguments["query_type"]
-        
+
         # Fetch available resources and requests
         if query_type == "offer":
             requests_data = await fetch_real_data("resources/requests")
             result = f"Found {len(requests_data)} potential matches for your offer: '{query}'"
         else:
-            available_data = await fetch_real_data("resources/available") 
+            available_data = await fetch_real_data("resources/available")
             result = f"Found {len(available_data)} available resources matching: '{query}'"
-            
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "find_social_connections":
         user_name = arguments["user_name"]
         interests = arguments["interests"]
-        
+
         # Fetch community data
         members_data = await fetch_real_data("community/members")
         groups_data = await fetch_real_data("community/groups")
-        
+
         result = f"Social recommendations for {user_name}:\n"
         result += f"- Found {len(groups_data)} relevant groups\n"
         result += f"- Found {len(members_data)} potential connections\n"
         result += f"Based on interests: {interests}"
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "analyze_urban_data":
         data_type = arguments["data_type"]
         area = arguments.get("area", "전체")
-        
+
         # Fetch urban data
         data = await fetch_real_data(f"urban-data/{data_type}")
-        
+
         # Perform basic analysis
         if isinstance(data, list) and len(data) > 0:
             total_incidents = sum(item.get("incidents", 0) for item in data if "incidents" in item)
@@ -253,13 +255,13 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             result += f"- Analysis timestamp: {datetime.now().isoformat()}"
         else:
             result = f"No data available for {data_type} in {area}"
-            
+
         return [TextContent(type="text", text=result)]
-    
+
     elif name == "get_real_time_data":
         api_type = arguments["api_type"]
         location = arguments["location"]
-        
+
         # Connect to real public APIs - no simulation
         try:
             if api_type == "air_quality":
@@ -270,19 +272,20 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 data = await fetch_real_data("urban-data/emergency")
             else:
                 raise ExternalDataUnavailableError(f"Unknown API type: {api_type}")
-            
+
             result = f"Real-time {api_type} data for {location}:\n"
             result += f"- Data: {json.dumps(data, indent=2)}\n"
             result += f"- Last updated: {datetime.now().isoformat()}\n"
             result += f"- Data source: Public API integration"
-            
+
         except Exception as e:
             raise ExternalDataUnavailableError(f"Failed to fetch real-time {api_type} data: {e}")
-        
+
         return [TextContent(type="text", text=result)]
-    
+
     else:
         raise ValueError(f"Unknown tool: {name}")
+
 
 async def main():
     """Main entry point for the Urban Hive MCP server."""
@@ -302,4 +305,4 @@ async def main():
         )
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

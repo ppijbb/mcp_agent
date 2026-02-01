@@ -1,6 +1,6 @@
 import logging
-import streamlit as st
 from collections import deque
+
 
 class StreamlitLogHandler(logging.Handler):
     """
@@ -22,6 +22,7 @@ class StreamlitLogHandler(logging.Handler):
         # Update the container with all messages, newest first
         # Use st.code for better formatting of log messages
         self.container.code("\n".join(self.log_messages))
+
 
 def setup_streamlit_logging(logger_names: list[str], container):
     """
@@ -48,4 +49,4 @@ def setup_streamlit_logging(logger_names: list[str], container):
 
         # Check if a handler of our type is already attached to avoid duplicates
         if not any(isinstance(h, StreamlitLogHandler) and h.container == container for h in logger.handlers):
-            logger.addHandler(handler) 
+            logger.addHandler(handler)

@@ -71,4 +71,4 @@ __all__ = [
     "UrbanThreatLevel",
     "UrbanAnalysisResult",
     "UrbanActionPlan",
-] 
+]

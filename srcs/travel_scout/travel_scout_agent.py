@@ -44,7 +44,7 @@ class TravelScoutAgent:
         )
         if not is_valid:
             raise ValueError(f"검색 파라미터 오류: {error_msg}")
-        
+
         scraper = BookingComScraper(self.browser_client)
         search_params: Dict[str, Any] = {
             "destination": destination,
@@ -52,14 +52,14 @@ class TravelScoutAgent:
             "check_out": check_out,
             "guests": guests,
         }
-        
+
         # 스크레이핑 실행
         raw_results = await scraper.search(search_params)
         hotels_data = raw_results.get("data", [])
-        
+
         # AI 분석 실행
         ai_analysis = await self.ai_analyzer.analyze_hotel_data(hotels_data, search_params)
-        
+
         # 결과 통합
         return {
             "type": "hotel",
@@ -79,14 +79,14 @@ class TravelScoutAgent:
         """Run a flight search via Google Flights scraper with AI analysis."""
         if not return_date:
             raise ValueError("항공편 검색에는 왕복 날짜가 필요합니다")
-        
+
         # 파라미터 검증
         is_valid, error_msg = TravelSearchUtils.validate_search_params(
             destination, departure_date, return_date, departure_date, return_date
         )
         if not is_valid:
             raise ValueError(f"검색 파라미터 오류: {error_msg}")
-        
+
         scraper = GoogleFlightsScraper(self.browser_client)
         search_params: Dict[str, Any] = {
             "origin": origin,
@@ -94,14 +94,14 @@ class TravelScoutAgent:
             "departure_date": departure_date,
             "return_date": return_date,
         }
-        
+
         # 스크레이핑 실행
         raw_results = await scraper.search(search_params)
         flights_data = raw_results.get("data", [])
-        
+
         # AI 분석 실행
         ai_analysis = await self.ai_analyzer.analyze_flight_data(flights_data, search_params)
-        
+
         # 결과 통합
         return {
             "type": "flight",
@@ -123,10 +123,10 @@ class TravelScoutAgent:
         try:
             # 호텔 검색
             hotel_results = await self.search_hotels(destination, check_in, check_out, guests)
-            
+
             # 항공편 검색
             flight_results = await self.search_flights(origin, destination, check_in, check_out)
-            
+
             # 통합 AI 추천 생성
             combined_recommendations = await self.ai_analyzer.generate_travel_recommendations(
                 hotel_results.get("ai_analysis", {}),
@@ -139,7 +139,7 @@ class TravelScoutAgent:
                     "guests": guests
                 }
             )
-            
+
             return {
                 "success": True,
                 "hotels": hotel_results,
@@ -154,7 +154,7 @@ class TravelScoutAgent:
                     "total_flights": flight_results.get("total_found", 0)
                 }
             }
-            
+
         except Exception as e:
             self.logger.error(f"통합 여행 검색 오류: {e}")
             return {

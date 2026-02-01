@@ -1,5 +1,3 @@
-from neo4j import GraphDatabase
-from srcs.utils.graph_database import config
 import asyncio
 from neo4j import AsyncGraphDatabase, basic_auth
 import logging
@@ -7,6 +5,7 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class Neo4jConnector:
     _driver = None
@@ -27,7 +26,7 @@ class Neo4jConnector:
                     logger.info("Neo4j connection successful.")
                 except Exception as e:
                     logger.error(f"Failed to connect to Neo4j: {e}")
-                    self._driver = None # Ensure driver is None on failure
+                    self._driver = None  # Ensure driver is None on failure
                     raise
 
     async def close(self):
@@ -40,7 +39,7 @@ class Neo4jConnector:
     async def query(self, query, parameters=None, database=None):
         if not self._driver:
             await self.connect()
-        
+
         async with self._driver.session(database=database) as session:
             result = await session.run(query, parameters)
             # Use a list comprehension with async for to handle the async generator
@@ -49,4 +48,4 @@ class Neo4jConnector:
             return records, summary
 
 # The global instance is removed to prevent async issues.
-# Each part of the application should manage its own connector instance. 
+# Each part of the application should manage its own connector instance.

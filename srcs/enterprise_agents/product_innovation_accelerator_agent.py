@@ -1,20 +1,17 @@
 import asyncio
 import os
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
-from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.utils import setup_agent_app
 
 
 # Configuration
@@ -28,7 +25,7 @@ app = setup_agent_app("product_innovation_accelerator_system")
 async def main():
     """
     Product Innovation Accelerator Agent System
-    
+
     Handles comprehensive product innovation and development acceleration:
     1. Market intelligence and opportunity identification
     2. Innovation pipeline management and prioritization
@@ -39,31 +36,31 @@ async def main():
     7. Technology scouting and partnership development
     8. Innovation metrics and ROI tracking
     """
-    
+
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     app = setup_agent_app("product_innovation_system")
 
     async with app.run() as innovation_app:
         context = innovation_app.context
         logger = innovation_app.logger
-        
+
         # Configure servers
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
             logger.info("Filesystem server configured")
-        
+
         # --- PRODUCT INNOVATION ACCELERATION AGENTS ---
-        
+
         # Market Intelligence and Opportunity Discovery Agent
         market_intelligence_agent = Agent(
             name="market_intelligence_opportunity_discovery",
             instruction=f"""You are a market intelligence and opportunity discovery specialist for {COMPANY_NAME}.
-            
+
             Identify and analyze market opportunities for {INNOVATION_SCOPE}:
-            
+
             1. Market Research and Analysis:
                - Global market size, growth, and trend analysis
                - Customer segment identification and profiling
@@ -71,7 +68,7 @@ async def main():
                - Competitive landscape mapping and positioning
                - Technology trend and disruption monitoring
                - Regulatory environment and policy impact
-            
+
             2. Customer Insight Generation:
                - Voice of customer (VoC) analysis and synthesis
                - Customer journey mapping and touchpoint analysis
@@ -79,7 +76,7 @@ async def main():
                - Persona development and validation
                - Jobs-to-be-done framework application
                - Design thinking and empathy research
-            
+
             3. Opportunity Assessment:
                - Market opportunity sizing and prioritization
                - Business model innovation potential
@@ -87,7 +84,7 @@ async def main():
                - Competitive advantage and differentiation analysis
                - Revenue potential and pricing strategy
                - Risk assessment and mitigation planning
-            
+
             4. Trend Analysis and Future Scenarios:
                - Emerging technology impact assessment
                - Social and cultural trend implications
@@ -95,7 +92,7 @@ async def main():
                - Demographic shift and market evolution
                - Scenario planning and future visioning
                - Disruptive innovation threat evaluation
-            
+
             5. Intelligence Automation:
                - AI-powered market research and data mining
                - Social listening and sentiment analysis
@@ -103,20 +100,20 @@ async def main():
                - Competitive intelligence gathering and tracking
                - Customer feedback aggregation and analysis
                - Real-time market signal detection
-            
+
             Generate comprehensive market intelligence reports with actionable insights and opportunity prioritization.
             Include data-driven recommendations and strategic implications for product development.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Innovation Pipeline Management and Prioritization Agent
         innovation_pipeline_agent = Agent(
             name="innovation_pipeline_management",
             instruction=f"""You are an innovation pipeline management and prioritization expert for {COMPANY_NAME}.
-            
+
             Manage and optimize innovation pipeline for {INNOVATION_SCOPE}:
-            
+
             1. Idea Generation and Collection:
                - Crowdsourcing and employee innovation programs
                - Customer co-creation and open innovation
@@ -124,7 +121,7 @@ async def main():
                - Technology scouting and startup engagement
                - Academic and research institution partnerships
                - Innovation challenge and hackathon organization
-            
+
             2. Innovation Portfolio Management:
                - Project portfolio optimization and balancing
                - Resource allocation and capacity planning
@@ -132,7 +129,7 @@ async def main():
                - Risk-return analysis and portfolio theory
                - Innovation funnel management and metrics
                - Strategic alignment and business case development
-            
+
             3. Prioritization and Selection:
                - Multi-criteria decision analysis (MCDA)
                - Innovation scoring and ranking methodologies
@@ -140,7 +137,7 @@ async def main():
                - Technical feasibility and resource requirements
                - Financial modeling and ROI projection
                - Risk assessment and scenario analysis
-            
+
             4. Agile Innovation Management:
                - Lean startup methodology application
                - Sprint-based development and iteration
@@ -148,7 +145,7 @@ async def main():
                - Pivot and persevere decision frameworks
                - Continuous learning and adaptation
                - Fail-fast experimentation and validation
-            
+
             5. Innovation Governance:
                - Innovation committee and decision-making
                - Stage gate reviews and milestone tracking
@@ -156,20 +153,20 @@ async def main():
                - Performance measurement and KPI tracking
                - Innovation culture and capability building
                - Change management and transformation
-            
+
             Create comprehensive innovation pipeline strategies with clear prioritization frameworks and governance models.
             Include resource optimization and performance measurement systems.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Rapid Prototyping and Design Thinking Agent
         rapid_prototyping_agent = Agent(
             name="rapid_prototyping_design_thinking",
             instruction=f"""You are a rapid prototyping and design thinking specialist for {COMPANY_NAME}.
-            
+
             Accelerate prototyping and design processes for {INNOVATION_SCOPE}:
-            
+
             1. Design Thinking Methodology:
                - Human-centered design approach
                - Empathy and user research integration
@@ -177,7 +174,7 @@ async def main():
                - Ideation and creative brainstorming
                - Prototyping and testing iteration
                - Implementation and scaling strategies
-            
+
             2. Rapid Prototyping Techniques:
                - Digital mockups and wireframing
                - 3D printing and rapid manufacturing
@@ -185,7 +182,7 @@ async def main():
                - Virtual and augmented reality prototyping
                - Paper prototyping and storyboarding
                - Interactive prototype development
-            
+
             3. Collaborative Design Process:
                - Cross-functional team collaboration
                - Co-design and stakeholder involvement
@@ -193,7 +190,7 @@ async def main():
                - Iterative feedback and improvement
                - Version control and design documentation
                - Remote collaboration and virtual workshops
-            
+
             4. Testing and Validation:
                - Usability testing and user experience evaluation
                - A/B testing and multivariate testing
@@ -201,7 +198,7 @@ async def main():
                - Technical feasibility and proof of concept
                - Performance testing and optimization
                - Accessibility and inclusive design testing
-            
+
             5. Technology Integration:
                - Design software and tool optimization
                - AI-powered design assistance and automation
@@ -209,20 +206,20 @@ async def main():
                - Cloud-based collaboration and sharing
                - Version control and project management
                - Automated testing and quality assurance
-            
+
             Develop comprehensive prototyping strategies with accelerated development timelines and quality frameworks.
             Include collaborative methodologies and technology integration approaches.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Customer Validation and Testing Automation Agent
         customer_validation_agent = Agent(
             name="customer_validation_testing_automation",
             instruction=f"""You are a customer validation and testing automation specialist for {COMPANY_NAME}.
-            
+
             Automate customer validation and testing for {INNOVATION_SCOPE}:
-            
+
             1. Customer Validation Framework:
                - Hypothesis-driven testing methodology
                - Customer development and discovery interviews
@@ -230,7 +227,7 @@ async def main():
                - Product-market fit measurement
                - Value proposition testing and refinement
                - Customer segment validation and optimization
-            
+
             2. Automated Testing Platform:
                - A/B testing and multivariate experimentation
                - User behavior tracking and analytics
@@ -238,7 +235,7 @@ async def main():
                - Heat mapping and user interaction analysis
                - Sentiment analysis and feedback processing
                - Real-time performance monitoring
-            
+
             3. Beta Testing and Launch Programs:
                - Beta user recruitment and management
                - Feedback collection and analysis automation
@@ -246,7 +243,7 @@ async def main():
                - Usage analytics and performance measurement
                - Graduate rollout and scaling strategies
                - Community building and engagement
-            
+
             4. Market Testing and Validation:
                - Landing page and marketing message testing
                - Pricing strategy testing and optimization
@@ -254,7 +251,7 @@ async def main():
                - Competitive response monitoring
                - Market penetration and adoption analysis
                - Customer lifetime value and retention metrics
-            
+
             5. Data-Driven Decision Making:
                - Real-time dashboard and reporting
                - Statistical significance testing
@@ -262,20 +259,20 @@ async def main():
                - Customer segmentation and persona refinement
                - Churn prediction and retention modeling
                - Revenue impact and ROI analysis
-            
+
             Create comprehensive validation strategies with automated testing frameworks and data-driven insights.
             Include customer feedback loops and continuous improvement processes.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Go-to-Market Strategy and Launch Optimization Agent
         go_to_market_agent = Agent(
             name="go_to_market_launch_optimization",
             instruction=f"""You are a go-to-market strategy and launch optimization expert for {COMPANY_NAME}.
-            
+
             Optimize go-to-market strategies and launch execution for {INNOVATION_SCOPE}:
-            
+
             1. Go-to-Market Strategy Development:
                - Target market segmentation and prioritization
                - Value proposition development and messaging
@@ -283,7 +280,7 @@ async def main():
                - Pricing strategy and revenue model design
                - Channel strategy and partner development
                - Sales enablement and training programs
-            
+
             2. Launch Planning and Execution:
                - Launch timeline and milestone planning
                - Cross-functional coordination and governance
@@ -291,7 +288,7 @@ async def main():
                - Public relations and media strategy
                - Influencer and thought leader engagement
                - Event marketing and trade show participation
-            
+
             3. Digital Marketing and Customer Acquisition:
                - Content marketing and thought leadership
                - Search engine optimization and marketing
@@ -299,7 +296,7 @@ async def main():
                - Email marketing and automation
                - Paid advertising and performance marketing
                - Conversion optimization and funnel management
-            
+
             4. Sales and Channel Optimization:
                - Sales process design and optimization
                - Channel partner recruitment and enablement
@@ -307,7 +304,7 @@ async def main():
                - Account-based marketing and sales alignment
                - Territory planning and quota setting
                - Incentive design and performance management
-            
+
             5. Launch Analytics and Optimization:
                - Launch performance tracking and measurement
                - Customer acquisition cost and lifetime value
@@ -315,20 +312,20 @@ async def main():
                - Competitive response monitoring and adjustment
                - Customer feedback integration and product iteration
                - Post-launch optimization and scaling
-            
+
             Generate comprehensive go-to-market strategies with detailed execution plans and performance frameworks.
             Include channel optimization and customer acquisition strategies.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Competitive Intelligence and Technology Scouting Agent
         competitive_intelligence_agent = Agent(
             name="competitive_intelligence_technology_scouting",
             instruction=f"""You are a competitive intelligence and technology scouting specialist for {COMPANY_NAME}.
-            
+
             Monitor competition and scout technologies for {INNOVATION_SCOPE}:
-            
+
             1. Competitive Intelligence Gathering:
                - Competitor product and strategy analysis
                - Market positioning and messaging monitoring
@@ -336,7 +333,7 @@ async def main():
                - Partnership and acquisition monitoring
                - Technology development and patent analysis
                - Customer and market share assessment
-            
+
             2. Technology Scouting and Assessment:
                - Emerging technology identification and evaluation
                - Startup ecosystem monitoring and engagement
@@ -344,7 +341,7 @@ async def main():
                - Patent landscape analysis and IP opportunities
                - Technology readiness and maturity assessment
                - Disruptive innovation threat and opportunity
-            
+
             3. Strategic Intelligence Analysis:
                - Competitive threat assessment and early warning
                - Market trend and disruption analysis
@@ -352,7 +349,7 @@ async def main():
                - Strategic partnership and collaboration opportunities
                - Acquisition target identification and evaluation
                - Innovation ecosystem mapping and engagement
-            
+
             4. Intelligence Automation and AI:
                - Automated news and information monitoring
                - Social media and web scraping analytics
@@ -360,7 +357,7 @@ async def main():
                - Market signal detection and pattern recognition
                - Competitive benchmarking and scoring
                - Predictive analytics and trend forecasting
-            
+
             5. Strategic Response and Action Planning:
                - Competitive response strategy development
                - Technology adoption and integration planning
@@ -368,69 +365,77 @@ async def main():
                - Investment and acquisition opportunity assessment
                - Risk mitigation and defensive strategy
                - Innovation roadmap and portfolio adjustment
-            
+
             Provide comprehensive competitive intelligence with actionable insights and strategic recommendations.
             Include technology scouting reports and partnership opportunity assessments.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Innovation Quality Evaluator
         innovation_evaluator = Agent(
             name="innovation_quality_evaluator",
             instruction="""You are a product innovation and development expert evaluating innovation acceleration initiatives.
-            
+
             Evaluate innovation programs based on:
-            
+
             1. Market Impact and Opportunity (35%)
                - Market size and growth potential
                - Customer need validation and satisfaction
                - Competitive advantage and differentiation
                - Revenue potential and business model viability
-            
+
             2. Innovation Process and Execution (30%)
                - Time-to-market acceleration and efficiency
                - Design thinking and customer validation
                - Prototype quality and testing effectiveness
                - Go-to-market execution and launch success
-            
+
             3. Technology and Feasibility (20%)
                - Technical innovation and breakthrough potential
                - Implementation feasibility and scalability
                - Technology integration and platform synergy
                - IP creation and protection strategy
-            
+
             4. Strategic Alignment and ROI (15%)
                - Strategic fit and portfolio coherence
                - Resource utilization and investment efficiency
                - Risk management and mitigation effectiveness
                - Long-term value creation and sustainability
-            
+
             Provide EXCELLENT, GOOD, FAIR, or POOR ratings with specific improvement recommendations.
             Highlight critical success factors and implementation challenges.
             """,
         )
-        
+
         # Create quality controller for innovation acceleration
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
         innovation_quality_controller = EvaluatorOptimizerLLM(
             optimizer=market_intelligence_agent,
             evaluator=innovation_evaluator,
-            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-                primary_model="gemini-2.5-flash-lite",
-                logger_instance=logger
-            )
-                llm_factory=orchestrator_llm_factory,
+            llm_factory=orchestrator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
-        
+
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing product innovation acceleration workflow for {COMPANY_NAME}")
-        
-        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-                primary_model="gemini-2.5-flash-lite",
-                logger_instance=logger
-            )
-            Orchestrator(
+
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+
+
+            primary_model="gemini-2.5-flash-lite",
+
+
+            logger_instance=logger
+
+
+        )
+
+
+        orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
             available_agents=[
                 innovation_quality_controller,
@@ -442,7 +447,7 @@ async def main():
             ],
             plan_type="full",
         )
-        
+
         # Define comprehensive innovation acceleration task
         task = f"""Execute a comprehensive product innovation acceleration program for {COMPANY_NAME}:
 
@@ -451,37 +456,37 @@ async def main():
            - Customer insight generation and validation
            - Competitive landscape analysis and positioning
            - Technology trend monitoring and assessment
-           
+
         2. Use the innovation_pipeline_agent to develop:
            - Innovation portfolio management and prioritization
            - Idea generation and collection systems
            - Agile innovation management methodologies
            - Innovation governance and decision-making frameworks
-           
+
         3. Use the rapid_prototyping_agent to create:
            - Design thinking and human-centered design processes
            - Rapid prototyping and validation techniques
            - Collaborative design and development workflows
            - Testing and iteration optimization strategies
-           
+
         4. Use the customer_validation_agent to implement:
            - Customer validation and testing automation
            - Beta testing and feedback collection systems
            - Market testing and validation frameworks
            - Data-driven decision making and analytics
-           
+
         5. Use the go_to_market_agent to establish:
            - Go-to-market strategy and launch planning
            - Digital marketing and customer acquisition
            - Sales and channel optimization
            - Launch analytics and performance tracking
-           
+
         6. Use the competitive_intelligence_agent to develop:
            - Competitive intelligence and monitoring systems
            - Technology scouting and assessment programs
            - Strategic intelligence analysis and planning
            - Intelligence automation and AI integration
-        
+
         Save all deliverables in the {OUTPUT_DIR} directory:
         - market_intelligence_opportunities_{timestamp}.md
         - innovation_pipeline_management_{timestamp}.md
@@ -490,7 +495,7 @@ async def main():
         - go_to_market_optimization_{timestamp}.md
         - competitive_intelligence_scouting_{timestamp}.md
         - innovation_acceleration_dashboard_{timestamp}.md
-        
+
         Create an integrated innovation acceleration strategy showing:
         - Current innovation capability and gap analysis
         - Market opportunities and technology trends
@@ -499,7 +504,7 @@ async def main():
         - Innovation metrics and performance frameworks
         - Continuous improvement and adaptation processes
         """
-        
+
         # Execute the workflow
         logger.info("Starting product innovation acceleration workflow")
         try:
@@ -507,10 +512,10 @@ async def main():
                 message=task,
                 request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
-            
+
             logger.info("Product innovation acceleration workflow completed successfully")
             logger.info(f"All deliverables saved in {OUTPUT_DIR}/")
-            
+
             # Generate executive innovation dashboard
             dashboard_path = os.path.join(OUTPUT_DIR, f"innovation_executive_summary_{timestamp}.md")
             with open(dashboard_path, 'w') as f:
@@ -576,7 +581,7 @@ For detailed technical information and implementation guides, refer to individua
 *This executive summary provides a high-level view of the product innovation acceleration opportunity.
 For comprehensive strategies and detailed implementation plans, please review the complete analysis reports.*
 """)
-            
+
             # Create innovation KPI tracking template
             kpi_path = os.path.join(OUTPUT_DIR, f"innovation_kpi_template_{timestamp}.json")
             innovation_kpis = {
@@ -633,16 +638,16 @@ For comprehensive strategies and detailed implementation plans, please review th
                 "reporting_period": f"{datetime.now().strftime('%Y-%m')}",
                 "last_updated": datetime.now().isoformat()
             }
-            
+
             with open(kpi_path, 'w') as f:
                 json.dump(innovation_kpis, f, indent=2)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error during innovation acceleration workflow execution: {str(e)}")
             return False
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

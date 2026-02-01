@@ -42,7 +42,7 @@ def create_standard_a2a_page(
 ):
     """
     표준화된 A2A Page 생성
-    
+
     Args:
         agent_id: Agent 고유 ID
         agent_name: Agent 이름
@@ -80,26 +80,26 @@ def create_standard_a2a_page(
         subtitle=subtitle,
         module_path=entry_point
     )
-    
+
     # Agent 타입 자동 감지 (제공되지 않은 경우)
     if agent_type is None:
         agent_type = detect_agent_type_from_entry_point(entry_point)
-    
+
     # 기본값 설정
     if capabilities is None:
         capabilities = []
     if description is None:
         description = subtitle
-    
+
     # 결과 placeholder
     result_placeholder = st.empty()
-    
+
     # 폼 생성
     with st.form(f"{agent_id}_form"):
         st.subheader(f"📝 {agent_name} 설정")
-        
+
         form_data = {}
-        
+
         if form_fields:
             for field in form_fields:
                 field_type = field.get("type", "text_input")
@@ -107,7 +107,7 @@ def create_standard_a2a_page(
                 field_label = field.get("label", field_key)
                 field_default = field.get("default", "")
                 field_help = field.get("help", "")
-                
+
                 if field_type == "text_area":
                     form_data[field_key] = st.text_area(
                         field_label,
@@ -144,15 +144,15 @@ def create_standard_a2a_page(
                         value=field.get("default", 0),
                         help=field_help
                     )
-        
+
         submitted = st.form_submit_button(f"🚀 {agent_name} 실행", use_container_width=True)
-    
+
     # 폼 제출 처리
     if submitted:
         # 필수 필드 검증
         required_fields = [f.get("key") for f in (form_fields or []) if f.get("required", False)]
         missing_fields = [f for f in required_fields if not form_data.get(f) or not str(form_data.get(f)).strip()]
-        
+
         if missing_fields:
             st.warning(f"다음 필드를 입력해주세요: {', '.join(missing_fields)}")
         else:
@@ -160,7 +160,7 @@ def create_standard_a2a_page(
             reports_path = Path(get_reports_path(agent_id))
             reports_path.mkdir(parents=True, exist_ok=True)
             result_json_path = reports_path / f"{agent_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
+
             # 표준화된 방식으로 agent 실행
             result = execute_standard_agent_via_a2a(
                 placeholder=result_placeholder,
@@ -174,10 +174,10 @@ def create_standard_a2a_page(
                 result_json_path=result_json_path,
                 use_a2a=True
             )
-            
+
             # 결과 처리
             processed_result = process_standard_agent_result(result, agent_id)
-            
+
             if processed_result["success"] and processed_result["has_data"]:
                 if display_results_func:
                     display_results_func(processed_result["data"])
@@ -185,7 +185,7 @@ def create_standard_a2a_page(
                     _default_display_results(processed_result["data"])
             elif not processed_result["success"]:
                 st.error(f"❌ {agent_name} 실행 실패: {processed_result.get('error', 'Unknown error')}")
-    
+
     # 최신 결과 확인
     if result_reader and result_category:
         _display_latest_results(agent_id, result_category, agent_name)
@@ -195,7 +195,7 @@ def _default_display_results(result_data: Dict[str, Any]):
     """기본 결과 표시 함수"""
     st.markdown("---")
     st.subheader("📊 실행 결과")
-    
+
     if isinstance(result_data, dict):
         st.json(result_data)
     else:
@@ -206,14 +206,14 @@ def _display_latest_results(agent_id: str, result_category: str, agent_name: str
     """최신 결과 표시"""
     st.markdown("---")
     st.markdown(f"## 📊 최신 {agent_name} 결과")
-    
+
     if result_reader:
         latest_result = result_reader.get_latest_result(agent_id, result_category)
-        
+
         if latest_result:
             with st.expander(f"🤖 최신 {agent_name} 실행 결과", expanded=False):
                 st.subheader(f"✈️ 최근 {agent_name} 실행 결과")
-                
+
                 if isinstance(latest_result, dict):
                     st.json(latest_result)
                 else:
@@ -233,7 +233,7 @@ def create_simple_a2a_page(
 ):
     """
     간단한 A2A Page 생성 (최소 설정)
-    
+
     Args:
         agent_id: Agent 고유 ID
         agent_name: Agent 이름
@@ -256,4 +256,3 @@ def create_simple_a2a_page(
         display_results_func=display_func,
         result_category=form_config.get("result_category") if form_config else None
     )
-

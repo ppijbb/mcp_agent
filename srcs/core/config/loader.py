@@ -8,6 +8,7 @@ from srcs.core.security.crypto import decrypt_file_content
 _config: AppConfig | None = None
 _config_path = Path(os.getenv("MCP_CONFIG_PATH", "configs/"))
 
+
 def load_config() -> AppConfig:
     """
     설정 파일을 로드, 병합, 유효성 검사를 수행하고 AppConfig 객체를 반환합니다.
@@ -18,20 +19,21 @@ def load_config() -> AppConfig:
         return _config
 
     env = os.getenv("MCP_ENV", "development")
-    
+
     base_config = _load_config_file(_config_path / "base.yaml")
     env_config = _load_config_file(_config_path / f"{env}.yaml")
-    
+
     merged_config = _deep_merge(base_config, env_config)
     merged_config["environment"] = env
 
     # AppConfig 모델로 유효성 검사 및 객체 생성
     _config = AppConfig(**merged_config)
-    
+
     # 환경 변수에서 민감한 정보 로드 (예: API 키)
     _load_secrets_from_env(_config)
-    
+
     return _config
+
 
 def _load_config_file(path: Path) -> Dict[str, Any]:
     """
@@ -46,13 +48,14 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
         except Exception as e:
             # 암호화된 파일 복호화 실패 시, 경고를 남기고 일반 파일 로드를 시도합니다.
             print(f"⚠️ 경고: 암호화된 설정 파일({encrypted_path})을 복호화하는 데 실패했습니다. 일반 설정 파일을 찾습니다. 오류: {e}")
-            pass # 아래의 일반 파일 로드로 넘어갑니다.
+            pass  # 아래의 일반 파일 로드로 넘어갑니다.
 
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
-            
+
     return {}
+
 
 def _deep_merge(source: Dict, destination: Dict) -> Dict:
     """두 딕셔너리를 재귀적으로 병합합니다."""
@@ -62,6 +65,7 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
         else:
             destination[key] = value
     return destination
+
 
 def _load_secrets_from_env(config: AppConfig):
     """
@@ -81,4 +85,4 @@ def _load_secrets_from_env(config: AppConfig):
 
 
 # 애플리케이션 전체에서 사용할 설정 객체
-settings = load_config() 
+settings = load_config()

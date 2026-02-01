@@ -13,21 +13,18 @@ Revenue Operations Intelligence Agent (RevOps)
 
 import asyncio
 import os
-import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
-from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.utils import setup_agent_app
 from srcs.core.config.loader import settings
 from srcs.core.errors import WorkflowError, APIError
 
@@ -35,21 +32,21 @@ from srcs.core.errors import WorkflowError, APIError
 class RevenueOperationsIntelligenceAgent:
     """
     Revenue Operations Intelligence Agent (RevOps)
-    
+
     매출 파이프라인을 분석하고 최적화하여 매출 증대를 달성합니다.
     """
-    
+
     def __init__(self, output_dir: str = "revops_intelligence_reports"):
         """
         Revenue Operations Intelligence Agent 초기화
-        
+
         Args:
             output_dir: 리포트 저장 디렉토리
         """
         self.app = setup_agent_app("revenue_operations_intelligence_system")
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-    
+
     def run_revops_workflow(
         self,
         business_context: Dict[str, Any],
@@ -57,7 +54,7 @@ class RevenueOperationsIntelligenceAgent:
     ) -> Dict[str, Any]:
         """
         RevOps 워크플로우 실행 (동기)
-        
+
         Args:
             business_context: 비즈니스 컨텍스트 정보
                 - company_name: 회사명
@@ -67,13 +64,13 @@ class RevenueOperationsIntelligenceAgent:
                 - time_period: 분석 기간 (선택)
                 - territories: 지역/세그먼트 정보 (선택)
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             dict: 실행 결과 및 생성된 콘텐츠
         """
         try:
             validated_context = self._validate_business_context(business_context)
-            
+
             result = asyncio.run(
                 self._async_workflow(validated_context, save_to_file)
             )
@@ -108,7 +105,7 @@ class RevenueOperationsIntelligenceAgent:
                 'error_type': type(e).__name__,
                 'save_to_file': save_to_file
             }
-    
+
     async def _async_workflow(
         self,
         business_context: Dict[str, Any],
@@ -116,63 +113,67 @@ class RevenueOperationsIntelligenceAgent:
     ) -> Dict[str, Any]:
         """
         비동기 워크플로우 실행
-        
+
         Args:
             business_context: 검증된 비즈니스 컨텍스트
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             dict: 생성된 분석 결과
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         if save_to_file:
             os.makedirs(self.output_dir, exist_ok=True)
-        
+
         async with self.app.run() as app_context:
             context = app_context.context
             logger = app_context.logger
-            
+
             # Configure filesystem server
             if "filesystem" in context.config.mcp.servers:
                 context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                 logger.info("Filesystem server configured")
-            
+
             # Create all RevOps agents
             agents = self._create_revops_agents(business_context)
-            
+
             # Create orchestrator
-            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+
+                primary_model="gemini-2.5-flash-lite",
+
+                logger_instance=logger
+
+            )
+
+            orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
-            
+
             # Create task
             task = self._create_task(business_context, timestamp, save_to_file)
-            
+
             # Execute workflow
             logger.info("Starting revenue operations intelligence workflow")
-            
+
             # Model 설정: settings에서 직접 가져오거나 agent가 판단
             # Fallback 없음: 설정이 없으면 WorkflowError 발생
             model_name = None
             if hasattr(settings, 'llm') and hasattr(settings.llm, 'default_model'):
                 model_name = settings.llm.default_model
-            
+
             if not model_name:
                 raise WorkflowError("LLM model not configured. Please set llm.default_model in settings.")
-            
+
             try:
                 result = await orchestrator.generate_str(
                     message=task,
                     request_params=RequestParams(model=model_name)
                 )
-                
+
                 logger.info("Revenue operations intelligence workflow completed successfully")
             except WorkflowError:
                 raise
@@ -181,91 +182,91 @@ Orchestrator(
             except Exception as e:
                 logger.error(f"Error during workflow execution: {str(e)}", exc_info=True)
                 raise WorkflowError(f"Unexpected error in workflow execution: {str(e)}") from e
-            
+
             if save_to_file:
                 logger.info(f"All deliverables saved in {self.output_dir}/")
-            
+
             return {
                 'business_context': business_context,
                 'analysis': result,
                 'timestamp': timestamp
             }
-    
+
     def _validate_business_context(self, business_context: Dict[str, Any]) -> Dict[str, Any]:
         """
         비즈니스 컨텍스트 검증
-        
+
         Args:
             business_context: 입력된 비즈니스 컨텍스트
-        
+
         Returns:
             dict: 검증된 비즈니스 컨텍스트
-        
+
         Raises:
             WorkflowError: 비즈니스 컨텍스트가 유효하지 않은 경우
         """
         if not isinstance(business_context, dict):
             raise WorkflowError("business_context must be a dictionary")
-        
+
         # Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 요청하거나 추론
         return business_context
-    
+
     def _create_revops_agents(
         self,
         business_context: Dict[str, Any]
     ) -> Dict[str, Agent]:
         """
         Revenue Operations Intelligence를 위한 모든 agent 생성
-        
+
         Args:
             business_context: 검증된 비즈니스 컨텍스트
-        
+
         Returns:
             dict: 생성된 agent 딕셔너리
         """
         agents = {}
-        
+
         # 1. Pipeline Analyzer Agent
         agents['pipeline_analyzer'] = Agent(
             name="pipeline_analyzer",
             instruction=self._create_pipeline_analyzer_instruction(business_context),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 2. Revenue Forecaster Agent
         agents['revenue_forecaster'] = Agent(
             name="revenue_forecaster",
             instruction=self._create_revenue_forecaster_instruction(business_context),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 3. Deal Intelligence Agent
         agents['deal_intelligence'] = Agent(
             name="deal_intelligence",
             instruction=self._create_deal_intelligence_instruction(business_context),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 4. Territory Optimizer Agent
         agents['territory_optimizer'] = Agent(
             name="territory_optimizer",
             instruction=self._create_territory_optimizer_instruction(business_context),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 5. Churn Predictor Agent
         agents['churn_predictor'] = Agent(
             name="churn_predictor",
             instruction=self._create_churn_predictor_instruction(business_context),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 6. Quality Evaluator Agent
         agents['quality_evaluator'] = Agent(
             name="revops_quality_evaluator",
             instruction=self._create_quality_evaluator_instruction(),
         )
-        
+
         # 7. Quality Controller (EvaluatorOptimizerLLM)
         agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
@@ -277,19 +278,19 @@ Orchestrator(
             llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
-        
+
         return agents
-    
+
     def _create_pipeline_analyzer_instruction(
         self,
         business_context: Dict[str, Any]
     ) -> str:
         """
         Pipeline Analyzer Agent instruction 동적 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
-        
+
         Returns:
             str: agent instruction
         """
@@ -360,17 +361,17 @@ Ensure analysis is:
 Output format: Comprehensive markdown report with data visualizations, metrics, and actionable insights.
 """
         return instruction
-    
+
     def _create_revenue_forecaster_instruction(
         self,
         business_context: Dict[str, Any]
     ) -> str:
         """
         Revenue Forecaster Agent instruction 동적 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
-        
+
         Returns:
             str: agent instruction
         """
@@ -441,17 +442,17 @@ Ensure forecasts are:
 Output format: Detailed forecast report with scenarios, probabilities, and actionable recommendations.
 """
         return instruction
-    
+
     def _create_deal_intelligence_instruction(
         self,
         business_context: Dict[str, Any]
     ) -> str:
         """
         Deal Intelligence Agent instruction 동적 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
-        
+
         Returns:
             str: agent instruction
         """
@@ -523,17 +524,17 @@ Ensure analysis is:
 Output format: Deal intelligence report with scoring, prioritization, and action plans.
 """
         return instruction
-    
+
     def _create_territory_optimizer_instruction(
         self,
         business_context: Dict[str, Any]
     ) -> str:
         """
         Territory Optimizer Agent instruction 동적 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
-        
+
         Returns:
             str: agent instruction
         """
@@ -605,17 +606,17 @@ Ensure optimization is:
 Output format: Territory optimization report with allocation recommendations and performance projections.
 """
         return instruction
-    
+
     def _create_churn_predictor_instruction(
         self,
         business_context: Dict[str, Any]
     ) -> str:
         """
         Churn Predictor Agent instruction 동적 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
-        
+
         Returns:
             str: agent instruction
         """
@@ -687,11 +688,11 @@ Ensure analysis is:
 Output format: Churn risk report with prioritized customer list, risk scores, and prevention action plans.
 """
         return instruction
-    
+
     def _create_quality_evaluator_instruction(self) -> str:
         """
         Quality Evaluator Agent instruction 생성
-        
+
         Returns:
             str: agent instruction
         """
@@ -731,20 +732,20 @@ Provide EXCELLENT, GOOD, FAIR, or POOR ratings with specific improvement recomme
 Focus on actionable feedback that improves revenue operations effectiveness.
 """
         return instruction
-    
+
     def _format_business_context_for_instruction(self, business_context: Dict[str, Any]) -> str:
         """
         비즈니스 컨텍스트를 instruction용 포맷으로 변환
         Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 추론하거나 요청
-        
+
         Args:
             business_context: 비즈니스 컨텍스트 딕셔너리
-        
+
         Returns:
             str: 포맷된 비즈니스 컨텍스트 문자열
         """
         lines = []
-        
+
         # 모든 필드를 agent가 동적으로 판단하도록 제공
         if 'company_name' in business_context:
             lines.append(f"- Company Name: {business_context['company_name']}")
@@ -762,17 +763,17 @@ Focus on actionable feedback that improves revenue operations effectiveness.
                 lines.append(f"- Territories: {', '.join(str(t) for t in territories)}")
             elif territories:
                 lines.append(f"- Territories: {territories}")
-        
+
         # 추가 필드가 있으면 모두 포함
         for key, value in business_context.items():
             if key not in ['company_name', 'revenue_target', 'sales_team_size', 'current_pipeline_value', 'time_period', 'territories']:
                 lines.append(f"- {key.replace('_', ' ').title()}: {value}")
-        
+
         # Fallback 없음: agent가 동적으로 판단
         # 정보가 없으면 agent가 MCP 도구를 사용하여 조사하도록 instruction에 명시
         formatted_context = "\n".join(lines)
         return formatted_context
-    
+
     def _create_task(
         self,
         business_context: Dict[str, Any],
@@ -781,12 +782,12 @@ Focus on actionable feedback that improves revenue operations effectiveness.
     ) -> str:
         """
         워크플로우 task 생성
-        
+
         Args:
             business_context: 비즈니스 컨텍스트
             timestamp: 타임스탬프
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             str: task description
         """
@@ -853,7 +854,7 @@ All analysis must be:
 - Production-ready quality
 
 """
-        
+
         if save_to_file:
             task += f"""
 Save all deliverables in the {self.output_dir} directory with appropriate naming:
@@ -870,7 +871,7 @@ Save all deliverables in the {self.output_dir} directory with appropriate naming
 Return the complete analysis for immediate display. Do not save to files.
 Provide comprehensive, detailed results including all analyses, forecasts, and recommendations.
 """
-        
+
         return task
 
 
@@ -887,13 +888,13 @@ async def main():
         'time_period': 'Q1 2025',
         'territories': ['North America', 'Europe', 'Asia Pacific']
     }
-    
+
     agent = RevenueOperationsIntelligenceAgent()
     result = agent.run_revops_workflow(
         business_context=business_context,
         save_to_file=True
     )
-    
+
     print(f"Workflow completed: {result['success']}")
     if result['success']:
         if 'output_dir' in result:

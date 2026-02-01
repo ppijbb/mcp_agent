@@ -8,9 +8,7 @@ Uses Google Gemini 2.5 Flash Lite to analyze text for:
 """
 
 import json
-import os
-from typing import Dict, List, Tuple, Optional
-import asyncio
+from typing import Dict, List, Tuple
 from datetime import datetime
 import google.generativeai as genai
 from .config import get_llm_config
@@ -19,26 +17,26 @@ from .exceptions import ExternalDataUnavailableError
 
 class AITextAnalyzer:
     """AI-powered text analysis using Google Gemini 2.5 Flash Lite."""
-    
+
     def __init__(self):
         """Initialize the AI text analyzer with Gemini configuration."""
         self.config = get_llm_config()
         self._setup_gemini_client()
-    
+
     def _setup_gemini_client(self):
         """Setup Gemini client with configuration."""
         if not self.config.api_key:
             raise ExternalDataUnavailableError(
                 "GOOGLE_API_KEY environment variable is required for AI text analysis"
             )
-        
+
         genai.configure(api_key=self.config.api_key)
         self.model = genai.GenerativeModel(self.config.model)
-    
+
     async def analyze_resource_intent(self, query: str) -> Tuple[str, Dict]:
         """
         Analyze user query to understand if they're offering or requesting resources.
-        
+
         Returns:
             Tuple[str, Dict]: (intent_type, analysis_result)
             - intent_type: "offer", "request", or "general"
@@ -67,10 +65,10 @@ class AITextAnalyzer:
 
 한국어와 영어 모두 이해하여 분석해주세요.
 """
-            
+
             response = await self._call_gemini(prompt)
             result = json.loads(response)
-            
+
             return result.get("intent", "general"), {
                 "query": query,
                 "confidence": result.get("confidence", 0.5),
@@ -79,14 +77,14 @@ class AITextAnalyzer:
                 "reasoning": result.get("reasoning", ""),
                 "timestamp": datetime.now().isoformat()
             }
-            
+
         except Exception as e:
             raise ExternalDataUnavailableError(f"Resource intent analysis failed: {e}") from e
-    
+
     async def analyze_interests(self, interests_text: str) -> List[str]:
         """
         Analyze user interests and categorize them intelligently.
-        
+
         Returns:
             List[str]: List of interest categories
         """
@@ -125,25 +123,25 @@ class AITextAnalyzer:
 
 한국어와 영어 모두 분석 가능합니다.
 """
-            
+
             response = await self._call_gemini(prompt)
             result = json.loads(response)
             return result.get("categories", ["social"])
-            
+
         except Exception as e:
             raise ExternalDataUnavailableError(f"Interests analysis failed: {e}") from e
-    
+
     async def assess_isolation_risk(self, user_profile: Dict) -> Tuple[str, str]:
         """
         Assess social isolation risk using AI analysis.
-        
+
         Returns:
             Tuple[str, str]: (risk_level, reasoning)
         """
         try:
             interests = user_profile.get('interests', '')
             name = user_profile.get('name', 'Unknown')
-            
+
             prompt = f"""
 사용자 프로필을 분석하여 사회적 고립 위험도를 평가해주세요.
 
@@ -169,14 +167,14 @@ class AITextAnalyzer:
 
 한국어와 영어 모두 분석 가능합니다.
 """
-            
+
             response = await self._call_gemini(prompt)
             result = json.loads(response)
             return result.get("risk_level", "low"), result.get("reasoning", "AI 분석 완료")
-            
+
         except Exception as e:
             raise ExternalDataUnavailableError(f"Isolation risk assessment failed: {e}") from e
-    
+
     async def _call_gemini(self, prompt: str) -> str:
         """Call Google Gemini API."""
         try:

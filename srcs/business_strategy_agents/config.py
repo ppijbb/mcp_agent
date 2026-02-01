@@ -8,7 +8,6 @@ and system parameters for the business strategy agent.
 import os
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from pathlib import Path
 import yaml
 
 
@@ -54,7 +53,7 @@ class RegionConfig:
 
 class Config:
     """메인 설정 클래스"""
-    
+
     def __init__(self, config_path: Optional[str] = None):
         self.config_path = config_path or self._get_default_config_path()
         self._load_config()
@@ -62,38 +61,38 @@ class Config:
         self._setup_monitoring_config()
         self._setup_region_config()
         self._setup_notion_config()
-    
+
     def _get_default_config_path(self) -> str:
         """기본 설정 파일 경로"""
         return os.path.join(os.path.dirname(__file__), 'config', 'business_strategy.yaml')
-    
+
     def _load_config(self):
         """설정 파일 로드 - 명시적 에러 처리"""
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(f"Configuration file not found at {self.config_path}")
-        
+
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 self.raw_config = yaml.safe_load(f)
         except Exception as e:
             raise ValueError(f"Failed to load configuration: {e}")
-    
+
     def get_ai_model_config(self) -> Dict[str, Any]:
         """AI 모델 설정 반환"""
         return self.raw_config.get('ai_model', {})
-    
+
     def get_mcp_servers_config(self) -> Dict[str, Any]:
         """MCP 서버 설정 반환"""
         return self.raw_config.get('mcp_servers', {})
-    
+
     def get_keyword_categories_config(self) -> Dict[str, List[str]]:
         """키워드 카테고리 설정 반환"""
         return self.raw_config.get('keyword_categories', {})
-    
+
     def _setup_api_configs(self):
         """API 설정 초기화 - YAML 기반"""
         self.api_configs: Dict[str, APIConfig] = {}
-        
+
         apis = self.raw_config.get('apis', {})
         for category, api_group in apis.items():
             for api_name, api_info in api_group.items():
@@ -107,7 +106,7 @@ class Config:
                     timeout=api_info.get('timeout', 30),
                     retry_count=api_info.get('retry_count', 3)
                 )
-    
+
     def _setup_monitoring_config(self):
         """모니터링 설정 초기화 - YAML 기반"""
         monitoring = self.raw_config.get('monitoring', {})
@@ -118,9 +117,9 @@ class Config:
             hooking_score_threshold=monitoring.get('hooking_score_threshold', 0.7),
             sentiment_threshold=monitoring.get('sentiment_threshold', 0.5)
         )
-        
+
         self.monitoring_keywords = monitoring.get('keywords', [])
-    
+
     def _setup_region_config(self):
         """지역 설정 초기화 - YAML 기반"""
         regions = self.raw_config.get('regions', {})
@@ -130,16 +129,16 @@ class Config:
             language_codes=regions.get('languages', {}),
             market_hours=regions.get('market_hours', {})
         )
-    
+
     def _setup_notion_config(self):
         """Notion 설정 초기화 - YAML 기반"""
         notion_data = self.raw_config.get('notion', {})
-        
+
         # 환경변수에서 Notion 설정 로드
         api_key = os.getenv('NOTION_API_KEY', '')
         database_id = os.getenv('NOTION_DATABASE_ID', '')
         workspace_id = os.getenv('NOTION_WORKSPACE_ID', '')
-        
+
         if bool(api_key) and database_id:
             self.notion = NotionConfig(
                 api_key=api_key,
@@ -149,26 +148,26 @@ class Config:
             )
         else:
             self.notion = None
-    
+
     def get_api_config(self, api_name: str) -> Optional[APIConfig]:
         """API 설정 반환"""
         return self.api_configs.get(api_name)
-    
+
     def get_keywords_by_category(self, category: str) -> List[str]:
         """카테고리별 키워드 반환 - YAML 기반"""
         keyword_categories = self.get_keyword_categories_config()
         return keyword_categories.get(category, [])
-    
+
     def update_config(self, key_path: str, value: Any):
         """설정 업데이트 - YAML 기반"""
         keys = key_path.split('.')
         current = self.raw_config
-        
+
         for key in keys[:-1]:
             if key not in current:
                 current[key] = {}
             current = current[key]
-        
+
         current[keys[-1]] = value
         # YAML 파일로 저장
         try:
@@ -177,7 +176,7 @@ class Config:
                 yaml.dump(self.raw_config, f, default_flow_style=False, allow_unicode=True, indent=2)
         except Exception as e:
             raise ValueError(f"Failed to save configuration: {e}")
-    
+
     def get_system_info(self) -> Dict[str, Any]:
         """시스템 정보 반환"""
         return {
@@ -208,7 +207,7 @@ def setup_environment():
     """환경 설정"""
     # 로깅 설정
     import logging
-    
+
     log_level = get_env_or_default('LOG_LEVEL', 'INFO')
     logging.basicConfig(
         level=getattr(logging, log_level),
@@ -218,7 +217,7 @@ def setup_environment():
             logging.FileHandler('logs/business_strategy_agent.log')
         ]
     )
-    
+
     # 로그 디렉토리 생성
     os.makedirs('logs', exist_ok=True)
 
@@ -236,40 +235,41 @@ def get_config() -> Config:
 def validate_config() -> List[str]:
     """설정 검증 및 문제점 반환"""
     issues = []
-    
+
     # API 키 검증
     required_apis = ['news_reuters', 'social_twitter', 'trends_google_trends']
     for api_name in required_apis:
         api_config = config.get_api_config(api_name)
         if not api_config or not api_config.api_key:
             issues.append(f"Missing API key for {api_name}")
-    
+
     # Notion 설정 검증
     if not config.notion:
         issues.append("Notion configuration is incomplete")
-    
+
     # 지역 설정 검증
     if not config.region.enabled_regions:
         issues.append("No regions enabled for monitoring")
-    
-    return issues 
+
+    return issues
+
 
 def classify_keywords_by_category(keywords: List[str]) -> Dict[str, List[str]]:
     """카테고리별 키워드 분류 로직 구현 - YAML 기반"""
-    
+
     # 설정에서 카테고리 패턴 로드
     config_instance = get_config()
     category_patterns = config_instance.get_keyword_categories_config()
-    
+
     # 결과 딕셔너리 초기화
     categorized = {category: [] for category in category_patterns.keys()}
     categorized["기타"] = []
-    
+
     # 각 키워드를 카테고리별로 분류
     for keyword in keywords:
         keyword_lower = keyword.lower().strip()
         classified = False
-        
+
         # 각 카테고리의 패턴과 매칭
         for category, patterns in category_patterns.items():
             for pattern in patterns:
@@ -279,10 +279,10 @@ def classify_keywords_by_category(keywords: List[str]) -> Dict[str, List[str]]:
                     break
             if classified:
                 break
-        
+
         # 어떤 카테고리에도 속하지 않는 경우 "기타"로 분류
         if not classified:
             categorized["기타"].append(keyword)
-    
+
     # 빈 카테고리 제거
-    return {k: v for k, v in categorized.items() if v} 
+    return {k: v for k, v in categorized.items() if v}

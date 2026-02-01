@@ -14,7 +14,7 @@ from typing import List
 class PersonaConfig:
     """Persona-specific settings"""
     enabled_personas: List[str] = None
-    
+
     def __post_init__(self):
         if self.enabled_personas is None:
             self.enabled_personas = ["Advocate", "Critic", "Skeptic", "Synthesizer", "MetaObserver"]
@@ -44,7 +44,7 @@ class MultiPersonaSystemConfig:
     persona: PersonaConfig = None
     dialogue: DialogueConfig = None
     llm: LLMConfig = None
-    
+
     def __post_init__(self):
         if self.persona is None:
             self.persona = PersonaConfig()
@@ -79,13 +79,13 @@ def update_config_from_env():
     if os.getenv("ENABLED_PERSONAS"):
         personas_str = os.getenv("ENABLED_PERSONAS")
         config.persona.enabled_personas = [p.strip() for p in personas_str.split(",")]
-    
+
     # Dialogue settings
     if os.getenv("DIALOGUE_MAX_ROUNDS"):
         config.dialogue.max_rounds = int(os.getenv("DIALOGUE_MAX_ROUNDS"))
     if os.getenv("DIALOGUE_TURNS_PER_ROUND"):
         config.dialogue.turns_per_round = int(os.getenv("DIALOGUE_TURNS_PER_ROUND"))
-    
+
     # LLM settings
     if os.getenv("DIALOGUE_MODEL"):
         config.llm.dialogue_model = os.getenv("DIALOGUE_MODEL")

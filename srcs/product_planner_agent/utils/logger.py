@@ -1,16 +1,17 @@
 import logging
 
+
 def get_product_planner_logger(sub_name: str) -> logging.Logger:
     """
     Returns a logger instance with the 'product_planner' prefix.
     This ensures all loggers within the Product Planner project have a unified,
     hierarchical naming convention for consistent log handling.
-    
+
     Args:
         sub_name: The specific name for the sub-module or agent logger.
                   For example, 'prd_writer' or 'reporting_coordinator'.
                   If __name__ is passed, it will be structured automatically.
-                  
+
     Returns:
         A configured logger instance.
     """
@@ -23,11 +24,11 @@ def get_product_planner_logger(sub_name: str) -> logging.Logger:
                 index = parts.index('product_planner_agent')
                 sub_name = '.'.join(parts[index+1:])
             except (ValueError, IndexError):
-                pass # Fallback to using the full name if parsing fails
+                pass  # Fallback to using the full name if parsing fails
 
     logger_name = f"product_planner.{sub_name}"
     logger = logging.getLogger(logger_name)
-    
+
     # 로거가 이미 설정되어 있지 않으면 기본 설정
     if not logger.handlers:
         handler = logging.StreamHandler()
@@ -37,5 +38,5 @@ def get_product_planner_logger(sub_name: str) -> logging.Logger:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
-    
-    return logger 
+
+    return logger

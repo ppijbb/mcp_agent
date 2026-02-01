@@ -1,16 +1,16 @@
 import streamlit as st
-import sys
 import json
 from pathlib import Path
 from datetime import datetime
 import streamlit_process_manager as spm
 from streamlit_process_manager.process import Process
 import os
-from typing import List, Optional, Callable, Any
+from typing import Optional, Callable, Any
+
 
 def run_agent_process(
     placeholder,
-    command: list[str], 
+    command: list[str],
     process_key_prefix: str,
     log_expander_title: str = "실시간 실행 로그",
     display_callback: Optional[Callable[[Any], None]] = None
@@ -36,7 +36,7 @@ def run_agent_process(
         with st.spinner("🤖 에이전트가 작업을 수행 중입니다..."):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             process_key = f"{process_key_prefix}_{timestamp}"
-            
+
             # The key might be used as a file path for logging. Ensure the directory exists.
             try:
                 log_path = Path(process_key)
@@ -47,16 +47,16 @@ def run_agent_process(
 
             log_path = Path(process_key)
             process = Process(command, log_path, label=process_key).start()
-            
+
             # expander 중첩 문제를 피하기 위해 직접 process monitor 사용
             st.info(f"🔄 {log_expander_title}")
             spm.st_process_monitor(process, label=f"monitor_{process_key}").loop_until_finished()
-                
+
             if process.get_return_code() == 0:
                 # 먼저 --result-json-path 인자를 찾아보고, 없으면 --result-txt-path를 찾아봄
                 result_path_str = None
                 is_json_format = False
-                
+
                 try:
                     # JSON 파일 경로 찾기
                     idx = command.index("--result-json-path")
@@ -87,7 +87,7 @@ def run_agent_process(
                             else:
                                 # 텍스트 파일 처리
                                 result_text = f.read()
-                                
+
                                 if result_text.strip():
                                     st.success("✅ 작업이 성공적으로 완료되었습니다!")
                                     return {"result_text": result_text}
@@ -107,4 +107,4 @@ def run_agent_process(
 
         st.info("프로세스가 아직 실행 중입니다. 잠시만 기다려주세요...")
 
-    st.markdown("---") 
+    st.markdown("---")

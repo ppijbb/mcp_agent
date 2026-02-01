@@ -43,7 +43,7 @@ class GenomeDatabaseConfig:
     retry_count: int = 3
     is_active: bool = True
     description: str = ""
-    
+
     def __post_init__(self):
         # Load API key from environment if not provided
         if not self.api_key:
@@ -98,34 +98,34 @@ class GenomeAnalysisConfig:
 @dataclass
 class GenomeAgentConfig:
     """Main configuration for the Genome Agent"""
-    
+
     # Basic settings
     agent_name: str = "GenomeAgentMCP"
     version: str = "1.0.0"
     environment: str = "development"
-    
+
     # Analysis configuration
     analysis: GenomeAnalysisConfig = field(default_factory=GenomeAnalysisConfig)
-    
+
     # Database configurations
     databases: Dict[str, GenomeDatabaseConfig] = field(default_factory=dict)
-    
+
     # Tool configurations
     tools: Dict[str, AnalysisToolConfig] = field(default_factory=dict)
-    
+
     # MCP server configurations
     mcp_servers: Dict[str, MCPServerConfig] = field(default_factory=dict)
-    
+
     # Logging configuration
     log_level: str = "INFO"
     log_file: Optional[str] = None
     enable_console_logging: bool = True
-    
+
     def __post_init__(self):
         self._setup_default_databases()
         self._setup_default_tools()
         self._setup_default_mcp_servers()
-    
+
     def _setup_default_databases(self):
         """Setup default genomic database configurations"""
         if not self.databases:
@@ -191,7 +191,7 @@ class GenomeAgentConfig:
                     description="ChEMBL bioactivity database"
                 )
             }
-    
+
     def _setup_default_tools(self):
         """Setup default analysis tool configurations"""
         if not self.tools:
@@ -246,7 +246,7 @@ class GenomeAgentConfig:
                     description="Python Programming Language"
                 )
             }
-    
+
     def _setup_default_mcp_servers(self):
         """Setup default MCP server configurations"""
         if not self.mcp_servers:
@@ -270,52 +270,52 @@ class GenomeAgentConfig:
                     description="Browser MCP server for web scraping"
                 )
             }
-    
+
     def get_database_config(self, name: str) -> Optional[GenomeDatabaseConfig]:
         """Get database configuration by name"""
         return self.databases.get(name.lower())
-    
+
     def get_tool_config(self, name: str) -> Optional[AnalysisToolConfig]:
         """Get tool configuration by name"""
         return self.tools.get(name.lower())
-    
+
     def get_mcp_server_config(self, name: str) -> Optional[MCPServerConfig]:
         """Get MCP server configuration by name"""
         return self.mcp_servers.get(name.lower())
-    
+
     def get_active_databases(self) -> List[GenomeDatabaseConfig]:
         """Get list of active databases"""
         return [db for db in self.databases.values() if db.is_active]
-    
+
     def get_active_tools(self) -> List[AnalysisToolConfig]:
         """Get list of active tools"""
         return [tool for tool in self.tools.values() if tool.is_active]
-    
+
     def get_active_mcp_servers(self) -> List[MCPServerConfig]:
         """Get list of active MCP servers"""
         return [server for server in self.mcp_servers.values() if server.is_active]
-    
+
     def update_database_config(self, name: str, **kwargs):
         """Update database configuration"""
         if name.lower() in self.databases:
             for key, value in kwargs.items():
                 if hasattr(self.databases[name.lower()], key):
                     setattr(self.databases[name.lower()], key, value)
-    
+
     def update_tool_config(self, name: str, **kwargs):
         """Update tool configuration"""
         if name.lower() in self.tools:
             for key, value in kwargs.items():
                 if hasattr(self.tools[name.lower()], key):
                     setattr(self.tools[name.lower()], key, value)
-    
+
     def update_mcp_server_config(self, name: str, **kwargs):
         """Update MCP server configuration"""
         if name.lower() in self.mcp_servers:
             for key, value in kwargs.items():
                 if hasattr(self.mcp_servers[name.lower()], key):
                     setattr(self.mcp_servers[name.lower()], key, value)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary"""
         return {
@@ -382,43 +382,43 @@ def get_default_config() -> GenomeAgentConfig:
 def load_config_from_file(config_path: str) -> GenomeAgentConfig:
     """Load configuration from file"""
     import json
-    
+
     try:
         with open(config_path, 'r') as f:
             config_data = json.load(f)
-        
+
         # Create config object from file data
         config = GenomeAgentConfig()
-        
+
         # Update with file data
         if "analysis" in config_data:
             for key, value in config_data["analysis"].items():
                 if hasattr(config.analysis, key):
                     setattr(config.analysis, key, value)
-        
+
         if "databases" in config_data:
             for name, db_data in config_data["databases"].items():
                 if name in config.databases:
                     for key, value in db_data.items():
                         if hasattr(config.databases[name], key):
                             setattr(config.databases[name], key, value)
-        
+
         if "tools" in config_data:
             for name, tool_data in config_data["tools"].items():
                 if name in config.tools:
                     for key, value in tool_data.items():
                         if hasattr(config.tools[name], key):
                             setattr(config.tools[name], key, value)
-        
+
         if "mcp_servers" in config_data:
             for name, server_data in config_data["mcp_servers"].items():
                 if name in config.mcp_servers:
                     for key, value in server_data.items():
                         if hasattr(config.mcp_servers[name], key):
                             setattr(config.mcp_servers[name], key, value)
-        
+
         return config
-        
+
     except Exception as e:
         print(f"Warning: Could not load config from {config_path}: {e}")
         return get_default_config()
@@ -427,7 +427,7 @@ def load_config_from_file(config_path: str) -> GenomeAgentConfig:
 def save_config_to_file(config: GenomeAgentConfig, config_path: str):
     """Save configuration to file"""
     import json
-    
+
     try:
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         with open(config_path, 'w') as f:
@@ -440,17 +440,17 @@ def save_config_to_file(config: GenomeAgentConfig, config_path: str):
 def get_env_config() -> GenomeAgentConfig:
     """Get configuration from environment variables"""
     config = get_default_config()
-    
+
     # Override with environment variables
     if os.getenv("GENOME_AGENT_OUTPUT_DIR"):
         config.analysis.default_output_dir = os.getenv("GENOME_AGENT_OUTPUT_DIR")
-    
+
     if os.getenv("GENOME_AGENT_LOG_LEVEL"):
         config.log_level = os.getenv("GENOME_AGENT_LOG_LEVEL")
-    
+
     if os.getenv("GENOME_AGENT_LOG_FILE"):
         config.log_file = os.getenv("GENOME_AGENT_LOG_FILE")
-    
+
     return config
 
 
@@ -458,5 +458,5 @@ def get_config(config_path: Optional[str] = None) -> GenomeAgentConfig:
     """Get configuration from file, environment, or defaults"""
     if config_path and os.path.exists(config_path):
         return load_config_from_file(config_path)
-    
+
     return get_env_config()

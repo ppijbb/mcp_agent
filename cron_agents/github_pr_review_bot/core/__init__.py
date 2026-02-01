@@ -14,7 +14,7 @@ from .config import Config
 # API 모듈
 from .api import GitHubClient, GitHubPRReviewServer
 
-# AI 모듈  
+# AI 모듈
 from .ai import gemini_service, MCPIntegrationManager, ReviewGenerator, ReviewEnhancer, review_enhancer
 
 # Storage 모듈
@@ -27,7 +27,7 @@ __all__ = [
     "Config",
     "GitHubClient",
     "GitHubPRReviewServer",
-    "gemini_service", 
+    "gemini_service",
     "MCPIntegrationManager",
     "ReviewGenerator",
     "ReviewEnhancer",
@@ -36,4 +36,4 @@ __all__ = [
     "TaskQueue",
     "MetricsCollector",
     "BatchProcessor"
-] 
+]

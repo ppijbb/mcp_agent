@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -48,4 +48,4 @@ def mask(value: str, *, visible: int = 4) -> str:
     return value[:visible] + "*" * (len(value) - visible)
 
 
-__all__ = ["get", "mask"] 
+__all__ = ["get", "mask"]

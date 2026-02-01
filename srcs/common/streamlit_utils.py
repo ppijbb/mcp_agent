@@ -6,6 +6,7 @@ from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 
 T = TypeVar("T", bound=OpenAIAugmentedLLM)
 
+
 @dataclass
 class AgentState:
     """Container for agent and its associated LLM"""
@@ -47,4 +48,4 @@ async def get_agent_state(
     else:
         state = st.session_state[key]
 
-    return state 
+    return state

@@ -10,16 +10,14 @@ Replaces fake UrbanAnalystAgent with real MCPAgent implementation using:
 - Traffic monitoring systems
 """
 
-import asyncio
 import os
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Dict, Any
 import logging
 
-from mcp_agent.agents.agent import Agent
 from srcs.core.agent.base import BaseAgent
-from srcs.core.errors import WorkflowError, APIError
+from srcs.core.errors import WorkflowError
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from .data_models import UrbanDataCategory, UrbanThreatLevel, UrbanAnalysisResult, UrbanActionPlan
@@ -57,20 +55,20 @@ class UrbanHiveMCPAgent(BaseAgent):
 
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+
             # Use MCP server to get urban data
             urban_data = await self._get_urban_data_via_mcp(category, location, time_range)
-            
+
             # Analyze data using Gemini
             analysis_result = await self._analyze_urban_data(
                 urban_data, category, location, timestamp
             )
-            
+
             # Generate action plan
             action_plan = await self._generate_action_plan(
                 analysis_result, location, timestamp
             )
-            
+
             # Save results
             report_path = await self._save_urban_analysis(
                 analysis_result, action_plan, timestamp
@@ -94,40 +92,40 @@ class UrbanHiveMCPAgent(BaseAgent):
                 name="urban_data_retriever",
                 instruction=f"Retrieve {category.value} data for {location} over the last {time_range}"
             )
-            
+
             # Map category to MCP resource
             resource_mapping = {
                 UrbanDataCategory.TRAFFIC_FLOW: "urban-data/traffic",
-                UrbanDataCategory.PUBLIC_SAFETY: "urban-data/safety", 
+                UrbanDataCategory.PUBLIC_SAFETY: "urban-data/safety",
                 UrbanDataCategory.ILLEGAL_DUMPING: "urban-data/illegal-dumping",
                 UrbanDataCategory.COMMUNITY_EVENTS: "community/groups",
                 UrbanDataCategory.URBAN_PLANNING: "urban-data/planning",
                 UrbanDataCategory.ENVIRONMENTAL: "urban-data/environmental",
                 UrbanDataCategory.REAL_ESTATE_TRENDS: "urban-data/real-estate"
             }
-            
+
             resource_uri = resource_mapping.get(category, "urban-data/general")
-            
+
             # Use MCP to get data
             data_response = await data_agent.generate_str(
                 message=f"Get data from MCP resource: {resource_uri} for location: {location}"
             )
-            
+
             # Parse the response (assuming it returns JSON)
             try:
                 return json.loads(data_response)
             except json.JSONDecodeError:
                 # If not JSON, return as text data
                 return {"raw_data": data_response, "location": location, "category": category.value}
-                
+
         except Exception as e:
             raise WorkflowError(f"Failed to retrieve urban data via MCP: {e}") from e
 
     async def _analyze_urban_data(
-        self, 
-        urban_data: Dict[str, Any], 
+        self,
+        urban_data: Dict[str, Any],
         category: UrbanDataCategory,
-        location: str, 
+        location: str,
         timestamp: str
     ) -> UrbanAnalysisResult:
         """
@@ -139,7 +137,7 @@ class UrbanHiveMCPAgent(BaseAgent):
                 name="urban_analyst",
                 instruction=f"Analyze {category.value} data for {location} and provide structured insights"
             )
-            
+
             analysis_prompt = f"""
 Analyze the following urban data for {location}:
 
@@ -159,7 +157,7 @@ Provide a structured analysis in JSON format:
 
 Focus on {self._get_category_analysis_focus(category)}.
 """
-            
+
             analysis_response = await analysis_agent.generate_str(
                 message=analysis_prompt,
                 request_params=RequestParams(
@@ -167,7 +165,7 @@ Focus on {self._get_category_analysis_focus(category)}.
                     temperature=self.llm_config.temperature
                 )
             )
-            
+
             # Parse analysis result
             try:
                 analysis_json = json.loads(analysis_response)
@@ -182,7 +180,7 @@ Focus on {self._get_category_analysis_focus(category)}.
                     "affected_areas": [location],
                     "predicted_trends": ["Continued monitoring needed"]
                 }
-            
+
             return UrbanAnalysisResult(
                 data_category=category,
                 threat_level=UrbanThreatLevel(analysis_json.get("threat_level", "moderate")),
@@ -196,7 +194,7 @@ Focus on {self._get_category_analysis_focus(category)}.
                 geographic_data={"location": location},
                 predicted_trends=analysis_json.get("predicted_trends", [])
             )
-            
+
         except Exception as e:
             raise WorkflowError(f"Urban data analysis failed: {e}") from e
 
@@ -214,9 +212,9 @@ Focus on {self._get_category_analysis_focus(category)}.
         return focus_map.get(category, "general urban conditions")
 
     async def _generate_action_plan(
-        self, 
-        analysis: UrbanAnalysisResult, 
-        location: str, 
+        self,
+        analysis: UrbanAnalysisResult,
+        location: str,
         timestamp: str
     ) -> UrbanActionPlan:
         """
@@ -228,7 +226,7 @@ Focus on {self._get_category_analysis_focus(category)}.
                 name="action_planner",
                 instruction=f"Create actionable plans for {location} based on urban analysis results"
             )
-            
+
             planning_prompt = f"""
 Based on the following urban analysis for {location}, create an action plan:
 
@@ -249,7 +247,7 @@ Create a structured action plan in JSON format:
     "stakeholders": ["stakeholder1", "stakeholder2"]
 }}
 """
-            
+
             plan_response = await planning_agent.generate_str(
                 message=planning_prompt,
                 request_params=RequestParams(
@@ -257,7 +255,7 @@ Create a structured action plan in JSON format:
                     temperature=self.llm_config.temperature
                 )
             )
-            
+
             # Parse plan result
             try:
                 plan_json = json.loads(plan_response)
@@ -272,7 +270,7 @@ Create a structured action plan in JSON format:
                     "implementation_timeline": {"Phase 1": "3 months"},
                     "stakeholders": ["City council", "Community groups"]
                 }
-            
+
             return UrbanActionPlan(
                 plan_id=f"plan_{timestamp}",
                 target_areas=analysis.affected_areas,
@@ -284,14 +282,14 @@ Create a structured action plan in JSON format:
                 implementation_timeline=plan_json.get("implementation_timeline", {}),
                 stakeholders=plan_json.get("stakeholders", [])
             )
-            
+
         except Exception as e:
             raise WorkflowError(f"Action plan generation failed: {e}") from e
 
     async def _save_urban_analysis(
-        self, 
-        analysis: UrbanAnalysisResult, 
-        action_plan: UrbanActionPlan, 
+        self,
+        analysis: UrbanAnalysisResult,
+        action_plan: UrbanActionPlan,
         timestamp: str
     ) -> str:
         """

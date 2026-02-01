@@ -9,15 +9,9 @@ import asyncio
 import os
 import sys
 from datetime import datetime
-import yaml
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from typing import Dict, List, Any
 
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent as MCP_Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
@@ -92,12 +86,12 @@ async def main():
             2. "{COMPANY_NAME} latest quarterly earnings"
             3. "{COMPANY_NAME} financial news"
             4. "{COMPANY_NAME} earnings expectations"
-            
+
             Extract the most relevant information about:
             - Current stock price and recent movement
             - Latest earnings report data
             - Any significant recent news with correct citations
-            
+
             Be smart and concise. Keep responses short and focused on facts.""",
             server_names=["g-search", "fetch"],
         )
@@ -106,20 +100,20 @@ async def main():
         research_evaluator = Agent(
             name="research_evaluator",
             instruction=f"""You are an expert research evaluator specializing in financial data quality.
-            
+
             Evaluate the research data on {COMPANY_NAME} based on these criteria:
-            
+
             1. Accuracy: Are facts properly cited with source URLs? Are numbers precise?
             2. Completeness: Is all required information present? (stock price, earnings data, recent news)
             3. Specificity: Are exact figures provided rather than generalizations?
             4. Clarity: Is the information organized and easy to understand?
-            
+
             For each criterion, provide a rating:
             - EXCELLENT: Exceeds requirements, highly reliable
             - GOOD: Meets all requirements, reliable
             - FAIR: Missing some elements but usable
             - POOR: Missing critical information, not usable
-            
+
             Provide an overall quality rating and specific feedback on what needs improvement.
             If any critical financial data is missing (stock price, earnings figures), the overall
             rating should not exceed FAIR.""",
@@ -158,7 +152,7 @@ async def main():
             - Current stock price and recent movement
             - Latest earnings results and performance vs expectations
             - 1-2 main strengths and concerns based on the data
-            
+
             Create a professional report with the following sections:
             1. Professional header with company name and current date
             2. Brief company description (1-2 sentences)
@@ -167,11 +161,11 @@ async def main():
             5. Recent news section with bullet points for relevant developments
             6. Brief outlook and recommendation section
             7. Sources and references section listing all cited sources
-            
+
             Format as clean markdown with appropriate headers and sections.
             Include exact figures with proper formatting (e.g., $XXX.XX, XX%).
             Keep under 800 words total.
-            
+
             Save the report to "{output_path}".""",
             server_names=["filesystem"],
         )
@@ -194,20 +188,20 @@ async def main():
         # Define the task for the orchestrator
         task = f"""Create a high-quality stock analysis report for {COMPANY_NAME} by following these steps:
 
-        1. Use the EvaluatorOptimizerLLM component (named 'research_quality_controller') to gather high-quality 
-           financial data about {COMPANY_NAME}. This component will automatically evaluate 
+        1. Use the EvaluatorOptimizerLLM component (named 'research_quality_controller') to gather high-quality
+           financial data about {COMPANY_NAME}. This component will automatically evaluate
            and improve the research until it reaches EXCELLENT quality.
-           
+
            Ask for:
            - Current stock price and recent movement
            - Latest quarterly earnings results and performance vs expectations
            - Recent news and developments
-        
+
         2. Use the financial_analyst to analyze this research data and identify key insights.
-        
+
         3. Use the report_writer to create a comprehensive stock report and save it to:
            "{output_path}"
-        
+
         The final report should be professional, fact-based, and include all relevant financial information."""
 
         # Run the orchestrator

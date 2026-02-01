@@ -2,6 +2,7 @@ from typing import Callable
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm import create_fallback_llm_factory
 
+
 def get_llm_factory() -> Callable[[], GoogleAugmentedLLM]:
     """
     Returns a factory function for creating instances of the GoogleAugmentedLLM.
@@ -11,4 +12,4 @@ def get_llm_factory() -> Callable[[], GoogleAugmentedLLM]:
     """
     return create_fallback_llm_factory(
         primary_model="gemini-2.5-flash-lite"
-    ) 
+    )

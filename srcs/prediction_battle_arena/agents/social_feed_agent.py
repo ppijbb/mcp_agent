@@ -2,9 +2,7 @@
 소셜 피드 에이전트
 """
 
-from typing import List, Dict, Any, Optional
 from mcp_agent.agents.agent import Agent as MCP_Agent
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 
 SOCIAL_FEED_AGENT_INSTRUCTION = """
@@ -33,7 +31,7 @@ def create_social_feed_agent(
 ) -> MCP_Agent:
     """
     소셜 피드 에이전트 생성
-    
+
     Args:
         llm_factory: LLM 팩토리 함수
     Returns:
@@ -45,6 +43,5 @@ def create_social_feed_agent(
         server_names=["filesystem"],
         llm_factory=llm_factory
     )
-    
-    return agent
 
+    return agent

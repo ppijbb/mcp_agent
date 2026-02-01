@@ -7,7 +7,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
 
@@ -47,7 +47,7 @@ class AgentMetadata:
     a2a_endpoint: Optional[str] = None  # A2A 통신 엔드포인트
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """딕셔너리로 변환"""
         return {
@@ -76,7 +76,7 @@ class AgentExecutionResult:
     execution_time: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """딕셔너리로 변환"""
         return {
@@ -91,32 +91,31 @@ class AgentExecutionResult:
 
 class BaseAgent(ABC):
     """모든 Agent의 기본 추상 클래스"""
-    
+
     def __init__(self, metadata: AgentMetadata):
         self.metadata = metadata
         self.status = AgentStatus.IDLE
         self.current_result: Optional[AgentExecutionResult] = None
-    
+
     @abstractmethod
     async def execute(self, input_data: Dict[str, Any]) -> AgentExecutionResult:
         """
         Agent 실행 (비동기)
-        
+
         Args:
             input_data: 입력 데이터
-            
+
         Returns:
             AgentExecutionResult: 실행 결과
         """
-        pass
-    
+
     def execute_sync(self, input_data: Dict[str, Any]) -> AgentExecutionResult:
         """
         Agent 실행 (동기)
-        
+
         Args:
             input_data: 입력 데이터
-            
+
         Returns:
             AgentExecutionResult: 실행 결과
         """
@@ -127,21 +126,19 @@ class BaseAgent(ABC):
             return result
         finally:
             loop.close()
-    
+
     @abstractmethod
     def get_capabilities(self) -> List[str]:
         """Agent의 능력 목록 반환"""
-        pass
-    
+
     @abstractmethod
     def validate_input(self, input_data: Dict[str, Any]) -> bool:
         """입력 데이터 검증"""
-        pass
-    
+
     def get_status(self) -> AgentStatus:
         """현재 상태 반환"""
         return self.status
-    
+
     def get_metadata(self) -> AgentMetadata:
         """메타데이터 반환"""
         return self.metadata
@@ -149,17 +146,17 @@ class BaseAgent(ABC):
 
 class AgentRunner:
     """Agent 실행을 위한 러너 클래스"""
-    
+
     def __init__(self, agent: BaseAgent):
         self.agent = agent
-    
+
     async def run(self, input_data: Dict[str, Any]) -> AgentExecutionResult:
         """
         Agent 실행
-        
+
         Args:
             input_data: 입력 데이터
-            
+
         Returns:
             AgentExecutionResult: 실행 결과
         """
@@ -169,10 +166,10 @@ class AgentRunner:
                 error="Invalid input data",
                 metadata={"agent_id": self.agent.metadata.agent_id}
             )
-        
+
         self.agent.status = AgentStatus.RUNNING
         start_time = datetime.now()
-        
+
         try:
             result = await self.agent.execute(input_data)
             self.agent.current_result = result
@@ -191,14 +188,14 @@ class AgentRunner:
             execution_time = (datetime.now() - start_time).total_seconds()
             if self.agent.current_result:
                 self.agent.current_result.execution_time = execution_time
-    
+
     def run_sync(self, input_data: Dict[str, Any]) -> AgentExecutionResult:
         """
         Agent 실행 (동기)
-        
+
         Args:
             input_data: 입력 데이터
-            
+
         Returns:
             AgentExecutionResult: 실행 결과
         """
@@ -208,4 +205,3 @@ class AgentRunner:
             return loop.run_until_complete(self.run(input_data))
         finally:
             loop.close()
-

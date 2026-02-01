@@ -2,7 +2,7 @@
 Research Agent - Basic research functionality with web search and analysis.
 
 This module provides a research agent that can search the web, analyze information,
-and generate comprehensive reports using various MCP tools including search, 
+and generate comprehensive reports using various MCP tools including search,
 filesystem, and Python interpreter capabilities.
 """
 
@@ -11,34 +11,31 @@ import time
 import os
 from pathlib import Path
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.mcp.mcp_connection_manager import MCPConnectionManager
 from mcp_agent.workflows.llm.augmented_llm_anthropic import AnthropicAugmentedLLM  # noqa: F401
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.logging.logger import LoggingConfig
 from rich import print
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.utils import setup_agent_app
 
 
 async def main(query: str) -> None:
     """
     Main entry point for the research agent.
-    
+
     Creates and runs a research agent that can search the web, analyze information,
     and generate comprehensive reports using MCP tools.
-    
+
     Args:
         query: Research query or topic to investigate
-        
+
     Returns:
         None
-        
+
     Raises:
         Exception: If agent initialization or execution fails
-        
+
     Example:
         await main("research about Eutelsat company")
     """
@@ -72,11 +69,11 @@ async def main(query: str) -> None:
             )
 
             research_prompt = """Produce an investment report for the company Eutelsat. The final report should be saved in the filesystem in markdown format, and
-                contain at least the following: 
+                contain at least the following:
                 1 - A brief description of the company
                 2 - Current financial position (find data, create and incorporate charts)
                 3 - A PESTLE analysis
-                4 - An investment thesis for the next 3 years. Include both 'buy side' and 'sell side' arguments, and a final 
+                4 - An investment thesis for the next 3 years. Include both 'buy side' and 'sell side' arguments, and a final
                 summary and recommendation.
                 Todays date is 05 February 2025. Include the main data sources consulted in presenting the report."""
 
@@ -108,4 +105,3 @@ if __name__ == "__main__":
         end = time.time()
         t = end - start
         print(f"Total run time: {t:.2f}s")
-        

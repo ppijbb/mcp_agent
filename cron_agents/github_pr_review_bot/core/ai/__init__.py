@@ -11,7 +11,7 @@ from .review_enhancer import ReviewEnhancer, review_enhancer
 
 __all__ = [
     "gemini_service",
-    "MCPIntegrationManager", 
+    "MCPIntegrationManager",
     "ReviewGenerator",
     "ReviewEnhancer",
     "review_enhancer"

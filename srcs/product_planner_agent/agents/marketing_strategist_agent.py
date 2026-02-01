@@ -9,13 +9,11 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from srcs.product_planner_agent.prompts import PROMPT
-from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class MarketingStrategistAgent(BaseAgent):
     """마케팅 전략 및 사용자 획득 전문 Agent"""
-    
+
     def __init__(self):
         super().__init__("marketing_strategist_agent")
 
@@ -46,7 +44,7 @@ class MarketingStrategistAgent(BaseAgent):
 
         Provide the output in a structured JSON format.
         """
-        
+
         try:
             result_str = await self.app.llm.generate_str(prompt, request_params=RequestParams(temperature=0.6, response_format={"type": "json_object"}))
             marketing_strategy = json.loads(result_str)
@@ -56,4 +54,4 @@ class MarketingStrategistAgent(BaseAgent):
         except json.JSONDecodeError as e:
             raise WorkflowError(f"Failed to decode LLM response: {e}") from e
         except Exception as e:
-            raise APIError(f"Failed to develop marketing strategy: {e}") from e 
+            raise APIError(f"Failed to develop marketing strategy: {e}") from e

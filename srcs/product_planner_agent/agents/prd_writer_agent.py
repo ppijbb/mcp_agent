@@ -3,7 +3,6 @@ PRD Writer Agent
 디자인 분석 결과를 바탕으로 전문적인 제품 요구사항 문서를 작성하는 Agent
 """
 
-import json
 from datetime import datetime
 from typing import Any, Dict
 
@@ -11,6 +10,7 @@ from srcs.product_planner_agent.agents.base_agent_simple import BaseAgentSimple 
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
 logger = get_product_planner_logger(__name__)
+
 
 class PRDWriterAgent(BaseAgent):
     """
@@ -26,14 +26,14 @@ class PRDWriterAgent(BaseAgent):
         Drafts the PRD using the product brief and feedback from the context.
         """
         logger.info("🖊️ Starting PRD generation workflow...")
-        
+
         # 컨텍스트에서 데이터 추출
         product_concept = context.get("product_concept", "제품")
         user_persona = context.get("user_persona", "사용자")
         figma_analysis = context.get("figma_analysis", {})
-        
+
         logger.info(f"Starting PRD draft for product: '{product_concept[:50]}...'")
-        
+
         # 간단한 PRD 템플릿 생성
         prd_data = {
             "product_name": f"{product_concept} 제품",
@@ -87,6 +87,6 @@ class PRDWriterAgent(BaseAgent):
             },
             "figma_analysis": figma_analysis
         }
-        
+
         logger.info("PRD 생성 완료")
-        return prd_data 
+        return prd_data

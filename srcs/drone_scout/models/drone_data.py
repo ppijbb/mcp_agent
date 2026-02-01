@@ -4,7 +4,7 @@ Drone Scout Data Models
 Pydantic-based data models for enterprise drone operations with comprehensive validation.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, field_validator
 from .task_types import (
@@ -21,7 +21,7 @@ class DronePosition(BaseModel):
     heading: Optional[float] = Field(None, ge=0, le=360, description="Heading in degrees")
     speed: Optional[float] = Field(None, ge=0, description="Speed in m/s")
     timestamp: datetime = Field(default_factory=datetime.now, description="Position timestamp")
-    
+
     @field_validator('altitude')
     @classmethod
     def validate_altitude(cls, v):
@@ -68,7 +68,7 @@ class WeatherData(BaseModel):
     condition: WeatherCondition = Field(..., description="Overall weather condition")
     flight_safe: bool = Field(True, description="Whether conditions are safe for flight")
     timestamp: datetime = Field(default_factory=datetime.now, description="Weather reading time")
-    
+
     @field_validator('flight_safe')
     @classmethod
     def check_flight_safety(cls, v, info):
@@ -89,26 +89,26 @@ class DroneTask(BaseModel):
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
     title: str = Field(..., description="Human-readable task title")
     description: str = Field(..., description="Detailed task description")
-    
+
     # Geographic area
     target_area: List[DronePosition] = Field(..., min_items=3, description="Polygon defining target area")
     max_altitude: float = Field(150.0, ge=0, le=400, description="Maximum allowed altitude")
     min_altitude: float = Field(10.0, ge=0, description="Minimum altitude for task")
-    
+
     # Task requirements
     required_sensors: List[SensorType] = Field(default_factory=list, description="Required sensors")
     estimated_duration: float = Field(..., gt=0, description="Estimated duration in minutes")
     max_duration: Optional[float] = Field(None, description="Maximum allowed duration")
-    
+
     # Environmental constraints
     weather_constraints: Dict[str, Any] = Field(default_factory=dict, description="Weather limitations")
     no_fly_zones: List[List[DronePosition]] = Field(default_factory=list, description="Prohibited areas")
-    
+
     # Scheduling
     scheduled_start: Optional[datetime] = Field(None, description="Scheduled start time")
     deadline: Optional[datetime] = Field(None, description="Task deadline")
     repeat_schedule: Optional[str] = Field(None, description="Cron-like repeat schedule")
-    
+
     # Progress tracking
     status: str = Field("pending", description="Current task status")
     progress: float = Field(0, ge=0, le=100, description="Task completion percentage")
@@ -116,17 +116,17 @@ class DroneTask(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now, description="Task creation time")
     started_at: Optional[datetime] = Field(None, description="Task start time")
     completed_at: Optional[datetime] = Field(None, description="Task completion time")
-    
+
     # Additional parameters
     custom_parameters: Dict[str, Any] = Field(default_factory=dict, description="Task-specific parameters")
-    
+
     @field_validator('target_area')
     @classmethod
     def validate_target_area(cls, v):
         if len(v) < 3:
             raise ValueError("Target area must have at least 3 points to form a polygon")
         return v
-    
+
     @field_validator('deadline')
     @classmethod
     def validate_deadline(cls, v, info):
@@ -142,34 +142,34 @@ class TaskResult(BaseModel):
     drone_id: str = Field(..., description="Executing drone identifier")
     completion_status: str = Field(..., description="Task completion status")
     completion_time: datetime = Field(default_factory=datetime.now, description="Task completion time")
-    
+
     # Execution summary
     actual_duration: float = Field(..., description="Actual execution time in minutes")
     area_covered: float = Field(0, description="Area covered in square meters")
     distance_traveled: float = Field(0, description="Total distance traveled in meters")
-    
+
     # Data collected
     sensor_data: List[SensorReading] = Field(default_factory=list, description="Collected sensor readings")
     images_captured: int = Field(0, description="Number of images captured")
     videos_recorded: int = Field(0, description="Number of videos recorded")
     data_points_collected: int = Field(0, description="Total data points collected")
-    
+
     # Analysis results
     findings: List[str] = Field(default_factory=list, description="Key findings from analysis")
     anomalies_detected: List[Dict[str, Any]] = Field(default_factory=list, description="Detected anomalies")
     recommendations: List[str] = Field(default_factory=list, description="Recommended actions")
     alerts_generated: List[str] = Field(default_factory=list, description="Alerts generated during task")
-    
+
     # Quality metrics
     data_quality_score: float = Field(0, ge=0, le=1, description="Overall data quality")
     coverage_percentage: float = Field(0, ge=0, le=100, description="Area coverage percentage")
     mission_success_rate: float = Field(0, ge=0, le=1, description="Mission success rate")
-    
+
     # Files and reports
     report_files: List[str] = Field(default_factory=list, description="Generated report file paths")
     raw_data_files: List[str] = Field(default_factory=list, description="Raw data file paths")
     processed_data_files: List[str] = Field(default_factory=list, description="Processed data file paths")
-    
+
     # Performance metrics
     battery_consumed: float = Field(0, ge=0, le=100, description="Battery percentage consumed")
     fuel_consumed: Optional[float] = Field(None, description="Fuel consumed (for gas drones)")
@@ -181,25 +181,25 @@ class RealTimeReport(BaseModel):
     task_id: str = Field(..., description="Associated task identifier")
     drone_id: str = Field(..., description="Executing drone identifier")
     timestamp: datetime = Field(default_factory=datetime.now, description="Report timestamp")
-    
+
     # Current status
     current_action: str = Field(..., description="Current action being performed")
     progress_percentage: float = Field(..., ge=0, le=100, description="Overall progress")
     estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
     time_remaining: Optional[float] = Field(None, description="Estimated time remaining in minutes")
-    
+
     # Live data
     current_position: DronePosition = Field(..., description="Current drone position")
     current_status: DroneStatus = Field(..., description="Current drone status")
     recent_findings: List[str] = Field(default_factory=list, description="Recent discoveries")
     alerts: List[str] = Field(default_factory=list, description="Current alerts or warnings")
-    
+
     # Performance metrics
     data_collected: int = Field(0, description="Number of data points collected so far")
     images_taken: int = Field(0, description="Number of images captured so far")
     area_covered_so_far: float = Field(0, description="Area covered so far in square meters")
     battery_remaining: float = Field(..., ge=0, le=100, description="Remaining battery percentage")
-    
+
     # Next actions
     next_waypoint: Optional[DronePosition] = Field(None, description="Next planned position")
     estimated_eta: Optional[float] = Field(None, description="ETA to next waypoint in minutes")
@@ -210,36 +210,36 @@ class DroneCapability(BaseModel):
     """Comprehensive drone capabilities and specifications"""
     drone_model: str = Field(..., description="Drone model name")
     manufacturer: str = Field(..., description="Drone manufacturer")
-    
+
     # Flight capabilities
     max_flight_time: float = Field(..., description="Maximum flight time in minutes")
     max_range: float = Field(..., description="Maximum range in meters")
     max_altitude: float = Field(..., description="Maximum altitude in meters")
     max_speed: float = Field(..., description="Maximum speed in m/s")
     cruise_speed: float = Field(..., description="Cruise speed in m/s")
-    
+
     # Physical specifications
     weight: float = Field(..., description="Drone weight in kg")
     payload_capacity: float = Field(..., description="Maximum payload in kg")
     dimensions: Dict[str, float] = Field(..., description="Drone dimensions (length, width, height)")
-    
+
     # Sensors and equipment
     available_sensors: List[SensorType] = Field(default_factory=list, description="Available sensors")
     camera_specs: Optional[Dict[str, Any]] = Field(None, description="Camera specifications")
-    
+
     # Environmental capabilities
     weather_resistance: Dict[str, Any] = Field(default_factory=dict, description="Weather resistance specs")
     operating_temperature: Dict[str, float] = Field(..., description="Operating temperature range")
     wind_resistance: float = Field(..., description="Maximum wind speed resistance in m/s")
-    
+
     # Advanced features
     autonomous_features: List[str] = Field(default_factory=list, description="Autonomous capabilities")
     safety_features: List[str] = Field(default_factory=list, description="Safety features")
-    
+
     # Connectivity
     communication_protocols: List[str] = Field(default_factory=list, description="Supported protocols")
     control_range: float = Field(..., description="Maximum control range in meters")
-    
+
     class Config:
         use_enum_values = True
 
@@ -270,6 +270,7 @@ class DroneFleet(BaseModel):
 
 from enum import Enum
 
+
 class AlertLevel(str, Enum):
     """Alert severity levels"""
     INFO = "info"
@@ -291,4 +292,4 @@ class DroneAlert(BaseModel):
     acknowledged: bool = Field(False, description="Whether alert has been acknowledged")
     resolved: bool = Field(False, description="Whether alert has been resolved")
     auto_resolve: bool = Field(False, description="Whether alert can auto-resolve")
-    actions_required: List[str] = Field(default_factory=list, description="Required actions") 
+    actions_required: List[str] = Field(default_factory=list, description="Required actions")

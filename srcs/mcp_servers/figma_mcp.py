@@ -8,12 +8,12 @@ It provides a structured context to agents, abstracting away the complexity of
 direct API calls.
 """
 import asyncio
-import os
 from typing import Dict, Any
-from mcp_agent.mcp import MCP, Server, tool
+from mcp_agent.mcp import Server, tool
 from mcp_agent.logging.logger import get_logger
 
 logger = get_logger("figma_mcp")
+
 
 class FigmaContextMCP:
     """
@@ -24,7 +24,7 @@ class FigmaContextMCP:
         self.server = Server("figma")
         # In a real scenario, this would be initialized with an API key
         # self.figma_client = figma.Client(os.environ.get("FIGMA_API_KEY"))
-        
+
         self.server.add_tool(self.analyze_design_system)
         self.server.add_tool(self.add_comment_to_node)
 
@@ -70,10 +70,11 @@ class FigmaContextMCP:
         logger.info(f"Starting Figma MCP Server on {host}:{port}")
         await self.server.run(host=host, port=port)
 
+
 async def main():
     """Main function to run the server."""
     server = FigmaContextMCP()
     await server.run()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

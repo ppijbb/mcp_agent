@@ -9,29 +9,27 @@ Connects to Korean public data APIs to fetch real urban data including:
 - Population demographics
 """
 
-import asyncio
-import os
 from datetime import datetime
 from typing import Dict, List, Optional
 import httpx
-import json
 from ..external_data_client import external_data_manager
 from ..config import config, get_api_config, get_cache_config
 from ..exceptions import ExternalDataUnavailableError
 
+
 class PublicDataClient:
     """Client for accessing Korean public data APIs."""
-    
+
     def __init__(self):
         """Initialize the public data client with API keys and endpoints."""
         api_config = get_api_config()
         cache_config = get_cache_config()
-        
+
         self.api_key = api_config.public_data_api_key
         self.endpoints = api_config.endpoints
         self.timeout = api_config.timeout_seconds
         self.max_retries = api_config.max_retries
-        
+
         # Cache for fetched district data
         self._districts_cache = None
         self._cache_timestamp = None
@@ -249,7 +247,7 @@ class PublicDataClient:
         try:
             # Use external data manager for district data
             districts = await external_data_manager.get_districts("seoul")
-            
+
             # Update local cache for backward compatibility
             if districts:
                 self._districts_cache = districts
@@ -257,20 +255,20 @@ class PublicDataClient:
                 return districts
             else:
                 raise ExternalDataUnavailableError("No districts returned from external sources")
-            
+
         except Exception as e:
             raise ExternalDataUnavailableError(
                 f"Error fetching districts from external sources: {e}"
             )
-    
+
     def _is_cache_valid(self) -> bool:
         """Check if cached district data is still valid."""
         if not self._districts_cache or not self._cache_timestamp:
             return False
-        
+
         current_time = datetime.now().timestamp()
         return (current_time - self._cache_timestamp) < self._cache_duration
-    
+
     async def _fetch_districts_from_apis(self) -> List[str]:
         """Fetch district data from multiple API sources."""
         # Try official Korean statistical geographic information service
@@ -280,7 +278,7 @@ class PublicDataClient:
                 return districts
         except Exception as e:
             print(f"SGIS API failed: {e}")
-        
+
         # Try Seoul Open Data API
         try:
             districts = await self._fetch_from_seoul_api()
@@ -288,7 +286,7 @@ class PublicDataClient:
                 return districts
         except Exception as e:
             print(f"Seoul API failed: {e}")
-        
+
         # Try administrative district API
         try:
             districts = await self._fetch_from_admin_api()
@@ -296,11 +294,11 @@ class PublicDataClient:
                 return districts
         except Exception as e:
             print(f"Admin API failed: {e}")
-        
+
         # If all APIs fail, return empty list
         print("All external APIs failed for districts")
         return []
-    
+
     async def _fetch_from_sgis_api(self) -> List[str]:
         """Fetch districts from Korean Statistical Geographic Information Service."""
         try:
@@ -310,23 +308,23 @@ class PublicDataClient:
                     "format": "json",
                     "sido_cd": config.urban_data.seoul_administrative_code,
                 }
-                
+
                 response = await client.get(self.endpoints["geographic_codes"], params=params)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if "result" in data and isinstance(data["result"], list):
                     districts = [item.get("addr_name") for item in data["result"] if item.get("addr_name")]
                     return list(set(districts))
                 return []
-                
+
         except httpx.HTTPStatusError as e:
             print(f"SGIS API HTTP error: {e.response.status_code} - {e.response.text}")
             return []
         except Exception as e:
             print(f"SGIS API error: {e}")
             return []
-    
+
     async def _fetch_from_seoul_api(self) -> List[str]:
         """Fetch districts from Seoul Open Data API."""
         try:
@@ -337,7 +335,7 @@ class PublicDataClient:
                 response = await client.get(self.endpoints["seoul_districts"])
                 response.raise_for_status()
                 data = response.json()
-                
+
                 # Find the list of items, usually in a "row" key.
                 for key, value in data.items():
                     if isinstance(value, dict) and "row" in value:
@@ -350,19 +348,19 @@ class PublicDataClient:
                                     districts.append(parts[1])
                             elif "SIGNGU_NM" in item:
                                 districts.append(item["SIGNGU_NM"])
-                        
+
                         if districts:
                             return list(set(districts))
 
                 return []
-                
+
         except httpx.HTTPStatusError as e:
             print(f"Seoul API HTTP error: {e.response.status_code} - {e.response.text}")
             return []
         except Exception as e:
             print(f"Seoul API error: {e}")
             return []
-    
+
     async def _fetch_from_admin_api(self) -> List[str]:
         """Fetch districts from administrative district API."""
         try:
@@ -378,28 +376,25 @@ class PublicDataClient:
                 response = await client.get(self.endpoints["admin_districts"], params=params)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if "response" in data and "body" in data["response"] and "items" in data["response"]["body"]:
                     items = data["response"]["body"]["items"]
                     if isinstance(items, dict) and "item" in items:
                         items = items["item"]
-                    
+
                     if isinstance(items, list):
                         districts = [item.get("signguNm") for item in items if item.get("signguNm")]
                         return list(set(districts))
 
                 return []
-                
+
         except httpx.HTTPStatusError as e:
             print(f"Admin API HTTP error: {e.response.status_code} - {e.response.text}")
             return []
         except Exception as e:
             print(f"Admin API error: {e}")
             return []
-    
-
-
 
 
 # Global instance
-public_data_client = PublicDataClient() 
+public_data_client = PublicDataClient()

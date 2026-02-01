@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import psutil
 from mcp.server import Server
@@ -17,7 +17,6 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolRequest,
     CallToolResult,
-    ListToolsRequest,
     ListToolsResult,
     Tool,
     TextContent,
@@ -27,9 +26,10 @@ from mcp.types import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("monitoring-scout")
 
+
 class SystemMonitor:
     """Real system monitoring using psutil"""
-    
+
     @staticmethod
     def get_cpu_info() -> Dict[str, Any]:
         """Get detailed CPU information"""
@@ -37,7 +37,7 @@ class SystemMonitor:
             cpu_percent = psutil.cpu_percent(interval=1, percpu=True)
             cpu_count = psutil.cpu_count()
             cpu_freq = psutil.cpu_freq()
-            
+
             return {
                 "cpu_percent_total": psutil.cpu_percent(interval=0.1),
                 "cpu_percent_per_core": cpu_percent,
@@ -53,14 +53,14 @@ class SystemMonitor:
         except Exception as e:
             logger.error(f"Error getting CPU info: {e}")
             return {"error": str(e)}
-    
+
     @staticmethod
     def get_memory_info() -> Dict[str, Any]:
         """Get detailed memory information"""
         try:
             virtual_mem = psutil.virtual_memory()
             swap_mem = psutil.swap_memory()
-            
+
             return {
                 "virtual_memory": {
                     "total": virtual_mem.total,
@@ -84,14 +84,14 @@ class SystemMonitor:
         except Exception as e:
             logger.error(f"Error getting memory info: {e}")
             return {"error": str(e)}
-    
+
     @staticmethod
     def get_disk_info() -> Dict[str, Any]:
         """Get disk usage information"""
         try:
             disk_usage = {}
             disk_partitions = psutil.disk_partitions()
-            
+
             for partition in disk_partitions:
                 try:
                     usage = psutil.disk_usage(partition.mountpoint)
@@ -109,24 +109,24 @@ class SystemMonitor:
                 except PermissionError:
                     # Skip partitions we can't access
                     continue
-            
+
             return {"disk_partitions": disk_usage}
         except Exception as e:
             logger.error(f"Error getting disk info: {e}")
             return {"error": str(e)}
-    
+
     @staticmethod
     def get_network_info() -> Dict[str, Any]:
         """Get network interface information"""
         try:
             net_io = psutil.net_io_counters(pernic=True)
             net_connections = len(psutil.net_connections())
-            
+
             network_info = {
                 "total_connections": net_connections,
                 "interfaces": {}
             }
-            
+
             for interface, stats in net_io.items():
                 network_info["interfaces"][interface] = {
                     "bytes_sent": stats.bytes_sent,
@@ -138,12 +138,12 @@ class SystemMonitor:
                     "dropin": stats.dropin,
                     "dropout": stats.dropout,
                 }
-            
+
             return network_info
         except Exception as e:
             logger.error(f"Error getting network info: {e}")
             return {"error": str(e)}
-    
+
     @staticmethod
     def get_top_processes(limit: int = 10) -> List[Dict[str, Any]]:
         """Get top processes by CPU and memory usage"""
@@ -157,12 +157,12 @@ class SystemMonitor:
                     processes.append(proc_info)
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
-            
+
             # Sort by CPU usage
             processes_by_cpu = sorted(processes, key=lambda x: x['cpu_percent'] or 0, reverse=True)[:limit]
             # Sort by memory usage
             processes_by_memory = sorted(processes, key=lambda x: x['memory_percent'] or 0, reverse=True)[:limit]
-            
+
             return {
                 "top_by_cpu": processes_by_cpu,
                 "top_by_memory": processes_by_memory,
@@ -171,7 +171,7 @@ class SystemMonitor:
         except Exception as e:
             logger.error(f"Error getting process info: {e}")
             return {"error": str(e)}
-    
+
     @staticmethod
     def get_system_info() -> Dict[str, Any]:
         """Get general system information"""
@@ -182,15 +182,17 @@ class SystemMonitor:
                 "platform": psutil.os.name,
                 "boot_time": boot_time.isoformat(),
                 "uptime_seconds": (datetime.now() - boot_time).total_seconds(),
-                "users": [{"name": user.name, "terminal": user.terminal, "host": user.host} 
+                "users": [{"name": user.name, "terminal": user.terminal, "host": user.host}
                          for user in psutil.users()],
             }
         except Exception as e:
             logger.error(f"Error getting system info: {e}")
             return {"error": str(e)}
 
+
 # Initialize the MCP server
 server = Server("monitoring-scout")
+
 
 @server.list_tools()
 async def handle_list_tools() -> ListToolsResult:
@@ -237,42 +239,43 @@ async def handle_list_tools() -> ListToolsResult:
         ]
     )
 
+
 @server.call_tool()
 async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
     """Handle tool calls"""
     try:
         monitor = SystemMonitor()
-        
+
         if request.name == "get_system_snapshot":
             # Get comprehensive system snapshot
             args = request.arguments or {}
             include_processes = args.get("include_processes", True)
             process_limit = args.get("process_limit", 10)
-            
+
             snapshot = {
                 "timestamp": datetime.now().isoformat(),
                 "cpu": monitor.get_cpu_info(),
                 "memory": monitor.get_memory_info(),
             }
-            
+
             if include_processes:
                 snapshot["processes"] = monitor.get_top_processes(process_limit)
-            
+
             return CallToolResult(
                 content=[TextContent(
                     type="text",
                     text=f"System Snapshot:\n{json.dumps(snapshot, indent=2)}"
                 )]
             )
-        
+
         elif request.name == "diagnose_high_cpu":
             args = request.arguments or {}
             threshold = args.get("threshold", 80.0)
-            
+
             # Get current CPU usage
             cpu_info = monitor.get_cpu_info()
             processes = monitor.get_top_processes(15)
-            
+
             diagnosis = {
                 "timestamp": datetime.now().isoformat(),
                 "threshold": threshold,
@@ -282,7 +285,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 "top_cpu_processes": processes.get("top_by_cpu", [])[:5],
                 "recommendations": []
             }
-            
+
             # Generate recommendations
             if diagnosis["is_high_cpu"]:
                 top_process = processes.get("top_by_cpu", [{}])[0] if processes.get("top_by_cpu") else {}
@@ -292,7 +295,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                         f"(PID: {top_process.get('pid', 'unknown')}) using "
                         f"{top_process.get('cpu_percent', 0):.1f}% CPU"
                     )
-                
+
                 diagnosis["recommendations"].extend([
                     "Consider investigating the top CPU-consuming processes",
                     "Check for runaway processes or infinite loops",
@@ -301,14 +304,14 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 ])
             else:
                 diagnosis["recommendations"].append("CPU usage is within normal range")
-            
+
             return CallToolResult(
                 content=[TextContent(
                     type="text",
                     text=f"CPU Diagnosis:\n{json.dumps(diagnosis, indent=2)}"
                 )]
             )
-        
+
         else:
             return CallToolResult(
                 content=[TextContent(
@@ -317,7 +320,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 )],
                 isError=True
             )
-    
+
     except Exception as e:
         logger.error(f"Error in tool call {request.name}: {e}")
         return CallToolResult(
@@ -328,10 +331,11 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
             isError=True
         )
 
+
 async def main():
     """Run the monitoring scout MCP server"""
     logger.info("Starting Monitoring Scout MCP Server...")
-    
+
     # Run the server using stdio transport
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
@@ -348,4 +352,4 @@ async def main():
         )
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

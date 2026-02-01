@@ -8,7 +8,6 @@ import asyncio
 import logging
 import contextvars
 from typing import Dict, Any, List, Optional, Callable
-from datetime import datetime
 
 from srcs.common.a2a_integration import (
     A2AAdapter,
@@ -17,7 +16,7 @@ from srcs.common.a2a_integration import (
     get_global_broker,
     get_global_registry,
 )
-from srcs.common.agent_interface import AgentMetadata, AgentType
+from srcs.common.agent_interface import AgentType
 
 logger = logging.getLogger(__name__)
 
@@ -27,26 +26,26 @@ current_correlation_id = contextvars.ContextVar("current_correlation_id", defaul
 
 class A2ALogHandler(logging.Handler):
     """로그 메시지를 A2A 알림 메시지로 변환하는 핸들러"""
-    
+
     def __init__(self, adapter: "A2AAdapter", correlation_id: Optional[str] = None):
         super().__init__()
         self.adapter = adapter
         self.correlation_id = correlation_id
         # 무한 루프 방지를 위해 자기 자신의 로거는 제외
         self.ignored_loggers = [__name__, "srcs.common.a2a_integration", "srcs.common.a2a_adapter"]
-    
+
     def emit(self, record):
         if record.name in self.ignored_loggers:
             return
-            
+
         # ContextVar에서 현재 correlation_id 확인
         ctx_id = current_correlation_id.get()
-        
+
         # 만약 핸들러에 지정된 correlation_id가 있고, 현재 컨텍스트와 일치하지 않으면 무시
         # (멀티테넌시/세션 분리 지원)
         if self.correlation_id and ctx_id and self.correlation_id != ctx_id:
             return
-            
+
         try:
             msg = self.format(record)
             # 비동기 루프 내에서 실행되는지 확인하고 메시지 전송
@@ -55,7 +54,7 @@ class A2ALogHandler(logging.Handler):
                 if loop.is_running():
                     # 비동기적으로 메시지 전송
                     asyncio.create_task(self.adapter.send_message(
-                        target_agent="", # 브로드캐스트
+                        target_agent="",  # 브로드캐스트
                         message_type="notification",
                         payload={
                             "type": "log",
@@ -74,7 +73,7 @@ class A2ALogHandler(logging.Handler):
 
 class CommonAgentA2AWrapper(A2AAdapter):
     """MCP/기본 Agent용 A2A Wrapper"""
-    
+
     def __init__(
         self,
         agent_id: str,
@@ -84,7 +83,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
     ):
         """
         초기화
-        
+
         Args:
             agent_id: Agent ID
             agent_metadata: Agent 메타데이터
@@ -95,7 +94,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
         self.agent_instance = agent_instance
         self.execute_function = execute_function
         self._message_processor_task: Optional[asyncio.Task] = None
-    
+
     async def send_message(
         self,
         target_agent: str,
@@ -113,10 +112,10 @@ class CommonAgentA2AWrapper(A2AAdapter):
             priority=priority,
             correlation_id=correlation_id,
         )
-        
+
         broker = get_global_broker()
         return await broker.route_message(message)
-    
+
     async def start_listener(self) -> None:
         """메시지 리스너 시작"""
         if self.is_listening:
@@ -129,21 +128,21 @@ class CommonAgentA2AWrapper(A2AAdapter):
                 # Task가 완료되었거나 없으면 재시작
                 logger.info(f"Restarting listener for agent {self.agent_id}")
                 self.is_listening = False
-        
+
         # Queue를 먼저 생성하여 현재 event loop에 바인딩
         self._ensure_queue()
-        
+
         self.is_listening = True
         self._message_processor_task = asyncio.create_task(self._process_messages())
         logger.info(f"Message listener started for agent {self.agent_id}, task: {self._message_processor_task}")
-    
+
     async def stop_listener(self) -> None:
         """메시지 리스너 중지 - 안전하게 처리"""
         if not self.is_listening:
             return
-        
+
         self.is_listening = False
-        
+
         # Queue에 종료 신호를 보내서 루프를 빠르게 종료
         try:
             queue = self._ensure_queue()
@@ -154,7 +153,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
                 pass  # Queue가 이미 닫혀있을 수 있음
         except Exception:
             pass  # Queue 생성 실패 무시
-        
+
         if self._message_processor_task:
             try:
                 # Task가 완료되지 않았고 취소되지 않았을 때만 취소
@@ -189,9 +188,9 @@ class CommonAgentA2AWrapper(A2AAdapter):
                 except Exception:
                     pass
                 self._message_processor_task = None
-        
+
         logger.debug(f"Message listener stopped for agent {self.agent_id}")
-    
+
     async def _process_messages(self) -> None:
         """메시지 처리 루프 - event loop가 닫혀있을 때 안전하게 처리"""
         try:
@@ -207,7 +206,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
                         # Event loop가 없는 경우
                         logger.debug(f"No event loop, stopping listener for {self.agent_id}")
                         break
-                    
+
                     queue = self._ensure_queue()
                     queue_size = queue.qsize()
                     if queue_size > 0:
@@ -222,12 +221,12 @@ class CommonAgentA2AWrapper(A2AAdapter):
                         logger.error(f"Error getting message from queue for agent {self.agent_id}: {e}", exc_info=True)
                         await asyncio.sleep(0.1)  # 에러 발생 시 잠시 대기
                         continue
-                    
+
                     # None은 종료 신호
                     if message is None:
                         logger.debug(f"Received stop signal for agent {self.agent_id}")
                         break
-                    
+
                     logger.info(f"✅ Agent {self.agent_id} received message: {message.message_type} (id: {message.message_id})")
                     try:
                         result = await self.handle_message(message)
@@ -260,7 +259,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
             # 정리 작업
             self.is_listening = False
             logger.debug(f"Message processor stopped for {self.agent_id}")
-    
+
     async def register_capabilities(self, capabilities: List[str]) -> None:
         """Agent 능력 등록"""
         self.agent_metadata["capabilities"] = capabilities
@@ -272,7 +271,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
             a2a_adapter=self,
         )
         logger.info(f"Capabilities registered for agent {self.agent_id}: {capabilities}")
-    
+
     async def execute_with_a2a(
         self,
         input_data: Dict[str, Any],
@@ -280,11 +279,11 @@ class CommonAgentA2AWrapper(A2AAdapter):
     ) -> Dict[str, Any]:
         """
         A2A 지원 실행
-        
+
         Args:
             input_data: 입력 데이터
             request_help: 다른 agent의 도움이 필요한지 여부
-            
+
         Returns:
             실행 결과
         """
@@ -300,7 +299,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
                 payload=help_message,
                 priority=MessagePriority.HIGH.value,
             )
-        
+
         # Agent 실행
         if self.agent_instance:
             if hasattr(self.agent_instance, "execute"):
@@ -322,9 +321,9 @@ class CommonAgentA2AWrapper(A2AAdapter):
                 result = self.execute_function(input_data)
         else:
             raise ValueError(f"No execution method available for agent {self.agent_id}")
-        
+
         return result
-    
+
     def serialize_state(self) -> Dict[str, Any]:
         """상태 직렬화"""
         return {
@@ -333,4 +332,3 @@ class CommonAgentA2AWrapper(A2AAdapter):
             "is_listening": self.is_listening,
             "message_queue_size": self._message_queue.qsize(),
         }
-

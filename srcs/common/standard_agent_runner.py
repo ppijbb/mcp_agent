@@ -39,7 +39,6 @@ except Exception:
 
 import asyncio
 import logging
-import subprocess
 import json
 import os
 import sys
@@ -49,10 +48,7 @@ from datetime import datetime
 
 from srcs.common.agent_interface import (
     AgentType,
-    AgentMetadata,
     AgentExecutionResult,
-    AgentRunner,
-    BaseAgent,
 )
 from srcs.common.a2a_integration import get_global_registry
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
@@ -66,10 +62,10 @@ logger = logging.getLogger(__name__)
 def _normalize_agent_type(agent_type: Any) -> str:
     """
     Agent 타입을 문자열로 정규화
-    
+
     Args:
         agent_type: AgentType enum 또는 문자열
-        
+
     Returns:
         정규화된 agent 타입 문자열
     """
@@ -108,11 +104,11 @@ def _normalize_agent_type(agent_type: Any) -> str:
 
 class StandardAgentRunner:
     """표준 Agent 실행 시스템"""
-    
+
     def __init__(self):
         self.registry = get_global_registry()
         self._agent_cache: Dict[str, Any] = {}
-    
+
     async def run_agent(
         self,
         agent_id: str,
@@ -121,12 +117,12 @@ class StandardAgentRunner:
     ) -> AgentExecutionResult:
         """
         Agent 실행
-        
+
         Args:
             agent_id: Agent ID
             input_data: 입력 데이터
             use_a2a: A2A 연결 사용 여부
-            
+
         Returns:
             AgentExecutionResult: 실행 결과
         """
@@ -141,7 +137,7 @@ class StandardAgentRunner:
                     error=error_msg,
                     metadata={"agent_id": agent_id, "step": "registry_lookup"}
                 )
-            
+
             logger.info(f"Found agent in registry: {agent_id}, type: {agent_info.get('agent_type')}")
             logger.debug(f"Full agent_info: {agent_info}")
         except Exception as e:
@@ -152,11 +148,11 @@ class StandardAgentRunner:
                 error=error_msg,
                 metadata={"agent_id": agent_id, "step": "registry_lookup", "exception": str(e)}
             )
-        
+
         # Agent 타입 정규화 - 레지스트리의 최상위 레벨에서 가져오기
         raw_agent_type = agent_info.get("agent_type")
         agent_type = _normalize_agent_type(raw_agent_type)
-        
+
         # metadata도 정규화 (metadata 안에 agent_type이 enum 객체로 있을 수 있음)
         metadata = agent_info.get("metadata", {})
         if metadata and "agent_type" in metadata:
@@ -164,9 +160,9 @@ class StandardAgentRunner:
             if isinstance(metadata_agent_type, AgentType):
                 metadata["agent_type"] = metadata_agent_type.value
                 logger.debug(f"Normalized agent_type in metadata: {metadata['agent_type']}")
-        
+
         logger.info(f"Running agent {agent_id} with type {agent_type} (normalized from {raw_agent_type})")
-        
+
         # Agent 타입에 따라 실행
         try:
             if agent_type == AgentType.MCP_AGENT.value:
@@ -202,7 +198,7 @@ class StandardAgentRunner:
                 error=error_msg,
                 metadata={"agent_id": agent_id, "agent_type": agent_type, "step": "agent_execution", "exception": str(e)}
             )
-    
+
     async def _run_mcp_agent(
         self,
         agent_id: str,
@@ -212,7 +208,7 @@ class StandardAgentRunner:
     ) -> AgentExecutionResult:
         """MCP Agent 실행"""
         start_time = datetime.now()
-        
+
         try:
             entry_point = metadata.get("entry_point")
             if not entry_point:
@@ -221,14 +217,14 @@ class StandardAgentRunner:
                     error=f"No entry point specified for agent {agent_id}",
                     metadata={"agent_id": agent_id}
                 )
-            
+
             # A2A 래퍼 생성 및 등록
             wrapper = None
             if use_a2a:
                 wrapper = CommonAgentA2AWrapper(agent_id, metadata)
                 await wrapper.start_listener()
                 await wrapper.register_capabilities(metadata.get("capabilities", []))
-                
+
                 # A2A 메시지 핸들러 등록
                 runner_instance = self  # self를 클로저에 저장
                 async def handle_task_request(message: A2AMessage) -> Optional[Dict[str, Any]]:
@@ -236,23 +232,23 @@ class StandardAgentRunner:
                     logger.info(f"Agent {agent_id} received task request: {message.message_id}")
                     task_data = message.payload.get("task_data", {})
                     task_start_time = datetime.now()
-                    
+
                     # 실행 방식 결정
                     execution_method = task_data.get("_execution_method")
-                    
+
                     # class-based agent인지 확인 (module_path, class_name, method_name이 있는 경우)
                     is_class_based = "module_path" in task_data and "class_name" in task_data
-                    
+
                     # Agent 실행
                     from srcs.common.a2a_adapter import A2ALogHandler, current_correlation_id
                     log_handler = A2ALogHandler(wrapper, correlation_id=message.correlation_id)
                     log_handler.setLevel(logging.INFO)
                     root_logger = logging.getLogger()
                     root_logger.addHandler(log_handler)
-                    
+
                     # ContextVar 설정
                     token = current_correlation_id.set(message.correlation_id)
-                    
+
                     try:
                         if is_class_based:
                             # class-based agent는 _run_module_agent 사용
@@ -261,7 +257,7 @@ class StandardAgentRunner:
                             exec_result = await runner_instance._run_cli_agent(entry_point, task_data)
                         else:
                             exec_result = await runner_instance._run_module_agent(entry_point, task_data)
-                        
+
                         execution_time = (datetime.now() - task_start_time).total_seconds()
                         exec_result.execution_time = execution_time
                     except Exception as e:
@@ -277,7 +273,7 @@ class StandardAgentRunner:
                     finally:
                         root_logger.removeHandler(log_handler)
                         current_correlation_id.reset(token)
-                    
+
                     # 결과를 A2A 메시지로 전송
                     response_payload = {
                         "success": exec_result.success,
@@ -287,7 +283,7 @@ class StandardAgentRunner:
                         "metadata": exec_result.metadata,
                         "timestamp": exec_result.timestamp.isoformat(),
                     }
-                    
+
                     await wrapper.send_message(
                         target_agent=message.source_agent,
                         message_type="task_response",
@@ -295,12 +291,12 @@ class StandardAgentRunner:
                         correlation_id=message.correlation_id,  # 원래 요청의 correlation_id 사용
                         priority=MessagePriority.HIGH.value
                     )
-                    
+
                     logger.info(f"Agent {agent_id} sent task response: {message.message_id}")
                     return response_payload
-                
+
                 wrapper.register_handler("task_request", handle_task_request)
-                
+
                 # 레지스트리에 wrapper 등록 (이미 등록되어 있으면 업데이트)
                 agent_info = await self.registry.get_agent(agent_id)
                 if agent_info:
@@ -310,15 +306,15 @@ class StandardAgentRunner:
                         metadata=metadata,
                         a2a_adapter=wrapper
                     )
-            
+
             # A2A를 통한 실행인 경우, 메시지로 요청 전송하고 응답 대기
             if use_a2a and wrapper:
                 from srcs.common.a2a_integration import get_global_broker, A2AMessage, MessagePriority
                 import uuid
-                
+
                 # Streamlit UI agent ID (요청자)
                 source_agent_id = input_data.get("_source_agent_id", "streamlit_ui")
-                
+
                 # task_request 메시지 생성
                 correlation_id = str(uuid.uuid4())
                 request_message = A2AMessage(
@@ -332,22 +328,22 @@ class StandardAgentRunner:
                     correlation_id=correlation_id,
                     priority=MessagePriority.HIGH.value
                 )
-                
+
                 # 메시지 전송
                 broker = get_global_broker()
                 await broker.route_message(request_message)
-                
+
                 # 응답 대기 (최대 5분)
                 response_received = False
                 response_data = None
                 timeout = 300  # 5분
                 check_interval = 0.5  # 0.5초마다 확인
                 elapsed = 0
-                
+
                 while not response_received and elapsed < timeout:
                     await asyncio.sleep(check_interval)
                     elapsed += check_interval
-                    
+
                     # 메시지 큐에서 응답 확인
                     try:
                         message = await asyncio.wait_for(wrapper._message_queue.get(), timeout=0.1)
@@ -356,7 +352,7 @@ class StandardAgentRunner:
                             response_received = True
                     except asyncio.TimeoutError:
                         continue
-                
+
                 if not response_received:
                     return AgentExecutionResult(
                         success=False,
@@ -364,7 +360,7 @@ class StandardAgentRunner:
                         execution_time=(datetime.now() - start_time).total_seconds(),
                         metadata={"agent_id": agent_id, "correlation_id": correlation_id}
                     )
-                
+
                 # 응답 데이터를 AgentExecutionResult로 변환
                 return AgentExecutionResult(
                     success=response_data.get("success", False),
@@ -374,14 +370,14 @@ class StandardAgentRunner:
                     metadata=response_data.get("metadata", {}),
                     timestamp=datetime.fromisoformat(response_data.get("timestamp", datetime.now().isoformat()))
                 )
-            
+
             # A2A를 사용하지 않는 경우 직접 실행
             # 실행 방식 결정
             execution_method = input_data.get("_execution_method")
-            
+
             # class-based agent인지 확인 (module_path, class_name, method_name이 있는 경우)
             is_class_based = "module_path" in input_data and "class_name" in input_data
-            
+
             if is_class_based:
                 # class-based agent는 _run_module_agent 사용
                 result = await self._run_module_agent(entry_point, input_data)
@@ -389,12 +385,12 @@ class StandardAgentRunner:
                 result = await self._run_cli_agent(entry_point, input_data)
             else:
                 result = await self._run_module_agent(entry_point, input_data)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
             result.execution_time = execution_time
-            
+
             return result
-            
+
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"Error running MCP agent {agent_id}: {e}", exc_info=True)
@@ -404,7 +400,7 @@ class StandardAgentRunner:
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id}
             )
-    
+
     async def _run_langgraph_agent(
         self,
         agent_id: str,
@@ -414,7 +410,7 @@ class StandardAgentRunner:
     ) -> AgentExecutionResult:
         """LangGraph Agent 실행"""
         start_time = datetime.now()
-        
+
         try:
             entry_point = metadata.get("entry_point")
             if not entry_point:
@@ -423,7 +419,7 @@ class StandardAgentRunner:
                     error=f"No entry point specified for agent {agent_id}",
                     metadata={"agent_id": agent_id}
                 )
-            
+
             # LangGraph app 로드
             graph_app = await self._load_langgraph_app(entry_point)
             if not graph_app:
@@ -432,25 +428,25 @@ class StandardAgentRunner:
                     error=f"Failed to load LangGraph app for agent {agent_id}",
                     metadata={"agent_id": agent_id}
                 )
-            
+
             # 실행
             wrapper = LangGraphAgentA2AWrapper(agent_id, metadata, graph_app=graph_app)
-            
+
             if use_a2a:
                 await wrapper.start_listener()
                 await wrapper.register_capabilities(metadata.get("capabilities", []))
-            
+
             result_data = await wrapper.execute_graph(input_data, stream=False)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             return AgentExecutionResult(
                 success=True,
                 data=result_data if isinstance(result_data, dict) else {"result": result_data},
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id, "agent_type": "langgraph"}
             )
-            
+
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"Error running LangGraph agent {agent_id}: {e}")
@@ -460,7 +456,7 @@ class StandardAgentRunner:
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id}
             )
-    
+
     async def _run_cron_agent(
         self,
         agent_id: str,
@@ -470,32 +466,32 @@ class StandardAgentRunner:
     ) -> AgentExecutionResult:
         """Cron Agent 실행"""
         start_time = datetime.now()
-        
+
         try:
             cron_schedule = metadata.get("cron_schedule", "")
             entry_point = metadata.get("entry_point")
-            
+
             wrapper = CronAgentA2AWrapper(
                 agent_id,
                 metadata,
                 cron_schedule=cron_schedule,
                 execute_function=None  # 실제 함수는 entry_point에서 로드
             )
-            
+
             if use_a2a:
                 await wrapper.start_listener()
                 await wrapper.register_capabilities(metadata.get("capabilities", []))
-            
+
             # Cron agent는 일반적으로 스케줄에 의해 실행되므로 즉시 실행은 선택적
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             return AgentExecutionResult(
                 success=True,
                 data={"message": "Cron agent scheduled", "schedule": cron_schedule},
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id, "agent_type": "cron"}
             )
-            
+
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"Error running Cron agent {agent_id}: {e}")
@@ -505,7 +501,7 @@ class StandardAgentRunner:
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id}
             )
-    
+
     async def _run_sparkleforge_agent(
         self,
         agent_id: str,
@@ -515,35 +511,35 @@ class StandardAgentRunner:
     ) -> AgentExecutionResult:
         """SparkleForge Agent 실행"""
         start_time = datetime.now()
-        
+
         try:
             # SparkleForge orchestrator 로드
             from sparkleforge.src.core.agent_orchestrator import AgentOrchestrator
             from sparkleforge.src.core.researcher_config import load_config_from_env
-            
+
             config = load_config_from_env()
             orchestrator = AgentOrchestrator(config=config)
-            
+
             wrapper = SparkleForgeA2AWrapper(agent_id, metadata, orchestrator=orchestrator)
-            
+
             if use_a2a:
                 await wrapper.start_listener()
                 await wrapper.register_capabilities(metadata.get("capabilities", []))
-            
+
             query = input_data.get("query", input_data.get("task", ""))
             context = input_data.get("context", {})
-            
+
             result_data = await wrapper.execute_research(query, context)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             return AgentExecutionResult(
                 success=True,
                 data=result_data if isinstance(result_data, dict) else {"result": result_data},
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id, "agent_type": "sparkleforge"}
             )
-            
+
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"Error running SparkleForge agent {agent_id}: {e}")
@@ -553,7 +549,7 @@ class StandardAgentRunner:
                 execution_time=execution_time,
                 metadata={"agent_id": agent_id}
             )
-    
+
     async def _run_cli_agent(
         self,
         entry_point: str,
@@ -564,9 +560,9 @@ class StandardAgentRunner:
             # input_data에서 CLI 인자 추출
             # input_data에 직접 CLI 인자가 있는 경우 (예: {"input_json_path": "...", "result_json_path": "..."})
             # 또는 표준 형식 (예: {"_cli_args": ["--arg1", "value1", ...]})
-            
+
             cli_args = input_data.get("_cli_args", [])
-            
+
             # 표준 인자가 없는 경우, input_data를 CLI 인자로 변환
             if not cli_args:
                 # 일반적인 패턴: input_json_path, result_json_path 등
@@ -583,14 +579,14 @@ class StandardAgentRunner:
                     else:
                         args.extend([f"--{key.replace('_', '-')}", str(value)])
                 cli_args = args
-            
+
             # 사용할 Python 인터프리터 결정
             python_exe = sys.executable
             # mcp_agent_env가 있으면 사용 (허브가 다른 환경에서 실행될 경우 대비)
             env_python = "/home/user/miniconda3/envs/mcp_agent_env/bin/python"
             if os.path.exists(env_python):
                 python_exe = env_python
-            
+
             # 명령어 구성
             if entry_point.startswith("python -m"):
                 command = [python_exe] + entry_point.split()[1:] + cli_args
@@ -599,9 +595,9 @@ class StandardAgentRunner:
             else:
                 # 모듈 경로인 경우 python -m으로 실행
                 command = [python_exe, "-m", entry_point] + cli_args
-            
+
             logger.info(f"Executing CLI command: {' '.join(command)}")
-            
+
             # 실행
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -609,9 +605,9 @@ class StandardAgentRunner:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=Path(__file__).parent.parent.parent
             )
-            
+
             stdout, stderr = await process.communicate()
-            
+
             if process.returncode == 0:
                 # 결과 파일 경로가 있으면 파일에서 읽기
                 result_json_path = input_data.get("result_json_path")
@@ -625,7 +621,7 @@ class StandardAgentRunner:
                         result_data = {"output": stdout.decode()}
                 else:
                     result_data = {"success": True, "message": "Agent executed successfully"}
-                
+
                 return AgentExecutionResult(
                     success=True,
                     data=result_data
@@ -637,14 +633,14 @@ class StandardAgentRunner:
                     success=False,
                     error=error_msg
                 )
-                
+
         except Exception as e:
             logger.error(f"Error in _run_cli_agent: {e}", exc_info=True)
             return AgentExecutionResult(
                 success=False,
                 error=str(e)
             )
-    
+
     async def _run_module_agent(
         self,
         entry_point: str,
@@ -653,13 +649,13 @@ class StandardAgentRunner:
         """모듈 import 방식 Agent 실행"""
         try:
             import importlib
-            
+
             # input_data에 module_path, class_name, method_name이 있는 경우 (복잡한 구조)
             if "module_path" in input_data and "class_name" in input_data:
                 module_path = input_data["module_path"]
                 class_name = input_data["class_name"]
                 method_name = input_data.get("method_name", "main")
-                
+
                 # class_name이 None이거나 빈 문자열이면 함수 호출 방식으로 처리
                 # 더 엄격한 체크: None, 빈 문자열, "None" 문자열 모두 처리
                 if class_name is None:
@@ -672,39 +668,39 @@ class StandardAgentRunner:
                     is_class_name_valid = False
                 else:
                     is_class_name_valid = True
-                
+
                 logger.debug(f"class_name={class_name}, is_class_name_valid={is_class_name_valid}")
-                
+
                 if not is_class_name_valid:
                     logger.info(f"Loading function-based agent: {module_path}.{method_name}")
-                    
+
                     # 모듈 import
                     module = importlib.import_module(module_path)
-                    
+
                     # 함수 가져오기
                     func = getattr(module, method_name)
-                    
+
                     # 함수 시그니처 확인하여 필요한 인자만 추출
                     import inspect
                     try:
                         sig = inspect.signature(func)
                         func_params = set(sig.parameters.keys())
-                        
+
                         # 함수가 실제로 받을 수 있는 인자만 필터링
-                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs", 
+                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs",
                                       "result_json_path", "_execution_method", "_cli_args"]
-                        func_kwargs = {k: v for k, v in input_data.items() 
+                        func_kwargs = {k: v for k, v in input_data.items()
                                      if k in func_params and k not in exclude_keys}
-                        
+
                         logger.debug(f"Function {method_name} accepts parameters: {func_params}")
                         logger.debug(f"Passing arguments: {list(func_kwargs.keys())}")
                     except Exception as e:
                         logger.warning(f"Could not inspect function signature: {e}, using all input_data")
-                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs", 
+                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs",
                                       "result_json_path", "_execution_method", "_cli_args"]
-                        func_kwargs = {k: v for k, v in input_data.items() 
+                        func_kwargs = {k: v for k, v in input_data.items()
                                      if k not in exclude_keys}
-                    
+
                     # 실행
                     if asyncio.iscoroutinefunction(func):
                         result = await func(**func_kwargs)
@@ -713,19 +709,19 @@ class StandardAgentRunner:
                 else:
                     # 클래스 기반 호출
                     logger.info(f"Loading class-based agent: {module_path}.{class_name}.{method_name}")
-                
+
                 # 모듈 import
                 module = importlib.import_module(module_path)
-                
+
                 # 클래스 가져오기
                 agent_class = getattr(module, class_name)
-                
+
                 # 인스턴스 생성 (필요한 경우)
                 # input_data에서 클래스 초기화에 필요한 인자 추출
                 init_kwargs = {}
                 if "init_kwargs" in input_data:
                     init_kwargs = input_data["init_kwargs"]
-                
+
                 # 인스턴스 생성
                 if init_kwargs:
                     agent_instance = agent_class(**init_kwargs)
@@ -736,36 +732,36 @@ class StandardAgentRunner:
                     except TypeError:
                         # 생성자가 필요한 인자를 요구하는 경우, input_data에서 추출
                         agent_instance = agent_class()
-                
+
                 # 메서드 호출
                 method = getattr(agent_instance, method_name)
-                
+
                 # 메서드 시그니처 확인하여 필요한 인자만 추출
                 import inspect
                 try:
                     sig = inspect.signature(method)
                     method_params = set(sig.parameters.keys())
-                    
+
                     # 메서드가 실제로 받을 수 있는 인자만 필터링
-                    method_kwargs = {k: v for k, v in input_data.items() 
+                    method_kwargs = {k: v for k, v in input_data.items()
                                    if k in method_params and k not in ["module_path", "class_name", "method_name", "init_kwargs"]}
-                    
+
                     logger.debug(f"Method {method_name} accepts parameters: {method_params}")
                     logger.debug(f"Passing arguments: {list(method_kwargs.keys())}")
                 except Exception as e:
                     logger.warning(f"Could not inspect method signature: {e}, using all input_data")
                     # 시그니처 확인 실패 시 기본 제외 목록 사용
-                    exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs", 
+                    exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs",
                                   "result_json_path", "_execution_method", "_cli_args"]
-                    method_kwargs = {k: v for k, v in input_data.items() 
+                    method_kwargs = {k: v for k, v in input_data.items()
                                    if k not in exclude_keys}
-                
+
                 # 실행
                 if asyncio.iscoroutinefunction(method):
                     result = await method(**method_kwargs)
                 else:
                     result = method(**method_kwargs)
-            
+
             else:
                 # 단순 함수 호출 방식 또는 LangGraph 모듈
                 # 모듈 경로 파싱 (예: "srcs.basic_agents.run_rag_agent")
@@ -773,7 +769,7 @@ class StandardAgentRunner:
                     parts = entry_point.rsplit(".", 1)
                     module_path = parts[0]
                     potential_function = parts[1]
-                    
+
                     # potential_function이 실제 함수인지 모듈 이름인지 확인
                     # 먼저 모듈을 import하고 확인
                     try:
@@ -843,12 +839,12 @@ class StandardAgentRunner:
                                 result = func(**input_data)
                         else:
                             raise ValueError(f"Module {module_path} has no 'app' attribute and no '{function_name}' function")
-            
+
             return AgentExecutionResult(
                 success=True,
                 data=result if isinstance(result, dict) else {"result": result}
             )
-            
+
         except Exception as e:
             error_msg = f"Error in _run_module_agent: {str(e)}"
             logger.error(error_msg, exc_info=True)
@@ -857,7 +853,7 @@ class StandardAgentRunner:
                 error=error_msg,
                 metadata={"entry_point": entry_point, "input_data_keys": list(input_data.keys())}
             )
-    
+
     async def _load_langgraph_app(self, entry_point: str) -> Optional[Any]:
         """LangGraph app 로드"""
         try:
@@ -868,7 +864,7 @@ class StandardAgentRunner:
                 spec = importlib.util.spec_from_file_location("langgraph_app", entry_point)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
-                
+
                 # app 또는 graph 찾기
                 if hasattr(module, "app"):
                     return module.app
@@ -881,7 +877,7 @@ class StandardAgentRunner:
                 # 모듈 경로인 경우
                 import importlib
                 module = importlib.import_module(entry_point)
-                
+
                 if hasattr(module, "app"):
                     return module.app
                 elif hasattr(module, "graph"):
@@ -889,16 +885,15 @@ class StandardAgentRunner:
                 else:
                     logger.warning(f"No app or graph found in {entry_point}")
                     return None
-                    
+
         except Exception as e:
             logger.error(f"Error loading LangGraph app from {entry_point}: {e}")
             return None
-    
+
     async def list_available_agents(self) -> List[Dict[str, Any]]:
         """사용 가능한 agent 목록 반환"""
         return await self.registry.list_agents()
-    
+
     async def get_agent_info(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """Agent 정보 조회"""
         return await self.registry.get_agent(agent_id)
-

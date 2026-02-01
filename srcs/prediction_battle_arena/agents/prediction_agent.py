@@ -2,9 +2,7 @@
 예측 생성 에이전트
 """
 
-from typing import List, Dict, Any, Optional
 from mcp_agent.agents.agent import Agent as MCP_Agent
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from ..tools.prediction_tools import PredictionTools
 
@@ -39,7 +37,7 @@ def create_prediction_agent(
 ) -> MCP_Agent:
     """
     예측 생성 에이전트 생성
-    
+
     Args:
         llm_factory: LLM 팩토리 함수
         prediction_tools: 예측 도구 인스턴스
@@ -48,7 +46,7 @@ def create_prediction_agent(
     """
     # 도구 목록 가져오기
     tools = prediction_tools.get_tools()
-    
+
     agent = MCP_Agent(
         name="prediction_agent",
         instruction=PREDICTION_AGENT_INSTRUCTION,
@@ -56,6 +54,5 @@ def create_prediction_agent(
         llm_factory=llm_factory,
         tools=tools
     )
-    
-    return agent
 
+    return agent

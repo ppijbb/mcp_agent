@@ -15,7 +15,7 @@ from .multi_agent_orchestrator import MultiAgentOrchestrator
 
 __all__ = [
     'TradingAgent',
-    'GeminiAgent', 
+    'GeminiAgent',
     'TradingAgentChain',
     'MultiAgentOrchestrator'
 ]

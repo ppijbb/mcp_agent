@@ -2,6 +2,7 @@ import json
 from srcs.common.templates import EnterpriseAgentTemplate
 from srcs.common.config import get_llm, get_memory, get_tool_manager, get_comm_manager
 
+
 class UltraAgenticLLMAgent(EnterpriseAgentTemplate):
     """
     MCP Agent 라이브러리 기반 초 agentic LLM 에이전트
@@ -64,4 +65,4 @@ You are an autonomous agent responsible for real-time anomaly detection and coll
 
     def build_reflection_prompt(self, feedback):
         return f"""
-Reflect on your last action and its result.\nFeedback: {feedback}\nCurrent state: {json.dumps(self.state)}\nWhat did you learn? How can you improve your next plan?\n""" 
+Reflect on your last action and its result.\nFeedback: {feedback}\nCurrent state: {json.dumps(self.state)}\nWhat did you learn? How can you improve your next plan?\n"""

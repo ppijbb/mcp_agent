@@ -39,31 +39,31 @@ BUTTON_STYLES = """
         transition: all 0.3s ease !important;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
     }
-    
+
     .stButton > button:hover {
         background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%) !important;
         transform: translateY(-2px) !important;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
     }
-    
+
     .stButton > button:active {
         transform: translateY(0) !important;
     }
-    
+
     /* 홈 버튼 특별 스타일 */
     .home-button > button {
         background: linear-gradient(135deg, #48bb78 0%, #38a169 100%) !important;
     }
-    
+
     .home-button > button:hover {
         background: linear-gradient(135deg, #38a169 0%, #2f855a 100%) !important;
     }
-    
+
     /* 위험 버튼 스타일 */
     .danger-button > button {
         background: linear-gradient(135deg, #ff4757, #ff3838) !important;
     }
-    
+
     .danger-button > button:hover {
         background: linear-gradient(135deg, #ff3838, #ff2f2f) !important;
     }
@@ -86,11 +86,11 @@ CARD_STYLES = """
         flex-direction: column;
         height: 100%;
     }
-    
+
     .agent-card-content {
         flex-grow: 1;
     }
-    
+
     [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
         border: 1px solid var(--secondary-background-color);
         border-radius: 10px;
@@ -101,12 +101,12 @@ CARD_STYLES = """
         justify-content: space-between;
         height: 100%;
     }
-    
+
     .agent-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
     }
-    
+
     .category-header {
         background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
         color: white;
@@ -115,7 +115,7 @@ CARD_STYLES = """
         text-align: center;
         margin: 1rem 0;
     }
-    
+
     .feature-highlight {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white !important;
@@ -123,7 +123,7 @@ CARD_STYLES = """
         border-radius: 8px;
         margin: 0.5rem 0;
     }
-    
+
     .metric-card {
         background: var(--secondary-background-color);
         padding: 1rem;
@@ -144,7 +144,7 @@ DARK_MODE_STYLES = """
     [data-testid="stMarkdownContainer"] p {
         color: var(--text-color) !important;
     }
-    
+
     .stats-container {
         background: var(--secondary-background-color);
         padding: 1rem;
@@ -164,7 +164,7 @@ MOBILE_STYLES = """
         padding-left: 1rem;
         padding-right: 1rem;
     }
-    
+
     /* 큰 버튼 스타일 */
     .mobile-button > button {
         height: 3rem;
@@ -175,20 +175,20 @@ MOBILE_STYLES = """
         border: none;
         margin: 0.5rem 0;
     }
-    
+
     /* 모바일 텍스트 크기 */
     .metric-big {
         font-size: 2rem !important;
         font-weight: bold !important;
     }
-    
+
     /* 터치 친화적 스페이싱 */
     .touch-friendly {
         min-height: 44px;
         padding: 12px;
         margin: 8px 0;
     }
-    
+
     /* 진동 애니메이션 */
     @keyframes vibrate {
         0% { transform: translateX(0); }
@@ -197,17 +197,17 @@ MOBILE_STYLES = """
         75% { transform: translateX(-2px); }
         100% { transform: translateX(0); }
     }
-    
+
     .vibrate {
         animation: vibrate 0.3s ease-in-out;
     }
-    
+
     /* 로딩 스피너 */
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-    
+
     .spinner {
         border: 4px solid #f3f3f3;
         border-top: 4px solid #3498db;
@@ -220,23 +220,27 @@ MOBILE_STYLES = """
 </style>
 """
 
+
 def get_common_styles():
     """모든 공통 스타일을 결합하여 반환"""
     return HEADER_STYLES["main_style_block"] + BUTTON_STYLES + CARD_STYLES + DARK_MODE_STYLES
 
+
 def get_mobile_styles():
     """모바일 최적화 스타일 반환"""
     return MOBILE_STYLES
+
 
 def apply_custom_styles():
     """Streamlit에 공통 스타일 적용"""
     import streamlit as st
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
+
 def get_page_header(page_type, title, subtitle):
     """페이지별 헤더 HTML 생성"""
     background = HEADER_STYLES.get(page_type, HEADER_STYLES["main"])
-    
+
     return f"""
     <div class="page-header" style="{background}">
         <h1>{title}</h1>
@@ -246,10 +250,11 @@ def get_page_header(page_type, title, subtitle):
     </div>
     """
 
+
 def get_home_button():
     """홈 버튼 HTML 생성"""
     return """
     <div class="home-button">
         🏠 홈으로 돌아가기
     </div>
-    """ 
+    """

@@ -3,13 +3,13 @@ Figma Analyzer Agent
 Figma 디자인 파일을 분석하여 디자인 요소와 사용자 플로우를 추출하는 Agent
 """
 
-import json
 from typing import Any, Dict
 
 from srcs.product_planner_agent.agents.base_agent_simple import BaseAgentSimple as BaseAgent
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
 logger = get_product_planner_logger(__name__)
+
 
 class FigmaAnalyzerAgent(BaseAgent):
     """
@@ -25,20 +25,20 @@ class FigmaAnalyzerAgent(BaseAgent):
         Analyzes Figma design and extracts design elements and user flows.
         """
         logger.info("🎨 Starting Figma analysis workflow...")
-        
+
         # 컨텍스트에서 Figma 정보 추출
         figma_file_id = context.get("figma_file_id")
         figma_node_id = context.get("figma_node_id")
-        
+
         if not figma_file_id:
             logger.info("No Figma file ID provided, skipping analysis")
             return {
                 "status": "skipped",
                 "message": "No Figma file provided for analysis"
             }
-        
+
         logger.info(f"Analyzing Figma file: {figma_file_id}")
-        
+
         # 간단한 Figma 분석 결과 생성 (실제로는 Figma API 호출)
         analysis_result = {
             "figma_file_id": figma_file_id,
@@ -52,7 +52,7 @@ class FigmaAnalyzerAgent(BaseAgent):
                         "layout": "responsive"
                     },
                     {
-                        "name": "로그인 화면", 
+                        "name": "로그인 화면",
                         "components": ["로고", "이메일 입력", "비밀번호 입력", "로그인 버튼", "회원가입 링크"],
                         "layout": "centered"
                     },
@@ -81,7 +81,7 @@ class FigmaAnalyzerAgent(BaseAgent):
                 ],
                 "color_scheme": {
                     "primary": "#007AFF",
-                    "secondary": "#6C757D", 
+                    "secondary": "#6C757D",
                     "background": "#FFFFFF",
                     "text": "#000000"
                 }
@@ -92,7 +92,7 @@ class FigmaAnalyzerAgent(BaseAgent):
                     "steps": ["시작 화면", "로그인 화면", "이메일 입력", "비밀번호 입력", "로그인 버튼 클릭", "대시보드"]
                 },
                 {
-                    "name": "회원가입 플로우", 
+                    "name": "회원가입 플로우",
                     "steps": ["시작 화면", "회원가입 화면", "정보 입력", "약관 동의", "가입 완료"]
                 }
             ],
@@ -103,6 +103,6 @@ class FigmaAnalyzerAgent(BaseAgent):
                 "직관적인 네비게이션"
             ]
         }
-        
+
         logger.info("Figma 분석 완료")
-        return analysis_result 
+        return analysis_result

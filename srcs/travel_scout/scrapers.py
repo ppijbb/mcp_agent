@@ -6,14 +6,14 @@ Web Scrapers for Travel Scout
 import asyncio
 import json
 import logging
-from typing import Dict, List, Any
-from datetime import datetime, timedelta
+from typing import Dict, Any
 
 from .mcp_browser_client import MCPBrowserClient
 from .utils import TravelSearchUtils
 from .config_loader import config
 
 logger = logging.getLogger(__name__)
+
 
 class BookingComScraper:
     """booking.com 스크레이퍼"""
@@ -28,16 +28,16 @@ class BookingComScraper:
         selectors = booking_config.get('selectors', {})
         wait_time = booking_config.get('wait_time', 3)
         max_results = booking_config.get('max_results', 10)
-        
+
         # 검색 파라미터 검증
         destination = search_params.get("destination")
         check_in = search_params.get("check_in")
         check_out = search_params.get("check_out")
         guests = search_params.get("guests", 2)
-        
+
         if not all([destination, check_in, check_out]):
             raise ValueError("필수 검색 파라미터가 누락되었습니다")
-        
+
         # URL 생성
         url_params = {
             'ss': destination,
@@ -46,7 +46,7 @@ class BookingComScraper:
             'group_adults': guests
         }
         url = TravelSearchUtils.format_search_url(base_url, url_params)
-        
+
         logger.info(f"Navigating to Booking.com: {url}")
         nav_result = await self.mcp_client.navigate_and_capture(url)
         if not nav_result.get("success"):
@@ -74,7 +74,7 @@ class BookingComScraper:
         }}
         """
         eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
-        
+
         hotels_data = []
         if eval_result and not eval_result.isError and eval_result.content:
             raw_data = json.loads(eval_result.content[0].text)
@@ -91,9 +91,10 @@ class BookingComScraper:
                 except Exception as e:
                     logger.warning(f"호텔 데이터 처리 오류: {e}")
                     continue
-        
+
         logger.info(f"Scraped {len(hotels_data)} hotels from Booking.com")
         return {"type": "hotel", "data": hotels_data}
+
 
 class GoogleFlightsScraper:
     """Google Flights 스크레이퍼"""
@@ -108,7 +109,7 @@ class GoogleFlightsScraper:
         selectors = flights_config.get('selectors', {})
         wait_time = flights_config.get('wait_time', 5)
         max_results = flights_config.get('max_results', 10)
-        
+
         # 검색 파라미터 검증
         origin = search_params.get("origin")
         destination = search_params.get("destination")
@@ -124,7 +125,7 @@ class GoogleFlightsScraper:
 
         # URL 생성
         url = f"{base_url}?q=Flights%20to%20{dest_code}%20from%20{origin_code}%20on%20{departure_date}%20through%20{return_date}"
-        
+
         logger.info(f"Navigating to Google Flights: {url}")
         nav_result = await self.mcp_client.navigate_and_capture(url)
         if not nav_result.get("success"):
@@ -152,7 +153,7 @@ class GoogleFlightsScraper:
         }}
         """
         eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
-        
+
         flights_data = []
         if eval_result and not eval_result.isError and eval_result.content:
             raw_data = json.loads(eval_result.content[0].text)
@@ -170,4 +171,4 @@ class GoogleFlightsScraper:
                     continue
 
         logger.info(f"Scraped {len(flights_data)} flights from Google Flights")
-        return {"type": "flight", "data": flights_data} 
+        return {"type": "flight", "data": flights_data}

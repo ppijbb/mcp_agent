@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import Any, Callable
+from typing import Callable
 
-from srcs.basic_agents.workflow_orchestration import Orchestrator, OpenAIAugmentedLLM
+from srcs.basic_agents.workflow_orchestration import Orchestrator
 from srcs.common.llm import create_fallback_llm_factory
 
 from .cached_llm import CachedLLM
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Singleton pattern to reuse orchestrator instance
 _ORCHESTRATOR_CACHE: Orchestrator | None = None
+
 
 def get_orchestrator() -> Orchestrator:
     global _ORCHESTRATOR_CACHE
@@ -39,7 +40,7 @@ def get_orchestrator() -> Orchestrator:
 
     # ---------- Planner with iteration limit ----------
     max_turns = int(os.getenv("AGENT_MAX_TURNS", 20))
-    
+
     # ---------- Optional Aggregator for fetch+filesystem ----------
     aggregator = None
 
@@ -57,4 +58,4 @@ def get_orchestrator() -> Orchestrator:
 def orchestrator_factory() -> Callable[[], Orchestrator]:
     """Return a callable for deferred orchestrator creation (lazy)."""
     orch = get_orchestrator()
-    return lambda: orch 
+    return lambda: orch

@@ -1,20 +1,18 @@
 import asyncio
 import os
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
-from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.utils import setup_agent_app
 
 
 # Configuration
@@ -32,7 +30,7 @@ app = MCPApp(
 async def main():
     """
     Hybrid Workplace Optimization Agent System
-    
+
     Handles comprehensive hybrid workplace optimization and management:
     1. Smart space utilization and capacity optimization
     2. Employee experience and satisfaction enhancement
@@ -43,31 +41,31 @@ async def main():
     7. Well-being and health monitoring
     8. Future workplace planning and adaptation
     """
-    
+
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     app = setup_agent_app("hybrid_workplace_optimization_system")
 
     async with app.run() as workplace_app:
         context = workplace_app.context
         logger = workplace_app.logger
-        
+
         # Configure servers
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
             logger.info("Filesystem server configured")
-        
+
         # --- HYBRID WORKPLACE OPTIMIZATION AGENTS ---
-        
+
         # Smart Space Utilization and Capacity Optimizer
         space_optimization_agent = Agent(
             name="smart_space_utilization_optimizer",
             instruction=f"""You are a smart space utilization and capacity optimization specialist for {COMPANY_NAME}.
-            
+
             Optimize space utilization and capacity management across {WORKPLACE_SCOPE}:
-            
+
             1. Space Analytics and Monitoring:
                - Real-time occupancy tracking with IoT sensors
                - Space utilization pattern analysis and forecasting
@@ -75,7 +73,7 @@ async def main():
                - Traffic flow and movement pattern analysis
                - Environmental condition monitoring (air quality, temperature)
                - Energy consumption and efficiency tracking
-            
+
             2. Capacity Planning and Optimization:
                - Dynamic space allocation based on demand
                - Flexible workspace design and configuration
@@ -83,7 +81,7 @@ async def main():
                - Meeting room and collaboration space optimization
                - Quiet zones and focus area management
                - Social and informal space planning
-            
+
             3. Predictive Analytics:
                - Occupancy forecasting and demand prediction
                - Seasonal and cyclical pattern identification
@@ -91,7 +89,7 @@ async def main():
                - Space requirement forecasting
                - Capacity bottleneck identification
                - Optimization scenario modeling
-            
+
             4. Real Estate Cost Optimization:
                - Space consolidation and downsizing opportunities
                - Lease optimization and renegotiation strategies
@@ -99,7 +97,7 @@ async def main():
                - Location strategy and portfolio optimization
                - Facilities management cost reduction
                - Energy and utility cost optimization
-            
+
             5. Technology Integration:
                - Smart building systems and automation
                - Mobile app for space booking and navigation
@@ -107,20 +105,20 @@ async def main():
                - Integrated workplace management platform
                - AI-powered space allocation optimization
                - Contactless access and security systems
-            
+
             Provide specific space optimization recommendations with ROI calculations and implementation timelines.
             Include technology deployment strategies and change management considerations.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Employee Experience and Satisfaction Enhancement Specialist
         employee_experience_agent = Agent(
             name="employee_experience_enhancement_specialist",
             instruction=f"""You are an employee experience and satisfaction enhancement expert for {COMPANY_NAME}.
-            
+
             Enhance employee experience and satisfaction across {WORKPLACE_SCOPE}:
-            
+
             1. Employee Journey Mapping:
                - End-to-end employee experience analysis
                - Touchpoint identification and optimization
@@ -128,7 +126,7 @@ async def main():
                - Moment of truth identification
                - Emotional journey and sentiment tracking
                - Personalized experience design
-            
+
             2. Work-Life Balance Optimization:
                - Flexible working arrangement design
                - Remote work policy and guideline development
@@ -136,7 +134,7 @@ async def main():
                - Burnout prevention and well-being programs
                - Family-friendly workplace initiatives
                - Mental health and wellness support
-            
+
             3. Communication and Collaboration Enhancement:
                - Digital communication platform optimization
                - Virtual meeting effectiveness improvement
@@ -144,7 +142,7 @@ async def main():
                - Knowledge sharing and documentation systems
                - Team building and social connection programs
                - Feedback and recognition systems
-            
+
             4. Learning and Development Integration:
                - Continuous learning and skill development
                - Digital learning platform integration
@@ -152,7 +150,7 @@ async def main():
                - Career development and progression planning
                - Cross-training and skill diversification
                - Innovation and creativity workshops
-            
+
             5. Personalization and Customization:
                - Individual workspace preferences and setup
                - Technology and tool customization
@@ -160,20 +158,20 @@ async def main():
                - Personal productivity optimization
                - Accessibility and inclusion accommodations
                - Cultural and diversity considerations
-            
+
             Create comprehensive employee experience strategies with measurement frameworks and feedback loops.
             Include personalization approaches and continuous improvement processes.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Productivity Analytics and Performance Tracking Specialist
         productivity_analytics_agent = Agent(
             name="productivity_analytics_performance_specialist",
             instruction=f"""You are a productivity analytics and performance tracking expert for {COMPANY_NAME}.
-            
+
             Track and optimize productivity across {WORKPLACE_SCOPE}:
-            
+
             1. Productivity Measurement Framework:
                - Individual and team productivity metrics
                - Output quality and efficiency tracking
@@ -181,7 +179,7 @@ async def main():
                - Goal achievement and milestone tracking
                - Cross-functional collaboration effectiveness
                - Innovation and creative output measurement
-            
+
             2. Performance Analytics:
                - Real-time productivity dashboard and reporting
                - Trend analysis and pattern identification
@@ -189,7 +187,7 @@ async def main():
                - Productivity driver identification and optimization
                - Bottleneck detection and resolution
                - Predictive performance modeling
-            
+
             3. Technology Usage Analytics:
                - Digital tool adoption and utilization tracking
                - Application usage pattern analysis
@@ -197,7 +195,7 @@ async def main():
                - Meeting productivity and efficiency metrics
                - Technology training and support needs assessment
                - Digital workplace optimization recommendations
-            
+
             4. Work Pattern Analysis:
                - Deep work vs. collaborative work optimization
                - Focus time and interruption management
@@ -205,7 +203,7 @@ async def main():
                - Work location preference and effectiveness
                - Meeting culture and efficiency improvement
                - Asynchronous vs. synchronous work optimization
-            
+
             5. Continuous Improvement:
                - Performance improvement initiative tracking
                - Best practice identification and sharing
@@ -213,20 +211,20 @@ async def main():
                - Productivity habit formation and reinforcement
                - Team dynamics and collaboration optimization
                - Innovation and experimentation encouragement
-            
+
             Generate specific productivity improvement strategies with measurable outcomes and tracking mechanisms.
             Include technology optimization recommendations and training programs.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Technology Integration and Digital Transformation Specialist
         technology_integration_agent = Agent(
             name="technology_integration_digital_transformation_specialist",
             instruction=f"""You are a technology integration and digital transformation expert for {COMPANY_NAME}.
-            
+
             Implement technology solutions and digital transformation for {WORKPLACE_SCOPE}:
-            
+
             1. Digital Workplace Platform:
                - Unified digital workplace ecosystem design
                - Cloud-based collaboration platform integration
@@ -234,7 +232,7 @@ async def main():
                - Mobile-first application development
                - API integration and data synchronization
                - User experience design and optimization
-            
+
             2. Collaboration Technology Stack:
                - Video conferencing and virtual meeting solutions
                - Instant messaging and chat platforms
@@ -242,7 +240,7 @@ async def main():
                - Project management and task tracking tools
                - Digital whiteboarding and brainstorming platforms
                - Knowledge management and search systems
-            
+
             3. Automation and AI Integration:
                - Workflow automation and process optimization
                - AI-powered scheduling and meeting coordination
@@ -250,7 +248,7 @@ async def main():
                - Chatbot and virtual assistant deployment
                - Predictive analytics for workplace optimization
                - Machine learning for personalization
-            
+
             4. Security and Compliance:
                - Zero-trust security architecture implementation
                - Multi-factor authentication and access control
@@ -258,7 +256,7 @@ async def main():
                - Endpoint security for remote devices
                - Secure file sharing and collaboration
                - Incident response and security monitoring
-            
+
             5. Technology Adoption and Training:
                - User adoption strategy and change management
                - Training program development and delivery
@@ -266,20 +264,20 @@ async def main():
                - Digital literacy assessment and improvement
                - Technology usage analytics and optimization
                - Continuous learning and skill development
-            
+
             Provide comprehensive technology roadmaps with implementation timelines and training strategies.
             Include security frameworks and user adoption methodologies.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Well-being and Health Monitoring Specialist
         wellbeing_health_agent = Agent(
             name="wellbeing_health_monitoring_specialist",
             instruction=f"""You are a well-being and health monitoring expert for {COMPANY_NAME}.
-            
+
             Monitor and enhance employee well-being and health across {WORKPLACE_SCOPE}:
-            
+
             1. Physical Health and Ergonomics:
                - Ergonomic assessment and workspace setup
                - Movement and exercise encouragement
@@ -287,7 +285,7 @@ async def main():
                - Lighting and air quality optimization
                - Noise level management and acoustics
                - Healthy eating and nutrition programs
-            
+
             2. Mental Health and Wellness:
                - Stress level monitoring and management
                - Burnout prevention and early intervention
@@ -295,7 +293,7 @@ async def main():
                - Mindfulness and meditation programs
                - Work-life balance coaching and guidance
                - Emotional intelligence development
-            
+
             3. Social Connection and Community:
                - Virtual team building and social activities
                - Peer support and buddy system programs
@@ -303,7 +301,7 @@ async def main():
                - Diversity and inclusion promotion
                - Employee resource group support
                - Social isolation prevention strategies
-            
+
             4. Health Technology Integration:
                - Wearable device integration and data analysis
                - Health tracking and wellness app deployment
@@ -311,7 +309,7 @@ async def main():
                - Telehealth and virtual healthcare access
                - Wellness challenge and gamification
                - Health data privacy and security
-            
+
             5. Preventive Health Programs:
                - Regular health screening and check-ups
                - Vaccination and immunization programs
@@ -319,20 +317,20 @@ async def main():
                - Emergency response and first aid training
                - Health education and awareness campaigns
                - Chronic disease management and support
-            
+
             Create comprehensive well-being programs with health monitoring and intervention strategies.
             Include technology integration and privacy protection frameworks.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Future Workplace Planning and Adaptation Strategist
         future_workplace_agent = Agent(
             name="future_workplace_planning_adaptation_strategist",
             instruction=f"""You are a future workplace planning and adaptation strategist for {COMPANY_NAME}.
-            
+
             Plan and adapt future workplace strategies for {WORKPLACE_SCOPE}:
-            
+
             1. Workforce Trend Analysis:
                - Remote and hybrid work trend monitoring
                - Generational preference and expectation analysis
@@ -340,7 +338,7 @@ async def main():
                - Technology adoption and digital native trends
                - Work culture evolution and transformation
                - Industry benchmark and best practice analysis
-            
+
             2. Scenario Planning and Modeling:
                - Future of work scenario development
                - Economic and social impact modeling
@@ -348,7 +346,7 @@ async def main():
                - Demographic shift and workforce composition
                - Climate change and sustainability considerations
                - Regulatory and policy change implications
-            
+
             3. Adaptive Workplace Design:
                - Flexible and modular workspace solutions
                - Multi-purpose and convertible space design
@@ -356,7 +354,7 @@ async def main():
                - Agile organizational structure support
                - Change management and adaptation capabilities
                - Resilience and business continuity planning
-            
+
             4. Innovation and Experimentation:
                - Workplace innovation lab and pilot programs
                - Emerging technology evaluation and testing
@@ -364,7 +362,7 @@ async def main():
                - Cultural change and transformation initiatives
                - Employee feedback and co-creation processes
                - Continuous improvement and iteration
-            
+
             5. Strategic Planning and Roadmapping:
                - Long-term workplace strategy development
                - Investment prioritization and resource allocation
@@ -372,49 +370,49 @@ async def main():
                - Stakeholder alignment and buy-in
                - Implementation timeline and milestone tracking
                - Success measurement and evaluation frameworks
-            
+
             Develop future-ready workplace strategies with adaptation mechanisms and continuous evolution capabilities.
             Include innovation frameworks and strategic planning methodologies.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Workplace Optimization Quality Evaluator
         workplace_evaluator = Agent(
             name="workplace_optimization_quality_evaluator",
             instruction="""You are a workplace optimization and employee experience expert evaluating hybrid workplace initiatives.
-            
+
             Evaluate workplace optimization programs based on:
-            
+
             1. Employee Experience and Satisfaction (35%)
                - Employee satisfaction and engagement scores
                - Work-life balance and well-being improvement
                - Communication and collaboration effectiveness
                - Learning and development opportunities
-            
+
             2. Productivity and Performance (30%)
                - Individual and team productivity metrics
                - Goal achievement and milestone completion
                - Innovation and creative output
                - Quality and efficiency improvements
-            
+
             3. Cost Optimization and Efficiency (20%)
                - Real estate and facility cost reduction
                - Technology ROI and efficiency gains
                - Operational cost optimization
                - Resource utilization improvement
-            
+
             4. Technology and Innovation (15%)
                - Technology adoption and integration success
                - Digital transformation progress
                - Automation and AI implementation
                - Future readiness and adaptability
-            
+
             Provide EXCELLENT, GOOD, FAIR, or POOR ratings with specific improvement recommendations.
             Highlight critical success factors and implementation challenges.
             """,
         )
-        
+
         # Create quality controller for workplace optimization
         workplace_quality_controller =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
@@ -426,15 +424,23 @@ async def main():
             llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
-        
+
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing hybrid workplace optimization workflow for {COMPANY_NAME}")
-        
-        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+
+
+            primary_model="gemini-2.5-flash-lite",
+
+
+            logger_instance=logger
+
+
+        )
+
+
+        orchestrator = Orchestrator(
             llm_factory=orchestrator_llm_factory,
             available_agents=[
                 workplace_quality_controller,
@@ -446,7 +452,7 @@ Orchestrator(
             ],
             plan_type="full",
         )
-        
+
         # Define comprehensive workplace optimization task
         task = f"""Execute a comprehensive hybrid workplace optimization program for {COMPANY_NAME}:
 
@@ -455,37 +461,37 @@ Orchestrator(
            - Real-time occupancy tracking and analytics
            - Space allocation and configuration strategies
            - Cost optimization and real estate management
-           
+
         2. Use the employee_experience_agent to develop:
            - Employee experience journey mapping and optimization
            - Work-life balance and flexibility programs
            - Communication and collaboration enhancement
            - Personalization and customization strategies
-           
+
         3. Use the productivity_analytics_agent to create:
            - Productivity measurement and analytics frameworks
            - Performance tracking and optimization systems
            - Technology usage and effectiveness analysis
            - Continuous improvement and best practice identification
-           
+
         4. Use the technology_integration_agent to implement:
            - Digital workplace platform and collaboration tools
            - Automation and AI integration strategies
            - Security and compliance frameworks
            - Technology adoption and training programs
-           
+
         5. Use the wellbeing_health_agent to establish:
            - Physical and mental health monitoring systems
            - Well-being programs and intervention strategies
            - Social connection and community building
            - Health technology integration and privacy protection
-           
+
         6. Use the future_workplace_agent to develop:
            - Future workplace planning and adaptation strategies
            - Scenario planning and modeling frameworks
            - Innovation and experimentation programs
            - Strategic planning and roadmapping
-        
+
         Save all deliverables in the {OUTPUT_DIR} directory:
         - space_utilization_optimization_{timestamp}.md
         - employee_experience_enhancement_{timestamp}.md
@@ -494,7 +500,7 @@ Orchestrator(
         - wellbeing_health_programs_{timestamp}.md
         - future_workplace_planning_{timestamp}.md
         - workplace_optimization_dashboard_{timestamp}.md
-        
+
         Create an integrated workplace optimization strategy showing:
         - Current workplace state assessment and challenges
         - Optimization opportunities and business case
@@ -503,7 +509,7 @@ Orchestrator(
         - Success metrics and monitoring frameworks
         - Continuous improvement and adaptation processes
         """
-        
+
         # Execute the workflow
         logger.info("Starting hybrid workplace optimization workflow")
         try:
@@ -511,10 +517,10 @@ Orchestrator(
                 message=task,
                 request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
-            
+
             logger.info("Hybrid workplace optimization workflow completed successfully")
             logger.info(f"All deliverables saved in {OUTPUT_DIR}/")
-            
+
             # Generate executive workplace dashboard
             dashboard_path = os.path.join(OUTPUT_DIR, f"workplace_executive_summary_{timestamp}.md")
             with open(dashboard_path, 'w') as f:
@@ -580,7 +586,7 @@ For detailed technical information and implementation guides, refer to individua
 *This executive summary provides a high-level view of the hybrid workplace optimization opportunity.
 For comprehensive strategies and detailed implementation plans, please review the complete analysis reports.*
 """)
-            
+
             # Create workplace KPI tracking template
             kpi_path = os.path.join(OUTPUT_DIR, f"workplace_kpi_template_{timestamp}.json")
             workplace_kpis = {
@@ -637,16 +643,16 @@ For comprehensive strategies and detailed implementation plans, please review th
                 "reporting_period": f"{datetime.now().strftime('%Y-%m')}",
                 "last_updated": datetime.now().isoformat()
             }
-            
+
             with open(kpi_path, 'w') as f:
                 json.dump(workplace_kpis, f, indent=2)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error during workplace optimization workflow execution: {str(e)}")
             return False
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

@@ -7,7 +7,6 @@ Enhanced with LangChain-based modular architecture supporting ETH/BTC
 import asyncio
 import logging
 import sys
-import os
 from pathlib import Path
 from typing import Dict, Any
 from dotenv import load_dotenv
@@ -54,9 +53,10 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 class MultiCryptocurrencyTradingSystem:
     """Main system orchestrator for multi-cryptocurrency trading agents"""
-    
+
     def __init__(self):
         self.config = Config()
         self.database = None
@@ -70,17 +70,17 @@ class MultiCryptocurrencyTradingSystem:
         self.trading_monitor = None
         self.trading_report_agent = None
         self.supported_cryptocurrencies = ["ethereum", "bitcoin"]
-        
+
     async def initialize_system(self):
         """Initialize all system components"""
         try:
             logger.info("Initializing Multi-Cryptocurrency Trading System...")
-            
+
             # Initialize database
             self.database = TradingDatabase()
             await self.database.connect()
             logger.info("Database initialized successfully")
-            
+
             # Initialize MCP client with Bitcoin support
             self.mcp_client = MCPClient(
                 ethereum_trading_url=self.config.MCP_ETHEREUM_TRADING_URL,
@@ -89,33 +89,33 @@ class MultiCryptocurrencyTradingSystem:
             )
             await self.mcp_client.connect()
             logger.info("MCP client initialized successfully with ETH/BTC support")
-            
+
             # Initialize data collector
             from .utils.data_collector import DataCollector
             self.data_collector = DataCollector()
             await self.data_collector.connect()
             logger.info("Data collector initialized successfully")
-            
+
             # Initialize cron scheduler
             self.cron_scheduler = CronScheduler()
             logger.info("Cron scheduler initialized successfully")
-            
+
             # Initialize trading memory
             self.trading_memory = TradingMemory()
             logger.info("Trading memory initialized successfully")
-            
+
             # Initialize email service
             self.email_service = EmailService()
             logger.info("Email service initialized successfully")
-            
+
             # Initialize trading report agent
             self.trading_report_agent = TradingReportAgent(
-                self.mcp_client, 
-                self.data_collector, 
+                self.mcp_client,
+                self.data_collector,
                 self.email_service
             )
             logger.info("Trading report agent initialized successfully")
-            
+
             # Initialize trading monitor
             self.trading_monitor = TradingMonitor(
                 self.mcp_client,
@@ -124,33 +124,33 @@ class MultiCryptocurrencyTradingSystem:
                 self.trading_report_agent
             )
             logger.info("Trading monitor initialized successfully")
-            
+
             # Initialize agents for ETH/BTC
             await self._initialize_agents()
             logger.info("Multi-cryptocurrency agents initialized successfully")
-            
+
             # Initialize chains
             await self._initialize_chains()
             logger.info("Chains initialized successfully")
-            
+
             # Initialize orchestrator
             await self._initialize_orchestrator()
             logger.info("Orchestrator initialized successfully")
-            
+
             # Start trading monitor
             await self.trading_monitor.start_monitoring()
             logger.info("Trading monitor started successfully")
-            
+
             # Setup cron jobs
             await self._setup_cron_jobs()
             logger.info("Cron jobs setup completed")
-            
+
             logger.info("Multi-Cryptocurrency Trading System initialized successfully!")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize system: {e}")
             raise
-    
+
     async def _initialize_agents(self):
         """Initialize all trading agents for ETH/BTC"""
         try:
@@ -158,35 +158,35 @@ class MultiCryptocurrencyTradingSystem:
             self.agents['ethereum_conservative'] = TradingAgent("ethereum_conservative", "ethereum")
             self.agents['ethereum_aggressive'] = TradingAgent("ethereum_aggressive", "ethereum")
             self.agents['ethereum_balanced'] = TradingAgent("ethereum_balanced", "ethereum")
-            
+
             # Initialize Bitcoin trading agents
             self.agents['bitcoin_conservative'] = TradingAgent("bitcoin_conservative", "bitcoin")
             self.agents['bitcoin_aggressive'] = TradingAgent("bitcoin_aggressive", "bitcoin")
             self.agents['bitcoin_balanced'] = TradingAgent("bitcoin_balanced", "bitcoin")
-            
+
             # Initialize LangChain enhanced agents for ETH/BTC
             self.agents['langchain_ethereum'] = TradingAgentChain("langchain_ethereum")
             self.agents['langchain_bitcoin'] = TradingAgentChain("langchain_bitcoin")
-            
+
             # Initialize Gemini agent with multi-crypto support
             self.agents['gemini'] = GeminiAgent(
                 database=self.database,
                 mcp_client=self.mcp_client,
                 memory=self.trading_memory
             )
-            
+
             logger.info(f"Initialized {len(self.agents)} multi-cryptocurrency agents")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize agents: {e}")
             raise
-    
+
     async def _initialize_chains(self):
         """Initialize LangChain chains for ETH/BTC"""
         try:
             # Get LLM from LangChain agent
             llm = self.agents['langchain_ethereum'].get_llm()
-            
+
             # Initialize Ethereum trading chain
             self.chains['ethereum_trading'] = TradingChain(
                 llm=llm,
@@ -194,7 +194,7 @@ class MultiCryptocurrencyTradingSystem:
                 analysis_agent=self.agents['gemini'],
                 config=self.config
             )
-            
+
             # Initialize Bitcoin trading chain
             self.chains['bitcoin_trading'] = TradingChain(
                 llm=llm,
@@ -202,31 +202,31 @@ class MultiCryptocurrencyTradingSystem:
                 analysis_agent=self.agents['gemini'],
                 config=self.config
             )
-            
+
             # Initialize analysis chain for cross-crypto analysis
             self.chains['analysis'] = AnalysisChain(llm=llm)
-            
+
             logger.info(f"Initialized {len(self.chains)} multi-cryptocurrency chains")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize chains: {e}")
             raise
-    
+
     async def _initialize_orchestrator(self):
         """Initialize multi-agent orchestrator"""
         try:
             self.orchestrator = MultiAgentOrchestrator()
-            
+
             # Register all agents with orchestrator
             for name, agent in self.agents.items():
                 self.orchestrator.register_agent(name, agent)
-            
+
             logger.info("Orchestrator initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize orchestrator: {e}")
             raise
-    
+
     async def _setup_cron_jobs(self):
         """Setup automated cron jobs"""
         try:
@@ -237,7 +237,7 @@ class MultiCryptocurrencyTradingSystem:
                 minutes=15,
                 id="market_analysis"
             )
-            
+
             # Portfolio review job (daily at 9 AM)
             await self.cron_scheduler.add_job(
                 func=self._run_portfolio_review,
@@ -246,7 +246,7 @@ class MultiCryptocurrencyTradingSystem:
                 minute=0,
                 id="portfolio_review"
             )
-            
+
             # Performance analysis job (weekly on Sunday)
             await self.cron_scheduler.add_job(
                 func=self._run_performance_analysis,
@@ -256,30 +256,30 @@ class MultiCryptocurrencyTradingSystem:
                 minute=0,
                 id="performance_analysis"
             )
-            
+
             # Start the scheduler
             await self.cron_scheduler.start()
-            
+
             logger.info("Cron jobs setup completed")
-            
+
         except Exception as e:
             logger.error(f"Failed to setup cron jobs: {e}")
             raise
-    
+
     async def _run_market_analysis(self):
         """Run automated market analysis"""
         try:
             logger.info("Running automated market analysis...")
-            
+
             # Get market data
             market_data = await self._get_market_data()
-            
+
             # Run analysis using analysis chain
             analysis_results = await self.chains['analysis'].execute_comprehensive_analysis(
                 market_data=market_data,
                 analysis_type="all"
             )
-            
+
             # Store results in memory
             await self.trading_memory.store(
                 key="latest_market_analysis",
@@ -287,28 +287,28 @@ class MultiCryptocurrencyTradingSystem:
                 memory_type=self.trading_memory.MemoryType.HISTORICAL_DATA,
                 ttl=3600  # 1 hour
             )
-            
+
             logger.info("Market analysis completed successfully")
-            
+
         except Exception as e:
             logger.error(f"Market analysis failed: {e}")
-    
+
     async def _run_portfolio_review(self):
         """Run automated portfolio review"""
         try:
             logger.info("Running automated portfolio review...")
-            
+
             # Get portfolio data
             portfolio_data = await self._get_portfolio_data()
-            
+
             # Use portfolio review prompt
             portfolio_prompt = get_prompt("portfolio_review")
-            
+
             # Run review using orchestrator
             review_results = await self.orchestrator.execute_portfolio_review(
                 portfolio_data=portfolio_data
             )
-            
+
             # Store results
             await self.trading_memory.store(
                 key="latest_portfolio_review",
@@ -316,28 +316,28 @@ class MultiCryptocurrencyTradingSystem:
                 memory_type=self.trading_memory.MemoryType.PERFORMANCE,
                 ttl=86400  # 24 hours
             )
-            
+
             logger.info("Portfolio review completed successfully")
-            
+
         except Exception as e:
             logger.error(f"Portfolio review failed: {e}")
-    
+
     async def _run_performance_analysis(self):
         """Run automated performance analysis"""
         try:
             logger.info("Running automated performance analysis...")
-            
+
             # Get performance data
             performance_data = await self._get_performance_data()
-            
+
             # Use performance analysis prompt
             performance_prompt = get_prompt("performance_analysis")
-            
+
             # Run analysis using orchestrator
             analysis_results = await self.orchestrator.execute_performance_analysis(
                 performance_data=performance_data
             )
-            
+
             # Store results
             await self.trading_memory.store(
                 key="latest_performance_analysis",
@@ -345,17 +345,17 @@ class MultiCryptocurrencyTradingSystem:
                 memory_type=self.trading_memory.MemoryType.PERFORMANCE,
                 ttl=604800  # 1 week
             )
-            
+
             logger.info("Performance analysis completed successfully")
-            
+
         except Exception as e:
             logger.error(f"Performance analysis failed: {e}")
-    
+
     async def _get_market_data(self) -> Dict[str, Any]:
         """Get current market data - NO FALLBACKS"""
         if not hasattr(self, 'data_collector') or not self.data_collector:
             raise ValueError("Data collector not initialized - cannot fetch market data")
-        
+
         try:
             # Fetch real market data from data collector
             market_data = await self.data_collector.collect_comprehensive_data("ETH")
@@ -364,12 +364,12 @@ class MultiCryptocurrencyTradingSystem:
             return market_data
         except Exception as e:
             raise ValueError(f"Market data collection failed: {str(e)}")
-    
+
     async def _get_portfolio_data(self) -> Dict[str, Any]:
         """Get current portfolio data - NO FALLBACKS"""
         if not hasattr(self, 'database') or not self.database:
             raise ValueError("Database not initialized - cannot fetch portfolio data")
-        
+
         try:
             # Fetch real portfolio data from database
             portfolio_data = await self.database.get_portfolio_status()
@@ -378,12 +378,12 @@ class MultiCryptocurrencyTradingSystem:
             return portfolio_data
         except Exception as e:
             raise ValueError(f"Portfolio data fetch failed: {str(e)}")
-    
+
     async def _get_performance_data(self) -> Dict[str, Any]:
         """Get performance data - NO FALLBACKS"""
         if not hasattr(self, 'database') or not self.database:
             raise ValueError("Database not initialized - cannot fetch performance data")
-        
+
         try:
             # Fetch real performance data from database
             performance_data = await self.database.get_performance_metrics()
@@ -392,7 +392,7 @@ class MultiCryptocurrencyTradingSystem:
             return performance_data
         except Exception as e:
             raise ValueError(f"Performance data fetch failed: {str(e)}")
-    
+
     async def execute_trading_workflow(
         self,
         market_data: Dict[str, Any],
@@ -402,7 +402,7 @@ class MultiCryptocurrencyTradingSystem:
         """Execute complete trading workflow"""
         try:
             logger.info("Executing trading workflow...")
-            
+
             # Use trading chain for workflow execution
             workflow_results = await self.chains['trading'].execute_trading_workflow(
                 market_data=market_data,
@@ -410,7 +410,7 @@ class MultiCryptocurrencyTradingSystem:
                 trading_strategy=trading_strategy,
                 portfolio_status=portfolio_status
             )
-            
+
             # Store workflow results in memory
             await self.trading_memory.store(
                 key=f"workflow_{workflow_results['timestamp']}",
@@ -418,14 +418,14 @@ class MultiCryptocurrencyTradingSystem:
                 memory_type=self.trading_memory.MemoryType.TRADING_CONTEXT,
                 ttl=3600  # 1 hour
             )
-            
+
             logger.info("Trading workflow completed successfully")
             return workflow_results
-            
+
         except Exception as e:
             logger.error(f"Trading workflow failed: {e}")
             raise
-    
+
     async def get_system_status(self) -> Dict[str, Any]:
         """Get current system status"""
         try:
@@ -447,47 +447,48 @@ class MultiCryptocurrencyTradingSystem:
                 "memory_stats": self.trading_memory.get_memory_stats() if self.trading_memory else {},
                 "available_prompts": list_available_prompts()
             }
-            
+
             return status
-            
+
         except Exception as e:
             logger.error(f"Failed to get system status: {e}")
             return {"error": str(e)}
-    
+
     def _get_timestamp(self) -> str:
         """Get current timestamp"""
         from datetime import datetime
         return datetime.now().isoformat()
-    
+
     async def shutdown(self):
         """Shutdown the system gracefully"""
         try:
             logger.info("Shutting down Ethereum Trading System...")
-            
+
             # Stop trading monitor
             if self.trading_monitor:
                 await self.trading_monitor.stop_monitoring()
-            
+
             # Stop cron scheduler
             if self.cron_scheduler:
                 await self.cron_scheduler.shutdown()
-            
+
             # Close database connection
             if self.database:
                 await self.database.close()
-            
+
             # Close MCP client
             if self.mcp_client:
                 await self.mcp_client.close()
-            
+
             # Close data collector
             if self.data_collector:
                 await self.data_collector.close()
-            
+
             logger.info("System shutdown completed")
-            
+
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
+
 
 async def main():
     """Main entry point"""
@@ -495,11 +496,11 @@ async def main():
         # Validate configuration
         Config.validate()
         logger.info("Configuration validated successfully")
-        
+
         # Create and initialize system
         system = EthereumTradingSystem()
         await system.initialize_system()
-        
+
         # Display system status
         status = await system.get_system_status()
         print("=== Ethereum Trading System Status ===")
@@ -507,11 +508,11 @@ async def main():
         print(f"Components: {status['components']}")
         print(f"Available Prompts: {len(status['available_prompts'])}")
         print("=====================================")
-        
+
         # Start orchestrator
         logger.info("Starting Ethereum trading multi-agent system...")
         await system.orchestrator.start()
-        
+
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
         if 'system' in locals():

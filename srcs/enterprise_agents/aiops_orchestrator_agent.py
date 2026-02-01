@@ -6,15 +6,14 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 # Correct imports based on the SEO Doctor Agent
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.utils import setup_agent_app
 from srcs.common.llm.fallback_llm import (
     create_fallback_orchestrator_llm_factory,
     try_fallback_orchestrator_execution
 )
+
 
 class AIOpsOrchestratorAgent:
     """
@@ -27,17 +26,17 @@ class AIOpsOrchestratorAgent:
         os.makedirs(self.output_dir, exist_ok=True)
         # Initialize MCPApp using standard setup function
         self.app = setup_agent_app("aiops_orchestrator")
-    
+
     def get_real_system_snapshot(self) -> Dict[str, Any]:
         """Get actual system metrics using psutil"""
         try:
             # Get CPU information
             cpu_percent = psutil.cpu_percent(interval=1)
             cpu_count = psutil.cpu_count()
-            
+
             # Get memory information
             memory = psutil.virtual_memory()
-            
+
             # Get top processes by CPU usage
             processes = []
             for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -47,10 +46,10 @@ class AIOpsOrchestratorAgent:
                     processes.append(proc_info)
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
-            
+
             # Sort by CPU usage and get top 10
             top_processes = sorted(processes, key=lambda x: x['cpu_percent'] or 0, reverse=True)[:10]
-            
+
             return {
                 "timestamp": datetime.now().isoformat(),
                 "cpu": {
@@ -77,22 +76,22 @@ class AIOpsOrchestratorAgent:
         """
         Standard execute_task method for agent runner compatibility.
         Calls handle_alert with the provided alert data.
-        
+
         Args:
             alert: Alert dictionary with 'id', 'node', 'description' keys
             **kwargs: Additional parameters (merged into alert if alert is None)
-            
+
         Returns:
             Dict containing the analysis result
         """
         # alert가 None이면 kwargs에서 alert 정보 구성
         if alert is None:
             alert = kwargs.get("alert", kwargs)
-        
+
         # alert가 dict가 아니면 변환 시도
         if not isinstance(alert, dict):
             alert = {"id": str(alert), "node": "unknown", "description": str(alert)}
-        
+
         # 필수 필드 확인 및 기본값 설정
         if "id" not in alert:
             alert["id"] = alert.get("alert_id", "unknown")
@@ -100,16 +99,16 @@ class AIOpsOrchestratorAgent:
             alert["node"] = alert.get("node_name", "unknown")
         if "description" not in alert:
             alert["description"] = alert.get("message", alert.get("text", "No description"))
-        
+
         result = await self.handle_alert(alert)
-        
+
         return {
             "success": True,
             "result": result,
             "alert_id": alert["id"],
             "node": alert["node"]
         }
-    
+
     async def handle_alert(self, alert: Dict[str, Any]):
         """
         Handles an incoming IT alert by orchestrating a team of virtual agents.
@@ -129,14 +128,14 @@ class AIOpsOrchestratorAgent:
                 name="system_monitor",
                 instruction=f"""You are a System Monitor. Your task is to analyze system performance
                 for the node '{alert['node']}'. Since this is a simulated environment, provide a realistic
-                analysis of what could cause high CPU usage (95% for 5 minutes). 
-                
+                analysis of what could cause high CPU usage (95% for 5 minutes).
+
                 Focus on:
                 - Common causes of high CPU usage (runaway processes, memory leaks, infinite loops)
                 - Typical processes that consume high CPU (java, python, node, database processes)
                 - System monitoring best practices
                 - Immediate remediation steps
-                
+
                 Provide a detailed technical analysis as if you had access to real system metrics.""",
                 server_names=[]  # MCP 서버 validation 에러 방지
             )
@@ -145,7 +144,7 @@ class AIOpsOrchestratorAgent:
                 name="root_cause_analyst",
                 instruction=f"""You are a Root Cause Analyst. Based on the system snapshot,
                 determine the likely root cause of the issue. Your analysis should be concise and point to a specific cause.
-                
+
                 Use your knowledge to analyze:
                 - System metrics and process information
                 - Common patterns of high CPU usage
@@ -162,13 +161,13 @@ class AIOpsOrchestratorAgent:
             orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=[monitoring_agent, rca_agent],
-                plan_type="full" # Let the LLM create a full plan
+                plan_type="full"  # Let the LLM create a full plan
             )
 
             # 3. Define the main task for the Orchestrator
             analysis_task = f"""
             An alert has been triggered: '{alert['description']}' on node '{alert['node']}'.
-            
+
             Follow these steps using the ReAct pattern (Thought -> Action -> Observation):
             1.  **THOUGHT**: Plan to use the `monitoring_scout` to get the system state.
             2.  **ACTION**: Execute the call to the `monitoring_scout`.
@@ -176,12 +175,12 @@ class AIOpsOrchestratorAgent:
             4.  **THOUGHT**: Based on the snapshot, plan to use the `root_cause_analyst` to find the cause.
             5.  **ACTION**: Execute the analysis.
             6.  **OBSERVATION**: State the final root cause.
-            
+
             Provide a clear, final conclusion about the root cause of the high CPU usage.
             """
 
             logger.info(f"Executing AIOps analysis task for node {alert['node']}...")
-            
+
             try:
                 # 4. Run the orchestration via a dedicated ReAct handler method
                 final_result = await self._react_aiops_analysis(
@@ -189,7 +188,7 @@ class AIOpsOrchestratorAgent:
                 )
 
                 logger.info(f"Analysis complete. Final Result:\n{final_result}")
-                
+
                 # 5. Save the report
                 with open(report_path, "w") as f:
                     f.write("AIOps Alert Analysis Report\n")
@@ -200,7 +199,7 @@ class AIOpsOrchestratorAgent:
                     f.write(f"Timestamp: {timestamp}\n")
                     f.write("\n--- Analysis Result ---\n")
                     f.write(final_result)
-                
+
                 logger.info(f"Report saved to {report_path}")
                 # 리포트 파일 내용도 읽어서 반환
                 try:
@@ -233,23 +232,23 @@ class AIOpsOrchestratorAgent:
         # 🧠 THOUGHT PHASE: Plan the analysis approach
         thought_task = f"""
         THOUGHT PHASE - AIOps Analysis Planning:
-        
+
         I need to analyze an IT infrastructure alert systematically.
-        
+
         Context: {task}
-        
+
         My approach will be:
         1. First, gather real-time system metrics from the affected node
         2. Analyze the data to identify resource consumption patterns
         3. Determine the root cause of the high CPU usage
         4. Provide actionable remediation steps
-        
+
         I will use the monitoring-scout agent to get system snapshots,
         then use search capabilities to research any unfamiliar processes or error patterns.
-        
+
         What specific system metrics should I gather first?
         """
-        
+
         logger.info("REACT THOUGHT: Planning AIOps analysis approach")
         try:
             thought_result = await try_fallback_orchestrator_execution(
@@ -264,40 +263,40 @@ class AIOpsOrchestratorAgent:
             logger.error(f"Thought phase failed: {e}")
             # Fallback 실패 시에도 기본 분석 수행
             thought_result = f"Analysis planning: I will gather system metrics and analyze the alert for node '{task.get('node', 'unknown')}'"
-        
+
         # ⚡ ACTION PHASE: Execute the monitoring and data collection
         # Get real system snapshot
         system_snapshot = self.get_real_system_snapshot()
-        
+
         action_task = f"""
         ACTION PHASE - Execute System Analysis:
-        
+
         Based on my thought process: {thought_result}
-        
+
         REAL SYSTEM SNAPSHOT DATA:
         {json.dumps(system_snapshot, indent=2)}
-        
+
         Now analyze this ACTUAL system data:
-        
+
         1. CURRENT SYSTEM STATE:
         - Current CPU usage: {system_snapshot.get('cpu', {}).get('usage_percent', 'N/A')}%
         - Memory usage: {system_snapshot.get('memory', {}).get('usage_percent', 'N/A')}%
         - Top CPU processes: {[p.get('name', 'unknown') for p in system_snapshot.get('top_processes', [])[:3]]}
-        
+
         2. PROCESS INVESTIGATION:
         - Analyze the top CPU-consuming processes from the real data
         - Research any suspicious or high-consumption processes using search
         - Check for known issues or solutions for these specific processes
-        
+
         3. SYSTEM STATE EVALUATION:
         - Compare current metrics against normal operational baselines
         - Identify if the current state indicates the reported high CPU issue
         - Determine if this is a current problem or if it has been resolved
-        
+
         Execute these monitoring and analysis tasks using the REAL system data provided.
         Provide detailed findings for each step.
         """
-        
+
         logger.info("REACT ACTION: Executing monitoring and data collection")
         try:
             action_result = await try_fallback_orchestrator_execution(
@@ -313,39 +312,39 @@ class AIOpsOrchestratorAgent:
             # Fallback 실패 시에도 시스템 스냅샷 기반 분석 수행
             system_snapshot = self.get_real_system_snapshot()
             action_result = f"System analysis based on current metrics:\n{json.dumps(system_snapshot, indent=2)}"
-        
+
         # 🔍 OBSERVATION PHASE: Analyze results and generate conclusions
         observation_task = f"""
         OBSERVATION PHASE - Root Cause Analysis and Recommendations:
-        
+
         Based on my analysis execution: {action_result}
-        
+
         Now I need to synthesize the findings and provide conclusions:
-        
+
         1. ROOT CAUSE IDENTIFICATION:
         - What is the primary cause of the high CPU usage?
         - Is this a runaway process, resource leak, or external attack?
         - What evidence supports this conclusion?
-        
+
         2. IMPACT ASSESSMENT:
         - How severe is this issue?
         - What systems or services are affected?
         - What is the urgency level?
-        
+
         3. REMEDIATION PLAN:
         - Immediate actions to resolve the issue
         - Steps to prevent recurrence
         - Monitoring recommendations
-        
+
         4. ESCALATION DECISION:
         - Should this be escalated to human operators?
         - Can this be resolved automatically?
         - What are the risks of automated intervention?
-        
+
         Provide a clear, actionable conclusion with specific next steps.
         Format the response as a structured incident report.
         """
-        
+
         logger.info("REACT OBSERVATION: Analyzing results and generating recommendations")
         try:
             observation_result = await try_fallback_orchestrator_execution(
@@ -365,25 +364,25 @@ Based on the system analysis, I recommend:
 2. Check for resource-intensive processes
 3. Monitor system performance over time
 4. Consider scaling or optimization if needed"""
-        
+
         # Combine all ReAct results for comprehensive analysis
         combined_result = f"""
         # 🚨 AIOPS INCIDENT ANALYSIS - REACT REPORT
-        
+
         ## 🧠 THOUGHT PHASE - Analysis Planning
         {thought_result}
-        
+
         ## ⚡ ACTION PHASE - System Investigation
         {action_result}
-        
+
         ## 🔍 OBSERVATION PHASE - Root Cause & Recommendations
         {observation_result}
-        
+
         ---
         Analysis completed using ReAct pattern for infrastructure incident.
         Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """
-        
+
         logger.info("REACT COMPLETE: AIOps analysis using THOUGHT → ACTION → OBSERVATION pattern")
         return combined_result
 
@@ -391,14 +390,14 @@ Based on the system analysis, I recommend:
 async def main():
     """Main function to run a demo of the AIOps Orchestrator Agent."""
     agent = AIOpsOrchestratorAgent()
-    
+
     test_alert = {
         "id": "cpu-95",
         "node": "web-server-01",
         "description": "High CPU Usage Detected"
     }
-    
+
     await agent.handle_alert(test_alert)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

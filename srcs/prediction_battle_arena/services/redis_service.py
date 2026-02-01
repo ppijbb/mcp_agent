@@ -7,7 +7,6 @@ Redis 서비스
 import logging
 import json
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +22,14 @@ except ImportError:
 class RedisService:
     """
     Redis 서비스
-    
+
     리더보드, 배틀 상태, 사용자 데이터 관리
     """
-    
+
     def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
         """
         RedisService 초기화
-        
+
         Args:
             host: Redis 호스트
             port: Redis 포트
@@ -40,10 +39,10 @@ class RedisService:
         self.port = port
         self.db = db
         self.redis_client: Optional[redis.Redis] = None
-        
+
         # Redis가 없는 경우 메모리 기반 저장소
         self.memory_store: Dict[str, Any] = {}
-        
+
         if REDIS_AVAILABLE:
             try:
                 self.redis_client = redis.Redis(
@@ -58,7 +57,7 @@ class RedisService:
                 self.redis_client = None
         else:
             logger.info("RedisService using in-memory storage")
-    
+
     async def connect(self):
         """Redis 연결"""
         if self.redis_client and REDIS_AVAILABLE:
@@ -68,24 +67,24 @@ class RedisService:
             except Exception as e:
                 logger.warning(f"Redis connection failed: {e}")
                 self.redis_client = None
-    
+
     async def close(self):
         """Redis 연결 종료"""
         if self.redis_client:
             await self.redis_client.close()
             self.redis_client = None
-    
+
     async def update_leaderboard(self, user_id: str, score: float, category: str = "global"):
         """
         리더보드 업데이트
-        
+
         Args:
             user_id: 사용자 ID
             score: 점수
             category: 카테고리 (global/weekly/monthly)
         """
         key = f"leaderboard:{category}"
-        
+
         if self.redis_client:
             try:
                 await self.redis_client.zadd(key, {user_id: score})
@@ -97,11 +96,11 @@ class RedisService:
             if key not in self.memory_store:
                 self.memory_store[key] = {}
             self.memory_store[key][user_id] = score
-    
+
     async def get_leaderboard(self, category: str = "global", limit: int = 100) -> List[Dict[str, Any]]:
         """
         리더보드 조회
-        
+
         Args:
             category: 카테고리
             limit: 조회할 상위 순위 수
@@ -109,7 +108,7 @@ class RedisService:
             리더보드 데이터
         """
         key = f"leaderboard:{category}"
-        
+
         if self.redis_client:
             try:
                 rankings = await self.redis_client.zrevrange(
@@ -129,22 +128,22 @@ class RedisService:
             # 메모리 기반
             if key not in self.memory_store:
                 return []
-            
+
             rankings = sorted(
                 self.memory_store[key].items(),
                 key=lambda x: x[1],
                 reverse=True
             )[:limit]
-            
+
             return [
                 {"user_id": uid, "score": score, "rank": idx + 1}
                 for idx, (uid, score) in enumerate(rankings)
             ]
-    
+
     async def get_user_rank(self, user_id: str, category: str = "global") -> Optional[int]:
         """
         사용자 순위 조회
-        
+
         Args:
             user_id: 사용자 ID
             category: 카테고리
@@ -152,7 +151,7 @@ class RedisService:
             순위 (None if not found)
         """
         key = f"leaderboard:{category}"
-        
+
         if self.redis_client:
             try:
                 rank = await self.redis_client.zrevrank(key, user_id)
@@ -164,23 +163,23 @@ class RedisService:
             # 메모리 기반
             if key not in self.memory_store:
                 return None
-            
+
             rankings = sorted(
                 self.memory_store[key].items(),
                 key=lambda x: x[1],
                 reverse=True
             )
-            
+
             for idx, (uid, _) in enumerate(rankings):
                 if uid == user_id:
                     return idx + 1
-            
+
             return None
-    
+
     async def set_battle_state(self, battle_id: str, state: Dict[str, Any], ttl: Optional[int] = None):
         """
         배틀 상태 저장
-        
+
         Args:
             battle_id: 배틀 ID
             state: 상태 데이터
@@ -188,7 +187,7 @@ class RedisService:
         """
         key = f"battle:{battle_id}"
         value = json.dumps(state)
-        
+
         if self.redis_client:
             try:
                 if ttl:
@@ -200,18 +199,18 @@ class RedisService:
         else:
             # 메모리 기반
             self.memory_store[key] = state
-    
+
     async def get_battle_state(self, battle_id: str) -> Optional[Dict[str, Any]]:
         """
         배틀 상태 조회
-        
+
         Args:
             battle_id: 배틀 ID
         Returns:
             상태 데이터
         """
         key = f"battle:{battle_id}"
-        
+
         if self.redis_client:
             try:
                 value = await self.redis_client.get(key)
@@ -222,18 +221,18 @@ class RedisService:
         else:
             # 메모리 기반
             return self.memory_store.get(key)
-    
+
     async def set_user_data(self, user_id: str, data: Dict[str, Any]):
         """
         사용자 데이터 저장
-        
+
         Args:
             user_id: 사용자 ID
             data: 데이터
         """
         key = f"user:{user_id}"
         value = json.dumps(data)
-        
+
         if self.redis_client:
             try:
                 await self.redis_client.set(key, value)
@@ -242,18 +241,18 @@ class RedisService:
         else:
             # 메모리 기반
             self.memory_store[key] = data
-    
+
     async def get_user_data(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
         사용자 데이터 조회
-        
+
         Args:
             user_id: 사용자 ID
         Returns:
             데이터
         """
         key = f"user:{user_id}"
-        
+
         if self.redis_client:
             try:
                 value = await self.redis_client.get(key)
@@ -264,4 +263,3 @@ class RedisService:
         else:
             # 메모리 기반
             return self.memory_store.get(key)
-

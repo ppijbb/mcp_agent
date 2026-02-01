@@ -7,7 +7,7 @@ class MissingEnvError(AgentError):
 
 
 class ExternalServiceError(AgentError):
-    """Raised when calls to external services (e.g., Figma, Notion APIs) fail.""" 
+    """Raised when calls to external services (e.g., Figma, Notion APIs) fail."""
 
 
 class WorkflowError(AgentError):

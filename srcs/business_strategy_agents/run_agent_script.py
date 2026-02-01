@@ -3,6 +3,7 @@ import json
 import asyncio
 from srcs.business_strategy_agents.run_business_strategy_agents import BusinessStrategyRunner
 
+
 async def main():
     parser = argparse.ArgumentParser(description="Run the Business Strategy Agent Suite.")
     parser.add_argument("--industry", required=True, help="The industry to analyze.")
@@ -20,7 +21,7 @@ async def main():
         help="URL for the Data Sourcing MCP server."
     )
     parser.add_argument("--output-json-path", help="Path to save the final JSON result.")
-    
+
     args = parser.parse_args()
 
     print("🚀 Starting Business Strategy Agent Workflow...")
@@ -58,4 +59,4 @@ async def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

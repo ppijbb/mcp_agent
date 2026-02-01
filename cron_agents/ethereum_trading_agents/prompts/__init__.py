@@ -6,6 +6,5 @@ This package contains prompt templates for trading agents:
 - Analysis Prompts
 - Decision Making Prompts
 """
-from .trading_prompts import *
 
 __all__ = []

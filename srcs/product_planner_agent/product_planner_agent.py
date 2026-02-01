@@ -2,10 +2,9 @@
 """
 Product Planner Agent
 """
-import asyncio
 import re
 from urllib.parse import unquote
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
 from datetime import datetime
 import json
 
@@ -35,7 +34,7 @@ class ProductPlannerAgent(BaseAgent):
         self.reporting_coordinator = ReportingCoordinator()
         self.figma_creator_agent = FigmaCreatorAgent()  # FigmaCreatorAgent 추가
         logger.info("ProductPlannerAgent and its sub-components initialized.")
-        
+
         # Add state management for conversational mode
         self.state = {
             "step": "init",
@@ -53,22 +52,22 @@ class ProductPlannerAgent(BaseAgent):
     async def _save_final_report(self, report_data: Dict[str, Any], product_concept: str) -> Dict[str, Any]:
         """Saves the final report to local file system."""
         logger.info("💾 Saving final report to local file system...")
-        
+
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # Sanitize product_concept for use in a filename
             safe_concept_name = re.sub(r'[\\/*?:"<>|]', "", product_concept)[:50]
             file_name = f"Final_Report_{safe_concept_name}_{timestamp}.json"
-            
+
             # 로컬 파일로 저장
             import os
             reports_dir = "reports"
             os.makedirs(reports_dir, exist_ok=True)
             file_path = os.path.join(reports_dir, file_name)
-            
+
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, ensure_ascii=False)
-            
+
             logger.info(f"✅ Final report saved successfully. File path: {file_path}")
             return {"status": "success", "file_path": file_path}
         except Exception as e:
@@ -80,7 +79,7 @@ class ProductPlannerAgent(BaseAgent):
         try:
             # Remove query parameters and fragment
             url_path = unquote(figma_url).split('?', 1)[0].split('#', 1)[0]
-            
+
             # Extract file ID and node ID
             file_id_match = re.search(r'/file/([a-zA-Z0-9_-]+)', url_path)
             node_id_match = re.search(r'/node/([a-zA-Z0-9_-]+)', url_path)
@@ -100,13 +99,12 @@ class ProductPlannerAgent(BaseAgent):
     def _extract_figma_components_from_prd(self, prd_content: str) -> List[Dict[str, Any]]:
         """PRD 내용에서 Figma 컴포넌트 정보 추출 (고도화)"""
         components = []
-        
+
         # LLM을 사용한 구조화된 컴포넌트 추출
         try:
             # 더 정교한 패턴 매칭과 LLM 기반 추출
             import re
-            import json
-            
+
             # 1. 기본 UI 컴포넌트 패턴 매칭
             button_patterns = [
                 r'버튼[:\s]*([^\n]+)',
@@ -122,7 +120,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'삭제[:\s]*([^\n]+)',
                 r'편집[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in button_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -144,7 +142,7 @@ class ProductPlannerAgent(BaseAgent):
                             "action": button_text.lower()
                         }
                     })
-            
+
             # 2. 입력 필드 패턴
             input_patterns = [
                 r'입력[:\s]*([^\n]+)',
@@ -160,7 +158,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'코멘트[:\s]*([^\n]+)',
                 r'메시지[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in input_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -182,7 +180,7 @@ class ProductPlannerAgent(BaseAgent):
                             "required": "필수" in placeholder or "required" in placeholder.lower()
                         }
                     })
-            
+
             # 3. 텍스트/라벨 패턴
             text_patterns = [
                 r'제목[:\s]*([^\n]+)',
@@ -196,7 +194,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'부제목[:\s]*([^\n]+)',
                 r'subtitle[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in text_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -218,7 +216,7 @@ class ProductPlannerAgent(BaseAgent):
                             "text_type": "label" if "라벨" in pattern or "label" in pattern else "title"
                         }
                     })
-            
+
             # 4. 카드/컨테이너 패턴
             card_patterns = [
                 r'카드[:\s]*([^\n]+)',
@@ -232,7 +230,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'패널[:\s]*([^\n]+)',
                 r'panel[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in card_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -255,7 +253,7 @@ class ProductPlannerAgent(BaseAgent):
                             "interactive": True
                         }
                     })
-            
+
             # 5. 이미지/아이콘 패턴
             image_patterns = [
                 r'이미지[:\s]*([^\n]+)',
@@ -267,7 +265,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'로고[:\s]*([^\n]+)',
                 r'logo[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in image_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -289,7 +287,7 @@ class ProductPlannerAgent(BaseAgent):
                             "alt_text": image_content
                         }
                     })
-            
+
             # 6. 네비게이션 패턴
             nav_patterns = [
                 r'메뉴[:\s]*([^\n]+)',
@@ -301,7 +299,7 @@ class ProductPlannerAgent(BaseAgent):
                 r'사이드바[:\s]*([^\n]+)',
                 r'sidebar[:\s]*([^\n]+)'
             ]
-            
+
             for pattern in nav_patterns:
                 matches = re.findall(pattern, prd_content, re.IGNORECASE)
                 for match in matches:
@@ -323,7 +321,7 @@ class ProductPlannerAgent(BaseAgent):
                             "interactive": True
                         }
                     })
-            
+
             # 7. 기본 컨테이너 (컴포넌트가 없을 경우)
             if not components:
                 components.append({
@@ -343,13 +341,13 @@ class ProductPlannerAgent(BaseAgent):
                         "layout": "flex"
                     }
                 })
-            
+
             # 8. 레이아웃 최적화 - 겹치지 않도록 위치 조정
             self._optimize_component_layout(components)
-            
+
             self.logger.info(f"PRD에서 {len(components)}개 컴포넌트 추출 완료")
             return components
-            
+
         except Exception as e:
             self.logger.error(f"컴포넌트 추출 중 오류: {str(e)}")
             # 오류 시 기본 컴포넌트 반환
@@ -363,39 +361,39 @@ class ProductPlannerAgent(BaseAgent):
                 "style": {"fill_color": "#F5F5F5"},
                 "properties": {"fallback": True}
             }]
-    
+
     def _optimize_component_layout(self, components: List[Dict[str, Any]]) -> None:
         """컴포넌트 레이아웃 최적화 - 겹치지 않도록 위치 조정"""
         if not components:
             return
-        
+
         # 컴포넌트 타입별로 그룹화
         buttons = [c for c in components if c["type"] == "button"]
         inputs = [c for c in components if c["type"] == "input"]
         texts = [c for c in components if c["type"] == "text"]
         cards = [c for c in components if c["type"] == "card"]
         rectangles = [c for c in components if c["type"] == "rectangle"]
-        
+
         # 버튼들을 상단에 배치
         for i, button in enumerate(buttons):
             button["x"] = 50 + (i * 150)
             button["y"] = 50
-        
+
         # 입력 필드들을 버튼 아래에 배치
         for i, input_field in enumerate(inputs):
             input_field["x"] = 50 + (i * 220)
             input_field["y"] = 120
-        
+
         # 텍스트들을 입력 필드 아래에 배치
         for i, text in enumerate(texts):
             text["x"] = 50 + (i * 250)
             text["y"] = 200
-        
+
         # 카드들을 텍스트 아래에 배치
         for i, card in enumerate(cards):
             card["x"] = 50 + (i * 320)
             card["y"] = 250
-        
+
         # 사각형들을 카드 아래에 배치
         for i, rect in enumerate(rectangles):
             rect["x"] = 50 + (i * 350)
@@ -405,7 +403,7 @@ class ProductPlannerAgent(BaseAgent):
         """Process a user message and advance the planning state."""
         self.state["history"].append({"role": "user", "content": user_message})
         response = {"message": "", "state": self.state["step"]}
-        
+
         try:
             if self.state["step"] == "init":
                 # Parse initial inputs from message or ask for them
@@ -422,11 +420,11 @@ class ProductPlannerAgent(BaseAgent):
                 except json.JSONDecodeError:
                     response["message"] = "Please provide product concept, user persona, and optional Figma URL in JSON format."
                     return response
-                
+
                 if not self.state["data"]["product_concept"] or not self.state["data"]["user_persona"]:
                     response["message"] = "Product concept and user persona are required."
                     return response
-                
+
                 self.state["step"] = "figma_analysis"
                 response["message"] = "Starting product planning. Analyzing Figma if provided..."
 
@@ -438,11 +436,11 @@ class ProductPlannerAgent(BaseAgent):
                 logger.info("Figma analysis completed.")
                 response["message"] += "\nFigma analysis complete."
                 self.state["step"] = "prd_drafting"
-            
+
             if self.state["step"] == "figma_analysis" and not self.state["data"]["figma_file_id"]:
                 self.state["data"]["figma_analysis"] = {"status": "skipped"}
                 self.state["step"] = "prd_drafting"
-            
+
             if self.state["step"] == "prd_drafting":
                 logger.info("Drafting PRD...")
                 prd_context = self.state["data"]
@@ -453,14 +451,14 @@ class ProductPlannerAgent(BaseAgent):
                 # === Figma 컴포넌트 생성 단계 고도화 ===
                 prd_content = str(prd_result)
                 components = self._extract_figma_components_from_prd(prd_content)
-                
+
                 # 고도화된 FigmaCreatorAgent 호출
                 try:
                     figma_result = await self.figma_creator_agent.run_workflow({
                         "prd_content": prd_content,
                         "components": components
                     })
-                    
+
                     # 추가로 특정 레이아웃 타입에 따른 생성도 시도
                     if "모바일" in prd_content or "앱" in prd_content:
                         mobile_result = await self.figma_creator_agent.create_mobile_app_layout(
@@ -468,23 +466,23 @@ class ProductPlannerAgent(BaseAgent):
                             features=["로그인", "회원가입", "메인 기능", "설정", "프로필"]
                         )
                         figma_result["mobile_layout"] = mobile_result
-                    
+
                     elif "대시보드" in prd_content or "관리" in prd_content:
                         dashboard_result = await self.figma_creator_agent.create_web_dashboard_layout(
                             dashboard_title="관리 대시보드",
                             widgets=["사용자 통계", "매출 현황", "시스템 상태", "최근 활동", "알림", "설정"]
                         )
                         figma_result["dashboard_layout"] = dashboard_result
-                    
+
                     self.state["data"]["figma_creation_result"] = figma_result
                     response["message"] += f"\n🎨 Figma 레이아웃 스펙 생성 완료! {figma_result.get('components_spec_count', 0)}개 컴포넌트 스펙이 생성되었습니다. 레이아웃 최적화도 적용되었습니다."
-                    
+
                 except Exception as e:
                     self.logger.error(f"Figma 생성 단계 오류: {str(e)}")
                     response["message"] += f"\n⚠️ Figma 컴포넌트 생성 중 오류가 발생했습니다: {str(e)}"
                     # 오류가 있어도 계속 진행
                 self.state["step"] = "report_generation"
-            
+
             if self.state["step"] == "report_generation":
                 logger.info("Generating final report...")
                 report_context = self.state["data"]
@@ -493,7 +491,7 @@ class ProductPlannerAgent(BaseAgent):
                 logger.info("Final report generation completed.")
                 response["message"] += "\nFinal report generated."
                 self.state["step"] = "save_report"
-            
+
             if self.state["step"] == "save_report":
                 save_status = await self._save_final_report(self.state["data"]["final_report"], self.state["data"]["product_concept"])
                 self.state["data"]["final_report"]["save_status"] = save_status
@@ -503,14 +501,14 @@ class ProductPlannerAgent(BaseAgent):
                 else:
                     response["message"] += "\nReport save status recorded (local filesystem)."
                 self.state["step"] = "complete"
-            
+
             if self.state["step"] == "complete":
                 response["message"] += "\nPlanning complete!"
                 response["final_report"] = self.state["data"]["final_report"]
-            
+
             self.state["history"].append({"role": "assistant", "content": response["message"]})
             return response
-        
+
         except Exception as e:
             logger.error(f"Error in process_message: {str(e)}")
             response["message"] = f"Error: {str(e)}"
@@ -523,63 +521,63 @@ class ProductPlannerAgent(BaseAgent):
     def set_state(self, state: Dict[str, Any]):
         """Set state from serialized data."""
         self.state = state
-    
+
     async def run_workflow(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         ProductPlannerAgent의 전체 워크플로우를 실행합니다.
         BaseAgentSimple의 추상 메서드 구현
         """
         logger.info("🚀 ProductPlannerAgent 전체 워크플로우 시작")
-        
+
         try:
             # 입력 데이터에서 정보 추출
             product_concept = input_data.get("product_concept", "제품")
             user_persona = input_data.get("user_persona", "사용자")
             figma_url = input_data.get("figma_url")
-            
+
             # 상태 초기화
             self.state["data"]["product_concept"] = product_concept
             self.state["data"]["user_persona"] = user_persona
-            
+
             if figma_url:
                 figma_file_id, figma_node_id = self._extract_figma_ids(figma_url)
                 self.state["data"]["figma_file_id"] = figma_file_id
                 self.state["data"]["figma_node_id"] = figma_node_id
-            
+
             # 1. Figma 분석
             if self.state["data"]["figma_file_id"]:
                 logger.info("🎨 Figma 분석 시작")
                 figma_result = await self.figma_analyzer.run_workflow(self.state["data"])
                 self.state["data"]["figma_analysis"] = figma_result
-            
+
             # 2. PRD 작성
             logger.info("📝 PRD 작성 시작")
             prd_result = await self.prd_writer.run_workflow(self.state["data"])
             self.state["data"]["prd_draft"] = prd_result
-            
+
             # 3. Figma 컴포넌트 생성
             logger.info("🔧 Figma 컴포넌트 생성 시작")
             prd_content = str(prd_result)
             components = self._extract_figma_components_from_prd(prd_content)
-            
+
             figma_result = await self.figma_creator_agent.run_workflow({
                 "prd_content": prd_content,
                 "components": components
             })
             self.state["data"]["figma_creation_result"] = figma_result
-            
+
             # 4. 최종 보고서 생성
             logger.info("📊 최종 보고서 생성 시작")
             final_report = await self.reporting_coordinator.generate_final_report(self.state["data"])
             self.state["data"]["final_report"] = final_report
-            
+
             # 5. 보고서 저장
             logger.info("💾 보고서 저장 시작")
             save_result = await self._save_final_report(final_report, product_concept)
             final_report["save_status"] = save_result
-            
+
             self.state["step"] = "complete"
-            
+
             logger.info("✅ ProductPlannerAgent 워크플로우 완료")
             return {
                 "status": "success",
@@ -587,7 +585,7 @@ class ProductPlannerAgent(BaseAgent):
                 "figma_creation_result": figma_result,
                 "prd_draft": prd_result
             }
-            
+
         except Exception as e:
             logger.error(f"❌ ProductPlannerAgent 워크플로우 실패: {str(e)}")
             return {

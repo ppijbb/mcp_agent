@@ -3,9 +3,9 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 from uuid import uuid4
 
 
@@ -30,7 +30,7 @@ class BattleType(Enum):
 @dataclass
 class Battle:
     """배틀 데이터 모델"""
-    
+
     battle_id: str = field(default_factory=lambda: str(uuid4()))
     battle_type: BattleType = BattleType.QUICK
     status: BattleStatus = BattleStatus.WAITING
@@ -38,23 +38,23 @@ class Battle:
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
-    
+
     # 참가자
     participants: Set[str] = field(default_factory=set)  # user_id 집합
     min_participants: int = 2
     max_participants: int = 100
-    
+
     # 예측 및 베팅
     predictions: Dict[str, str] = field(default_factory=dict)  # user_id -> prediction_id
     bets: Dict[str, float] = field(default_factory=dict)  # user_id -> bet_amount
-    
+
     # 결과
     winner_id: Optional[str] = None
     results: Dict[str, Dict] = field(default_factory=dict)  # user_id -> 결과 데이터
-    
+
     # 메타데이터
     metadata: Dict = field(default_factory=dict)
-    
+
     def get_duration_seconds(self) -> int:
         """배틀 지속 시간 (초)"""
         duration_map = {
@@ -63,27 +63,27 @@ class Battle:
             BattleType.EXTENDED: 1800,  # 30분
         }
         return duration_map.get(self.battle_type, 300)
-    
+
     def get_remaining_seconds(self) -> Optional[int]:
         """남은 시간 (초)"""
         if not self.started_at:
             return None
-        
+
         elapsed = (datetime.now() - self.started_at).total_seconds()
         remaining = self.get_duration_seconds() - elapsed
         return max(0, int(remaining))
-    
+
     def is_full(self) -> bool:
         """참가자 가득 찼는지"""
         return len(self.participants) >= self.max_participants
-    
+
     def can_join(self) -> bool:
         """참가 가능한지"""
         return (
             self.status == BattleStatus.WAITING and
             not self.is_full()
         )
-    
+
     def to_dict(self) -> Dict:
         """딕셔너리로 변환"""
         return {
@@ -103,4 +103,3 @@ class Battle:
             "remaining_seconds": self.get_remaining_seconds(),
             "metadata": self.metadata,
         }
-

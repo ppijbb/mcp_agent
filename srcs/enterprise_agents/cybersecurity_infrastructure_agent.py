@@ -1,22 +1,17 @@
 import asyncio
 import os
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
-    EvaluatorOptimizerLLM,
-    QualityRating,
-)
 from srcs.core.config.loader import settings
 
 # ✅ P2-1: Cybersecurity Agent 메서드 구현 (2개 함수)
+
 
 def load_assessment_types():
     """평가 유형을 동적으로 로드"""
@@ -38,6 +33,7 @@ def load_assessment_types():
         "물리적 보안 평가 (Physical Security Assessment)"
     ]
 
+
 def load_compliance_frameworks():
     """컴플라이언스 프레임워크를 동적으로 로드"""
     return [
@@ -46,40 +42,41 @@ def load_compliance_frameworks():
         "ISO 27002 (Code of Practice for Information Security)",
         "ISO 27017 (Cloud Security)",
         "ISO 27018 (Privacy in Cloud Computing)",
-        
+
         # 미국 표준 및 규정
         "NIST Cybersecurity Framework",
         "NIST SP 800-53 (Security Controls)",
         "SOX (Sarbanes-Oxley Act)",
         "FISMA (Federal Information Security Management Act)",
         "FedRAMP (Federal Risk and Authorization Management Program)",
-        
+
         # 개인정보보호 규정
         "GDPR (General Data Protection Regulation)",
         "CCPA (California Consumer Privacy Act)",
         "PIPEDA (Personal Information Protection and Electronic Documents Act)",
-        
+
         # 산업별 규정
         "HIPAA (Health Insurance Portability and Accountability Act)",
         "PCI DSS (Payment Card Industry Data Security Standard)",
         "GLBA (Gramm-Leach-Bliley Act)",
         "FERPA (Family Educational Rights and Privacy Act)",
-        
+
         # 클라우드 및 기술 프레임워크
         "CSA CCM (Cloud Security Alliance Cloud Controls Matrix)",
         "COBIT (Control Objectives for Information and Related Technologies)",
         "ITIL (Information Technology Infrastructure Library)",
-        
+
         # 지역별 규정
         "K-ISMS (한국 정보보호관리체계)",
         "PIPL (Personal Information Protection Law - China)",
         "LGPD (Lei Geral de Proteção de Dados - Brazil)",
-        
+
         # 업계 특화 프레임워크
         "SWIFT CSP (Customer Security Programme)",
         "NERC CIP (North American Electric Reliability Corporation Critical Infrastructure Protection)",
         "IEC 62443 (Industrial Communication Networks Security)"
     ]
+
 
 # Configuration
 OUTPUT_DIR = "cybersecurity_infrastructure_reports"
@@ -89,7 +86,7 @@ COMPLIANCE_FRAMEWORKS = ["SOX", "ISO 27001", "NIST", "GDPR", "HIPAA"]
 
 class CybersecurityAgent:
     """Cybersecurity Infrastructure Agent for Streamlit integration"""
-    
+
     def __init__(self):
         mcp_servers_config = {
             name: server.model_dump()
@@ -102,17 +99,17 @@ class CybersecurityAgent:
         }
         self.app = MCPApp(settings=app_config, human_input_callback=None)
         self.output_dir = OUTPUT_DIR
-    
+
     def run_cybersecurity_workflow(self, company_name=None, assessment_type=None, frameworks=None, save_to_file=False):
         """
         Run cybersecurity workflow synchronously for Streamlit
-        
+
         Args:
             company_name: Company name for assessment
             assessment_type: Type of security assessment
             frameworks: List of compliance frameworks to assess
             save_to_file: Whether to save results to files (default: False)
-        
+
         Returns:
             dict: Results of the execution with actual content
         """
@@ -122,7 +119,7 @@ class CybersecurityAgent:
         if frameworks:
             global COMPLIANCE_FRAMEWORKS
             COMPLIANCE_FRAMEWORKS = frameworks
-            
+
         try:
             # Run the async main function
             result = asyncio.run(self._async_workflow(assessment_type, save_to_file))
@@ -145,48 +142,52 @@ class CybersecurityAgent:
                 'assessment_type': assessment_type,
                 'save_to_file': save_to_file
             }
-    
+
     async def _async_workflow(self, assessment_type, save_to_file=False):
         """Internal async workflow execution"""
-        
+
         # Create output directory only if saving to file
         if save_to_file:
             os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         async with self.app.run() as security_app:
             context = security_app.context
             logger = security_app.logger
-            
+
             # Configure servers only if saving to file
             if save_to_file and "filesystem" in context.config.mcp.servers:
                 context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                 logger.info("Filesystem server configured")
-            
+
             # Create all cybersecurity agents
             agents = self._create_cybersecurity_agents()
-            
+
             # Create orchestrator
-            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+
+                primary_model="gemini-2.5-flash-lite",
+
+                logger_instance=logger
+
+            )
+
+            orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
-            
+
             # Define task based on assessment type
             task = self._create_task(assessment_type, timestamp, save_to_file)
-            
+
             # Execute the workflow
             logger.info(f"Starting cybersecurity infrastructure workflow for {COMPANY_NAME}")
             result = await orchestrator.generate_str(
                 message=task,
                 request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
-            
+
             logger.info("Cybersecurity infrastructure workflow completed successfully")
             if save_to_file:
                 logger.info(f"All deliverables saved in {self.output_dir}/")
@@ -194,21 +195,21 @@ Orchestrator(
                 self._generate_dashboard_and_kpis(timestamp)
             else:
                 logger.info("Results returned for display (not saved to file)")
-            
+
             return result
-    
+
     def _create_cybersecurity_agents(self):
         """Create all cybersecurity agents"""
-        
+
         agents = {}
-        
+
         # Security Assessment Specialist
         agents['security_assessment'] = Agent(
             name="security_assessment_specialist",
             instruction=f"""You are a senior cybersecurity analyst specializing in comprehensive security assessments.
-            
+
             Conduct thorough security evaluations for {COMPANY_NAME}:
-            
+
             1. Vulnerability Assessment:
                - Network vulnerability scanning
                - Web application security testing
@@ -216,7 +217,7 @@ Orchestrator(
                - Mobile application security
                - API security evaluation
                - Configuration review
-            
+
             2. Penetration Testing Framework:
                - External penetration testing
                - Internal network testing
@@ -224,7 +225,7 @@ Orchestrator(
                - Physical security evaluation
                - Wireless network security
                - Cloud infrastructure testing
-            
+
             3. Risk Assessment Matrix:
                - Asset classification and valuation
                - Threat modeling and analysis
@@ -232,7 +233,7 @@ Orchestrator(
                - Risk scoring and prioritization
                - Business impact analysis
                - Residual risk calculation
-            
+
             4. Security Control Evaluation:
                - Access control effectiveness
                - Encryption implementation
@@ -240,7 +241,7 @@ Orchestrator(
                - Incident response capabilities
                - Backup and recovery procedures
                - Change management processes
-            
+
             5. Remediation Planning:
                - Critical vulnerability prioritization
                - Patch management strategies
@@ -248,20 +249,20 @@ Orchestrator(
                - Cost-benefit analysis
                - Implementation timelines
                - Progress tracking metrics
-            
+
             Provide detailed findings with CVSS scores and actionable remediation steps.
             """,
             server_names=["filesystem", "fetch"],
         )
-        
+
         # Add other agents here...
         # (I'll add just the key ones to keep the response manageable)
-        
+
         return agents
-    
+
     def _create_task(self, assessment_type, timestamp, save_to_file):
         """Create task description based on assessment type"""
-        
+
         # Base task for security assessment
         task = f"""Execute comprehensive cybersecurity and infrastructure assessment for {COMPANY_NAME}:
 
@@ -271,11 +272,11 @@ Orchestrator(
         4. Design infrastructure security architecture
         5. Establish cloud security governance
         6. Implement data protection program
-        
+
         Assessment Focus: {assessment_type or 'comprehensive security evaluation'}
-        
+
         """
-        
+
         # Add file saving instructions only if save_to_file is True
         if save_to_file:
             task += f"""Save all deliverables in the {self.output_dir} directory:
@@ -297,12 +298,12 @@ Orchestrator(
         - Infrastructure security recommendations
         - Data protection controls assessment
         """
-        
+
         return task
-    
+
     def _generate_dashboard_and_kpis(self, timestamp):
         """Generate dashboard and KPI files (only when saving to file)"""
-        
+
         # Generate executive security dashboard
         dashboard_path = os.path.join(self.output_dir, f"cybersecurity_executive_dashboard_{timestamp}.md")
         with open(dashboard_path, 'w') as f:
@@ -359,10 +360,10 @@ All critical security domains evaluated with actionable recommendations.
 For detailed technical information, refer to individual reports in {self.output_dir}/
 
 ---
-*This dashboard provides a high-level view of the organization's cybersecurity posture. 
+*This dashboard provides a high-level view of the organization's cybersecurity posture.
 For technical details and implementation guidance, please review the complete assessment reports.*
 """)
-        
+
         # Create security KPI tracking template
         kpi_path = os.path.join(self.output_dir, f"security_kpi_template_{timestamp}.json")
         security_kpis = {
@@ -395,6 +396,6 @@ For technical details and implementation guidance, please review the complete as
             "reporting_period": f"{datetime.now().strftime('%Y-%m')}",
             "last_updated": datetime.now().isoformat()
         }
-        
+
         with open(kpi_path, 'w') as f:
-            json.dump(security_kpis, f, indent=2) 
+            json.dump(security_kpis, f, indent=2)

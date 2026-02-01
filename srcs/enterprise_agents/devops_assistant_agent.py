@@ -13,20 +13,17 @@ Features:
 Model: gemini-2.5-flash-lite-preview-0607
 """
 
-import asyncio
 import os
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 
 # MCP Agent imports
-from mcp_agent.app import MCPApp
-from mcp_agent.agents.agent import Agent
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+
 
 @dataclass
 class CodeReviewRequest:
@@ -38,6 +35,7 @@ class CodeReviewRequest:
     author: str = ""
     changes_summary: str = ""
 
+
 @dataclass
 class DeploymentStatus:
     """배포 상태"""
@@ -46,6 +44,7 @@ class DeploymentStatus:
     last_deployed: str
     health_check: str
     error_count: int = 0
+
 
 @dataclass
 class IssueAnalysis:
@@ -56,6 +55,7 @@ class IssueAnalysis:
     category: str  # bug, feature, security
     estimated_hours: int
     assigned_to: str = ""
+
 
 @dataclass
 class TeamActivity:
@@ -68,6 +68,7 @@ class TeamActivity:
     build_success_rate: float
     avg_review_time: float
 
+
 class DevOpsTaskType(Enum):
     """DevOps 작업 타입"""
     CODE_REVIEW = "🔍 코드 리뷰"
@@ -76,6 +77,7 @@ class DevOpsTaskType(Enum):
     TEAM_STANDUP = "👥 팀 스탠드업"
     PERFORMANCE_ANALYSIS = "📊 성능 분석"
     SECURITY_SCAN = "🔒 보안 스캔"
+
 
 @dataclass
 class DevOpsResult:
@@ -87,34 +89,35 @@ class DevOpsResult:
     timestamp: str
     processing_time: float
 
+
 class DevOpsAssistantMCPAgent:
     """
     🚀 DevOps Assistant MCP Agent
-    
+
     Features:
     - GitHub 코드 리뷰 자동화
-    - CI/CD 파이프라인 모니터링  
+    - CI/CD 파이프라인 모니터링
     - 이슈 우선순위 분석
     - 팀 스탠드업 준비
     - 성능 분석 및 최적화
     - 보안 스캔 및 권장사항
-    
+
     Model: gemini-2.5-flash-lite-preview-0607
     """
-    
+
     def __init__(self, output_dir: str = "devops_assistant_reports"):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        
+
         # MCP App 초기화
         from srcs.common.utils import setup_agent_app
         self.app = setup_agent_app("devops_assistant")
-        
+
         # DevOps 작업 히스토리
         self.task_history: List[DevOpsResult] = []
         self.active_monitors: Dict[str, Any] = {}
         self.team_metrics: Dict[str, TeamActivity] = {}
-        
+
         # 설정
         self.model_name = "gemini-2.5-flash-lite-preview-0607"
         self.default_review_criteria = [
@@ -124,17 +127,17 @@ class DevOpsAssistantMCPAgent:
             "테스트 커버리지",
             "문서화 수준"
         ]
-        
+
     async def analyze_code_review(self, request: CodeReviewRequest) -> DevOpsResult:
         """
         GitHub Pull Request 코드 리뷰 분석
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             # LLM을 통한 코드 리뷰 생성
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             analysis_prompt = f"""
             다음 Pull Request를 전문 개발자 관점에서 리뷰해주세요:
 
@@ -159,7 +162,7 @@ class DevOpsAssistantMCPAgent:
 
             건설적이고 실행 가능한 피드백을 제공해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -167,7 +170,7 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=1000
                 )
             )
-            
+
             # Mock 데이터로 실제 GitHub API 호출 시뮬레이션
             mock_pr_data = {
                 "files_changed": 5,
@@ -178,14 +181,14 @@ class DevOpsAssistantMCPAgent:
                 "ci_status": "passing",
                 "conflicts": False
             }
-            
+
             recommendations = [
                 f"코드 리뷰 완료: {request.owner}/{request.repo}#{request.pull_number}",
                 "CI/CD 파이프라인 상태 확인 필요",
                 "테스트 커버리지 80% 이상 유지 권장",
                 "보안 스캔 결과 검토 필요"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.CODE_REVIEW,
                 status="completed",
@@ -199,21 +202,21 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def check_deployment_status(self, service_name: str, environment: str = "production") -> DevOpsResult:
         """
         배포 상태 확인 및 분석
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             # Mock 배포 데이터
             mock_deployment_data = {
                 "service": service_name,
@@ -227,7 +230,7 @@ class DevOpsAssistantMCPAgent:
                 "cpu_usage": "45%",
                 "memory_usage": "62%"
             }
-            
+
             analysis_prompt = f"""
             다음 서비스의 배포 상태를 분석해주세요:
 
@@ -250,7 +253,7 @@ class DevOpsAssistantMCPAgent:
 
             운영 관점에서 실행 가능한 인사이트를 제공해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -258,7 +261,7 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=800
                 )
             )
-            
+
             recommendations = [
                 f"{service_name} 서비스 상태 모니터링 완료",
                 "헬스체크 실패 1건 조사 필요",
@@ -266,7 +269,7 @@ class DevOpsAssistantMCPAgent:
                 "응답시간 145ms - 성능 양호",
                 "에러율 0.2% - 허용 범위 내"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.DEPLOYMENT_CHECK,
                 status="completed",
@@ -279,21 +282,21 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def analyze_issues(self, owner: str, repo: str) -> DevOpsResult:
         """
         GitHub 이슈 우선순위 분석
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             # Mock 이슈 데이터
             mock_issues = [
                 {
@@ -314,11 +317,11 @@ class DevOpsAssistantMCPAgent:
                     "id": 125,
                     "title": "SQL injection vulnerability in search",
                     "labels": ["security", "critical"],
-                    "created": "2025-01-18", 
+                    "created": "2025-01-18",
                     "description": "Search endpoint vulnerable to SQL injection attacks"
                 }
             ]
-            
+
             analysis_prompt = f"""
             다음 GitHub 이슈들의 우선순위를 분석하고 분류해주세요:
 
@@ -341,7 +344,7 @@ class DevOpsAssistantMCPAgent:
 
             개발팀의 생산성을 고려한 실용적인 우선순위를 제안해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -349,7 +352,7 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=1200
                 )
             )
-            
+
             # 이슈 분석 결과 생성
             analyzed_issues = []
             for issue in mock_issues:
@@ -362,7 +365,7 @@ class DevOpsAssistantMCPAgent:
                 else:
                     priority = "P3"
                     estimated_hours = 16
-                    
+
                 analyzed_issues.append(IssueAnalysis(
                     issue_id=issue["id"],
                     title=issue["title"],
@@ -371,14 +374,14 @@ class DevOpsAssistantMCPAgent:
                     estimated_hours=estimated_hours,
                     assigned_to="security-team" if "security" in issue["labels"] else "backend-team"
                 ))
-            
+
             recommendations = [
                 f"{len(mock_issues)}개 이슈 우선순위 분석 완료",
                 "보안 이슈 1건 즉시 처리 필요 (P0)",
                 "Critical 버그 1건 당일 처리 권장 (P1)",
                 "UI 개선사항 스프린트 백로그 추가 (P3)"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.ISSUE_ANALYSIS,
                 status="completed",
@@ -392,21 +395,21 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def generate_team_standup(self, team_name: str) -> DevOpsResult:
         """
         팀 스탠드업 요약 생성
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             # Mock 팀 활동 데이터
             team_activity = TeamActivity(
                 team_name=team_name,
@@ -417,9 +420,9 @@ class DevOpsAssistantMCPAgent:
                 build_success_rate=94.5,
                 avg_review_time=2.3
             )
-            
+
             self.team_metrics[team_name] = team_activity
-            
+
             analysis_prompt = f"""
             다음 팀의 24시간 활동을 기반으로 스탠드업 요약을 작성해주세요:
 
@@ -430,23 +433,23 @@ class DevOpsAssistantMCPAgent:
             1. 어제 완료된 주요 작업 (Yesterday)
                - 머지된 PR과 해결된 이슈 기준
                - 핵심 성과 하이라이트
-            
+
             2. 오늘 예정된 작업 (Today)
                - 진행 중인 PR 검토
                - 우선순위 높은 이슈 처리
-            
+
             3. 차단 요소 (Blockers)
                - 빌드 실패 원인
                - 리뷰 지연 사항
                - 의존성 이슈
-            
+
             4. 팀 메트릭 하이라이트
                - 성과 지표 요약
                - 개선 포인트
-            
+
             간결하고 실행 가능한 정보 위주로 작성해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -454,17 +457,17 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=800
                 )
             )
-            
+
             recommendations = [
                 f"{team_name} 팀 스탠드업 요약 생성 완료",
                 f"빌드 성공률 {team_activity.build_success_rate}% - 목표 95% 달성 근접",
                 f"평균 리뷰 시간 {team_activity.avg_review_time}시간 - 양호",
                 f"일일 커밋 {team_activity.commits_today}건 - 활발한 개발 활동"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.TEAM_STANDUP,
-                status="completed", 
+                status="completed",
                 result_data={
                     "team_name": team_name,
                     "team_activity": asdict(team_activity),
@@ -475,28 +478,28 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def analyze_performance(self, service_name: str, timeframe: str = "24h") -> DevOpsResult:
         """
         서비스 성능 분석
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             # Mock 성능 메트릭
             performance_metrics = {
                 "service": service_name,
                 "timeframe": timeframe,
                 "response_time": {
                     "avg": "156ms",
-                    "p95": "324ms", 
+                    "p95": "324ms",
                     "p99": "892ms"
                 },
                 "throughput": "2,450 req/min",
@@ -513,7 +516,7 @@ class DevOpsAssistantMCPAgent:
                     "slow_queries": 3
                 }
             }
-            
+
             analysis_prompt = f"""
             다음 서비스의 성능 메트릭을 분석하고 최적화 방안을 제안해주세요:
 
@@ -537,7 +540,7 @@ class DevOpsAssistantMCPAgent:
 
             SRE 관점에서 실용적인 개선 방안을 제시해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -545,7 +548,7 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=1000
                 )
             )
-            
+
             recommendations = [
                 f"{service_name} 성능 분석 완료 ({timeframe})",
                 "P99 응답시간 892ms - 최적화 필요",
@@ -553,7 +556,7 @@ class DevOpsAssistantMCPAgent:
                 "슬로우 쿼리 3건 - DB 튜닝 권장",
                 "CPU 사용률 52% - 적정 수준"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.PERFORMANCE_ANALYSIS,
                 status="completed",
@@ -567,21 +570,21 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def run_security_scan(self, target: str, scan_type: str = "full") -> DevOpsResult:
         """
         보안 스캔 실행 및 분석
         """
         start_time = datetime.now()
-        
+
         async with self.app.run() as agent_app:
             llm = GoogleAugmentedLLM(model=self.model_name)
-            
+
             # Mock 보안 스캔 결과
             security_scan_results = {
                 "target": target,
@@ -600,7 +603,7 @@ class DevOpsAssistantMCPAgent:
                         "description": "User input not properly sanitized"
                     },
                     {
-                        "severity": "high", 
+                        "severity": "high",
                         "type": "XSS",
                         "location": "/user/profile",
                         "description": "Reflected XSS in user profile page"
@@ -617,7 +620,7 @@ class DevOpsAssistantMCPAgent:
                     "CIS_Controls": "85% compliant"
                 }
             }
-            
+
             analysis_prompt = f"""
             다음 보안 스캔 결과를 분석하고 대응 방안을 제시해주세요:
 
@@ -641,7 +644,7 @@ class DevOpsAssistantMCPAgent:
 
             보안팀과 개발팀이 협력할 수 있는 실행 계획을 제시해주세요.
             """
-            
+
             response = await llm.generate(
                 RequestParams(
                     prompt=analysis_prompt,
@@ -649,7 +652,7 @@ class DevOpsAssistantMCPAgent:
                     max_tokens=1000
                 )
             )
-            
+
             recommendations = [
                 f"{target} 보안 스캔 완료 - {scan_type} 모드",
                 "Critical 취약점 1건 - 즉시 패치 필요",
@@ -657,7 +660,7 @@ class DevOpsAssistantMCPAgent:
                 "OWASP Top 10 - 70% 준수 (개선 필요)",
                 "CIS Controls - 85% 준수 (양호)"
             ]
-            
+
             result = DevOpsResult(
                 task_type=DevOpsTaskType.SECURITY_SCAN,
                 status="completed",
@@ -671,41 +674,41 @@ class DevOpsAssistantMCPAgent:
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 processing_time=(datetime.now() - start_time).total_seconds()
             )
-            
+
             self.task_history.append(result)
             await self._save_result(result)
-            
+
             return result
-    
+
     async def _save_result(self, result: DevOpsResult):
         """결과를 파일로 저장"""
         filename = f"{result.task_type.name.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         filepath = os.path.join(self.output_dir, filename)
-        
+
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(asdict(result), f, ensure_ascii=False, indent=2)
-    
+
     def get_task_history(self) -> List[DevOpsResult]:
         """작업 히스토리 조회"""
         return self.task_history
-    
+
     def get_team_metrics(self) -> Dict[str, TeamActivity]:
         """팀 메트릭 조회"""
         return self.team_metrics
-    
+
     def get_summary_report(self) -> Dict[str, Any]:
         """종합 요약 리포트"""
         if not self.task_history:
             return {"message": "아직 수행된 작업이 없습니다."}
-        
+
         task_counts = {}
         total_processing_time = 0
-        
+
         for task in self.task_history:
             task_type = task.task_type.value
             task_counts[task_type] = task_counts.get(task_type, 0) + 1
             total_processing_time += task.processing_time
-        
+
         return {
             "total_tasks": len(self.task_history),
             "task_breakdown": task_counts,
@@ -716,15 +719,18 @@ class DevOpsAssistantMCPAgent:
         }
 
 # 편의 함수들
+
+
 async def create_devops_assistant(output_dir: str = "devops_assistant_reports") -> DevOpsAssistantMCPAgent:
     """DevOps Assistant Agent 생성"""
     return DevOpsAssistantMCPAgent(output_dir=output_dir)
+
 
 async def run_code_review(agent: DevOpsAssistantMCPAgent, owner: str, repo: str, pull_number: int) -> DevOpsResult:
     """코드 리뷰 실행"""
     request = CodeReviewRequest(
         owner=owner,
-        repo=repo, 
+        repo=repo,
         pull_number=pull_number,
         title=f"Feature update for {repo}",
         author="developer",
@@ -732,22 +738,27 @@ async def run_code_review(agent: DevOpsAssistantMCPAgent, owner: str, repo: str,
     )
     return await agent.analyze_code_review(request)
 
+
 async def run_deployment_check(agent: DevOpsAssistantMCPAgent, service_name: str, environment: str = "production") -> DevOpsResult:
     """배포 상태 확인"""
     return await agent.check_deployment_status(service_name, environment)
+
 
 async def run_issue_analysis(agent: DevOpsAssistantMCPAgent, owner: str, repo: str) -> DevOpsResult:
     """이슈 분석 실행"""
     return await agent.analyze_issues(owner, repo)
 
+
 async def run_team_standup(agent: DevOpsAssistantMCPAgent, team_name: str) -> DevOpsResult:
     """팀 스탠드업 생성"""
     return await agent.generate_team_standup(team_name)
+
 
 async def run_performance_analysis(agent: DevOpsAssistantMCPAgent, service_name: str, timeframe: str = "24h") -> DevOpsResult:
     """성능 분석 실행"""
     return await agent.analyze_performance(service_name, timeframe)
 
+
 async def run_security_scan(agent: DevOpsAssistantMCPAgent, target: str, scan_type: str = "full") -> DevOpsResult:
     """보안 스캔 실행"""
-    return await agent.run_security_scan(target, scan_type) 
+    return await agent.run_security_scan(target, scan_type)

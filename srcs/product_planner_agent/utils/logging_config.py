@@ -10,6 +10,7 @@ from logging import LogRecord
 
 _JSON = bool(int(os.getenv("AGENT_JSON_LOG", "0")))
 
+
 class _JsonFormatter(logging.Formatter):
     def format(self, record: LogRecord) -> str:
         base = {
@@ -21,6 +22,7 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             base["exc_info"] = self.formatException(record.exc_info)
         return json.dumps(base, ensure_ascii=False)
+
 
 def setup_logging():
     root = logging.getLogger()
@@ -50,5 +52,6 @@ def setup_logging():
         except ImportError:
             logging.getLogger(__name__).warning("opentelemetry-sdk not installed, OTEL logging disabled.")
 
+
 # auto-initialize
-setup_logging() 
+setup_logging()

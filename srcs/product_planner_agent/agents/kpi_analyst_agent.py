@@ -9,13 +9,11 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from srcs.product_planner_agent.prompts import PROMPT
-from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class KPIAnalystAgent(BaseAgent):
     """KPI 설정 및 성과 분석 전문 Agent"""
-    
+
     def __init__(self):
         super().__init__("kpi_analyst_agent")
 
@@ -46,7 +44,7 @@ class KPIAnalystAgent(BaseAgent):
 
         Provide the output in a structured JSON format.
         """
-        
+
         try:
             result_str = await self.app.llm.generate_str(prompt, request_params=RequestParams(temperature=0.5, response_format={"type": "json_object"}))
             kpi_definition = json.loads(result_str)
@@ -56,4 +54,4 @@ class KPIAnalystAgent(BaseAgent):
         except json.JSONDecodeError as e:
             raise WorkflowError(f"Failed to decode LLM response: {e}") from e
         except Exception as e:
-            raise APIError(f"Failed to define KPIs: {e}") from e 
+            raise APIError(f"Failed to define KPIs: {e}") from e

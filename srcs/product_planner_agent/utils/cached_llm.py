@@ -6,10 +6,10 @@ NOTE: For production use Redis/LRU cache + TTL. This is a minimal implementation
 """
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 from collections import OrderedDict
 import time, logging, os
+
 
 class _LRUCache(OrderedDict):
     """Very small manual LRU cache for <128 items."""
@@ -29,6 +29,7 @@ class _LRUCache(OrderedDict):
         if len(self) > self.maxsize:
             oldest = next(iter(self))
             del self[oldest]
+
 
 class CachedLLM:
     """Proxy object that wraps an existing AugmentedLLM instance and applies LRU caching."""
@@ -62,4 +63,4 @@ class CachedLLM:
             logging.getLogger("llm").info(f"LLM call tokens≈{token_est}, elapsed={elapsed:.2f}s")
 
         self._cache[key] = result
-        return result 
+        return result

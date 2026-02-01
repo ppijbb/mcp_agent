@@ -2,9 +2,7 @@
 보상 계산 에이전트
 """
 
-from typing import List, Dict, Any, Optional
 from mcp_agent.agents.agent import Agent as MCP_Agent
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from ..tools.reward_tools import RewardTools
 from ..services.reward_service import RewardService
@@ -42,7 +40,7 @@ def create_reward_calculator_agent(
 ) -> MCP_Agent:
     """
     보상 계산 에이전트 생성
-    
+
     Args:
         llm_factory: LLM 팩토리 함수
         reward_tools: 보상 도구 인스턴스
@@ -52,7 +50,7 @@ def create_reward_calculator_agent(
     """
     # 도구 목록 가져오기
     tools = reward_tools.get_tools()
-    
+
     agent = MCP_Agent(
         name="reward_calculator_agent",
         instruction=REWARD_CALCULATOR_AGENT_INSTRUCTION,
@@ -60,6 +58,5 @@ def create_reward_calculator_agent(
         llm_factory=llm_factory,
         tools=tools
     )
-    
-    return agent
 
+    return agent

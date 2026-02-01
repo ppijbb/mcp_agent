@@ -3,7 +3,6 @@ import os
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
-from mcp_agent.config import get_settings
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
@@ -96,16 +95,16 @@ async def run_workflow(task: str, model_name: str, plan_type: str):
         logger = orchestrator_app.logger
 
         context = orchestrator_app.context
-        
+
         # 파일시스템 서버의 인자에 현재 디렉토리 추가
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
 
         finder_agent = Agent(
             name="finder",
-            instruction="""You are an agent with access to the filesystem, 
-            as well as the ability to fetch URLs. Your job is to identify 
-            the closest match to a user's request, make the appropriate tool calls, 
+            instruction="""You are an agent with access to the filesystem,
+            as well as the ability to fetch URLs. Your job is to identify
+            the closest match to a user's request, make the appropriate tool calls,
             and return the URI and CONTENTS of the closest match.""",
             server_names=["fetch", "filesystem"],
         )
@@ -113,7 +112,7 @@ async def run_workflow(task: str, model_name: str, plan_type: str):
         writer_agent = Agent(
             name="writer",
             instruction="""You are an agent that can write to the filesystem.
-            You are tasked with taking the user's input, addressing it, and 
+            You are tasked with taking the user's input, addressing it, and
             writing the result to disk in the appropriate location.""",
             server_names=["filesystem"],
         )
@@ -121,25 +120,25 @@ async def run_workflow(task: str, model_name: str, plan_type: str):
         proofreader = Agent(
             name="proofreader",
             instruction=""""Review the provided text for grammar, spelling, and punctuation errors.
-            Identify any awkward phrasing or structural issues that could improve clarity. 
+            Identify any awkward phrasing or structural issues that could improve clarity.
             Provide detailed feedback on corrections.""",
-            server_names=[], # No servers needed, works on input text
+            server_names=[],  # No servers needed, works on input text
         )
 
         fact_checker = Agent(
             name="fact_checker",
             instruction="""Verify the factual consistency within the provided text. Identify any contradictions,
-            logical inconsistencies, or inaccuracies. 
+            logical inconsistencies, or inaccuracies.
             Highlight potential issues with reasoning or coherence.""",
-            server_names=[], # No servers needed
+            server_names=[],  # No servers needed
         )
 
         style_enforcer = Agent(
             name="style_enforcer",
             instruction="""Analyze the provided text for adherence to style guidelines.
-            Evaluate the narrative flow, clarity of expression, and tone. Suggest improvements to 
+            Evaluate the narrative flow, clarity of expression, and tone. Suggest improvements to
             enhance storytelling, readability, and engagement.""",
-            server_names=[], # No servers needed
+            server_names=[],  # No servers needed
         )
 
         orchestrator = Orchestrator(
@@ -165,11 +164,11 @@ if __name__ == "__main__":
     import time
 
     # 기본 작업을 사용하여 테스트
-    default_task = """Load the student's short story from a file named 'short_story.md', 
-    and generate a report with feedback across proofreading, 
+    default_task = """Load the student's short story from a file named 'short_story.md',
+    and generate a report with feedback across proofreading,
     factuality/logical consistency and style adherence.
     Write the graded report to 'graded_report.md' in the same directory."""
-    
+
     # 테스트용 임시 파일 생성
     with open("short_story.md", "w") as f:
         f.write("This is a tale of bravery and waffles. The knight sir Reginald ate 12 waffles before the dragon came.")
@@ -183,7 +182,7 @@ if __name__ == "__main__":
     t = end - start
 
     print(f"Total run time: {t:.2f}s")
-    
+
     # 생성된 파일 내용 확인
     if os.path.exists("graded_report.md"):
         print("\n--- GRADED REPORT CONTENT ---")

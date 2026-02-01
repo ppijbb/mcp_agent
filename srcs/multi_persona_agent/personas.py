@@ -7,6 +7,7 @@ Each persona has a specific role and instruction set to guide its contribution.
 # These functions return instruction strings that will be used to create Agent instances
 # in the MultiPersonaDialogueAgent class within the MCPApp context.
 
+
 def get_advocate_instruction() -> str:
     """
     Returns the Advocate instruction.
@@ -18,6 +19,7 @@ def get_advocate_instruction() -> str:
     - Proactively defend against potential criticisms.
     - Your tone is passionate, confident, and persuasive.
     - Do not acknowledge flaws unless absolutely necessary, and if so, frame them as minor or manageable."""
+
 
 def get_critic_instruction() -> str:
     """
@@ -31,6 +33,7 @@ def get_critic_instruction() -> str:
     - Your tone is analytical, objective, and sharp.
     - Challenge the Advocate's points directly and rigorously."""
 
+
 def get_skeptic_instruction() -> str:
     """
     Returns the Skeptic instruction.
@@ -42,7 +45,8 @@ def get_skeptic_instruction() -> str:
     - Request more data, clearer definitions, and stronger evidence.
     - Your tone is inquisitive, cautious, and probing.
     - You are not necessarily negative, but you are never easily convinced."""
-    
+
+
 def get_synthesizer_instruction() -> str:
     """
     Returns the Synthesizer instruction.
@@ -54,6 +58,7 @@ def get_synthesizer_instruction() -> str:
     - Resolve contradictions by proposing nuanced or higher-level perspectives.
     - Your goal is to create a balanced, holistic, and insightful summary.
     - Your tone is wise, balanced, and constructive."""
+
 
 def get_meta_observer_instruction() -> str:
     """
@@ -75,4 +80,4 @@ PERSONA_INSTRUCTIONS = {
     "Skeptic": get_skeptic_instruction(),
     "Synthesizer": get_synthesizer_instruction(),
     "MetaObserver": get_meta_observer_instruction(),
-} 
+}

@@ -1,20 +1,17 @@
 import asyncio
 import os
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
-from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.utils import setup_agent_app
 
 # Configuration
 OUTPUT_DIR = "clv_reports"
@@ -27,7 +24,7 @@ app = setup_agent_app("customer_lifetime_value_system")
 async def main():
     """
     Customer Lifetime Value Optimization Agent System
-    
+
     Handles comprehensive customer value optimization and experience management:
     1. 360-degree customer profiling and segmentation
     2. Real-time churn prediction and early intervention
@@ -38,31 +35,31 @@ async def main():
     7. Loyalty program design and gamification
     8. Voice of customer analysis and sentiment monitoring
     """
-    
+
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     app = setup_agent_app("clv_optimization_system")
 
     async with app.run() as clv_app:
         context = clv_app.context
         logger = clv_app.logger
-        
+
         # Configure servers
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
             logger.info("Filesystem server configured")
-        
+
         # --- CUSTOMER LIFETIME VALUE OPTIMIZATION AGENTS ---
-        
+
         # 360-Degree Customer Profiler
         customer_profiler_agent = Agent(
             name="customer_profiler_360",
             instruction=f"""You are a customer intelligence specialist creating comprehensive customer profiles for {COMPANY_NAME}.
-            
+
             Build 360-degree customer profiles across {CUSTOMER_BASE} segments:
-            
+
             1. Demographic and Firmographic Data:
                - Personal demographics (age, location, income, education)
                - Business firmographics (industry, company size, revenue, growth stage)
@@ -70,7 +67,7 @@ async def main():
                - Technographic profile and digital maturity
                - Decision-making hierarchy and influence mapping
                - Competitive landscape and vendor relationships
-            
+
             2. Behavioral Analytics:
                - Website and app interaction patterns
                - Content consumption preferences and engagement
@@ -78,7 +75,7 @@ async def main():
                - Communication channel preferences
                - Social media activity and sentiment
                - Customer service interaction history
-            
+
             3. Lifecycle Stage Identification:
                - Acquisition source and onboarding journey
                - Product adoption and feature usage patterns
@@ -86,7 +83,7 @@ async def main():
                - Retention and loyalty indicators
                - Risk factors and churn predictors
                - Advocacy and referral potential
-            
+
             4. Value Assessment:
                - Historical revenue and profitability analysis
                - Lifetime value calculation and projections
@@ -94,7 +91,7 @@ async def main():
                - Expansion revenue potential
                - Referral value and network effects
                - Risk-adjusted value scoring
-            
+
             5. Engagement Preferences:
                - Communication frequency and timing preferences
                - Content format and channel preferences
@@ -102,20 +99,20 @@ async def main():
                - Product and service usage patterns
                - Feedback and review behaviors
                - Community participation and advocacy
-            
+
             Create dynamic customer profiles that update in real-time with new interactions.
             Include confidence scores for each data point and prediction.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Churn Prediction and Early Warning System
         churn_prediction_agent = Agent(
             name="churn_prediction_specialist",
             instruction=f"""You are a customer retention specialist focused on churn prediction and prevention for {COMPANY_NAME}.
-            
+
             Develop predictive churn models and intervention strategies for {CUSTOMER_BASE}:
-            
+
             1. Churn Risk Modeling:
                - Statistical models (logistic regression, survival analysis)
                - Machine learning algorithms (random forest, gradient boosting)
@@ -123,7 +120,7 @@ async def main():
                - Ensemble methods for improved accuracy
                - Real-time scoring and risk assessment
                - Cohort analysis and retention curves
-            
+
             2. Early Warning Indicators:
                - Product usage decline patterns
                - Support ticket frequency and sentiment
@@ -131,7 +128,7 @@ async def main():
                - Engagement drop across channels
                - Feature adoption stagnation
                - Competitive activity indicators
-            
+
             3. Risk Segmentation:
                - High-risk customers (90+ day probability)
                - Medium-risk customers (30-90 day probability)
@@ -139,7 +136,7 @@ async def main():
                - Recently churned win-back opportunities
                - Dormant account reactivation potential
                - At-risk expansion accounts
-            
+
             4. Intervention Strategies:
                - Proactive outreach campaigns
                - Product education and training programs
@@ -147,7 +144,7 @@ async def main():
                - Feature access and trial extensions
                - Executive relationship building
                - Success manager assignment and escalation
-            
+
             5. Retention Measurement:
                - Retention rate tracking by segment
                - Churn reason analysis and categorization
@@ -155,20 +152,20 @@ async def main():
                - Customer health score evolution
                - Lifetime value preservation
                - Win-back campaign success rates
-            
+
             Provide specific intervention recommendations with timing, messaging, and success probability.
             Include A/B testing frameworks for retention strategies.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Personalized Journey Designer
         journey_designer_agent = Agent(
             name="personalized_journey_designer",
             instruction=f"""You are a customer experience designer specializing in personalized journey optimization for {COMPANY_NAME}.
-            
+
             Design and optimize personalized customer journeys across {CUSTOMER_BASE}:
-            
+
             1. Journey Mapping and Analysis:
                - Customer touchpoint identification and mapping
                - Emotion and sentiment tracking at each stage
@@ -176,7 +173,7 @@ async def main():
                - Opportunity identification for value creation
                - Cross-channel experience orchestration
                - Micro-moment identification and optimization
-            
+
             2. Personalization Engine:
                - Individual preference learning and adaptation
                - Content and offer personalization
@@ -184,7 +181,7 @@ async def main():
                - Channel preference routing
                - Next best action recommendations
                - Dynamic journey path selection
-            
+
             3. Omnichannel Orchestration:
                - Email and marketing automation sequences
                - Website and app personalization
@@ -192,7 +189,7 @@ async def main():
                - Sales and customer success handoffs
                - Support and service experience optimization
                - Partner and channel integration
-            
+
             4. Journey Optimization:
                - Conversion rate optimization (CRO)
                - Time to value acceleration
@@ -200,7 +197,7 @@ async def main():
                - Content relevance and effectiveness
                - Call-to-action optimization
                - Abandonment recovery strategies
-            
+
             5. Measurement and Analytics:
                - Journey performance metrics and KPIs
                - Attribution modeling and lift analysis
@@ -208,20 +205,20 @@ async def main():
                - Journey completion and drop-off analysis
                - Revenue impact and ROI measurement
                - Continuous optimization and testing
-            
+
             Create journey blueprints with specific personalization rules and automation triggers.
             Include journey performance benchmarks and optimization recommendations.
             """,
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # Dynamic Pricing and Revenue Optimizer
         pricing_optimizer_agent = Agent(
             name="dynamic_pricing_optimizer",
             instruction=f"""You are a pricing and revenue optimization specialist for {COMPANY_NAME}'s {CUSTOMER_BASE} business.
-            
+
             Optimize pricing and revenue strategies across customer segments:
-            
+
             1. Price Elasticity Analysis:
                - Demand sensitivity modeling
                - Competitive price benchmarking
@@ -229,7 +226,7 @@ async def main():
                - Customer willingness to pay analysis
                - Price discrimination opportunities
                - Bundle and package optimization
-            
+
             2. Dynamic Pricing Models:
                - Real-time price optimization algorithms
                - Demand forecasting and capacity management
@@ -237,7 +234,7 @@ async def main():
                - Customer segment pricing strategies
                - Seasonal and promotional pricing
                - A/B testing for price optimization
-            
+
             3. Revenue Optimization:
                - Customer lifetime value maximization
                - Cross-sell and upsell revenue potential
@@ -245,7 +242,7 @@ async def main():
                - Margin optimization by customer segment
                - Payment terms and billing optimization
                - Contract structure and renewal optimization
-            
+
             4. Promotion and Discount Strategy:
                - Targeted discount and incentive programs
                - Limited-time offer optimization
@@ -253,7 +250,7 @@ async def main():
                - Referral and advocacy reward programs
                - Win-back pricing strategies
                - Competitive response pricing
-            
+
             5. Financial Impact Analysis:
                - Revenue impact modeling and forecasting
                - Margin analysis and profitability optimization
@@ -261,20 +258,20 @@ async def main():
                - Price change impact simulation
                - Elasticity testing and measurement
                - ROI analysis for pricing initiatives
-            
+
             Provide specific pricing recommendations with revenue impact projections.
             Include risk assessment and monitoring frameworks for pricing changes.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Cross-sell and Upsell Automation Engine
         cross_upsell_agent = Agent(
             name="cross_upsell_automation_engine",
             instruction=f"""You are a growth and expansion specialist focused on cross-sell and upsell optimization for {COMPANY_NAME}.
-            
+
             Automate and optimize expansion revenue across {CUSTOMER_BASE}:
-            
+
             1. Opportunity Identification:
                - Product usage pattern analysis
                - Feature adoption and maturity assessment
@@ -282,7 +279,7 @@ async def main():
                - Pain point and need identification
                - Competitive displacement opportunities
                - Whitespace and expansion potential mapping
-            
+
             2. Recommendation Engine:
                - Next best product/feature recommendations
                - Timing optimization for expansion offers
@@ -290,7 +287,7 @@ async def main():
                - Upgrade path identification and sequencing
                - Cross-sell affinity analysis
                - Personalized value proposition development
-            
+
             3. Automation and Orchestration:
                - Trigger-based expansion campaigns
                - Progressive disclosure and education
@@ -298,7 +295,7 @@ async def main():
                - Renewal and expansion timing coordination
                - Sales handoff and qualification automation
                - Success metric tracking and optimization
-            
+
             4. Value Communication:
                - ROI and business case development
                - Success story and case study matching
@@ -306,7 +303,7 @@ async def main():
                - Comparative analysis and benchmarking
                - Implementation support and training
                - Change management and adoption assistance
-            
+
             5. Performance Measurement:
                - Expansion revenue tracking and attribution
                - Conversion rate optimization
@@ -314,20 +311,20 @@ async def main():
                - Customer satisfaction and success correlation
                - Sales efficiency and productivity metrics
                - LTV expansion and retention impact
-            
+
             Generate specific expansion strategies with revenue projections and success probability.
             Include automated workflow designs and performance monitoring frameworks.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Customer Health and Engagement Monitor
         customer_health_agent = Agent(
             name="customer_health_engagement_monitor",
             instruction=f"""You are a customer success and health monitoring specialist for {COMPANY_NAME}.
-            
+
             Monitor and optimize customer health and engagement across {CUSTOMER_BASE}:
-            
+
             1. Health Score Development:
                - Composite health scoring methodology
                - Leading and lagging indicator integration
@@ -335,7 +332,7 @@ async def main():
                - Risk factor weighting and calibration
                - Segment-specific health benchmarks
                - Real-time score updating and alerting
-            
+
             2. Engagement Measurement:
                - Product usage depth and breadth tracking
                - Feature adoption and time to value
@@ -343,7 +340,7 @@ async def main():
                - Support interaction quality and outcomes
                - Advocacy and referral activity
                - Feedback and survey participation
-            
+
             3. Early Warning Systems:
                - Declining engagement pattern detection
                - Support escalation and satisfaction alerts
@@ -351,7 +348,7 @@ async def main():
                - Competitive activity and risk indicators
                - Executive and stakeholder changes
                - Usage anomaly detection and investigation
-            
+
             4. Intervention and Outreach:
                - Proactive success manager engagement
                - Automated nurture and education campaigns
@@ -359,7 +356,7 @@ async def main():
                - Training and certification program enrollment
                - Community and user group participation
                - Success milestone recognition and celebration
-            
+
             5. Success Correlation Analysis:
                - Health score correlation with business outcomes
                - Engagement impact on retention and expansion
@@ -367,70 +364,70 @@ async def main():
                - Benchmark comparisons and best practices
                - Predictive analytics for success planning
                - Resource allocation optimization
-            
+
             Create comprehensive health monitoring dashboards with actionable alerts.
             Include success playbooks and intervention decision trees.
             """,
             server_names=["filesystem", "g-search"],
         )
-        
+
         # Customer Experience Quality Evaluator
         clv_evaluator = Agent(
             name="clv_quality_evaluator",
             instruction="""You are a customer experience and value optimization expert evaluating CLV strategies.
-            
+
             Evaluate customer lifetime value initiatives based on:
-            
+
             1. Customer Impact (35%)
                - Customer satisfaction and NPS improvement
                - Retention and churn reduction effectiveness
                - Engagement and adoption enhancement
                - Experience quality and consistency
-            
+
             2. Revenue Impact (30%)
                - Lifetime value increase and expansion revenue
                - Acquisition cost reduction and efficiency
                - Pricing optimization and margin improvement
                - Cross-sell and upsell success rates
-            
+
             3. Data and Analytics Quality (20%)
                - Prediction accuracy and model performance
                - Data integration and real-time capabilities
                - Personalization effectiveness
                - Attribution and measurement precision
-            
+
             4. Implementation and Scalability (15%)
                - Technology integration and automation
                - Process efficiency and resource requirements
                - Change management and adoption success
                - Continuous improvement and optimization
-            
+
             Provide EXCELLENT, GOOD, FAIR, or POOR ratings with specific improvement recommendations.
             Highlight critical success factors and implementation challenges.
             """,
         )
-        
+
         # Create quality controller for CLV optimization
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
         clv_quality_controller = EvaluatorOptimizerLLM(
             optimizer=customer_profiler_agent,
             evaluator=clv_evaluator,
-            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-                primary_model="gemini-2.5-flash-lite",
-                logger_instance=logger
-            )
-                llm_factory=orchestrator_llm_factory,
+            llm_factory=orchestrator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
-        
+
         # --- CREATE ORCHESTRATOR ---
         logger.info(f"Initializing customer lifetime value optimization workflow for {COMPANY_NAME}")
-        
-        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-                primary_model="gemini-2.5-flash-lite",
-                logger_instance=logger
-            )
-            Orchestrator(
-                llm_factory=orchestrator_llm_factory,
+
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=logger
+        )
+        orchestrator = Orchestrator(
+            llm_factory=orchestrator_llm_factory,
             available_agents=[
                 clv_quality_controller,
                 churn_prediction_agent,
@@ -441,7 +438,7 @@ async def main():
             ],
             plan_type="full",
         )
-        
+
         # Define comprehensive CLV optimization task
         task = f"""Execute a comprehensive customer lifetime value optimization program for {COMPANY_NAME}:
 
@@ -450,37 +447,37 @@ async def main():
            - Data integration and real-time analytics capabilities
            - Customer intelligence and insight generation
            - Profile accuracy and completeness measurement
-           
+
         2. Use the churn_prediction_agent to develop:
            - Advanced churn prediction models and algorithms
            - Early warning systems and risk scoring
            - Retention intervention strategies and playbooks
            - Churn prevention campaign automation
-           
+
         3. Use the journey_designer_agent to create:
            - Personalized customer journey maps and flows
            - Omnichannel experience orchestration
            - Journey optimization and conversion improvement
            - Experience personalization and automation
-           
+
         4. Use the pricing_optimizer_agent to implement:
            - Dynamic pricing models and optimization engines
            - Revenue maximization strategies
            - Promotion and discount optimization
            - Price elasticity analysis and testing
-           
+
         5. Use the cross_upsell_agent to build:
            - Expansion revenue identification and automation
            - Cross-sell and upsell recommendation engines
            - Growth opportunity scoring and prioritization
            - Expansion campaign design and execution
-           
+
         6. Use the customer_health_agent to establish:
            - Customer health scoring and monitoring systems
            - Engagement tracking and optimization
            - Success intervention and outreach programs
            - Health correlation and predictive analytics
-        
+
         Save all deliverables in the {OUTPUT_DIR} directory:
         - customer_profiling_system_{timestamp}.md
         - churn_prediction_framework_{timestamp}.md
@@ -489,7 +486,7 @@ async def main():
         - cross_upsell_automation_{timestamp}.md
         - customer_health_monitoring_{timestamp}.md
         - clv_optimization_dashboard_{timestamp}.md
-        
+
         Create an integrated CLV optimization strategy showing:
         - Current customer base analysis and segmentation
         - Value optimization opportunities and business case
@@ -498,7 +495,7 @@ async def main():
         - Success metrics and monitoring frameworks
         - Continuous optimization and improvement processes
         """
-        
+
         # Execute the workflow
         logger.info("Starting customer lifetime value optimization workflow")
         try:
@@ -506,10 +503,10 @@ async def main():
                 message=task,
                 request_params=RequestParams(model="gemini-2.5-flash-lite")
             )
-            
+
             logger.info("Customer lifetime value optimization workflow completed successfully")
             logger.info(f"All deliverables saved in {OUTPUT_DIR}/")
-            
+
             # Generate executive CLV dashboard
             dashboard_path = os.path.join(OUTPUT_DIR, f"clv_executive_summary_{timestamp}.md")
             with open(dashboard_path, 'w') as f:
@@ -575,7 +572,7 @@ For detailed technical information and implementation guides, refer to individua
 *This executive summary provides a high-level view of the customer lifetime value optimization opportunity.
 For comprehensive strategies and detailed implementation plans, please review the complete analysis reports.*
 """)
-            
+
             # Create CLV KPI tracking template
             kpi_path = os.path.join(OUTPUT_DIR, f"clv_kpi_template_{timestamp}.json")
             clv_kpis = {
@@ -620,16 +617,16 @@ For comprehensive strategies and detailed implementation plans, please review th
                 "reporting_period": f"{datetime.now().strftime('%Y-%m')}",
                 "last_updated": datetime.now().isoformat()
             }
-            
+
             with open(kpi_path, 'w') as f:
                 json.dump(clv_kpis, f, indent=2)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error during CLV optimization workflow execution: {str(e)}")
             return False
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

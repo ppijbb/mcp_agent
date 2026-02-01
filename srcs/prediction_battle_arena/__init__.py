@@ -8,4 +8,3 @@ Prediction Battle Arena
 from .prediction_battle_agent import PredictionBattleAgent
 
 __all__ = ["PredictionBattleAgent"]
-

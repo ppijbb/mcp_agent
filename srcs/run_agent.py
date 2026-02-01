@@ -9,12 +9,12 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 import argparse
 import sys
 import os
-from pathlib import Path
+
 
 def list_agents():
     """List all available agents"""
     print("\n=== Available Agents ===\n")
-    
+
     print("📝 Basic Agents:")
     basic_agents = {
         "basic": "Basic functionality and testing agent",
@@ -27,10 +27,10 @@ def list_agents():
         "rag": "Retrieval-Augmented Generation agent",
         "travel_scout": "Incognito mode travel search agent for best deals"
     }
-    
+
     for agent, description in basic_agents.items():
         print(f"  • {agent:20} - {description}")
-    
+
     print("\n🏢 Enterprise Agents:")
     enterprise_agents = {
         "hr_recruitment": "HR Recruitment and talent acquisition automation",
@@ -42,10 +42,10 @@ def list_agents():
         "workplace": "Hybrid workplace optimization and management",
         "innovation": "Product innovation acceleration and development"
     }
-    
+
     for agent, description in enterprise_agents.items():
         print(f"  • {agent:20} - {description}")
-    
+
     print("\n🛠️  Utility Scripts:")
     utils = {
         "mental": "Mental model analysis and visualization",
@@ -53,20 +53,20 @@ def list_agents():
         "swarm": "Multi-agent swarm coordination",
         "workflow": "Workflow orchestration and management"
     }
-    
+
     for util, description in utils.items():
         print(f"  • {util:20} - {description}")
-    
+
     print("\n🔧 Development Examples:")
     examples = {
         "common_demo": "Demonstration of common modules usage",
         "template_basic": "Basic agent template example",
         "template_enterprise": "Enterprise agent template example"
     }
-    
+
     for example, description in examples.items():
         print(f"  • {example:20} - {description}")
-    
+
     print("\n🧬 Specialized Agents:")
     specialized_agents = {
         "genome": "Genome analysis and bioinformatics agent",
@@ -74,9 +74,10 @@ def list_agents():
         "decision": "Decision making and analysis agent",
         "ai_architect": "AI architecture design and optimization agent"
     }
-    
+
     for agent, description in specialized_agents.items():
         print(f"  • {agent:20} - {description}")
+
 
 def run_basic_agent(agent_name):
     """Run a basic agent"""
@@ -91,15 +92,15 @@ def run_basic_agent(agent_name):
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }
-    
+
     if agent_name not in agent_map:
         print(f"❌ Unknown basic agent: {agent_name}")
         return False
-    
+
     try:
         print(f"🚀 Starting basic agent: {agent_name}")
         module_name = agent_map[agent_name]
-        
+
         if agent_name == "streamlit":
             # Special handling for Streamlit agent
             os.system(f"cd basic_agents && python streamlit_agent.py")
@@ -110,6 +111,7 @@ def run_basic_agent(agent_name):
     except Exception as e:
         print(f"❌ Error running basic agent {agent_name}: {str(e)}")
         return False
+
 
 def run_enterprise_agent(agent_name):
     """Run an enterprise agent"""
@@ -123,11 +125,11 @@ def run_enterprise_agent(agent_name):
         "workplace": "enterprise_agents.hybrid_workplace_optimizer_agent",
         "innovation": "enterprise_agents.product_innovation_accelerator_agent"
     }
-    
+
     if agent_name not in agent_map:
         print(f"❌ Unknown enterprise agent: {agent_name}")
         return False
-    
+
     try:
         print(f"🏢 Starting enterprise agent: {agent_name}")
         module_name = agent_map[agent_name]
@@ -137,6 +139,7 @@ def run_enterprise_agent(agent_name):
         print(f"❌ Error running enterprise agent {agent_name}: {str(e)}")
         return False
 
+
 def run_specialized_agent(agent_name):
     """Run a specialized agent"""
     agent_map = {
@@ -145,15 +148,15 @@ def run_specialized_agent(agent_name):
         "decision": "advanced_agents.decision_agent",
         "ai_architect": "evolutionary_ai_architect.architect"
     }
-    
+
     if agent_name not in agent_map:
         print(f"❌ Unknown specialized agent: {agent_name}")
         return False
-    
+
     try:
         print(f"🧬 Starting specialized agent: {agent_name}")
         module_name = agent_map[agent_name]
-        
+
         # Import and run the main function
         exec(f"from {module_name} import main; main()")
         return True
@@ -170,14 +173,14 @@ def run_utility(util_name):
         "swarm": "basic_agents.swarm",
         "workflow": "basic_agents.workflow_orchestration"
     }
-    
+
     if util_name == "genome":
         return run_specialized_agent(util_name)
-    
+
     if util_name not in util_map:
         print(f"❌ Unknown utility: {util_name}")
         return False
-    
+
     try:
         print(f"🛠️  Starting utility: {util_name}")
         module_name = util_map[util_name]
@@ -186,6 +189,7 @@ def run_utility(util_name):
     except Exception as e:
         print(f"❌ Error running utility {util_name}: {str(e)}")
         return False
+
 
 def run_development_example(example_name):
     """Run development examples and demonstrations"""
@@ -202,7 +206,7 @@ def run_development_example(example_name):
         print("    # Your agent implementation...")
         print("\nSee basic_agents/researcher_v2.py for a complete example!")
         return True
-    
+
     elif example_name == "template_basic":
         print("🔧 Basic Agent Template Example")
         print("\nTo create a new basic agent using templates:")
@@ -215,18 +219,18 @@ class MyAgent(BasicAgentTemplate):
             agent_name="my_agent",
             task_description="Your agent's main task description"
         )
-    
+
     # Override methods as needed
     def create_agents(self):
         # Return list of specialized agents
         pass
-        
+
     def create_evaluator(self):
         # Return quality evaluator
         pass
 """)
         return True
-    
+
     elif example_name == "template_enterprise":
         print("🔧 Enterprise Agent Template Example")
         print("\nTo create a new enterprise agent using templates:")
@@ -239,11 +243,11 @@ class MyEnterpriseAgent(EnterpriseAgentTemplate):
             agent_name="my_enterprise_agent",
             business_scope="Global Operations"
         )
-    
+
     def create_agents(self):
         # Return list of specialized enterprise agents
         pass
-        
+
     def create_evaluator(self):
         evaluation_criteria = [
             ("Business Impact", 40, "ROI and value creation"),
@@ -253,10 +257,11 @@ class MyEnterpriseAgent(EnterpriseAgentTemplate):
         return self.create_standard_evaluator(evaluation_criteria)
 """)
         return True
-    
+
     else:
         print(f"❌ Unknown development example: {example_name}")
         return False
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -273,43 +278,44 @@ Examples:
   python run_agent.py --dev common_demo         # Show common modules demo
         """
     )
-    
+
     parser.add_argument("--list", action="store_true", help="List all available agents")
     parser.add_argument("--basic", metavar="AGENT", help="Run a basic agent")
     parser.add_argument("--enterprise", metavar="AGENT", help="Run an enterprise agent")
     parser.add_argument("--utility", metavar="UTIL", help="Run a utility script")
     parser.add_argument("--specialized", metavar="AGENT", help="Run a specialized agent")
     parser.add_argument("--dev", metavar="EXAMPLE", help="Run development examples")
-    
+
     args = parser.parse_args()
-    
+
     if args.list:
         list_agents()
         return
-    
+
     if args.basic:
         success = run_basic_agent(args.basic)
         sys.exit(0 if success else 1)
-    
+
     if args.enterprise:
         success = run_enterprise_agent(args.enterprise)
         sys.exit(0 if success else 1)
-    
+
     if args.utility:
         success = run_utility(args.utility)
         sys.exit(0 if success else 1)
-    
+
     if args.specialized:
         success = run_specialized_agent(args.specialized)
         sys.exit(0 if success else 1)
-    
+
     if args.dev:
         success = run_development_example(args.dev)
         sys.exit(0 if success else 1)
-    
+
     # If no arguments provided, show help
     parser.print_help()
     print("\n💡 Use --list to see all available agents")
 
+
 if __name__ == "__main__":
-    main() 
+    main()

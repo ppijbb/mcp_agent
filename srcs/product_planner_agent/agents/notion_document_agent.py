@@ -8,14 +8,12 @@ import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from srcs.core.agent.base import BaseAgent
-from srcs.core.errors import APIError, WorkflowError
-from srcs.product_planner_agent.prompts import PROMPT
-from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
+from srcs.core.errors import APIError
 
 
 class NotionDocumentAgent(BaseAgent):
     """노션 문서 관리 및 지식 베이스 구축 전문 Agent"""
-    
+
     def __init__(self):
         super().__init__("notion_document_agent")
 
@@ -25,7 +23,7 @@ class NotionDocumentAgent(BaseAgent):
         (실제 Notion API 연동은 추후 구현)
         """
         all_results = context.get_all()
-        
+
         final_report_content = "## 📝 Product Plan Final Report\n\n"
         for key, value in all_results.items():
             final_report_content += f"### {key.replace('_', ' ').title()}\n\n"
@@ -48,7 +46,7 @@ class NotionDocumentAgent(BaseAgent):
 
         Provide the output as a single, well-formatted markdown string.
         """
-        
+
         try:
             final_report = await self.app.llm.generate_str(prompt, request_params=RequestParams(temperature=0.4))
             # 실제 Notion 페이지 생성 대신, 결과물과 목업 URL 반환
@@ -60,4 +58,4 @@ class NotionDocumentAgent(BaseAgent):
             context.set("final_report", result)
             return result
         except Exception as e:
-            raise APIError(f"Failed to create project workspace: {e}") from e 
+            raise APIError(f"Failed to create project workspace: {e}") from e

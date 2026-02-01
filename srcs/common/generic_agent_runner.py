@@ -5,6 +5,7 @@ from pathlib import Path
 import importlib
 import asyncio
 
+
 def main():
     """
     범용 에이전트 실행 스크립트.
@@ -16,7 +17,7 @@ def main():
     parser.add_argument("--method-name", required=True, help="Name of the method to call on the agent instance.")
     parser.add_argument("--config-json", default='{}', help="Configuration dictionary as a JSON string for the method.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
-    
+
     args = parser.parse_args()
 
     # 프로젝트 루트를 동적으로 sys.path에 추가 (python -m으로 실행 시 필요)
@@ -40,17 +41,17 @@ def main():
     try:
         # 동적으로 모듈 임포트
         agent_module = importlib.import_module(args.module_path)
-        
+
         # 클래스 가져오기
         AgentClass = getattr(agent_module, args.class_name)
-        
+
         # 에이전트 인스턴스 생성
         # TODO: 생성자에 인자가 필요한 경우를 대비해 확장 필요
         agent_instance = AgentClass()
-        
+
         # 호출할 메서드 가져오기
         method_to_call = getattr(agent_instance, args.method_name)
-        
+
         # JSON 설정 파싱
         config = json.loads(args.config_json)
 
@@ -61,11 +62,11 @@ def main():
         else:
             print("   - Running sync method.")
             result_data = method_to_call(**config)
-        
+
         # 에이전트가 반환한 값에 error가 포함되어 있는지 확인
         if isinstance(result_data, dict) and "error" in result_data:
             raise Exception(f"Agent reported an error: {result_data['error']}")
-        
+
         print(f"✅ Agent method '{args.method_name}' finished successfully.")
         final_result["success"] = True
         final_result["data"] = result_data
@@ -75,7 +76,7 @@ def main():
         error_msg = f"❌ An error occurred during agent execution: {e}\n{traceback.format_exc()}"
         print(error_msg)
         final_result["error"] = str(error_msg)
-    
+
     finally:
         print(f"💾 Saving final results to {result_json_path}...")
         try:
@@ -93,5 +94,6 @@ def main():
         if not final_result["success"]:
             sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

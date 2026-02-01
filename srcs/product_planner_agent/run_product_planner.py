@@ -16,6 +16,7 @@ from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 # Setup unified logger for this script
 logger = get_product_planner_logger("run_script")
 
+
 async def main():
     """
     Product Planner Agent 실행 스크립트.
@@ -28,7 +29,7 @@ async def main():
     parser.add_argument("--figma-file-id", help="The file ID of the Figma design (manual override).")
     parser.add_argument("--figma-url", help="Full Figma URL. The file ID will be extracted from this.")
     parser.add_argument("--result-json-path", help="Path to save the final report JSON file.")
-    
+
     args = parser.parse_args()
 
     # Determine figma_file_id from URL if provided
@@ -46,7 +47,7 @@ async def main():
             logger.warning(f"Could not extract Figma File ID from URL: {args.figma_url}")
 
     logger.info("🚀 Initializing Product Planner Agent...")
-    
+
     # 에이전트 인스턴스 생성. BaseAgent.__init__이 MCPApp 설정을 처리합니다.
     product_planner = ProductPlannerAgent()
 
@@ -55,7 +56,7 @@ async def main():
     logger.info(f"   - User Persona: {args.user_persona[:100]}...")
     logger.info(f"   - Figma File ID: {figma_file_id or 'Not provided'}")
     logger.info("-" * 30)
-    
+
     try:
         # 워크플로우를 위한 초기 컨텍스트 딕셔너리 생성
         initial_context = {
@@ -67,7 +68,7 @@ async def main():
         # 에이전트의 run 메서드를 직접 호출.
         # BaseAgent.run이 오류 처리, 재시도, 서킷 브레이커를 포함합니다.
         final_report = await product_planner.run(initial_context)
-        
+
         logger.info("✅ Workflow finished successfully.")
 
         # Save the result to a file if path is provided
@@ -96,4 +97,4 @@ async def main():
             sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

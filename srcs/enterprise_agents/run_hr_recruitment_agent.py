@@ -9,6 +9,7 @@ sys.path.insert(0, str(project_root))
 
 from srcs.enterprise_agents.hr_recruitment_agent import HRRecruitmentAgent
 
+
 def main():
     """HR Recruitment Agent 실행 스크립트"""
     parser = argparse.ArgumentParser(description="Run the HR Recruitment Agent from the command line.")
@@ -30,7 +31,7 @@ def main():
             position=args.position_name,
             company=args.company_name,
             workflows=args.workflows,
-            save_to_file=False 
+            save_to_file=False
         )
 
         print("-" * 30)
@@ -39,7 +40,7 @@ def main():
 
         with open(args.result_json_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
-        
+
         print("🎉 Results saved.")
 
     except Exception as e:
@@ -56,4 +57,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

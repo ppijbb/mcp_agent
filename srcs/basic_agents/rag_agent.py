@@ -1,10 +1,10 @@
 from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 
@@ -13,6 +13,7 @@ SAMPLE_TEXTS = [
     # ... (other sample texts omitted for brevity)
     "Whether you're an AI tool developer... we invite you to build the future of context-aware AI together",
 ]
+
 
 class RAGAgent(BaseAgent):
     """A RAG agent that uses Qdrant for retrieval and an LLM for generation."""
@@ -64,7 +65,7 @@ class RAGAgent(BaseAgent):
             )
             self.logger.info(f"Agent response: {response}")
             context.set("response", response)
-            
+
             # Save result using BaseAgent's save_result method
             result_data = {
                 'query': query,
@@ -72,7 +73,7 @@ class RAGAgent(BaseAgent):
                 'collection_name': self.collection_name,
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             self.save_result(
                 result=result_data,
                 result_type="rag_query",
@@ -87,6 +88,7 @@ class RAGAgent(BaseAgent):
             raise WorkflowError(f"RAG agent workflow failed: {e}") from e
 
 # --- Helper functions for Streamlit UI (can be moved later) ---
+
 
 def get_qdrant_status() -> Dict[str, Any]:
     """Qdrant 서버 상태 확인"""

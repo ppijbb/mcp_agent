@@ -39,7 +39,7 @@ Create a comprehensive final report based on the product planning results.
 - User experience considerations
 - Technical implementation notes
 
-## 📄 Product Requirements Overview  
+## 📄 Product Requirements Overview
 - Core product features and functionality
 - User stories and acceptance criteria
 - Technical specifications summary
@@ -127,4 +127,4 @@ ACTION: {{"agent": "agent_name", "method": "method_name", "params": {{"param1": 
 4. Finish with comprehensive results
 
 Remember: You can only take ONE action at a time. Think carefully about the next best step to achieve the user's goal.
-""" 
+"""

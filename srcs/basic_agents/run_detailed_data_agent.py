@@ -9,15 +9,16 @@ sys.path.insert(0, str(project_root))
 
 from srcs.basic_agents.data_generator import AIDataGenerationAgent
 
+
 def main():
     """Detailed Data Agent 실행 스크립트"""
     parser = argparse.ArgumentParser(description="Run the AIDataGenerationAgent with detailed configurations.")
-    parser.add_argument("--agent-method", required=True, 
+    parser.add_argument("--agent-method", required=True,
                         choices=['generate_smart_data', 'create_custom_dataset', 'generate_customer_profiles', 'generate_timeseries_data'],
                         help="The method to call on the AIDataGenerationAgent.")
     parser.add_argument("--config-json", required=True, help="The configuration dictionary as a JSON string.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
-    
+
     args = parser.parse_args()
 
     print(f"🔄 Starting Detailed Data Agent...")
@@ -36,7 +37,7 @@ def main():
 
         # 호출할 메서드 가져오기
         method_to_call = getattr(agent, args.agent_method)
-        
+
         # JSON 설정 파싱
         config = json.loads(args.config_json)
 
@@ -46,7 +47,7 @@ def main():
 
         if "error" in result_data:
             raise Exception(f"Agent reported an error: {result_data['error']}")
-        
+
         print(f"✅ Agent finished successfully.")
         final_result["success"] = True
         final_result["data"] = result_data
@@ -55,7 +56,7 @@ def main():
         error_msg = f"❌ An error occurred during agent execution: {e}"
         print(error_msg)
         final_result["error"] = str(e)
-    
+
     finally:
         print(f"💾 Saving final results to {result_json_path}...")
         try:
@@ -66,9 +67,10 @@ def main():
             print(f"❌ Failed to save result JSON: {e}")
             final_result["success"] = False
             final_result["error"] = f"Failed to save result JSON: {e}"
-        
+
         if not final_result["success"]:
             sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

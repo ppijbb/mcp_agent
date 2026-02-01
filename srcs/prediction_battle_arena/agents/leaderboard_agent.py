@@ -2,9 +2,7 @@
 리더보드 관리 에이전트
 """
 
-from typing import List, Dict, Any, Optional
 from mcp_agent.agents.agent import Agent as MCP_Agent
-from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from ..tools.leaderboard_tools import LeaderboardTools
 from ..services.redis_service import RedisService
@@ -40,7 +38,7 @@ def create_leaderboard_agent(
 ) -> MCP_Agent:
     """
     리더보드 관리 에이전트 생성
-    
+
     Args:
         llm_factory: LLM 팩토리 함수
         leaderboard_tools: 리더보드 도구 인스턴스
@@ -50,7 +48,7 @@ def create_leaderboard_agent(
     """
     # 도구 목록 가져오기
     tools = leaderboard_tools.get_tools()
-    
+
     agent = MCP_Agent(
         name="leaderboard_agent",
         instruction=LEADERBOARD_AGENT_INSTRUCTION,
@@ -58,6 +56,5 @@ def create_leaderboard_agent(
         llm_factory=llm_factory,
         tools=tools
     )
-    
-    return agent
 
+    return agent

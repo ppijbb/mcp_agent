@@ -14,6 +14,7 @@ from srcs.urban_hive.urban_hive_agent import UrbanHiveMCPAgent, UrbanDataCategor
 from srcs.urban_hive.config import get_llm_config
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
+
 class DataclassJSONEncoder(json.JSONEncoder):
     def default(self, o):
         if is_dataclass(o):
@@ -32,6 +33,7 @@ class DataclassJSONEncoder(json.JSONEncoder):
             return o.isoformat()
         return super().default(o)
 
+
 async def main():
     """Urban Hive Agent 실행 스크립트"""
     parser = argparse.ArgumentParser(description="Run the Urban Hive Agent from the command line.")
@@ -45,10 +47,10 @@ async def main():
 
     result_json_path = Path(args.result_json_path)
     result_json_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Get LLM configuration
     llm_config = get_llm_config()
-    
+
     agent = UrbanHiveMCPAgent()
 
     parsing_prompt = f"""
@@ -78,7 +80,7 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
         parsed_params_str = await agent.app.llm_factory.create_llm().generate_str(
             message=parsing_prompt,
             request_params=RequestParams(
-                model=llm_config.model, 
+                model=llm_config.model,
                 temperature=llm_config.temperature
             )
         )
@@ -94,7 +96,7 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
             raise ValueError("Location could not be determined from the prompt.")
 
         category = UrbanDataCategory[category_str]
-        
+
         print("\n2. Running urban data analysis...")
         # Use the agent's run method with proper context
         context = {
@@ -109,7 +111,7 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
         with open(result_json_path, 'w', encoding='utf-8') as f:
             # We need a custom JSON encoder for dataclasses and enums
             json.dump(analysis_result, f, indent=2, ensure_ascii=False, cls=DataclassJSONEncoder)
-        
+
         print(f"🎉 Results saved to {result_json_path}")
 
     except Exception as e:
@@ -124,4 +126,4 @@ Default to "URBAN_PLANNING" for category if no clear match. Default to "1m" for 
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

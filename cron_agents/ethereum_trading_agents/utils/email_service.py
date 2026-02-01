@@ -9,157 +9,154 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-import asyncio
 import aiohttp
-import json
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
 class EmailService:
     """Professional email service for trading reports"""
-    
+
     def __init__(self):
         self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.email_address = os.getenv("EMAIL_ADDRESS")
         self.email_password = os.getenv("EMAIL_PASSWORD")
         self.sender_name = os.getenv("SENDER_NAME", "Ethereum Trading Agent")
-        
+
         # MCP Email Server (if available)
         self.mcp_email_url = os.getenv("MCP_EMAIL_URL")
         self.mcp_api_key = os.getenv("MCP_EMAIL_API_KEY")
-        
+
         # Recipients
         self.default_recipients = self._load_recipients()
-        
+
     def _load_recipients(self) -> List[str]:
         """Load email recipients from environment"""
         recipients_str = os.getenv("EMAIL_RECIPIENTS", "")
         if recipients_str:
             return [email.strip() for email in recipients_str.split(",")]
         return []
-    
-    async def send_trading_report(self, 
+
+    async def send_trading_report(self,
                                  transaction_data: Dict[str, Any],
                                  market_analysis: Dict[str, Any],
                                  recipients: Optional[List[str]] = None) -> bool:
         """Send comprehensive trading report email"""
         try:
             subject = f"🚀 Ethereum Trading Report - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            
+
             # Generate HTML content
             html_content = self._generate_trading_report_html(transaction_data, market_analysis)
-            
+
             # Generate plain text content
             text_content = self._generate_trading_report_text(transaction_data, market_analysis)
-            
+
             # Try MCP first, fallback to SMTP
             if self.mcp_email_url and self.mcp_api_key:
                 success = await self._send_via_mcp(subject, html_content, text_content, recipients)
                 if success:
                     logger.info("Trading report sent successfully via MCP")
                     return True
-            
+
             # Fallback to SMTP
             success = await self._send_via_smtp(subject, html_content, text_content, recipients)
             if success:
                 logger.info("Trading report sent successfully via SMTP")
                 return True
-                
+
             return False
-            
+
         except Exception as e:
             logger.error(f"Failed to send trading report: {e}")
             return False
-    
-    async def send_transaction_notification(self, 
+
+    async def send_transaction_notification(self,
                                           transaction_hash: str,
                                           transaction_details: Dict[str, Any],
                                           recipients: Optional[List[str]] = None) -> bool:
         """Send immediate transaction notification email"""
         try:
             subject = f"⚡ Ethereum Transaction Executed - {transaction_hash[:10]}..."
-            
+
             # Generate HTML content
             html_content = self._generate_transaction_notification_html(transaction_hash, transaction_details)
-            
+
             # Generate plain text content
             text_content = self._generate_transaction_notification_text(transaction_hash, transaction_details)
-            
+
             # Try MCP first, fallback to SMTP
             if self.mcp_email_url and self.mcp_api_key:
                 success = await self._send_via_mcp(subject, html_content, text_content, recipients)
                 if success:
                     logger.info("Transaction notification sent successfully via MCP")
                     return True
-            
+
             # Fallback to SMTP
             success = await self._send_via_smtp(subject, html_content, text_content, recipients)
             if success:
                 logger.info("Transaction notification sent successfully via SMTP")
                 return True
-                
+
             return False
-            
+
         except Exception as e:
             logger.error(f"Failed to send transaction notification: {e}")
             return False
-    
-    async def send_daily_summary(self, 
+
+    async def send_daily_summary(self,
                                 daily_trades: List[Dict[str, Any]],
                                 portfolio_summary: Dict[str, Any],
                                 recipients: Optional[List[str]] = None) -> bool:
         """Send daily trading summary email"""
         try:
             subject = f"📊 Daily Trading Summary - {datetime.now().strftime('%Y-%m-%d')}"
-            
+
             # Generate HTML content
             html_content = self._generate_daily_summary_html(daily_trades, portfolio_summary)
-            
+
             # Generate plain text content
             text_content = self._generate_daily_summary_text(daily_trades, portfolio_summary)
-            
+
             # Try MCP first, fallback to SMTP
             if self.mcp_email_url and self.mcp_api_key:
                 success = await self._send_via_mcp(subject, html_content, text_content, recipients)
                 if success:
                     logger.info("Daily summary sent successfully via MCP")
                     return True
-            
+
             # Fallback to SMTP
             success = await self._send_via_smtp(subject, html_content, text_content, recipients)
             if success:
                 logger.info("Daily summary sent successfully via SMTP")
                 return True
-                
+
             return False
-            
+
         except Exception as e:
             logger.error(f"Failed to send daily summary: {e}")
             return False
-    
-    async def _send_via_mcp(self, subject: str, html_content: str, text_content: str, 
+
+    async def _send_via_mcp(self, subject: str, html_content: str, text_content: str,
                            recipients: Optional[List[str]] = None) -> bool:
         """Send email via MCP server"""
         try:
             if not self.mcp_email_url or not self.mcp_api_key:
                 return False
-                
+
             recipients = recipients or self.default_recipients
             if not recipients:
                 logger.error("No recipients specified for MCP email")
                 return False
-            
+
             payload = {
                 "api_key": self.mcp_api_key,
                 "from": self.email_address,
@@ -169,10 +166,10 @@ class EmailService:
                 "html_content": html_content,
                 "text_content": text_content
             }
-            
+
             async with aiohttp.ClientSession() as session:
-                async with session.post(f"{self.mcp_email_url}/send-email", 
-                                      json=payload, 
+                async with session.post(f"{self.mcp_email_url}/send-email",
+                                      json=payload,
                                       timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status == 200:
                         result = await response.json()
@@ -180,11 +177,11 @@ class EmailService:
                     else:
                         logger.error(f"MCP email server returned status {response.status}")
                         return False
-                        
+
         except Exception as e:
             logger.error(f"Failed to send email via MCP: {e}")
             return False
-    
+
     async def _send_via_smtp(self, subject: str, html_content: str, text_content: str,
                             recipients: Optional[List[str]] = None) -> bool:
         """Send email via SMTP"""
@@ -192,40 +189,40 @@ class EmailService:
             if not all([self.email_address, self.email_password]):
                 logger.error("SMTP credentials not configured")
                 return False
-                
+
             recipients = recipients or self.default_recipients
             if not recipients:
                 logger.error("No recipients specified for SMTP email")
                 return False
-            
+
             # Create message
             message = MIMEMultipart("alternative")
             message["From"] = f"{self.sender_name} <{self.email_address}>"
             message["To"] = ", ".join(recipients)
             message["Subject"] = subject
-            
+
             # Add both HTML and text parts
             text_part = MIMEText(text_content, "plain")
             html_part = MIMEText(html_content, "html")
-            
+
             message.attach(text_part)
             message.attach(html_part)
-            
+
             # Send email
             context = ssl.create_default_context()
-            
+
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls(context=context)
                 server.login(self.email_address, self.email_password)
                 server.sendmail(self.email_address, recipients, message.as_string())
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to send email via SMTP: {e}")
             return False
-    
-    def _generate_trading_report_html(self, transaction_data: Dict[str, Any], 
+
+    def _generate_trading_report_html(self, transaction_data: Dict[str, Any],
                                     market_analysis: Dict[str, Any]) -> str:
         """Generate HTML content for trading report"""
         return f"""
@@ -238,7 +235,7 @@ class EmailService:
             <style>
                 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                 .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                           color: white; padding: 30px; border-radius: 10px; text-align: center; }}
                 .section {{ margin: 30px 0; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; }}
                 .section h3 {{ color: #667eea; margin-top: 0; }}
@@ -254,7 +251,7 @@ class EmailService:
                     <h1>🚀 Ethereum Trading Report</h1>
                     <p>Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                 </div>
-                
+
                 <div class="section">
                     <h3>📊 Transaction Summary</h3>
                     <div class="transaction-details">
@@ -268,7 +265,7 @@ class EmailService:
                         <p><strong>Status:</strong> {transaction_data.get('status', 'N/A')}</p>
                     </div>
                 </div>
-                
+
                 <div class="section">
                     <h3>🔍 Market Analysis</h3>
                     <div class="market-analysis">
@@ -278,7 +275,7 @@ class EmailService:
                         <p><strong>Technical Indicators:</strong> {market_analysis.get('technical_indicators', 'N/A')}</p>
                     </div>
                 </div>
-                
+
                 <div class="section">
                     <h3>💡 Trading Insights</h3>
                     <div class="highlight">
@@ -286,7 +283,7 @@ class EmailService:
                         <p>{transaction_data.get('reason', 'Based on market analysis and trading strategy')}</p>
                     </div>
                 </div>
-                
+
                 <div class="footer">
                     <p>This report was automatically generated by the Ethereum Trading Agent System</p>
                     <p>For questions or support, please contact the system administrator</p>
@@ -295,8 +292,8 @@ class EmailService:
         </body>
         </html>
         """
-    
-    def _generate_trading_report_text(self, transaction_data: Dict[str, Any], 
+
+    def _generate_trading_report_text(self, transaction_data: Dict[str, Any],
                                     market_analysis: Dict[str, Any]) -> str:
         """Generate plain text content for trading report"""
         return f"""
@@ -326,8 +323,8 @@ Why this trade was executed: {transaction_data.get('reason', 'Based on market an
 This report was automatically generated by the Ethereum Trading Agent System
 For questions or support, please contact the system administrator
         """
-    
-    def _generate_transaction_notification_html(self, transaction_hash: str, 
+
+    def _generate_transaction_notification_html(self, transaction_hash: str,
                                              transaction_details: Dict[str, Any]) -> str:
         """Generate HTML content for transaction notification"""
         return f"""
@@ -351,7 +348,7 @@ For questions or support, please contact the system administrator
                     <h2>⚡ Transaction Executed</h2>
                     <p>Your Ethereum transaction has been processed</p>
                 </div>
-                
+
                 <div class="details">
                     <p><strong>Transaction Hash:</strong> {transaction_hash}</p>
                     <p><strong>Status:</strong> {transaction_details.get('status', 'Confirmed')}</p>
@@ -359,7 +356,7 @@ For questions or support, please contact the system administrator
                     <p><strong>Gas Used:</strong> {transaction_details.get('gasUsed', 'N/A')}</p>
                     <p><strong>Timestamp:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                 </div>
-                
+
                 <div class="footer">
                     <p>Ethereum Trading Agent System</p>
                 </div>
@@ -367,8 +364,8 @@ For questions or support, please contact the system administrator
         </body>
         </html>
         """
-    
-    def _generate_transaction_notification_text(self, transaction_hash: str, 
+
+    def _generate_transaction_notification_text(self, transaction_hash: str,
                                              transaction_details: Dict[str, Any]) -> str:
         """Generate plain text content for transaction notification"""
         return f"""
@@ -385,8 +382,8 @@ Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ---
 Ethereum Trading Agent System
         """
-    
-    def _generate_daily_summary_html(self, daily_trades: List[Dict[str, Any]], 
+
+    def _generate_daily_summary_html(self, daily_trades: List[Dict[str, Any]],
                                    portfolio_summary: Dict[str, Any]) -> str:
         """Generate HTML content for daily summary"""
         trades_html = ""
@@ -400,7 +397,7 @@ Ethereum Trading Agent System
                     <td>{trade.get('timestamp', 'N/A')}</td>
                 </tr>
             """
-        
+
         return f"""
         <!DOCTYPE html>
         <html>
@@ -411,7 +408,7 @@ Ethereum Trading Agent System
             <style>
                 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                 .container {{ max-width: 900px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                           color: white; padding: 30px; border-radius: 10px; text-align: center; }}
                 .section {{ margin: 30px 0; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; }}
                 .section h3 {{ color: #667eea; margin-top: 0; }}
@@ -430,7 +427,7 @@ Ethereum Trading Agent System
                     <h1>📊 Daily Trading Summary</h1>
                     <p>{datetime.now().strftime('%Y-%m-%d')}</p>
                 </div>
-                
+
                 <div class="section">
                     <h3>📈 Portfolio Summary</h3>
                     <div class="summary-grid">
@@ -452,7 +449,7 @@ Ethereum Trading Agent System
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="section">
                     <h3>🔄 Today's Trades</h3>
                     <table class="trades-table">
@@ -470,7 +467,7 @@ Ethereum Trading Agent System
                         </tbody>
                     </table>
                 </div>
-                
+
                 <div class="footer">
                     <p>This summary was automatically generated by the Ethereum Trading Agent System</p>
                 </div>
@@ -478,8 +475,8 @@ Ethereum Trading Agent System
         </body>
         </html>
         """
-    
-    def _generate_daily_summary_text(self, daily_trades: List[Dict[str, Any]], 
+
+    def _generate_daily_summary_text(self, daily_trades: List[Dict[str, Any]],
                                    portfolio_summary: Dict[str, Any]) -> str:
         """Generate plain text content for daily summary"""
         trades_text = ""
@@ -491,7 +488,7 @@ Amount: {trade.get('amount', 'N/A')} ETH
 Status: {trade.get('status', 'N/A')}
 Time: {trade.get('timestamp', 'N/A')}
 ---"""
-        
+
         return f"""
 Daily Trading Summary - {datetime.now().strftime('%Y-%m-%d')}
 

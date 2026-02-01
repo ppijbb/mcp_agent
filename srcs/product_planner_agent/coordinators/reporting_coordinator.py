@@ -1,10 +1,11 @@
 """Reporting Coordinator
 초기 요구사항 수집 및 최종 보고서 생성을 담당합니다.
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from srcs.product_planner_agent.utils.logger import get_product_planner_logger
 
 logger = get_product_planner_logger("coordinator.reporting")
+
 
 class ReportingCoordinator:
     """대화 기반 요구사항 수집 & 보고서 생성을 담당하는 Coordinator"""
@@ -45,6 +46,6 @@ class ReportingCoordinator:
             "generated_at": "2024-01-01T00:00:00Z",
             "status": "completed"
         }
-        
+
         logger.info("Final report successfully generated.")
-        return report 
+        return report

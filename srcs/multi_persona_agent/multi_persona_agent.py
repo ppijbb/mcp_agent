@@ -2,8 +2,7 @@
 Main entry point for the Multi-Persona Dialogue Agent system.
 """
 import asyncio
-import json
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 import sys
 from pathlib import Path
@@ -18,9 +17,10 @@ from .multi_persona_config import config, get_persona_config, get_dialogue_confi
 from .personas import PERSONA_INSTRUCTIONS
 from .dialogue_manager import DialogueManager
 
+
 class MultiPersonaDialogueAgent:
     """
-    An agent system that uses a dialogue between multiple personas 
+    An agent system that uses a dialogue between multiple personas
     to explore a topic from different angles and produce a comprehensive result.
     """
     def __init__(self):
@@ -29,12 +29,12 @@ class MultiPersonaDialogueAgent:
         self.persona_config = get_persona_config()
         self.dialogue_config = get_dialogue_config()
         self.llm_config = get_llm_config()
-        
+
         # Initialize Gemini directly
         self._setup_gemini()
         self.name = "multi_persona_agent"
         self.instruction = "Multi-persona dialogue system for comprehensive topic analysis"
-        
+
         # Initialize persona agents
         self.persona_agents = {}
         self._initialize_personas()
@@ -45,10 +45,10 @@ class MultiPersonaDialogueAgent:
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY environment variable is required")
-        
+
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(self.llm_config.dialogue_model)
-    
+
     def _initialize_personas(self):
         """Initialize persona instructions from configuration."""
         for name in self.persona_config.enabled_personas:
@@ -62,9 +62,9 @@ class MultiPersonaDialogueAgent:
         """Main workflow method."""
         if max_rounds is None:
             max_rounds = self.dialogue_config.max_rounds
-        
+
         return await self.run_dialogue(topic, max_rounds)
-    
+
     async def run_dialogue(self, topic: str, max_rounds: int) -> Dict[str, Any]:
         """
         Conducts a multi-persona dialogue on a given topic using real LLM.
@@ -84,7 +84,7 @@ class MultiPersonaDialogueAgent:
             # Set the model directly
             agent.model = self.model
             agents[name] = agent
-        
+
         dialogue_manager = DialogueManager(
             topic=topic,
             personas=list(agents.values()),
@@ -96,7 +96,7 @@ class MultiPersonaDialogueAgent:
             print(f"--- Dialogue Turn {i+1} ---")
             turn = await dialogue_manager.run_dialogue_round()
             print(f"{turn}\n")
-        
+
         print("--- Dialogue Concluded ---")
 
         # Get Meta-Observer Commentary
@@ -107,7 +107,7 @@ class MultiPersonaDialogueAgent:
         # Get Final Synthesized Summary
         print("Generating final summary...")
         final_summary = await dialogue_manager.get_summary()
-        
+
         print("Dialogue process complete.")
 
         return {
@@ -117,20 +117,21 @@ class MultiPersonaDialogueAgent:
             "summary": final_summary,
         }
 
+
 async def main():
     """A simple runner for the MultiPersonaDialogueAgent."""
     import sys
-    
+
     agent = MultiPersonaDialogueAgent()
-    
+
     # Get topic from command line argument or use default
     if len(sys.argv) > 1:
         topic = " ".join(sys.argv[1:])
     else:
         topic = "The impact of artificial intelligence on modern society"
-    
+
     result = await agent.run_workflow(topic, max_rounds=2)
-    
+
     print("\n\n" + "="*80)
     print("                      FINAL REPORT")
     print("="*80)
@@ -138,11 +139,11 @@ async def main():
     print("-" * 30 + " DIALOGUE HISTORY " + "-" * 30)
     for turn in result['history']:
         print(f"**{turn['persona_name']}**: {turn['content']}\n")
-    
+
     if result['meta_commentary']:
         print("-" * 30 + " META COMMENTARY " + "-" * 30)
         print(f"{result['meta_commentary']}\n")
-        
+
     print("-" * 30 + " FINAL SUMMARY " + "-" * 30)
     print(result['summary'])
     print("="*80)
@@ -154,5 +155,5 @@ if __name__ == "__main__":
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(main()) 
+
+    loop.run_until_complete(main())

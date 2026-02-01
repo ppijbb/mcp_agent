@@ -13,21 +13,18 @@ Customer White Hacking Agent
 
 import asyncio
 import os
-import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     EvaluatorOptimizerLLM,
     QualityRating,
 )
-from srcs.common.utils import setup_agent_app, save_report
+from srcs.common.utils import setup_agent_app
 from srcs.core.config.loader import settings
 from srcs.core.errors import WorkflowError, APIError
 
@@ -35,22 +32,22 @@ from srcs.core.errors import WorkflowError, APIError
 class CustomerWhiteHackingAgent:
     """
     Customer White Hacking Agent
-    
+
     비즈니스 상품을 입력받아 고객 페르소나를 생성하고,
     각 페르소나에 최적화된 판매 시나리오를 자동 생성합니다.
     """
-    
+
     def __init__(self, output_dir: str = "customer_white_hacking_reports"):
         """
         Customer White Hacking Agent 초기화
-        
+
         Args:
             output_dir: 리포트 저장 디렉토리
         """
         self.app = setup_agent_app("customer_white_hacking_system")
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-    
+
     def run_white_hacking_workflow(
         self,
         product_info: Dict[str, Any],
@@ -58,7 +55,7 @@ class CustomerWhiteHackingAgent:
     ) -> Dict[str, Any]:
         """
         Customer White Hacking 워크플로우 실행 (동기)
-        
+
         Args:
             product_info: 비즈니스 상품 정보
                 - name: 상품명
@@ -69,14 +66,14 @@ class CustomerWhiteHackingAgent:
                 - features: 주요 기능 (선택)
                 - competitors: 경쟁사 정보 (선택)
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             dict: 실행 결과 및 생성된 콘텐츠
         """
         try:
             # Validate product info before execution
             validated_product = self._validate_product_info(product_info)
-            
+
             result = asyncio.run(
                 self._async_workflow(validated_product, save_to_file)
             )
@@ -111,7 +108,7 @@ class CustomerWhiteHackingAgent:
                 'error_type': type(e).__name__,
                 'save_to_file': save_to_file
             }
-    
+
     async def _async_workflow(
         self,
         product_info: Dict[str, Any],
@@ -119,63 +116,63 @@ class CustomerWhiteHackingAgent:
     ) -> Dict[str, Any]:
         """
         비동기 워크플로우 실행
-        
+
         Args:
             product_info: 비즈니스 상품 정보
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             dict: 생성된 페르소나 및 판매 시나리오
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         if save_to_file:
             os.makedirs(self.output_dir, exist_ok=True)
-        
+
         async with self.app.run() as app_context:
             context = app_context.context
             logger = app_context.logger
-            
+
             # Configure filesystem server
             if "filesystem" in context.config.mcp.servers:
                 context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                 logger.info("Filesystem server configured")
-            
+
             # Create all white hacking agents
             agents = self._create_white_hacking_agents(validated_product)
-            
+
             # Create orchestrator
-            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
+            orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=list(agents.values()),
                 plan_type="full",
             )
-            
+
             # Create task
             task = self._create_task(validated_product, timestamp, save_to_file)
-            
+
             # Execute workflow
             logger.info("Starting customer white hacking workflow")
-            
+
             # Model 설정: settings에서 직접 가져오거나 agent가 판단
             # Fallback 없음: 설정이 없으면 WorkflowError 발생
             model_name = None
             if hasattr(settings, 'llm') and hasattr(settings.llm, 'default_model'):
                 model_name = settings.llm.default_model
-            
+
             if not model_name:
                 raise WorkflowError("LLM model not configured. Please set llm.default_model in settings.")
-            
+
             try:
                 result = await orchestrator.generate_str(
                     message=task,
                     request_params=RequestParams(model=model_name)
                 )
-                
+
                 logger.info("Customer white hacking workflow completed successfully")
             except WorkflowError:
                 raise
@@ -184,85 +181,85 @@ Orchestrator(
             except Exception as e:
                 logger.error(f"Error during workflow execution: {str(e)}", exc_info=True)
                 raise WorkflowError(f"Unexpected error in workflow execution: {str(e)}") from e
-            
+
             if save_to_file:
                 logger.info(f"All deliverables saved in {self.output_dir}/")
-            
+
             return {
                 'product_info': validated_product,
                 'analysis': result,
                 'timestamp': timestamp
             }
-    
+
     def _validate_product_info(self, product_info: Dict[str, Any]) -> Dict[str, Any]:
         """
         상품 정보 검증
-        
+
         Args:
             product_info: 입력된 상품 정보
-        
+
         Returns:
             dict: 검증된 상품 정보
-        
+
         Raises:
             WorkflowError: 상품 정보가 유효하지 않은 경우
         """
         if not isinstance(product_info, dict):
             raise WorkflowError("product_info must be a dictionary")
-        
+
         # Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 요청하거나 추론
         # 모든 필드는 agent가 필요에 따라 동적으로 처리
         return product_info
-    
+
     def _create_white_hacking_agents(
         self,
         product_info: Dict[str, Any]
     ) -> Dict[str, Agent]:
         """
         Customer White Hacking을 위한 모든 agent 생성
-        
+
         Args:
             product_info: 검증된 상품 정보
-        
+
         Returns:
             dict: 생성된 agent 딕셔너리
         """
         agents = {}
-        
+
         # 1. Persona Generator Agent
         agents['persona_generator'] = Agent(
             name="persona_generator",
             instruction=self._create_persona_generator_instruction(product_info),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 2. Persona Analyzer Agent (각 페르소나를 독립적으로 분석)
         agents['persona_analyzer'] = Agent(
             name="persona_analyzer",
             instruction=self._create_persona_analyzer_instruction(product_info),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 3. Sales Scenario Generator Agent
         agents['sales_scenario_generator'] = Agent(
             name="sales_scenario_generator",
             instruction=self._create_sales_scenario_instruction(product_info),
             server_names=["filesystem", "g-search", "fetch"],
         )
-        
+
         # 4. Scenario Optimizer Agent
         agents['scenario_optimizer'] = Agent(
             name="scenario_optimizer",
             instruction=self._create_scenario_optimizer_instruction(product_info),
             server_names=["filesystem"],
         )
-        
+
         # 5. Quality Evaluator Agent
         agents['quality_evaluator'] = Agent(
             name="white_hacking_quality_evaluator",
             instruction=self._create_quality_evaluator_instruction(),
         )
-        
+
         # 6. Quality Controller (EvaluatorOptimizerLLM)
         agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
@@ -274,19 +271,19 @@ Orchestrator(
             llm_factory=evaluator_llm_factory,
             min_rating=QualityRating.GOOD,
         )
-        
+
         return agents
-    
+
     def _create_persona_generator_instruction(
         self,
         product_info: Dict[str, Any]
     ) -> str:
         """
         Persona Generator Agent instruction 동적 생성
-        
+
         Args:
             product_info: 상품 정보
-        
+
         Returns:
             str: agent instruction
         """
@@ -341,19 +338,19 @@ Do not use dummy or mock data. Base all personas on actual research and analysis
 Output format: Structured JSON with persona details, or detailed markdown format.
 """
         return instruction
-    
+
     def _create_persona_analyzer_instruction(
         self,
         product_info: Dict[str, Any]
     ) -> str:
         """
         Persona Analyzer Agent instruction 동적 생성
-        
+
         각 페르소나를 독립적으로 심층 분석합니다.
-        
+
         Args:
             product_info: 상품 정보
-        
+
         Returns:
             str: agent instruction
         """
@@ -452,17 +449,17 @@ Ensure each persona analysis is:
 Output format: Detailed markdown with clear sections for each persona's analysis.
 """
         return instruction
-    
+
     def _create_sales_scenario_instruction(
         self,
         product_info: Dict[str, Any]
     ) -> str:
         """
         Sales Scenario Generator Agent instruction 동적 생성
-        
+
         Args:
             product_info: 상품 정보
-        
+
         Returns:
             str: agent instruction
         """
@@ -536,17 +533,17 @@ Do not create generic sales scripts. Each scenario must be unique to its persona
 Output format: Detailed markdown or structured format with clear sections for each persona.
 """
         return instruction
-    
+
     def _create_scenario_optimizer_instruction(
         self,
         product_info: Dict[str, Any]
     ) -> str:
         """
         Scenario Optimizer Agent instruction 동적 생성
-        
+
         Args:
             product_info: 상품 정보
-        
+
         Returns:
             str: agent instruction
         """
@@ -612,11 +609,11 @@ Ensure all recommendations are:
 Output format: Structured markdown with clear sections for validation, optimization, and recommendations.
 """
         return instruction
-    
+
     def _create_quality_evaluator_instruction(self) -> str:
         """
         Quality Evaluator Agent instruction 생성
-        
+
         Returns:
             str: agent instruction
         """
@@ -656,20 +653,20 @@ Provide EXCELLENT, GOOD, FAIR, or POOR ratings with specific improvement recomme
 Focus on actionable feedback that improves sales effectiveness.
 """
         return instruction
-    
+
     def _format_product_info_for_instruction(self, product_info: Dict[str, Any]) -> str:
         """
         상품 정보를 instruction용 포맷으로 변환
         Fallback 없음: agent가 동적으로 판단하여 필요한 정보를 추론하거나 요청
-        
+
         Args:
             product_info: 상품 정보 딕셔너리
-        
+
         Returns:
             str: 포맷된 상품 정보 문자열
         """
         lines = []
-        
+
         # 모든 필드를 agent가 동적으로 판단하도록 제공
         # 필드가 없으면 agent가 추론하거나 요청하도록 함
         if 'name' in product_info:
@@ -694,17 +691,17 @@ Focus on actionable feedback that improves sales effectiveness.
                 lines.append(f"- Competitors: {', '.join(str(c) for c in competitors)}")
             elif competitors:
                 lines.append(f"- Competitors: {competitors}")
-        
+
         # 추가 필드가 있으면 모두 포함
         for key, value in product_info.items():
             if key not in ['name', 'description', 'category', 'target_market', 'price_range', 'features', 'competitors']:
                 lines.append(f"- {key.replace('_', ' ').title()}: {value}")
-        
+
         # Fallback 없음: agent가 동적으로 판단
         # 정보가 없으면 agent가 MCP 도구를 사용하여 조사하도록 instruction에 명시
         # 빈 리스트를 join하면 빈 문자열이 반환되므로 fallback 불필요
         return "\n".join(lines)
-    
+
     def _create_task(
         self,
         product_info: Dict[str, Any],
@@ -713,12 +710,12 @@ Focus on actionable feedback that improves sales effectiveness.
     ) -> str:
         """
         워크플로우 task 생성
-        
+
         Args:
             product_info: 상품 정보
             timestamp: 타임스탬프
             save_to_file: 파일 저장 여부
-        
+
         Returns:
             str: task description
         """
@@ -780,7 +777,7 @@ All analysis must be:
 - Production-ready quality
 
 """
-        
+
         if save_to_file:
             task += f"""
 Save all deliverables in the {self.output_dir} directory with appropriate naming:
@@ -795,7 +792,7 @@ Save all deliverables in the {self.output_dir} directory with appropriate naming
 Return the complete analysis for immediate display. Do not save to files.
 Provide comprehensive, detailed results including all personas, scenarios, and recommendations.
 """
-        
+
         return task
 
 
@@ -819,13 +816,13 @@ async def main():
         ],
         'competitors': ['Asana', 'Monday.com', 'Jira', 'ClickUp']
     }
-    
+
     agent = CustomerWhiteHackingAgent()
     result = agent.run_white_hacking_workflow(
         product_info=product_info,
         save_to_file=True
     )
-    
+
     print(f"Workflow completed: {result['success']}")
     if result['success']:
         if 'output_dir' in result:

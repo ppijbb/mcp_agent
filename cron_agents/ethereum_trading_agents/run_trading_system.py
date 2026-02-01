@@ -8,7 +8,6 @@ This script starts the Ethereum trading system with monitoring and reporting cap
 import asyncio
 import logging
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 
@@ -28,21 +27,22 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 async def main():
     """Main entry point for the trading system"""
     try:
         logger.info("🚀 Starting Ethereum Trading System with Monitoring...")
-        
+
         # Import and initialize system
         from ethereum_trading_agents.main import EthereumTradingSystem
-        
+
         # Create system instance
         system = EthereumTradingSystem()
-        
+
         # Initialize system
         logger.info("Initializing system components...")
         await system.initialize_system()
-        
+
         # Display system status
         status = await system.get_system_status()
         print("\n" + "="*60)
@@ -58,26 +58,26 @@ async def main():
         print(f"  • Trading Monitor: {status['components']['trading_monitor']}")
         print(f"  • Trading Report Agent: {status['components']['trading_report_agent']}")
         print("="*60)
-        
+
         # Start the system
         logger.info("Starting Ethereum trading multi-agent system...")
         await system.orchestrator.start()
-        
+
         # Keep the system running
         logger.info("System is now running. Press Ctrl+C to stop...")
-        
+
         try:
             # Keep alive
             while True:
                 await asyncio.sleep(60)  # Check every minute
-                
+
                 # Display periodic status
                 current_time = datetime.now().strftime("%H:%M:%S")
                 print(f"[{current_time}] System running - Monitoring active")
-                
+
         except KeyboardInterrupt:
             logger.info("Received shutdown signal...")
-            
+
     except Exception as e:
         logger.error(f"Failed to start system: {e}")
         raise

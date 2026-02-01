@@ -1,22 +1,20 @@
 import asyncio
-import logging
 import re
 import uuid
-from typing import List, Dict, Any, Tuple
+from typing import Tuple
 import json
 import inspect
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from srcs.common.utils import setup_agent_app
 import graphviz
 import os
 from logging import Logger
 from srcs.utils.graph_database.connector import Neo4jConnector
+
 
 async def clear_graph(logger: Logger):
     """Deletes all nodes and relationships from the graph."""
@@ -33,6 +31,7 @@ async def clear_graph(logger: Logger):
         logger.error(f"Failed to clear the graph: {e}", exc_info=True)
     finally:
         await connector.close()
+
 
 class GraphReActAgent(Agent):
     """
@@ -51,19 +50,19 @@ class GraphReActAgent(Agent):
         self.graph = Neo4jConnector()
         # self.orchestrator and self.logger will be set by the MCPApp/Orchestrator
         # that this agent is part of.
-        
+
     async def execute_react_cycle(self, user_query: str):
         """
         This is the main entry point for the agent's logic, to be called by the orchestrator.
         """
         session_id = str(uuid.uuid4())
         self.logger.info(f"Executing ReAct cycle for query: '{user_query}' with session ID: {session_id}")
-        
+
         observation = await self._action_initiate(user_query, session_id)
-        
+
         for i in range(self.max_iterations):
-            self.logger.info(f"--- Iteration {i+1}/{self.max_iterations} ---")
-            
+            self.logger.info(f"--- Iteration {i + 1}/{self.max_iterations} ---")
+
             thought_prompt = self._get_thought_prompt(user_query, observation)
             thought_text = await self.orchestrator.generate_str(
                 message=thought_prompt,
@@ -72,7 +71,7 @@ class GraphReActAgent(Agent):
             self.logger.info(f"THOUGHT: {thought_text}")
 
             action_name, action_input = self._parse_action(thought_text)
-            
+
             if action_name == "finish":
                 self.logger.info(f"ACTION: Finishing with answer: {action_input}")
                 await self._action_cleanup(session_id)
@@ -102,7 +101,7 @@ class GraphReActAgent(Agent):
         - `g_search(query)`: Use Google Search to get external information for a thought.
         - `synthesize(reason)`: If the graph is mature enough, synthesize the final answer.
         - `finish(answer)`: Provide the final answer if it's explicitly known.
-        
+
         Think step-by-step. What is the single best action to perform next?
         Example: `expand()` or `g_search(What is the current market trend for AI assistants?)`
         """
@@ -114,11 +113,11 @@ class GraphReActAgent(Agent):
             name = action_match.group(1).strip()
             input_val = action_match.group(2).strip().strip("'\"")
             return name, input_val
-        
+
         action_word = thought_text.split()[0].strip().replace('`', '')
         if action_word in ["expand", "evaluate", "prune", "check_status", "synthesize"]:
             return action_word, ""
-            
+
         return "finish", "Could not parse a valid action from the thought."
 
     async def _execute_action(self, name: str, input_val: str, session_id: str) -> str:
@@ -143,7 +142,7 @@ class GraphReActAgent(Agent):
         self.logger.info(f"Initiating graph for session {session_id}")
         cypher = "CREATE (t:Thought {id: $id, session_id: $session_id, text: $text, status: 'new', is_initial: true, timestamp: datetime()})"
         self.graph.execute_query(cypher, {"id": str(uuid.uuid4()), "session_id": session_id, "text": query})
-        return f"Initiated graph with first thought."
+        return "Initiated graph with first thought."
 
     async def _action_expand(self, _, session_id: str) -> str:
         self.logger.info("Expanding thoughts.")
@@ -157,8 +156,8 @@ class GraphReActAgent(Agent):
         generated_text = await self.orchestrator.generate_str(message=prompt, request_params=RequestParams(model=self.model))
         new_thoughts = [t.strip() for t in generated_text.split('\n') if t.strip()]
         for new_text in new_thoughts:
-            cypher = "MATCH (p:Thought {id:$p_id}) CREATE (c:Thought {id:$c_id, session_id:$s_id, text:$text, status:'unevaluated', ts:datetime()})-[:DERIVES_FROM]->(p)"
-            self.graph.execute_query(cypher, {"p_id":thought['id'], "c_id":str(uuid.uuid4()), "s_id":session_id, "text":new_text})
+            cypher = "MATCH (p:Thought {id: $p_id}) CREATE (c:Thought {id: $c_id, session_id: $s_id, text: $text, status: 'unevaluated', ts: datetime()})-[:DERIVES_FROM]->(p)"
+            self.graph.execute_query(cypher, {"p_id": thought['id'], "c_id": str(uuid.uuid4()), "s_id": session_id, "text": new_text})
         self.graph.execute_query("MATCH (t:Thought {id: $id}) SET t.status = 'expanded'", {"id": thought['id']})
         return f"Expanded thought {thought['id']} into {len(new_thoughts)} new thoughts."
 
@@ -291,13 +290,13 @@ Thought:
             graph_status = await self._get_graph_status()
             tools_str = self.format_tools()
             prompt = prompt_template.format(query=query, tools=tools_str, graph_status=graph_status, thought=thought)
-            
+
             llm_response = await self.orchestrator.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 model="gemini-2.5-flash-lite",
                 json_response=True
             )
-            
+
             observation = ""
             try:
                 response_text = llm_response.choices[0].message.content
@@ -327,21 +326,22 @@ Thought:
                         observation = await tool_function(**tool_args)
                 else:
                     observation = f"Error: Unknown tool '{tool_name}'. Please use one of the available tools: {list(self.tools.keys())}"
-            
+
             except json.JSONDecodeError:
                 observation = "Error: Invalid JSON response. Please provide a valid JSON object with 'thought' and 'action'."
                 thought = "The last response was not valid JSON. I must correct my output format."
             except Exception as e:
                 observation = f"An unexpected error occurred: {e}"
                 self.logger.error(f"Error during agent execution: {e}", exc_info=True)
-            
+
             self.history += f"\nObservation {self.step}: {observation}\n"
             self.step += 1
 
         return "Agent stopped after reaching max steps."
 
-from srcs.common.utils import setup_agent_app
+
 app = setup_agent_app("graph_react_agent_app")
+
 
 async def main():
     """Main function to run the GraphReActAgent."""
@@ -349,26 +349,26 @@ async def main():
         logger = app_context.logger
         try:
             await clear_graph(logger)
-            
+
             # Create an instance of our agent first
             graph_agent = GraphReActAgent()
 
             # The orchestrator is the main entry point
             # Pass the agent instance to the orchestrator upon creation
-            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
+            orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=[graph_agent]
             )
-            
+
             # Define the high-level task for the orchestrator
             query = "Should we build a new AI agent based on graph databases? What are the pros and cons?"
             task = f"""
             Use the "GraphReActAgent" to answer the following query: "{query}"
-            
+
             To do this, you must call the agent's `execute_react_cycle` method with the user's query.
             The agent will then perform a step-by-step reasoning process using a knowledge graph.
             Return the final answer provided by the agent.
@@ -376,7 +376,7 @@ Orchestrator(
 
             logger.info("Starting GraphReAct workflow via orchestrator...")
             final_answer = await orchestrator.generate_str(task)
-            
+
             logger.info("\n--- FINAL ANSWER ---")
             logger.info(final_answer)
 
@@ -385,6 +385,7 @@ Orchestrator(
         finally:
             logger.info("Agent execution finished. Visualizing graph...")
             await visualize_graph(logger)
+
 
 async def visualize_graph(logger: Logger):
     """
@@ -424,7 +425,7 @@ async def visualize_graph(logger: Logger):
         # Ensure the output directory exists
         output_dir = "travel_results"
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Save the figure
         output_path = os.path.join(output_dir, "knowledge_graph")
         dot.render(output_path, format='png', view=False, cleanup=True)
@@ -436,4 +437,4 @@ async def visualize_graph(logger: Logger):
         await connector.close()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

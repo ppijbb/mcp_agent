@@ -3,13 +3,7 @@ import functools
 import atexit
 import threading
 from abc import ABC, abstractmethod
-import logging
-import subprocess
-import json
-import os
-import sys
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
 # HACK: mcp-agent 설정 캐시 초기화 (파일 변경사항 반영)
 try:
@@ -39,6 +33,7 @@ _active_mcp_apps: List[MCPApp] = []
 _cleanup_registered = False
 _cleanup_lock = threading.Lock()
 
+
 def _cleanup_mcp_apps():
     """모든 활성 MCPApp 인스턴스 정리"""
     import logging
@@ -54,6 +49,8 @@ def _cleanup_mcp_apps():
             logger.warning(f"Error cleaning up MCPApp: {e}")
 
 # 프로세스 종료 시 cleanup 등록 (한 번만)
+
+
 def _register_cleanup():
     """cleanup 핸들러 등록 (메인 스레드에서만)"""
     global _cleanup_registered
@@ -70,18 +67,19 @@ def _register_cleanup():
 
 def async_memoize(func):
     cache = LRUCache(maxsize=128)
-    
+
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         key = hashkey(*args, **kwargs)
         if key in cache:
             return cache[key]
-        
+
         result = await func(*args, **kwargs)
         cache[key] = result
         return result
 
     return wrapper
+
 
 class BaseAgent(ABC):
     """
@@ -100,12 +98,12 @@ class BaseAgent(ABC):
         self.name = name
         self.instruction = instruction
         self.server_names = server_names or []
-        
+
         self.settings = settings  # 중앙 설정 객체 사용
         self.app = self._setup_app()
-        self.logger = self.app.logger # MCPApp이 생성한 로거를 사용
+        self.logger = self.app.logger  # MCPApp이 생성한 로거를 사용
         self._session = None
-        
+
         # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
         failure_threshold = 5
         recovery_timeout = 30
@@ -132,24 +130,24 @@ class BaseAgent(ABC):
         """
         from mcp_agent.config import get_settings
         from pathlib import Path
-        
+
         # 프로젝트 루트에서 설정 파일 경로 찾기
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         config_path = project_root / "mcp_agent.config.yaml"
-        
+
         # mcp_agent 라이브러리의 표준 설정 사용
         # HACK: 설정 캐시 강제 초기화 (google 섹션 누락 방지)
         import mcp_agent.config
         mcp_agent.config._settings = None
         settings = get_settings(str(config_path))
-        
+
         if not settings.google or not settings.google.api_key:
              # 만약 여전히 None이면 직접 주입 시도 (최후의 수단)
              import os
              if os.getenv("GOOGLE_API_KEY"):
                  from mcp_agent.config import GoogleSettings
                  settings.google = GoogleSettings(api_key=os.getenv("GOOGLE_API_KEY"))
-        
+
         app = MCPApp(
             name=self.name,
             settings=settings,
@@ -167,7 +165,6 @@ class BaseAgent(ABC):
         에이전트의 핵심 워크플로우를 실행하는 추상 메서드.
         자식 클래스에서 반드시 구현해야 합니다.
         """
-        pass
 
     def get_orchestrator(self, agents: List[MCP_Agent]) -> Orchestrator:
         """
@@ -175,13 +172,13 @@ class BaseAgent(ABC):
         Fallback 지원 포함.
         """
         from srcs.common.llm import create_fallback_orchestrator_llm_factory
-        
+
         # Fallback이 가능한 LLM factory 사용 (common 모듈)
         llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash",
             logger_instance=self.logger
         )
-        
+
         return Orchestrator(
             llm_factory=llm_factory,
             available_agents=agents,
@@ -198,13 +195,13 @@ class BaseAgent(ABC):
             # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
             max_retries = 3
             retry_delay = 5
-            
+
             for attempt in range(max_retries):
                 try:
                     result = await self.circuit_breaker.call_async(self.run_workflow, *args, **kwargs)
 
                     self.logger.info(f"'{self.name}' 에이전트 워크플로우를 성공적으로 완료했습니다.")
-                    
+
                     return result
                 except CircuitBreakerError as e:
                     self.logger.error(f"서킷 브레이커가 열렸습니다. '{self.name}' 워크플로우를 중단합니다.")
@@ -223,4 +220,4 @@ class BaseAgent(ABC):
                     raise WorkflowError(f"Unexpected error in workflow '{self.name}': {e}") from e
         finally:
             await self.close_session()
-            self.logger.info(f"'{self.name}' 에이전트 세션을 정리했습니다.") 
+            self.logger.info(f"'{self.name}' 에이전트 세션을 정리했습니다.")

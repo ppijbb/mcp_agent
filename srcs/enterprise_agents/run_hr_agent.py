@@ -1,8 +1,8 @@
 import argparse
 import json
 import sys
-import os
 from srcs.enterprise_agents.hr_recruitment_agent import HRRecruitmentAgent
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run HR Recruitment Agent workflow")
@@ -41,5 +41,6 @@ def main():
         print(f"[ERROR] Failed to save result JSON: {e}")
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

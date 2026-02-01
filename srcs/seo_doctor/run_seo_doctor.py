@@ -16,17 +16,18 @@ from srcs.seo_doctor.config_loader import seo_config
 from srcs.core.utils import EnhancedJSONEncoder
 
 # Dataclass를 dict로 변환하기 위한 헬퍼
-from dataclasses import asdict, is_dataclass
 from datetime import datetime
+
 
 async def upload_to_drive(session: aiohttp.ClientSession, mcp_url: str, file_name: str, content: str) -> dict:
     """Uploads content to Google Drive via MCP."""
     upload_url = f"{mcp_url}/upload"
     payload = {"fileName": file_name, "content": content}
-    
+
     async with session.post(upload_url, json=payload) as response:
         response.raise_for_status()
         return await response.json()
+
 
 async def run_agent(args):
     """SEO Doctor 에이전트의 핵심 로직을 실행합니다."""
@@ -35,7 +36,7 @@ async def run_agent(args):
     print(f"   - Google Drive MCP: {args.google_drive_mcp_url}")
     print(f"   - SEO MCP: {args.seo_mcp_url}")
     print("-" * 30)
-    
+
     final_result = {"success": False, "data": None, "error": None}
     agent_result = None
     agent = SEODoctorAgent()
@@ -45,7 +46,7 @@ async def run_agent(args):
             url=args.url,
             keywords=args.competitor_urls
         )
-        
+
         print("✅ Agent finished successfully.")
         final_result["success"] = True
         agent_result = analysis_result
@@ -55,7 +56,7 @@ async def run_agent(args):
         error_msg = f"❌ An error occurred during agent execution: {e}\n{traceback.format_exc()}"
         print(error_msg)
         final_result["error"] = str(e)
-    
+
     finally:
         if agent_result:
             final_result["data"] = json.loads(json.dumps(agent_result, cls=EnhancedJSONEncoder))
@@ -79,9 +80,10 @@ async def run_agent(args):
             final_result["success"] = False
             final_result["error"] = f"Failed to upload result JSON: {e}"
             raise Exception(error_msg)
-        
+
         if not final_result["success"]:
             sys.exit(1)
+
 
 def main():
     """명령줄 인자를 파싱하고 에이전트를 실행합니다."""
@@ -89,7 +91,7 @@ def main():
     mcp_servers = seo_config.get_mcp_servers_config()
     google_drive_url = mcp_servers.get('google_drive', {}).get('url', 'http://localhost:3001')
     seo_url = mcp_servers.get('seo', {}).get('url', 'http://localhost:3002')
-    
+
     parser = argparse.ArgumentParser(description="Run the SEO Doctor Agent with AI-powered analysis.")
     parser.add_argument("--url", required=True, help="The URL to analyze.")
     parser.add_argument("--include-competitors", action='store_true', help="Include competitor analysis.")
@@ -104,9 +106,10 @@ def main():
         default=seo_url,
         help=f"The URL for the SEO MCP server (default: {seo_url})."
     )
-    
+
     args = parser.parse_args()
     asyncio.run(run_agent(args))
 
+
 if __name__ == "__main__":
-    main() 
+    main()

@@ -9,20 +9,20 @@ This module integrates all advanced algorithms:
 5. Real-time strategy adaptation
 """
 
-import asyncio
 import numpy as np
-from typing import Dict, List, Tuple, Optional, TypedDict
+from typing import Dict, List, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 import logging
 from datetime import datetime, timedelta
 
-from .amm_algorithm import AMMAlgorithm, AMMConfig, AMMPosition
-from .technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig, AnalysisResult, AnalysisMethod
+from .amm_algorithm import AMMAlgorithm, AMMConfig
+from .technical_analysis import TechnicalAnalysisAlgorithm, TechnicalAnalysisConfig
 from .parallel_evm import ParallelEVMAlgorithm, ParallelEVMConfig, Transaction, TransactionPriority
-from .advanced_risk import AdvancedRiskAlgorithm, RiskConfig, RiskMetrics, RiskLevel
+from .advanced_risk import AdvancedRiskAlgorithm, RiskConfig
 
 logger = logging.getLogger(__name__)
+
 
 class TradingStrategy(Enum):
     """Trading strategy types"""
@@ -33,6 +33,7 @@ class TradingStrategy(Enum):
     ARBITRAGE = "arbitrage"
     HEDGE = "hedge"
 
+
 class MarketCondition(Enum):
     """Market condition classifications"""
     BULL = "bull"
@@ -41,31 +42,33 @@ class MarketCondition(Enum):
     VOLATILE = "volatile"
     TRENDING = "trending"
 
+
 @dataclass
 class IntegratedTradingConfig:
     """Integrated trading configuration"""
     # AMM settings
     amm_enabled: bool = True
     amm_liquidity_threshold: float = 10000.0
-    
+
     # Technical analysis settings
     technical_analysis_enabled: bool = True
     prediction_confidence_threshold: float = 0.7
-    
+
     # Parallel EVM settings
     parallel_execution_enabled: bool = True
     max_parallel_trades: int = 5
-    
+
     # Risk management settings
     risk_management_enabled: bool = True
     max_portfolio_risk: float = 0.05
-    
+
     # Strategy selection
     primary_strategy: TradingStrategy = TradingStrategy.TECHNICAL_ANALYSIS
-    
+
     # Market adaptation
     market_adaptation_enabled: bool = True
     strategy_switch_threshold: float = 0.1
+
 
 class TradingDecision(TypedDict):
     """Trading decision structure"""
@@ -81,27 +84,28 @@ class TradingDecision(TypedDict):
     gas_strategy: str
     timestamp: str
 
+
 class IntegratedTradingAlgorithm:
     """Integrated advanced trading algorithm for Ethereum"""
-    
+
     def __init__(self, config: IntegratedTradingConfig):
         self.config = config
-        
+
         # Initialize sub-algorithms
         self.amm_algorithm = AMMAlgorithm(AMMConfig())
         self.technical_analysis = TechnicalAnalysisAlgorithm(TechnicalAnalysisConfig())
         self.parallel_evm = ParallelEVMAlgorithm(ParallelEVMConfig())
         self.risk_management = AdvancedRiskAlgorithm(RiskConfig())
-        
+
         # State tracking
         self.current_strategy: TradingStrategy = config.primary_strategy
         self.market_condition: MarketCondition = MarketCondition.SIDEWAYS
         self.portfolio_state: Dict[str, any] = {}
         self.trading_history: List[TradingDecision] = []
         self.performance_metrics: Dict[str, float] = {}
-        
+
     async def analyze_market_condition(
-        self, 
+        self,
         market_data: Dict[str, any]
     ) -> MarketCondition:
         """Analyze current market condition"""
@@ -110,7 +114,7 @@ class IntegratedTradingAlgorithm:
             volatility = market_data.get("volatility", 0)
             volume = market_data.get("volume", 0)
             price_change_24h = market_data.get("price_change_24h", 0)
-            
+
             # Determine market condition based on multiple factors
             if volatility > 0.1:  # High volatility
                 condition = MarketCondition.VOLATILE
@@ -123,32 +127,32 @@ class IntegratedTradingAlgorithm:
                 condition = MarketCondition.SIDEWAYS
             else:
                 condition = MarketCondition.TRENDING
-            
+
             self.market_condition = condition
             logger.info(f"Market condition analyzed: {condition.value}")
-            
+
             return condition
-            
+
         except Exception as e:
             logger.error(f"Market condition analysis failed: {e}")
             raise ValueError(f"Market condition analysis failed: {e}")
-    
+
     async def select_optimal_strategy(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> TradingStrategy:
         """Select optimal trading strategy based on market conditions"""
         try:
             if not self.config.market_adaptation_enabled:
                 return self.current_strategy
-            
+
             # Analyze market condition
             market_condition = await self.analyze_market_condition(market_data)
-            
+
             # Get risk metrics
             risk_metrics = await self.risk_management.calculate_comprehensive_risk_metrics(portfolio_data)
-            
+
             # Strategy selection logic
             if market_condition == MarketCondition.VOLATILE:
                 # High volatility - use AMM for stability
@@ -156,36 +160,36 @@ class IntegratedTradingAlgorithm:
                     selected_strategy = TradingStrategy.AMM
                 else:
                     selected_strategy = TradingStrategy.HEDGE
-                    
+
             elif market_condition in [MarketCondition.BULL, MarketCondition.BEAR]:
                 # Trending market - use technical analysis
                 if self.config.technical_analysis_enabled:
                     selected_strategy = TradingStrategy.TECHNICAL_ANALYSIS
                 else:
                     selected_strategy = TradingStrategy.MOMENTUM
-                    
+
             elif market_condition == MarketCondition.SIDEWAYS:
                 # Sideways market - use mean reversion
                 selected_strategy = TradingStrategy.MEAN_REVERSION
-                
+
             else:  # TRENDING
                 # Use momentum strategy
                 selected_strategy = TradingStrategy.MOMENTUM
-            
+
             # Check if strategy switch is needed
             if selected_strategy != self.current_strategy:
                 logger.info(f"Strategy switched from {self.current_strategy.value} to {selected_strategy.value}")
                 self.current_strategy = selected_strategy
-            
+
             return selected_strategy
-            
+
         except Exception as e:
             logger.error(f"Strategy selection failed: {e}")
             return self.config.primary_strategy
-    
+
     async def execute_amm_strategy(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> TradingDecision:
         """Execute AMM strategy"""
@@ -195,12 +199,12 @@ class IntegratedTradingAlgorithm:
             current_price = market_data.get("price", 0)
             volatility = market_data.get("volatility", 0)
             volume_24h = market_data.get("volume_24h", 0)
-            
+
             # Execute AMM strategy
             amm_result = await self.amm_algorithm.execute_amm_strategy(
                 token0, token1, current_price, volatility, volume_24h
             )
-            
+
             # Create trading decision
             decision: TradingDecision = {
                 "action": "AMM_PROVIDE",
@@ -215,18 +219,18 @@ class IntegratedTradingAlgorithm:
                 "gas_strategy": "dynamic",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             logger.info(f"AMM strategy executed: {decision['action']}")
-            
+
             return decision
-            
+
         except Exception as e:
             logger.error(f"AMM strategy execution failed: {e}")
             raise ValueError(f"AMM strategy failed: {str(e)}")
-    
+
     async def execute_technical_analysis_strategy(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> TradingDecision:
         """Execute technical analysis strategy"""
@@ -234,12 +238,12 @@ class IntegratedTradingAlgorithm:
             # Get price analysis using technical analysis
             historical_data = portfolio_data.get("historical_data", [])
             analysis_result = await self.technical_analysis.analyze_price(market_data, historical_data)
-            
+
             # Determine action based on analysis
             current_price = market_data.get("price", 0)
             predicted_price = analysis_result["prediction"]
             confidence = analysis_result["confidence"]
-            
+
             if confidence < self.config.prediction_confidence_threshold:
                 action = "HOLD"
                 amount = 0.0
@@ -252,12 +256,12 @@ class IntegratedTradingAlgorithm:
             else:
                 action = "HOLD"
                 amount = 0.0
-            
+
             # Calculate risk metrics
             risk_score = 1 - confidence  # Higher confidence = lower risk
             expected_return = abs(predicted_price - current_price) / current_price
             max_loss = expected_return * 0.5  # Assume 50% of expected return as max loss
-            
+
             decision: TradingDecision = {
                 "action": action,
                 "amount": amount,
@@ -271,18 +275,18 @@ class IntegratedTradingAlgorithm:
                 "gas_strategy": "aggressive" if confidence > 0.9 else "dynamic",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             logger.info(f"AI prediction strategy executed: {decision['action']}")
-            
+
             return decision
-            
+
         except Exception as e:
             logger.error(f"AI prediction strategy execution failed: {e}")
             raise ValueError(f"AI prediction strategy failed: {str(e)}")
-    
+
     async def execute_momentum_strategy(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> TradingDecision:
         """Execute momentum strategy"""
@@ -290,10 +294,10 @@ class IntegratedTradingAlgorithm:
             current_price = market_data.get("price", 0)
             price_change_24h = market_data.get("price_change_24h", 0)
             volume_24h = market_data.get("volume_24h", 0)
-            
+
             # Calculate momentum score
             momentum_score = price_change_24h * (volume_24h / 1000000)  # Normalize volume
-            
+
             # Determine action
             if momentum_score > 0.1:  # Strong positive momentum
                 action = "BUY"
@@ -307,7 +311,7 @@ class IntegratedTradingAlgorithm:
                 action = "HOLD"
                 amount = 0.0
                 confidence = 0.5
-            
+
             decision: TradingDecision = {
                 "action": action,
                 "amount": amount,
@@ -321,35 +325,35 @@ class IntegratedTradingAlgorithm:
                 "gas_strategy": "dynamic",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             logger.info(f"Momentum strategy executed: {decision['action']}")
-            
+
             return decision
-            
+
         except Exception as e:
             logger.error(f"Momentum strategy execution failed: {e}")
             raise ValueError(f"Momentum strategy failed: {str(e)}")
-    
+
     async def execute_mean_reversion_strategy(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> TradingDecision:
         """Execute mean reversion strategy"""
         try:
             current_price = market_data.get("price", 0)
             historical_prices = [d.get("price", 0) for d in portfolio_data.get("historical_data", [])]
-            
+
             if len(historical_prices) < 20:
                 raise ValueError("Insufficient historical data for mean reversion")
-            
+
             # Calculate moving average
             ma_20 = np.mean(historical_prices[-20:])
             ma_50 = np.mean(historical_prices[-50:]) if len(historical_prices) >= 50 else ma_20
-            
+
             # Calculate deviation from mean
             deviation = (current_price - ma_20) / ma_20
-            
+
             # Determine action
             if deviation > 0.05:  # Price above mean by 5%
                 action = "SELL"  # Expect reversion down
@@ -363,7 +367,7 @@ class IntegratedTradingAlgorithm:
                 action = "HOLD"
                 amount = 0.0
                 confidence = 0.5
-            
+
             decision: TradingDecision = {
                 "action": action,
                 "amount": amount,
@@ -377,44 +381,44 @@ class IntegratedTradingAlgorithm:
                 "gas_strategy": "conservative",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             logger.info(f"Mean reversion strategy executed: {decision['action']}")
-            
+
             return decision
-            
+
         except Exception as e:
             logger.error(f"Mean reversion strategy execution failed: {e}")
             raise ValueError(f"Mean reversion strategy failed: {str(e)}")
-    
+
     def _calculate_position_size(
-        self, 
-        current_price: float, 
+        self,
+        current_price: float,
         confidence: float
     ) -> float:
         """Calculate position size based on confidence and risk management"""
         try:
             # Base position size
             base_size = 0.01  # 1% of portfolio
-            
+
             # Adjust for confidence
             confidence_multiplier = confidence * 2  # 0.5 to 2.0
-            
+
             # Calculate final position size
             position_size = base_size * confidence_multiplier
-            
+
             # Apply risk management constraints
             max_position = 0.1  # 10% max position
             position_size = min(position_size, max_position)
-            
+
             return position_size
-            
+
         except Exception as e:
             logger.error(f"Position size calculation failed: {e}")
             return 0.01
-    
+
     async def execute_trading_decision(
-        self, 
-        decision: TradingDecision, 
+        self,
+        decision: TradingDecision,
         portfolio_data: Dict[str, any]
     ) -> Dict[str, any]:
         """Execute trading decision with risk management"""
@@ -424,25 +428,25 @@ class IntegratedTradingAlgorithm:
                 should_reduce, recommendations = await self.risk_management.should_reduce_risk(
                     portfolio_data.get("risk_metrics", {})
                 )
-                
+
                 if should_reduce and decision["action"] in ["BUY", "AMM_PROVIDE"]:
                     logger.warning(f"Risk management override: {recommendations}")
                     decision["action"] = "HOLD"
                     decision["amount"] = 0.0
-            
+
             # Create transaction if action is not HOLD
             if decision["action"] != "HOLD":
                 transaction = await self._create_transaction(decision)
-                
+
                 # Execute with parallel EVM optimization
                 if self.config.parallel_execution_enabled:
                     execution_result = await self.parallel_evm.execute_parallel_transactions([transaction])
                 else:
                     execution_result = await self.parallel_evm._execute_sequential([transaction])
-                
+
                 # Update trading history
                 self.trading_history.append(decision)
-                
+
                 return {
                     "decision": decision,
                     "execution_result": execution_result[0] if execution_result else None,
@@ -454,7 +458,7 @@ class IntegratedTradingAlgorithm:
                     "execution_result": None,
                     "success": True
                 }
-                
+
         except Exception as e:
             logger.error(f"Trading decision execution failed: {e}")
             return {
@@ -463,17 +467,17 @@ class IntegratedTradingAlgorithm:
                 "success": False,
                 "error": str(e)
             }
-    
+
     async def _create_transaction(self, decision: TradingDecision) -> Transaction:
         """Create transaction from trading decision"""
         try:
             # Calculate gas price and limit
             gas_price = 20  # Base gas price in Gwei
             gas_limit = 21000  # Base gas limit
-            
+
             if decision["action"] in ["BUY", "SELL"]:
                 gas_limit = 100000  # Higher gas for complex transactions
-            
+
             # Create transaction
             transaction: Transaction = {
                 "to": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",  # Example address
@@ -487,23 +491,23 @@ class IntegratedTradingAlgorithm:
                 "max_fee_per_gas": int(gas_price * 1.2 * 1e9),
                 "max_priority_fee_per_gas": int(gas_price * 0.1 * 1e9)
             }
-            
+
             return transaction
-            
+
         except Exception as e:
             logger.error(f"Transaction creation failed: {e}")
             raise ValueError(f"Transaction creation failed: {str(e)}")
-    
+
     async def run_integrated_trading_cycle(
-        self, 
-        market_data: Dict[str, any], 
+        self,
+        market_data: Dict[str, any],
         portfolio_data: Dict[str, any]
     ) -> Dict[str, any]:
         """Run complete integrated trading cycle"""
         try:
             # Select optimal strategy
             strategy = await self.select_optimal_strategy(market_data, portfolio_data)
-            
+
             # Execute strategy
             if strategy == TradingStrategy.AMM:
                 decision = await self.execute_amm_strategy(market_data, portfolio_data)
@@ -516,13 +520,13 @@ class IntegratedTradingAlgorithm:
             else:
                 # Fallback to primary strategy
                 decision = await self.execute_technical_analysis_strategy(market_data, portfolio_data)
-            
+
             # Execute trading decision
             execution_result = await self.execute_trading_decision(decision, portfolio_data)
-            
+
             # Update performance metrics
             await self._update_performance_metrics(execution_result)
-            
+
             return {
                 "strategy_used": strategy.value,
                 "market_condition": self.market_condition.value,
@@ -530,43 +534,43 @@ class IntegratedTradingAlgorithm:
                 "execution_result": execution_result,
                 "performance_metrics": self.performance_metrics
             }
-            
+
         except Exception as e:
             logger.error(f"Integrated trading cycle failed: {e}")
             raise ValueError(f"Trading cycle failed: {str(e)}")
-    
+
     async def _update_performance_metrics(self, execution_result: Dict[str, any]):
         """Update performance metrics"""
         try:
             if "decision" not in execution_result:
                 return
-            
+
             decision = execution_result["decision"]
-            
+
             # Update basic metrics
             if "total_trades" not in self.performance_metrics:
                 self.performance_metrics["total_trades"] = 0
                 self.performance_metrics["successful_trades"] = 0
                 self.performance_metrics["total_return"] = 0.0
-            
+
             self.performance_metrics["total_trades"] += 1
-            
+
             if execution_result.get("success", False):
                 self.performance_metrics["successful_trades"] += 1
                 self.performance_metrics["total_return"] += decision.get("expected_return", 0.0)
-            
+
             # Calculate success rate
             success_rate = (
-                self.performance_metrics["successful_trades"] / 
+                self.performance_metrics["successful_trades"] /
                 self.performance_metrics["total_trades"]
             )
             self.performance_metrics["success_rate"] = success_rate
-            
+
             logger.info(f"Performance metrics updated: {self.performance_metrics}")
-            
+
         except Exception as e:
             logger.error(f"Performance metrics update failed: {e}")
-    
+
     async def get_algorithm_status(self) -> Dict[str, any]:
         """Get current algorithm status"""
         try:
@@ -582,7 +586,7 @@ class IntegratedTradingAlgorithm:
                     "risk_management_enabled": self.config.risk_management_enabled
                 }
             }
-            
+
         except Exception as e:
             logger.error(f"Status retrieval failed: {e}")
             return {}

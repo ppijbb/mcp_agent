@@ -7,7 +7,6 @@
 import logging
 import random
 from typing import Dict, Optional, Any
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +14,10 @@ logger = logging.getLogger(__name__)
 class RewardService:
     """
     보상 서비스
-    
+
     랜덤 보상, 연승 보너스, 특별 이벤트 보상 관리
     """
-    
+
     def __init__(self):
         """
         RewardService 초기화
@@ -27,7 +26,7 @@ class RewardService:
         self.jackpot_probability = 0.1  # 10% 확률
         self.jackpot_multiplier = 100.0  # 100x
         self.normal_bonus_range = (1.5, 5.0)  # 1.5x ~ 5.0x
-        
+
         # 연승 보너스 설정
         self.streak_bonuses = {
             3: 0.2,   # 3연승: 20% 보너스
@@ -35,13 +34,13 @@ class RewardService:
             10: 1.0,  # 10연승: 100% 보너스
             20: 2.0,  # 20연승: 200% 보너스
         }
-        
+
         logger.info("RewardService initialized")
-    
+
     def calculate_random_bonus(self, base_amount: float = 10.0) -> Dict[str, Any]:
         """
         랜덤 보상 계산
-        
+
         Args:
             base_amount: 기본 보상 금액
         Returns:
@@ -56,20 +55,20 @@ class RewardService:
             multiplier = random.uniform(*self.normal_bonus_range)
             bonus_type = "normal"
             message = f"🎁 {multiplier:.1f}x 보너스!"
-        
+
         amount = base_amount * multiplier
-        
+
         return {
             "bonus_type": bonus_type,
             "multiplier": multiplier,
             "amount": amount,
             "message": message
         }
-    
+
     def calculate_streak_bonus(self, base_reward: float, win_streak: int) -> float:
         """
         연승 보너스 계산
-        
+
         Args:
             base_reward: 기본 보상
             win_streak: 연승 횟수
@@ -78,16 +77,16 @@ class RewardService:
         """
         if win_streak < 3:
             return 0.0
-        
+
         # 가장 높은 연승 보너스 적용
         bonus_rate = 0.0
         for streak, rate in sorted(self.streak_bonuses.items(), reverse=True):
             if win_streak >= streak:
                 bonus_rate = rate
                 break
-        
+
         return base_reward * bonus_rate
-    
+
     def calculate_total_reward(
         self,
         base_reward: float,
@@ -98,7 +97,7 @@ class RewardService:
     ) -> Dict[str, Any]:
         """
         총 보상 계산
-        
+
         Args:
             base_reward: 기본 보상
             accuracy_score: 정확도 점수 (0.0 ~ 1.0)
@@ -110,19 +109,19 @@ class RewardService:
         """
         # 기본 보상 (정확도 기반)
         accuracy_reward = bet_amount * multiplier * accuracy_score
-        
+
         # 연승 보너스
         streak_bonus = self.calculate_streak_bonus(accuracy_reward, win_streak)
-        
+
         # 총 보상
         total_reward = accuracy_reward + streak_bonus
-        
+
         # 랜덤 보너스 (10% 확률)
         random_bonus_info = None
         if random.random() < 0.1:
             random_bonus_info = self.calculate_random_bonus()
             total_reward += random_bonus_info["amount"]
-        
+
         return {
             "base_reward": base_reward,
             "accuracy_reward": accuracy_reward,
@@ -137,11 +136,11 @@ class RewardService:
                 "random_portion": random_bonus_info["amount"] if random_bonus_info else 0.0
             }
         }
-    
+
     def get_streak_message(self, win_streak: int) -> Optional[str]:
         """
         연승 메시지 생성
-        
+
         Args:
             win_streak: 연승 횟수
         Returns:
@@ -156,4 +155,3 @@ class RewardService:
         elif win_streak >= 3:
             return f"✨ {win_streak}연승! 좋은 흐름이에요!"
         return None
-

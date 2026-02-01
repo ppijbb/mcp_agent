@@ -1,11 +1,10 @@
 """
 Enhanced Data Generator Agent with Meta Synthetic Data Kit Integration
 --------------------------------------------------------------------
-A comprehensive data generation tool that combines MCP agents with Meta's 
+A comprehensive data generation tool that combines MCP agents with Meta's
 Synthetic Data Kit for high-quality synthetic dataset creation.
 """
 
-import asyncio
 import os
 import sys
 import json
@@ -15,9 +14,6 @@ from pathlib import Path
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import QualityRating
-from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
-from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -29,45 +25,46 @@ DATA_TYPE = "qa" if len(sys.argv) <= 1 else sys.argv[1]  # qa, cot, summary, cus
 RECORD_COUNT = 100 if len(sys.argv) <= 2 else int(sys.argv[2])
 SOURCE_FILE = None if len(sys.argv) <= 3 else sys.argv[3]  # Optional source document
 
+
 class SyntheticDataKitIntegration:
     """Integration wrapper for Meta's Synthetic Data Kit"""
-    
+
     def __init__(self, output_dir: str):
         self.output_dir = Path(output_dir)
         self.data_dir = self.output_dir / "data"
         self.setup_directories()
-    
+
     def setup_directories(self):
         """Create the directory structure expected by synthetic-data-kit"""
         dirs = [
-            "pdf", "html", "youtube", "docx", "ppt", "txt", 
+            "pdf", "html", "youtube", "docx", "ppt", "txt",
             "output", "generated", "cleaned", "final"
         ]
         for dir_name in dirs:
             (self.data_dir / dir_name).mkdir(parents=True, exist_ok=True)
-    
+
     def check_installation(self):
         """Check if synthetic-data-kit is installed"""
         try:
             result = subprocess.run(
-                ["synthetic-data-kit", "--help"], 
+                ["synthetic-data-kit", "--help"],
                 capture_output=True, text=True, timeout=10
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
-    
+
     def install_kit(self):
         """Install synthetic-data-kit via pip"""
         try:
             subprocess.run(
-                ["pip", "install", "synthetic-data-kit"], 
+                ["pip", "install", "synthetic-data-kit"],
                 check=True, capture_output=True, text=True
             )
             return True
         except subprocess.CalledProcessError:
             return False
-    
+
     def system_check(self):
         """Run system check for synthetic-data-kit"""
         try:
@@ -78,7 +75,7 @@ class SyntheticDataKitIntegration:
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return False, "", "Timeout during system check"
-    
+
     def ingest_document(self, file_path: str):
         """Ingest a document using synthetic-data-kit"""
         try:
@@ -89,7 +86,7 @@ class SyntheticDataKitIntegration:
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return False, "", "Timeout during document ingestion"
-    
+
     def create_dataset(self, input_file: str, data_type: str, num_pairs: int):
         """Create dataset using synthetic-data-kit"""
         try:
@@ -104,7 +101,7 @@ class SyntheticDataKitIntegration:
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return False, "", "Timeout during dataset creation"
-    
+
     def curate_dataset(self, input_file: str, threshold: float = 7.0):
         """Curate dataset using synthetic-data-kit"""
         try:
@@ -118,7 +115,7 @@ class SyntheticDataKitIntegration:
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return False, "", "Timeout during dataset curation"
-    
+
     def save_dataset(self, input_file: str, format_type: str = "alpaca", storage: str = "json"):
         """Save dataset in specified format using synthetic-data-kit"""
         try:
@@ -187,7 +184,7 @@ class SyntheticDataAgent:
             )
             validator_agent = Agent(
                 name="data_validator",
-                instruction=f"You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
+                instruction="You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
                 server_names=[],
             )
             refiner_agent = Agent(
@@ -197,11 +194,11 @@ class SyntheticDataAgent:
             )
 
             # The orchestrator will manage the workflow
-            orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=logger
-)
-Orchestrator(
+            orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+                primary_model="gemini-2.5-flash-lite",
+                logger_instance=logger
+            )
+            orchestrator = Orchestrator(
                 llm_factory=orchestrator_llm_factory,
                 available_agents=[schema_agent, data_generator_agent, validator_agent, refiner_agent],
                 plan_type="full",
@@ -230,7 +227,7 @@ Orchestrator(
                 # Define validator and refiner agents
                 validator_agent = Agent(
                     name="data_validator",
-                    instruction=f"You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
+                    instruction="You are a data quality analyst. Validate the dataset and provide a concise validation report highlighting issues.",
                     server_names=[],
                 )
                 refiner_agent = Agent(
@@ -259,10 +256,10 @@ Orchestrator(
                         json.dump(parsed_json, f, indent=2, ensure_ascii=False)
                     except json.JSONDecodeError:
                         f.write(final_data)
-                
+
                 logger.info(f"Successfully generated and saved refined data to {output_path}")
                 return f"Successfully generated and saved refined data to {output_path}"
 
             except Exception as e:
                 logger.error(f"An error occurred during the data generation workflow: {e}")
-                return f"Error: {e}" 
+                return f"Error: {e}"

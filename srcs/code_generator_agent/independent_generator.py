@@ -11,6 +11,7 @@ from pathlib import Path
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
+
 def create_prompt(description: str, server_name: str) -> str:
     # Re-adding the explicit JSON instruction at the end of the prompt
     # to satisfy the API requirement for 'json_object' response format.
@@ -22,7 +23,7 @@ def create_prompt(description: str, server_name: str) -> str:
     **Server Name:** "{server_name}"
 
     You MUST generate two files: `package.json` and `index.js`.
-    
+
     ... (rest of the prompt rules are the same) ...
 
     **CRITICAL: Your entire output MUST be a single, valid JSON object.**
@@ -32,6 +33,7 @@ def create_prompt(description: str, server_name: str) -> str:
     Ensure the final output is a raw JSON string.
     """
 
+
 async def generate_code(description: str, server_name: str) -> dict:
     if not OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY environment variable is not set.")
@@ -40,9 +42,9 @@ async def generate_code(description: str, server_name: str) -> dict:
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
-    
+
     prompt = create_prompt(description, server_name)
-    
+
     payload = {
         "model": "gpt-5-mini-turbo",
         "messages": [{"role": "user", "content": prompt}],
@@ -58,12 +60,13 @@ async def generate_code(description: str, server_name: str) -> dict:
 
     response_data = response.json()
     message_content = response_data["choices"][0]["message"]["content"]
-    
+
     try:
         return json.loads(message_content)
     except json.JSONDecodeError as e:
         print(f"Failed to decode JSON from LLM response: {message_content}")
         raise e
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Self-Contained Code Generator for MCP Servers.")
@@ -97,4 +100,4 @@ async def main():
         print(f"\n❌ An error occurred: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

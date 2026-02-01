@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Literal
+from typing import List, Dict, Literal
 
 STATUS_FILE = Path(__file__).parent.parent / "status.json"
 
 Status = Literal["pending", "in_progress", "completed", "failed"]
+
 
 class StatusLogger:
     def __init__(self, steps: List[str]):
@@ -47,4 +48,4 @@ class StatusLogger:
         for step in self.steps:
             if self.statuses[step] == "pending" or self.statuses[step] == "in_progress":
                 self.statuses[step] = "completed"
-        self._write_status() 
+        self._write_status()

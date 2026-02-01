@@ -5,6 +5,7 @@ from typing import Callable, Type, Tuple, Any
 
 logger = logging.getLogger("retry")
 
+
 async def async_retry(
     func: Callable[..., Any],
     *args,
@@ -26,4 +27,4 @@ async def async_retry(
                 raise
             delay = random.uniform(min_delay, max_delay) * (2 ** (attempt - 1))
             logger.warning("Retrying %s (attempt %s/%s) after %.2fs due to %s", func.__name__, attempt, retries, delay, e)
-            await asyncio.sleep(delay) 
+            await asyncio.sleep(delay)

@@ -15,4 +15,4 @@ __all__ = [
     "GitHubPRReviewServer",
     "GitHubClient",
     "ReviewGenerator",
-] 
+]

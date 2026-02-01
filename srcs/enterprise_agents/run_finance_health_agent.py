@@ -1,10 +1,9 @@
 import argparse
 import json
 import sys
-import os
 import asyncio
-from datetime import datetime
 from srcs.enterprise_agents import personal_finance_health_agent
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run Personal Finance Health Agent workflow")
@@ -26,7 +25,6 @@ def main():
     # 여기서는 monkey patch 방식으로 user_profile을 대체
     def patched_main():
         # 기존 main 함수에서 user_profile을 대체
-        import types
         orig_main = personal_finance_health_agent.main
         async def new_main():
             # 기존 main 함수의 본문을 복사해오고, user_profile만 user_input으로 대체
@@ -55,5 +53,6 @@ def main():
         print(f"[ERROR] Failed to save result JSON: {e}")
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

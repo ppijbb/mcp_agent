@@ -77,5 +77,3 @@ def configure_external_servers(context, candidates: List[str]) -> List[str]:
     # context.config.mcp.servers는 dict와 유사한 객체일 수 있음. 직접 재할당로 안전하게 반영.
     context.config.mcp.servers = server_map
     return added
-
-

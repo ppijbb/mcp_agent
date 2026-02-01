@@ -12,9 +12,8 @@ Production-level DevOps assistant with MCP server integrations:
 
 import asyncio
 import os
-import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 # MCP Agent imports
 from srcs.core.agent.base import BaseAgent
@@ -26,17 +25,17 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 class DevOpsProductivityAgent(BaseAgent):
     """Production DevOps Assistant with MCP server integrations"""
-    
+
     def __init__(self, output_dir: str = "devops_reports"):
         super().__init__(
             name="devops_productivity_agent",
             instruction="전문 DevOps 엔지니어. AWS 리소스 관리, GitHub CI/CD, Kubernetes, 인프라 모니터링을 수행합니다. MCP 서버를 통해 다양한 클라우드 리소스와 도구들을 자동으로 조정합니다.",
             server_names=["aws-kb", "github", "prometheus", "kubernetes", "gcp-admin", "azure-admin"]
         )
-        
+
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        
+
         # Define agent capabilities
         self.capabilities = {
             "aws_management": "AWS EC2, S3, Lambda, CloudFormation 관리",
@@ -45,7 +44,7 @@ class DevOpsProductivityAgent(BaseAgent):
             "infrastructure_monitoring": "Prometheus 메트릭 기반 인프라 모니터링",
             "multi_cloud_coordination": "AWS, GCP, Azure 간 리소스 조정"
         }
-    
+
     def _create_agents(self) -> Dict[str, Agent]:
         """Create specialized DevOps agents according to mcp_agent standards"""
         return {
@@ -75,7 +74,7 @@ class DevOpsProductivityAgent(BaseAgent):
                 server_names=["gcp-admin", "azure-admin"]
             )
         }
-    
+
     async def run_workflow(self, request: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         mcp_agent 표준에 따른 워크플로우 실행
@@ -84,18 +83,18 @@ class DevOpsProductivityAgent(BaseAgent):
             async with self.app.run() as devops_app:
                 app_context = devops_app.context
                 logger = devops_app.logger
-                
+
                 logger.info(f"Processing DevOps request: {request}")
-                
+
                 # 서버 설정
                 if "filesystem" in app_context.config.mcp.servers:
                     app_context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
                     logger.info("Filesystem server configured")
-                
+
                 # 전문 Agent 생성
                 agents = self._create_agents()
                 logger.info(f"Created {len(agents)} specialized agents: {list(agents.keys())}")
-                
+
                 # Orchestrator 생성
                 orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
                     primary_model="gemini-2.5-flash-lite",
@@ -106,7 +105,7 @@ class DevOpsProductivityAgent(BaseAgent):
                     available_agents=list(agents.values()),
                     plan_type="full"
                 )
-                
+
                 # 실행
                 result = await orchestrator.generate_str(
                     message=request,
@@ -115,18 +114,18 @@ class DevOpsProductivityAgent(BaseAgent):
                         temperature=0.1
                     )
                 )
-                
+
                 # 결과 저장
                 output_file = os.path.join(
                     self.output_dir,
                     f"devops_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
                 )
-                
+
                 with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(result)
-                
+
                 logger.info(f"Result saved to: {output_file}")
-                
+
                 return {
                     "status": "success",
                     "request": request,
@@ -134,7 +133,7 @@ class DevOpsProductivityAgent(BaseAgent):
                     "output_file": output_file,
                     "timestamp": datetime.now().isoformat()
                 }
-                
+
         except Exception as e:
             self.logger.error(f"Workflow failed: {str(e)}")
             return {
@@ -148,7 +147,7 @@ class DevOpsProductivityAgent(BaseAgent):
 async def main():
     """Test the DevOps assistant with mcp_agent standard integration"""
     agent = DevOpsProductivityAgent()
-    
+
     # Test with sample requests
     test_requests = [
         "AWS EC2 인스턴스 상태를 확인해주세요",
@@ -156,10 +155,10 @@ async def main():
         "Kubernetes 클러스터의 리소스 사용률을 조회해주세요",
         "Prometheus 메트릭을 통해 인프라 상태를 모니터링해주세요"
     ]
-    
+
     print("🚀 DevOps Productivity Agent - mcp_agent 표준 테스트")
     print("=" * 60)
-    
+
     for i, request in enumerate(test_requests, 1):
         print(f"\n[{i}/{len(test_requests)}] 🔄 Processing: {request}")
         try:
@@ -172,9 +171,9 @@ async def main():
                 print(f"❌ Error: {result.get('error', 'Unknown error')}")
         except Exception as e:
             print(f"❌ Exception: {str(e)}")
-    
+
     print("\n🎉 모든 테스트 완료!")
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

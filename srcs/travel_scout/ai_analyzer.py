@@ -5,7 +5,7 @@ Gemini 2.5 Flash를 활용한 여행 데이터 분석 및 추천 생성
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import google.generativeai as genai
 from .config_loader import config
 
@@ -14,19 +14,19 @@ logger = logging.getLogger(__name__)
 
 class TravelAIAnalyzer:
     """여행 데이터 AI 분석기 - Gemini 2.5 Flash 활용"""
-    
+
     def __init__(self):
         self.model_name = config.get_ai_model_config()
         self.api_key = config.get_ai_api_key()
         self.prompts = config.get_analysis_prompts()
-        
+
         # Gemini 설정
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(self.model_name)
-        
+
         logger.info(f"AI 분석기 초기화 완료 - 모델: {self.model_name}")
-    
-    async def analyze_hotel_data(self, hotels_data: List[Dict[str, Any]], 
+
+    async def analyze_hotel_data(self, hotels_data: List[Dict[str, Any]],
                                 search_params: Dict[str, Any]) -> Dict[str, Any]:
         """호텔 데이터 분석 및 추천 생성"""
         try:
@@ -37,24 +37,24 @@ class TravelAIAnalyzer:
                     "price_analysis": {},
                     "quality_ranking": []
                 }
-            
+
             # 분석용 데이터 준비
             analysis_data = {
                 "hotels": hotels_data,
                 "search_params": search_params,
                 "total_hotels": len(hotels_data)
             }
-            
+
             # Gemini를 통한 분석
             prompt = self._build_hotel_analysis_prompt(analysis_data)
             response = await self._generate_analysis(prompt)
-            
+
             # 결과 파싱 및 구조화
             analysis_result = self._parse_hotel_analysis(response, hotels_data)
-            
+
             logger.info(f"호텔 데이터 분석 완료 - {len(hotels_data)}개 호텔")
             return analysis_result
-            
+
         except Exception as e:
             logger.error(f"호텔 데이터 분석 오류: {e}")
             return {
@@ -63,8 +63,8 @@ class TravelAIAnalyzer:
                 "price_analysis": {},
                 "quality_ranking": []
             }
-    
-    async def analyze_flight_data(self, flights_data: List[Dict[str, Any]], 
+
+    async def analyze_flight_data(self, flights_data: List[Dict[str, Any]],
                                  search_params: Dict[str, Any]) -> Dict[str, Any]:
         """항공편 데이터 분석 및 추천 생성"""
         try:
@@ -75,24 +75,24 @@ class TravelAIAnalyzer:
                     "price_analysis": {},
                     "airline_ranking": []
                 }
-            
+
             # 분석용 데이터 준비
             analysis_data = {
                 "flights": flights_data,
                 "search_params": search_params,
                 "total_flights": len(flights_data)
             }
-            
+
             # Gemini를 통한 분석
             prompt = self._build_flight_analysis_prompt(analysis_data)
             response = await self._generate_analysis(prompt)
-            
+
             # 결과 파싱 및 구조화
             analysis_result = self._parse_flight_analysis(response, flights_data)
-            
+
             logger.info(f"항공편 데이터 분석 완료 - {len(flights_data)}개 항공편")
             return analysis_result
-            
+
         except Exception as e:
             logger.error(f"항공편 데이터 분석 오류: {e}")
             return {
@@ -101,8 +101,8 @@ class TravelAIAnalyzer:
                 "price_analysis": {},
                 "airline_ranking": []
             }
-    
-    async def generate_travel_recommendations(self, hotel_analysis: Dict[str, Any], 
+
+    async def generate_travel_recommendations(self, hotel_analysis: Dict[str, Any],
                                             flight_analysis: Dict[str, Any],
                                             search_params: Dict[str, Any]) -> Dict[str, Any]:
         """통합 여행 추천 생성"""
@@ -113,17 +113,17 @@ class TravelAIAnalyzer:
                 "flight_analysis": flight_analysis,
                 "search_params": search_params
             }
-            
+
             # Gemini를 통한 통합 분석
             prompt = self._build_combined_analysis_prompt(combined_data)
             response = await self._generate_analysis(prompt)
-            
+
             # 결과 파싱
             recommendations = self._parse_combined_analysis(response)
-            
+
             logger.info("통합 여행 추천 생성 완료")
             return recommendations
-            
+
         except Exception as e:
             logger.error(f"통합 추천 생성 오류: {e}")
             return {
@@ -132,16 +132,16 @@ class TravelAIAnalyzer:
                 "budget_breakdown": {},
                 "travel_tips": []
             }
-    
+
     def _build_hotel_analysis_prompt(self, data: Dict[str, Any]) -> str:
         """호텔 분석 프롬프트 생성"""
         base_prompt = self.prompts.get('hotel_analysis', '')
-        
+
         hotels_text = "\n".join([
             f"- {hotel.get('name', 'N/A')} | 가격: {hotel.get('price', 'N/A')} | 평점: {hotel.get('rating', 'N/A')}"
             for hotel in data['hotels']
         ])
-        
+
         return f"""
 {base_prompt}
 
@@ -161,16 +161,16 @@ class TravelAIAnalyzer:
 4. 최적 선택 3개
 5. 주의사항 및 팁
 """
-    
+
     def _build_flight_analysis_prompt(self, data: Dict[str, Any]) -> str:
         """항공편 분석 프롬프트 생성"""
         base_prompt = self.prompts.get('flight_analysis', '')
-        
+
         flights_text = "\n".join([
             f"- {flight.get('airline', 'N/A')} | 가격: {flight.get('price', 'N/A')} | 소요시간: {flight.get('duration', 'N/A')}"
             for flight in data['flights']
         ])
-        
+
         return f"""
 {base_prompt}
 
@@ -190,7 +190,7 @@ class TravelAIAnalyzer:
 4. 최적 선택 3개
 5. 주의사항 및 팁
 """
-    
+
     def _build_combined_analysis_prompt(self, data: Dict[str, Any]) -> str:
         """통합 분석 프롬프트 생성"""
         return f"""
@@ -213,7 +213,7 @@ class TravelAIAnalyzer:
 4. 예약 전략
 5. 대안 옵션
 """
-    
+
     async def _generate_analysis(self, prompt: str) -> str:
         """Gemini를 통한 분석 생성"""
         try:
@@ -222,7 +222,7 @@ class TravelAIAnalyzer:
         except Exception as e:
             logger.error(f"Gemini 분석 생성 오류: {e}")
             raise
-    
+
     def _parse_hotel_analysis(self, response: str, hotels_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """호텔 분석 결과 파싱"""
         return {
@@ -231,7 +231,7 @@ class TravelAIAnalyzer:
             "price_analysis": self._extract_price_analysis(response),
             "quality_ranking": self._extract_quality_ranking(response, hotels_data)
         }
-    
+
     def _parse_flight_analysis(self, response: str, flights_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """항공편 분석 결과 파싱"""
         return {
@@ -240,7 +240,7 @@ class TravelAIAnalyzer:
             "price_analysis": self._extract_price_analysis(response),
             "airline_ranking": self._extract_airline_ranking(response, flights_data)
         }
-    
+
     def _parse_combined_analysis(self, response: str) -> Dict[str, Any]:
         """통합 분석 결과 파싱"""
         return {
@@ -249,7 +249,7 @@ class TravelAIAnalyzer:
             "budget_breakdown": self._extract_budget_breakdown(response),
             "travel_tips": self._extract_travel_tips(response)
         }
-    
+
     def _extract_recommendations(self, text: str) -> List[str]:
         """추천사항 추출"""
         # 간단한 추출 로직 - 실제로는 더 정교한 파싱 필요
@@ -259,7 +259,7 @@ class TravelAIAnalyzer:
             if any(keyword in line.lower() for keyword in ['추천', 'recommend', 'best', 'optimal']):
                 recommendations.append(line.strip())
         return recommendations[:5]  # 최대 5개
-    
+
     def _extract_price_analysis(self, text: str) -> Dict[str, str]:
         """가격 분석 추출"""
         # 간단한 추출 로직
@@ -268,22 +268,22 @@ class TravelAIAnalyzer:
             "value_analysis": "분석 중...",
             "price_trends": "분석 중..."
         }
-    
+
     def _extract_quality_ranking(self, text: str, hotels_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """품질 순위 추출"""
         # 호텔 데이터를 평점 기준으로 정렬
-        sorted_hotels = sorted(hotels_data, 
-                             key=lambda x: self._extract_rating_numeric(x.get('rating', '0')), 
+        sorted_hotels = sorted(hotels_data,
+                             key=lambda x: self._extract_rating_numeric(x.get('rating', '0')),
                              reverse=True)
         return sorted_hotels[:3]  # 상위 3개
-    
+
     def _extract_airline_ranking(self, text: str, flights_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """항공사 순위 추출"""
         # 항공편 데이터를 가격 기준으로 정렬
-        sorted_flights = sorted(flights_data, 
+        sorted_flights = sorted(flights_data,
                               key=lambda x: self._extract_price_numeric(x.get('price', '0')))
         return sorted_flights[:3]  # 상위 3개
-    
+
     def _extract_combinations(self, text: str) -> List[Dict[str, str]]:
         """최적 조합 추출"""
         return [
@@ -291,7 +291,7 @@ class TravelAIAnalyzer:
             {"hotel": "추천 호텔 2", "flight": "추천 항공편 2", "total_cost": "예상 비용"},
             {"hotel": "추천 호텔 3", "flight": "추천 항공편 3", "total_cost": "예상 비용"}
         ]
-    
+
     def _extract_budget_breakdown(self, text: str) -> Dict[str, str]:
         """예산 분석 추출"""
         return {
@@ -300,7 +300,7 @@ class TravelAIAnalyzer:
             "total_estimated": "총 예상 비용",
             "savings_tips": "절약 팁"
         }
-    
+
     def _extract_travel_tips(self, text: str) -> List[str]:
         """여행 팁 추출"""
         return [
@@ -308,7 +308,7 @@ class TravelAIAnalyzer:
             "여행 팁 2",
             "여행 팁 3"
         ]
-    
+
     def _extract_rating_numeric(self, rating_text: str) -> float:
         """평점 텍스트에서 숫자 추출"""
         try:
@@ -317,7 +317,7 @@ class TravelAIAnalyzer:
             return float(match.group(1)) if match else 0.0
         except:
             return 0.0
-    
+
     def _extract_price_numeric(self, price_text: str) -> float:
         """가격 텍스트에서 숫자 추출"""
         try:

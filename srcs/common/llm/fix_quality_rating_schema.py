@@ -14,7 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluationResult, QualityRating
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +30,18 @@ def patch_quality_rating_schema():
     global _patched
     if _patched:
         return
-    
+
     try:
         from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluationResult, QualityRating
-        from pydantic import field_validator, model_validator
-        
+
         # 1. JSON 스키마를 문자열 enum으로 수정
         original_model_json_schema = EvaluationResult.model_json_schema
-        
+
         @classmethod
         def patched_model_json_schema(cls, by_alias: bool = True, ref_template: str = "#/$defs/{model}", **kwargs):
             """QualityRating enum을 문자열로 변환한 스키마 반환"""
             schema = original_model_json_schema(by_alias=by_alias, ref_template=ref_template, **kwargs)
-            
+
             # $defs의 QualityRating enum 정의를 문자열로 수정
             if '$defs' in schema and 'QualityRating' in schema['$defs']:
                 quality_rating_def = schema['$defs']['QualityRating']
@@ -54,11 +53,11 @@ def patch_quality_rating_schema():
                         quality_rating_def['enum'] = [rating.name for rating in QualityRating]
                         quality_rating_def['type'] = 'string'
                         logger.debug(f"Fixed QualityRating enum in $defs: {quality_rating_def['enum']}")
-            
+
             return schema
-        
+
         EvaluationResult.model_json_schema = patched_model_json_schema
-        
+
         # 2. EvaluationResult에 validator 추가하여 문자열을 정수 enum으로 변환
         def convert_rating_string_to_enum(v: Union[str, int, QualityRating]) -> QualityRating:
             """문자열 rating을 정수 enum으로 변환"""
@@ -89,14 +88,14 @@ def patch_quality_rating_schema():
             else:
                 logger.warning(f"Unexpected QualityRating type: {type(v)}, defaulting to GOOD")
                 return QualityRating.GOOD
-        
+
         # Pydantic v2에서는 model_validate를 monkey patch
         if not hasattr(EvaluationResult, '__quality_rating_validator_patched__'):
             EvaluationResult.__quality_rating_validator_patched__ = True
-            
+
             # model_validate를 monkey patch
             original_model_validate = EvaluationResult.model_validate
-            
+
             @classmethod
             def patched_model_validate(cls, obj, *args, **kwargs):
                 """model_validate에서 rating 문자열 변환"""
@@ -105,23 +104,23 @@ def patch_quality_rating_schema():
                         obj = obj.copy()
                         obj['rating'] = convert_rating_string_to_enum(obj['rating'])
                 return original_model_validate(obj, *args, **kwargs)
-            
+
             EvaluationResult.model_validate = patched_model_validate
-            
+
             # __init__도 patch
             original_init = EvaluationResult.__init__
-            
+
             def patched_init(self, *args, **kwargs):
                 # rating이 문자열인 경우 변환
                 if 'rating' in kwargs and isinstance(kwargs['rating'], str):
                     kwargs['rating'] = convert_rating_string_to_enum(kwargs['rating'])
                 return original_init(self, *args, **kwargs)
-            
+
             EvaluationResult.__init__ = patched_init
-        
+
         _patched = True
         logger.info("QualityRating schema and validator patch applied successfully")
-        
+
     except Exception as e:
         logger.warning(f"Failed to patch QualityRating schema: {e}", exc_info=True)
         _patched = False
@@ -132,4 +131,3 @@ try:
     patch_quality_rating_schema()
 except Exception as e:
     logger.warning(f"Auto-patch failed: {e}")
-

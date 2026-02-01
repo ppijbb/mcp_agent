@@ -1,8 +1,8 @@
 import argparse
 import json
 import sys
-import os
 from srcs.advanced_agents.researcher_v2 import ResearcherAgent
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run Research Agent workflow")
@@ -35,5 +35,6 @@ def main():
         print(f"[ERROR] Failed to save result JSON: {e}")
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

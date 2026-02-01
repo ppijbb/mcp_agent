@@ -9,8 +9,6 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
-from srcs.product_planner_agent.prompts import PROMPT
-from srcs.product_planner_agent.utils.llm_utils import get_llm_factory
 
 
 class MarketResearchAgent(BaseAgent):
@@ -48,4 +46,4 @@ class MarketResearchAgent(BaseAgent):
         except json.JSONDecodeError as e:
             raise WorkflowError(f"Failed to decode LLM response: {e}") from e
         except Exception as e:
-            raise APIError(f"Market analysis failed: {e}") from e 
+            raise APIError(f"Market analysis failed: {e}") from e

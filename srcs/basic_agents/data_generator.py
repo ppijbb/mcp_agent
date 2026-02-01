@@ -34,14 +34,13 @@ if "mcp_agent.context" not in sys.modules:
 import os
 import json
 import re
-from datetime import datetime
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
+
 
 class DataGeneratorAgent(BaseAgent):
     """
@@ -77,11 +76,11 @@ class DataGeneratorAgent(BaseAgent):
             instruction=f"You are a data quality analyst. Validate the generated {data_type} data for schema compliance and realism. Provide a quality report.",
         )
 
-        orchestrator = orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-    primary_model="gemini-2.5-flash-lite",
-    logger_instance=None
-)
-Orchestrator(
+        orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
+            primary_model="gemini-2.5-flash-lite",
+            logger_instance=None
+        )
+        orchestrator = Orchestrator(
             llm_factory=orchestrator_llm_factory,
             available_agents=[schema_agent, data_generator, validator_agent],
             plan_type="full",
@@ -124,7 +123,7 @@ Orchestrator(
                     'purpose': purpose
                 }
             }
-            
+
             self.save_result(
                 result=result_data,
                 result_type="data_generation",
@@ -139,6 +138,6 @@ Orchestrator(
             self.logger.info(f"✅ Smart data generation successful.")
 
         except Exception as e:
-            raise APIError(f"Error during smart data generation: {e}") from e 
+            raise APIError(f"Error during smart data generation: {e}") from e
 
-AIDataGenerationAgent = DataGeneratorAgent 
+AIDataGenerationAgent = DataGeneratorAgent

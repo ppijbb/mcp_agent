@@ -2,23 +2,17 @@ import asyncio
 import os
 import time
 
-from mcp_agent.app import MCPApp
-from mcp_agent.config import (
-    AgentConfig,
-    MCPAppConfig,
-)
 from srcs.common.utils import setup_agent_app
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from mcp_agent.workflows.llm.llm_selector import ModelPreferences
-from mcp_agent.workflows.llm.augmented_llm_anthropic import AnthropicAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 
 async def main():
     app = setup_agent_app("basic_app")
-    
+
     # Run the app
     async with app.run() as app_context:
         # Get the logger from the app context
@@ -32,9 +26,9 @@ async def main():
 
         finder_agent = Agent(
             name="finder",
-            instruction="""You are an agent with access to the filesystem, 
-            as well as the ability to fetch URLs. Your job is to identify 
-            the closest match to a user's request, make the appropriate tool calls, 
+            instruction="""You are an agent with access to the filesystem,
+            as well as the ability to fetch URLs. Your job is to identify
+            the closest match to a user's request, make the appropriate tool calls,
             and return the URI and CONTENTS of the closest match.""",
             server_names=["fetch", "filesystem"],
         )
