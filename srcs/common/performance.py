@@ -240,8 +240,13 @@ class ResourceMonitor:
 # Global cache instance for common use
 default_cache = SimpleCache(max_size=200, default_ttl=300)
 
+# Export commonly used constants
+DEFAULT_CACHE_SIZE = 200
+DEFAULT_CACHE_TTL = 300
+
 # Export commonly used items
 __all__ = [
     'SimpleCache', 'rate_limit', 'performance_monitor',
-    'memoize_strict', 'ResourceMonitor', 'default_cache'
+    'memoize_strict', 'ResourceMonitor', 'default_cache',
+    'DEFAULT_CACHE_SIZE', 'DEFAULT_CACHE_TTL'
 ]

@@ -40,11 +40,11 @@ scikit-learn
 
 # HTTP Clients
 requests>=2.32.3
-aiohttp>=3.11.0
-httpx>=0.28.1
+aiohttp>=3.11.12
+httpx>=0.28.2
 
 # Configuration and Utilities
-python-dotenv>=1.0.1
+python-dotenv>=1.1.0
 PyYAML>=6.0.2
 pydantic>=2.10.4
 pydantic-settings>=2.6.1
@@ -119,7 +119,7 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=46.0.4
+cryptography>=46.1.0
 passlib>=1.7.4
 PyJWT>=2.8.0
 
