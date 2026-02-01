@@ -121,3 +121,6 @@
 [submodule "open_researcher/open_deep_research"]
 	path = open_researcher/open_deep_research
 	url = https://github.com/langchain-ai/open_deep_research.git
+[submodule "open_researcher/openclaw"]
+	path = open_researcher/openclaw
+	url = https://github.com/openclaw/openclaw.git
