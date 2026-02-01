@@ -43,7 +43,7 @@ class ErrorContext:
     component: str
     severity: ErrorSeverity
     retry_count: int = 0
-    metadata: Dict[str, Any] = None
+    metadata: Optional[Dict[str, Any]] = None
     
     def __post_init__(self):
         if self.metadata is None:
@@ -129,7 +129,7 @@ class CircuitBreaker:
     
     def _should_attempt_reset(self) -> bool:
         """Check if circuit breaker should attempt reset."""
-        return time.time() - self.last_failure_time >= self.recovery_timeout
+        return self.last_failure_time is not None and self.recovery_timeout is not None and time.time() - self.last_failure_time >= self.recovery_timeout
     
     def _on_success(self):
         """Handle successful call."""
@@ -156,7 +156,7 @@ class RetryHandler:
     in external service calls and network operations.
     """
     
-    def __init__(self, config: RetryConfig = None):
+    def __init__(self, config: Optional[RetryConfig] = None):
         """
         Initialize retry handler.
         
@@ -194,7 +194,13 @@ class RetryHandler:
         for attempt in range(self.config.max_attempts):
             try:
                 return await func(*args, **kwargs)
-            except retry_exceptions as e:
+            except Exception as e:
+                # Check if exception matches retry_exceptions
+                if isinstance(retry_exceptions, list):
+                    if not any(isinstance(e, exc_type) for exc_type in retry_exceptions):
+                        raise
+                elif not isinstance(e, retry_exceptions):
+                    raise
                 last_exception = e
                 if attempt == self.config.max_attempts - 1:
                     logger.error(f"Function {func.__name__} failed after {self.config.max_attempts} attempts")
@@ -204,7 +210,7 @@ class RetryHandler:
                 logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e}. Retrying in {delay:.2f}s")
                 await asyncio.sleep(delay)
         
-        raise last_exception
+        raise last_exception if last_exception else Exception("Retry failed")
     
     def _retry_sync(self, 
                    func: Callable, 
@@ -216,7 +222,13 @@ class RetryHandler:
         for attempt in range(self.config.max_attempts):
             try:
                 return func(*args, **kwargs)
-            except retry_exceptions as e:
+            except Exception as e:
+                # Check if exception matches retry_exceptions
+                if isinstance(retry_exceptions, list):
+                    if not any(isinstance(e, exc_type) for exc_type in retry_exceptions):
+                        raise
+                elif not isinstance(e, retry_exceptions):
+                    raise
                 last_exception = e
                 if attempt == self.config.max_attempts - 1:
                     logger.error(f"Function {func.__name__} failed after {self.config.max_attempts} attempts")
@@ -226,7 +238,7 @@ class RetryHandler:
                 logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e}. Retrying in {delay:.2f}s")
                 time.sleep(delay)
         
-        raise last_exception
+        raise last_exception if last_exception else Exception("Retry failed")
     
     def _calculate_delay(self, attempt: int) -> float:
         """Calculate delay with exponential backoff and jitter."""
@@ -265,7 +277,7 @@ class ErrorHandler:
                     error: Exception, 
                     operation: str = "",
                     severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-                    context: Dict[str, Any] = None,
+                    context: Optional[Dict[str, Any]] = None,
                     reraise: bool = True) -> Optional[Exception]:
         """
         Handle error with logging and metrics.
@@ -335,7 +347,7 @@ class ErrorHandler:
 
 
 # Convenience decorators and instances
-def with_retry(config: RetryConfig = None, retry_exceptions: Union[Type[Exception], List[Type[Exception]]] = Exception):
+def with_retry(config: Optional[RetryConfig] = None, retry_exceptions: Union[Type[Exception], List[Type[Exception]]] = Exception):
     """Convenience decorator for retry logic."""
     retry_handler = RetryHandler(config)
     return retry_handler(retry_exceptions)
