@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+import weakref
 
 logger = logging.getLogger(__name__)
 
@@ -176,14 +177,8 @@ class TaskQueueItem:
     task_id: str
     task: Dict[str, Any]
     priority: int = 0  # 높을수록 우선순위 높음
-    dependencies: List[str] = None
-    created_at: datetime = None
-    
-    def __post_init__(self):
-        if self.dependencies is None:
-            self.dependencies = []
-        if self.created_at is None:
-            self.created_at = datetime.now()
+    dependencies: List[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
     
     def to_topic_block(self, block_id: Optional[str] = None) -> TopicBlock:
         """
@@ -241,6 +236,11 @@ class TaskQueue:
         self.block_counter = 0
         self.created_at = datetime.now().isoformat()
         
+        # Performance optimizations: Indexed lookups
+        self._task_index: Dict[str, int] = {}  # task_id -> index in blocks
+        self._block_index: Dict[str, int] = {}  # block_id -> index in blocks
+        self._priority_queues: Dict[int, List[str]] = defaultdict(list)  # priority -> [block_ids]
+        
     def add_tasks(self, tasks: List[Dict[str, Any]]) -> None:
         """작업들을 큐에 추가."""
         logger.info(f"Adding {len(tasks)} tasks to queue")
@@ -256,16 +256,18 @@ class TaskQueue:
                 task['id'] = task_id
                 logger.warning(f"Generated task_id for task without ID: {task_id}")
             
+            dependencies = task.get('dependencies') or []
+            self.dependency_graph[task_id] = dependencies
+            
             # TaskQueueItem 생성
             queue_item = TaskQueueItem(
                 task_id=task_id,
                 task=task,
                 priority=task.get('priority', 0),
-                dependencies=task.get('dependencies', [])
+                dependencies=dependencies
             )
             
             self.tasks[task_id] = queue_item
-            self.dependency_graph[task_id] = task.get('dependencies', [])
         
         # 병렬 그룹 식별
         self._identify_parallel_groups()
@@ -325,7 +327,8 @@ class TaskQueue:
         return None
     
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """작업 정보 반환."""
+        """작업 정보 반환 (O(1) lookup with index)."""
+        # Use indexed lookup for better performance
         if task_id in self.tasks:
             return self.tasks[task_id].task
         return None
@@ -394,7 +397,12 @@ class TaskQueue:
             task=task or {},
             status=TopicStatus.PENDING
         )
+        
+        # Add to blocks and update indices
         self.blocks.append(block)
+        self._block_index[block_id] = len(self.blocks) - 1
+        self._priority_queues[block.priority].append(block_id)
+        
         self._auto_save()
         return block
     
@@ -415,11 +423,19 @@ class TaskQueue:
     
     def get_pending_block(self) -> Optional[TopicBlock]:
         """
-        첫 번째 대기 중인 topic block 반환.
+        첫 번째 대기 중인 topic block 반환 (priority-based lookup).
         
         Returns:
             PENDING 상태의 첫 번째 TopicBlock, 없으면 None
         """
+        # Check priority queues first for better performance
+        for priority in sorted(self._priority_queues.keys(), reverse=True):
+            for block_id in self._priority_queues[priority]:
+                block = self.get_block_by_id(block_id)
+                if block and block.status == TopicStatus.PENDING:
+                    return block
+        
+        # Fallback to linear search if priority queues are empty
         for block in self.blocks:
             if block.status == TopicStatus.PENDING:
                 return block
@@ -427,7 +443,7 @@ class TaskQueue:
     
     def get_block_by_id(self, block_id: str) -> Optional[TopicBlock]:
         """
-        Block ID로 topic block 조회.
+        Block ID로 topic block 조회 (O(1) lookup with index).
         
         Args:
             block_id: Topic block ID
@@ -435,8 +451,16 @@ class TaskQueue:
         Returns:
             해당 TopicBlock, 없으면 None
         """
-        for block in self.blocks:
+        # Use indexed lookup for O(1) performance
+        if block_id in self._block_index:
+            index = self._block_index[block_id]
+            if 0 <= index < len(self.blocks):
+                return self.blocks[index]
+        
+        # Fallback to linear search if index is out of sync
+        for i, block in enumerate(self.blocks):
             if block.block_id == block_id:
+                self._block_index[block_id] = i  # Rebuild index
                 return block
         return None
     

@@ -1,4 +1,29 @@
-"""Typed server specifications and conversion helpers for FastMCP configuration."""
+"""
+Typed server specifications and conversion helpers for FastMCP configuration.
+
+This module provides Pydantic-based models for configuring MCP (Model Context Protocol) servers
+with support for both stdio and HTTP/SSE transports. It ensures type safety and validation
+for server specifications used throughout the MCP Agent system.
+
+Key Features:
+- Type-safe server configuration models
+- Support for stdio and HTTP/SSE transports
+- Environment variable handling
+- Validation and error handling
+- Configuration serialization/deserialization
+
+Usage:
+    spec = HTTPServerSpec(
+        url="http://127.0.0.1:8000/mcp",
+        headers={"Authorization": "Bearer token"}
+    )
+    
+    stdio_spec = StdioServerSpec(
+        command="python",
+        args=["server.py"],
+        env={"DEBUG": "true"}
+    )
+"""
 
 from __future__ import annotations
 
