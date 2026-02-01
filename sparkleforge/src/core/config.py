@@ -32,15 +32,22 @@ from typing import Literal, Any, Dict, List, Optional, Union
 
 # Simple fallback implementation without pydantic dependency
 class BaseModel:
-    """Simple base model for server specs."""
+    """Simple base model for server specs.
+    
+    Provides basic attribute initialization without requiring pydantic dependency.
+    This lightweight implementation allows for flexible configuration while maintaining
+    compatibility with the existing codebase.
+    """
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
 def ConfigDict(**kwargs):
+    """Placeholder for pydantic ConfigDict compatibility."""
     return kwargs
 
 def Field(default=None, **kwargs):
+    """Placeholder for pydantic Field compatibility."""
     return default
 
 

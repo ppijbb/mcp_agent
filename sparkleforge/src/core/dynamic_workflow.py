@@ -333,8 +333,16 @@ class TaskQueue:
         Args:
             phase: 특정 단계의 태스크만 반환 (선택)
         """
-        for priority in TaskPriority:
-            for task_id in self.priority_queues[priority]:
+        # Cache priorities list for better performance
+        if not hasattr(self, '_sorted_priorities'):
+            self._sorted_priorities = sorted(TaskPriority, key=lambda p: p.value)
+        
+        for priority in self._sorted_priorities:
+            queue = self.priority_queues.get(priority, [])
+            if not queue:
+                continue
+                
+            for task_id in queue:
                 task = self.tasks.get(task_id)
                 if not task:
                     continue

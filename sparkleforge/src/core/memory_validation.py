@@ -20,7 +20,7 @@ class ValidationResult:
     """검증 결과."""
     is_valid: bool
     confidence: float  # 0.0 ~ 1.0
-    issues: List[str] = None
+    issues: Optional[List[str]] = None
     sanitized_content: Optional[str] = None
     
     def __post_init__(self):
@@ -89,6 +89,7 @@ class MemoryValidator:
             use_llm_validation: LLM 기반 검증 사용 여부
         """
         self.use_llm_validation = use_llm_validation
+        # Pre-compile patterns for better performance
         self.patterns = [(re.compile(pattern, re.IGNORECASE), name) for pattern, name in MALICIOUS_PATTERNS]
         logger.info(f"MemoryValidator initialized (LLM validation: {use_llm_validation})")
     
@@ -98,14 +99,18 @@ class MemoryValidator:
         user_id: str
     ) -> ValidationResult:
         """
-        메모리 검증.
+        메모리 검증 수행.
         
         Args:
-            memory: 검증할 메모리
-            user_id: 사용자 ID
-            
+            memory: 검증할 메모리 객체
+            user_id: 사용자 ID (소스 추적용)
+        
         Returns:
-            ValidationResult
+            ValidationResult: 검증 결과를 포함한 객체
+            - is_valid: 메모리가 안전한지 여부
+            - confidence: 검증 신뢰도 (0.0~1.0)
+            - issues: 발견된 문제 목록
+            - sanitized_content: 정제된 내용 (문제가 있는 경우)
         """
         # 1. 패턴 기반 검증
         pattern_result = self._validate_with_patterns(memory.content)

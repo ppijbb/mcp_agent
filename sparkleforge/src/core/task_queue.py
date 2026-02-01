@@ -15,7 +15,6 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-import weakref
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +239,7 @@ class TaskQueue:
         self._task_index: Dict[str, int] = {}  # task_id -> index in blocks
         self._block_index: Dict[str, int] = {}  # block_id -> index in blocks
         self._priority_queues: Dict[int, List[str]] = defaultdict(list)  # priority -> [block_ids]
+        self._sorted_priorities: List[int] = []  # Cached sorted priorities for faster lookups
         
     def add_tasks(self, tasks: List[Dict[str, Any]]) -> None:
         """작업들을 큐에 추가."""
@@ -429,11 +429,17 @@ class TaskQueue:
             PENDING 상태의 첫 번째 TopicBlock, 없으면 None
         """
         # Check priority queues first for better performance
-        for priority in sorted(self._priority_queues.keys(), reverse=True):
-            for block_id in self._priority_queues[priority]:
-                block = self.get_block_by_id(block_id)
-                if block and block.status == TopicStatus.PENDING:
-                    return block
+        # Sort priorities once and cache for repeated calls
+        if not hasattr(self, '_sorted_priorities'):
+            self._sorted_priorities = sorted(self._priority_queues.keys(), reverse=True)
+        
+        for priority in self._sorted_priorities:
+            queue = self._priority_queues.get(priority, [])
+            if queue:
+                for block_id in queue:
+                    block = self.get_block_by_id(block_id)
+                    if block and block.status == TopicStatus.PENDING:
+                        return block
         
         # Fallback to linear search if priority queues are empty
         for block in self.blocks:

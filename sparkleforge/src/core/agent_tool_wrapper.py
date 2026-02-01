@@ -76,6 +76,10 @@ class AgentToolWrapper:
         self.executor = executor_agent
         self.verifier = verifier_agent
         self.generator = generator_agent
+        
+        # Cache for created tools to avoid recreation overhead
+        self._cached_tools: Optional[List[BaseTool]] = None
+        
         logger.info("Agent Tool Wrapper initialized")
     
     def _create_agent_state(self, query: str, context: Optional[str] = None) -> AgentState:
@@ -109,6 +113,10 @@ class AgentToolWrapper:
         Returns:
             LangChain Tool 리스트
         """
+        # Return cached tools if available to avoid recreation overhead
+        if self._cached_tools is not None:
+            return self._cached_tools
+            
         tools = []
         
         # PlannerAgent를 도구로 노출 (기존 execute 메서드 그대로 사용)
@@ -204,6 +212,8 @@ class AgentToolWrapper:
                 description="Ask the generator agent to generate a final report"
             ))
         
+        # Cache the created tools for future use
+        self._cached_tools = tools
         logger.info(f"Created {len(tools)} agent tools")
         return tools
 

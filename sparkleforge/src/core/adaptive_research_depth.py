@@ -47,11 +47,21 @@ class AdaptiveResearchDepth:
             config: ResearchConfig의 research_depth 설정
         """
         self.config = config
-        self.preset_configs = self._load_preset_configs()
+        # Cache preset configurations for better performance
+        self._preset_configs: Optional[Dict[str, Any]] = None
         logger.info("AdaptiveResearchDepth initialized")
     
     def _load_preset_configs(self) -> Dict[str, Dict[str, Any]]:
-        """프리셋 설정 로드."""
+        """
+        프리셋 설정 로드 (cached for performance).
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: 프리셋 설정 매핑
+        """
+        # Return cached configs if available
+        if self._preset_configs is not None:
+            return self._preset_configs
+            
         if isinstance(self.config, dict):
             presets = self.config.get("presets", {})
         else:
@@ -145,6 +155,8 @@ class AdaptiveResearchDepth:
                         "reporting": user_config.reporting,
                     }
         
+        # Cache the result before returning
+        self._preset_configs = default_presets
         return default_presets
     
     def _deep_merge(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -196,7 +208,8 @@ class AdaptiveResearchDepth:
             complexity = self._estimate_complexity_for_preset(preset)
         
         # 프리셋 설정 가져오기
-        preset_config = self.preset_configs.get(preset.value, self.preset_configs["medium"])
+        configs = self._load_preset_configs()
+        preset_config = configs.get(preset.value, configs["medium"])
         
         return DepthConfig(
             preset=preset,
@@ -347,7 +360,8 @@ class AdaptiveResearchDepth:
                 return None  # 이미 최대 깊이
             
             logger.info(f"Progressive deepening: {current_depth.preset.value} -> {new_preset.value}")
-            preset_config = self.preset_configs.get(new_preset.value, self.preset_configs["medium"])
+            configs = self._load_preset_configs()
+            preset_config = configs.get(new_preset.value, configs["medium"])
             
             return DepthConfig(
                 preset=new_preset,
