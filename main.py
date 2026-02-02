@@ -5,14 +5,9 @@
 """
 
 import importlib
-import importlib.util
 
 # HACK: 새롭게 설치된 패키지(jsonref 등)를 활성 프로세스에서 인식하도록 캐시 초기화
 importlib.invalidate_caches()
-try:
-    import jsonref
-except ImportError:
-    pass
 
 # HACK: Google GenAI Safety Settings Fix
 # 'HARM_CATEGORY_JAILBREAK' 카테고리는 일부 API 엔드포인트에서 오류(400 INVALID_ARGUMENT)를 유발하므로 필터링합니다.
@@ -23,17 +18,23 @@ try:
     if hasattr(genai_types, "GenerateContentConfig"):
         original_config_init = genai_types.GenerateContentConfig.__init__
         def patched_config_init(self, *args, **kwargs):
-            if "safety_settings" in kwargs and kwargs["safety_settings"]:
-                new_settings = []
-                for s in kwargs["safety_settings"]:
-                    category = None
-                    if isinstance(s, dict): category = s.get("category")
-                    elif hasattr(s, "category"): category = s.category
-                    
-                    if category and "JAILBREAK" in str(category):
-                        continue
-                    new_settings.append(s)
-                kwargs["safety_settings"] = new_settings
+            try:
+                if "safety_settings" in kwargs and kwargs["safety_settings"]:
+                    new_settings = []
+                    for s in kwargs["safety_settings"]:
+                        category = None
+                        if isinstance(s, dict): 
+                            category = s.get("category")
+                        elif hasattr(s, "category"): 
+                            category = s.category
+                        
+                        if category and "JAILBREAK" in str(category):
+                            continue
+                        new_settings.append(s)
+                    kwargs["safety_settings"] = new_settings
+            except Exception as e:
+                # 안전 설정 처리 중 오류가 발생해도 애플리케이션은 계속 실행되어야 함
+                print(f"⚠️ 경고: 안전 설정 필터링 중 오류 발생: {e}")
             original_config_init(self, *args, **kwargs)
         genai_types.GenerateContentConfig.__init__ = patched_config_init
     
@@ -41,11 +42,20 @@ try:
     if hasattr(genai_types, "SafetySetting"):
         original_setting_init = genai_types.SafetySetting.__init__
         def patched_setting_init(self, *args, **kwargs):
-            if "category" in kwargs and kwargs["category"] and "JAILBREAK" in str(kwargs["category"]):
-                kwargs["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT" # 유효한 카테고리로 매핑
+            try:
+                if "category" in kwargs and kwargs["category"] and "JAILBREAK" in str(kwargs["category"]):
+                    kwargs["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT" # 유효한 카테고리로 매핑
+            except Exception as e:
+                print(f"⚠️ 경고: SafetySetting 카테고리 변환 중 오류 발생: {e}")
             original_setting_init(self, *args, **kwargs)
         genai_types.SafetySetting.__init__ = patched_setting_init
-except Exception:
+        
+except ImportError:
+    # Google GenAI 라이브러리가 설치되지 않은 경우 정상적인 상황
+    pass
+except Exception as e:
+    # 예상치 못한 오류에 대한 상세 로깅
+    print(f"⚠️ 경고: Google GenAI Safety Settings 패치 적용 실패: {e}")
     pass
 
 # Force config reload for fresh imports
@@ -53,14 +63,14 @@ try:
     import mcp_agent.config
     if hasattr(mcp_agent.config, '_settings'):
         mcp_agent.config._settings = None
-except (ImportError, AttributeError):
+except Exception:
     pass
 
 try:
     import srcs.core.config.loader
     if hasattr(srcs.core.config.loader, '_config'):
         srcs.core.config.loader._config = None
-except (ImportError, AttributeError):
+except Exception:
     pass
 
 import streamlit as st
@@ -69,10 +79,19 @@ from pathlib import Path
 
 # HACK: mcp-agent 0.1.0과 mcp 1.x 간의 타입 호환성 문제 해결
 # Python 3.10+에서 types.UnionType을 상속받으려 할 때 발생하는 TypeError 방지
-import mcp.types
 import types
-if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
-    mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
+try:
+    import mcp.types
+    if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
+        # 타입 호환성을 위해 URLParams로 대체
+        mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
+        print("✅ mcp-agent 타입 호환성 패치 적용 완료")
+except ImportError:
+    # MCP 라이브러리가 설치되지 않은 경우 정상적인 상황
+    pass
+except Exception as e:
+    print(f"⚠️ 경고: MCP 타입 호환성 패치 실패: {e}")
+    pass
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent

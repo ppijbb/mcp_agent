@@ -1,4 +1,5 @@
 # Core LangChain and LangGraph
+# Note: Using >= syntax allows automatic security patches and bug fixes within major versions
 langgraph>=0.2.60
 langgraph-cli>=0.2.60
 langchain>=0.3.20
