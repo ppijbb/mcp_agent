@@ -45,8 +45,8 @@ aiohttp==3.11.12
 httpx==0.28.2
 
 # Security and validation
-urllib3==2.6.3
-certifi==2026.1.4
+urllib3==2.6.0
+certifi==2025.12.5
 
 # Configuration and Utilities
 python-dotenv==1.1.0

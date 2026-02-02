@@ -72,7 +72,11 @@ def main():
     display_agent_categories()
 
 def display_dashboard():
-    """최신 업데이트 및 사용 가이드를 포함한 대시보드"""
+    """
+    최신 업데이트 및 사용 가이드를 포함한 대시보드를 표시합니다.
+    
+    2단 컬럼 레이아웃으로 최신 업데이트 정보와 사용 가이드를 제공합니다.
+    """
     with st.container():
         col1, col2 = st.columns([1., 1.])
         with col1:
@@ -96,7 +100,12 @@ def display_dashboard():
             """)
 
 def display_agent_categories():
-    """에이전트 카테고리를 2단 컬럼으로 표시"""
+    """
+    에이전트 카테고리를 2단 컬럼 레이아웃으로 표시합니다.
+    
+    비즈니스 전략, 엔터프라이즈, 라이프스타일, 고급 AI, 기본 에이전트 카테고리를
+    2단 컬럼으로 구성하여 표시하고 시연환경이 필요한 에이전트들을 별도로 표시합니다.
+    """
     main_col1, main_col2 = st.columns(2)
     
     with main_col1:
@@ -112,7 +121,12 @@ def display_agent_categories():
     display_demo_environment_required_agents()
 
 def display_business_strategy_agents():
-    """비즈니스 전략 에이전트 표시"""
+    """
+    비즈니스 전략 관련 에이전트들을 표시합니다.
+    
+    Business Strategy Agent, SEO Doctor, Product Planner Agent 등
+    비즈니스 전략과 관련된 에이전트들을 카드 형태로 표시합니다.
+    """
     st.markdown("""
     <div class="category-header">
         <h2>💼 비즈니스 전략</h2>
@@ -144,7 +158,12 @@ def display_business_strategy_agents():
             st.switch_page("pages/product_planner.py")
 
 def display_enterprise_agents():
-    """엔터프라이즈 에이전트 표시"""
+    """
+    엔터프라이즈 관련 에이전트들을 표시합니다.
+    
+    Finance Health Agent, HR Recruitment Agent 등
+    엔터프라이즈 환경에서 사용되는 에이전트들을 표시합니다.
+    """
     st.markdown("""
     <div class="category-header">
         <h2>🏢 엔터프라이즈</h2>
@@ -163,7 +182,12 @@ def display_enterprise_agents():
             st.switch_page("pages/hr_recruitment.py")
 
 def display_lifestyle_agents():
-    """라이프스타일 에이전트 표시"""
+    """
+    라이프스타일 관련 에이전트들을 표시합니다.
+    
+    Travel Scout Agent, Research Agent, Urban Hive Agent 등
+    개인 생활과 관련된 에이전트들을 표시합니다.
+    """
     st.markdown("""
     <div class="category-header">
         <h2>🌟 라이프스타일</h2>
@@ -196,7 +220,12 @@ def display_lifestyle_agents():
 
 
 def display_advanced_ai_agents():
-    """고급 AI 에이전트 표시"""
+    """
+    고급 AI 관련 에이전트들을 표시합니다.
+    
+    Decision Agent, Workflow Orchestrator, Boardgame UI Generator 등
+    고급 AI 기술을 활용하는 에이전트들을 표시합니다.
+    """
     st.markdown("""
     <div class="category-header">
         <h2>🧠 고급 AI</h2>
@@ -229,7 +258,12 @@ def display_advanced_ai_agents():
             st.switch_page("pages/boardgame_ui_generator.py")
 
 def display_basic_agents():
-    """기본 에이전트 표시"""
+    """
+    기본 기능 에이전트들을 표시합니다.
+    
+    Data Generator, RAG Agent 등
+    기본적인 기능을 제공하는 에이전트들을 표시합니다.
+    """
     st.markdown("""
     <div class="category-header">
         <h2>⚡ 기본</h2>
@@ -253,7 +287,13 @@ def display_basic_agents():
             st.switch_page("pages/rag_agent.py")
 
 def display_demo_environment_required_agents():
-    """시연환경 구성이 필요한 Agent 표시"""
+    """
+    시연환경 구성이 필요한 에이전트들을 표시합니다.
+    
+    Drone Scout Agent, AIOps Orchestrator Agent, DevOps Assistant Agent 등
+    실제 인프라, 하드웨어, 또는 클라우드 서비스가 필요한 에이전트들을
+    별도 섹션에서 표시하고 구성 가이드를 제공합니다.
+    """
     st.markdown("---")
     st.markdown("""
     <div class="category-header">
