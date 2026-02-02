@@ -7,8 +7,10 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 """
 
 import argparse
+import importlib
 import sys
 import os
+from typing import Optional, Dict, Any
 
 
 def list_agents():
@@ -103,10 +105,31 @@ def run_basic_agent(agent_name):
 
         if agent_name == "streamlit":
             # Special handling for Streamlit agent
-            os.system(f"cd basic_agents && python streamlit_agent.py")
+            import subprocess
+            result = subprocess.run(
+                ["python", "streamlit_agent.py"],
+                cwd="basic_agents",
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Streamlit agent failed: {result.stderr}")
+            print(result.stdout)
         else:
-            # Import and run the main function
-            exec(f"from {module_name} import main; main()")
+            # Safe import and execution
+            try:
+                module = importlib.import_module(module_name)
+                if not hasattr(module, 'main'):
+                    raise AttributeError(f"Module {module_name} missing main function")
+                main_func = getattr(module, 'main')
+                if not callable(main_func):
+                    raise TypeError(f"main in {module_name} is not callable")
+                main_func()
+            except ImportError as e:
+                raise ImportError(f"Failed to import module {module_name}: {e}")
+            except Exception as e:
+                raise RuntimeError(f"Error executing {module_name}.main(): {e}")
         return True
     except Exception as e:
         print(f"❌ Error running basic agent {agent_name}: {str(e)}")
@@ -133,7 +156,20 @@ def run_enterprise_agent(agent_name):
     try:
         print(f"🏢 Starting enterprise agent: {agent_name}")
         module_name = agent_map[agent_name]
-        exec(f"from {module_name} import main; main()")
+        
+        # Safe import and execution
+        try:
+            module = importlib.import_module(module_name)
+            if not hasattr(module, 'main'):
+                raise AttributeError(f"Module {module_name} missing main function")
+            main_func = getattr(module, 'main')
+            if not callable(main_func):
+                raise TypeError(f"main in {module_name} is not callable")
+            main_func()
+        except ImportError as e:
+            raise ImportError(f"Failed to import module {module_name}: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
         return True
     except Exception as e:
         print(f"❌ Error running enterprise agent {agent_name}: {str(e)}")
@@ -157,8 +193,19 @@ def run_specialized_agent(agent_name):
         print(f"🧬 Starting specialized agent: {agent_name}")
         module_name = agent_map[agent_name]
 
-        # Import and run the main function
-        exec(f"from {module_name} import main; main()")
+        # Safe import and execution
+        try:
+            module = importlib.import_module(module_name)
+            if not hasattr(module, 'main'):
+                raise AttributeError(f"Module {module_name} missing main function")
+            main_func = getattr(module, 'main')
+            if not callable(main_func):
+                raise TypeError(f"main in {module_name} is not callable")
+            main_func()
+        except ImportError as e:
+            raise ImportError(f"Failed to import module {module_name}: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
         return True
     except Exception as e:
         print(f"❌ Error running specialized agent {agent_name}: {str(e)}")
@@ -184,7 +231,20 @@ def run_utility(util_name):
     try:
         print(f"🛠️  Starting utility: {util_name}")
         module_name = util_map[util_name]
-        exec(f"from {module_name} import main; main()")
+        
+        # Safe import and execution
+        try:
+            module = importlib.import_module(module_name)
+            if not hasattr(module, 'main'):
+                raise AttributeError(f"Module {module_name} missing main function")
+            main_func = getattr(module, 'main')
+            if not callable(main_func):
+                raise TypeError(f"main in {module_name} is not callable")
+            main_func()
+        except ImportError as e:
+            raise ImportError(f"Failed to import module {module_name}: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
         return True
     except Exception as e:
         print(f"❌ Error running utility {util_name}: {str(e)}")

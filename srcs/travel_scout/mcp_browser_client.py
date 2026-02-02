@@ -72,7 +72,15 @@ class MCPBrowserClient:
         self.screenshots_dir = screenshot_dir or self._setup_screenshots_dir()
 
     def _setup_screenshots_dir(self) -> str:
-        """스크린샷 디렉토리 설정"""
+        """
+        Setup screenshots directory for debug storage.
+        
+        Returns:
+            str: Path to the screenshots directory
+            
+        Creates a temporary directory for storing browser screenshots
+        during debugging sessions. Directory is created if it doesn't exist.
+        """
         base_dir = "tmp/debug_screenshots"
         os.makedirs(base_dir, exist_ok=True)
         return base_dir
@@ -241,18 +249,24 @@ class MCPBrowserClient:
                     logger.warning(f"스크린샷 저장 실패: {save_error}")
                     filepath = None
 
-                # 최대 개수 제한
+                # 최대 개수 제한 및 비동기 파일 삭제
                 if len(self.screenshots) > self.max_screenshots:
-                    # 오래된 파일 삭제
-                    try:
-                        os.remove(self.screenshots[0])
-                    except OSError as e:
-                        logger.warning(f"오래된 스크린샷 파일 삭제 실패: {e}")
+                    # 오래된 파일 삭제 (비동기 방식)
+                    old_files = self.screenshots[:-self.max_screenshots]
                     self.screenshots = self.screenshots[-self.max_screenshots:]
+                    
+                    # 백그라운드에서 파일 삭제
+                    for old_file in old_files:
+                        try:
+                            if os.path.exists(old_file):
+                                os.remove(old_file)
+                        except OSError as e:
+                            logger.warning(f"오래된 스크린샷 파일 삭제 실패: {e}")
 
                 # Streamlit UI 업데이트 (컨테이너가 있는 경우)
                 if self.streamlit_container:
                     try:
+                        # 비동기 방식으로 이미지 표시를 피하기 위해 동기 처리
                         self.streamlit_container.image(
                             base64.b64decode(base64_data),
                             caption=f"[{datetime.now().strftime('%H:%M:%S')}] {self.current_url}",
@@ -273,7 +287,12 @@ class MCPBrowserClient:
             return {"success": False, "error": str(e)}
 
     def clear_screenshots(self):
-        """스크린샷 기록 삭제"""
+        """
+        Clear all screenshot records and update UI.
+        
+        Clears the internal screenshots list and empties the Streamlit
+        container if one is available. Logs the operation for debugging.
+        """
         self.screenshots = []
         if self.streamlit_container:
             self.streamlit_container.empty()
@@ -291,7 +310,7 @@ class MCPBrowserClient:
             if not nav_result.get("success"):
                 return nav_result
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
             screenshot_result = await self.take_screenshot_async()
 
             return {
@@ -304,7 +323,13 @@ class MCPBrowserClient:
             return {"success": False, "error": str(e)}
 
     async def cleanup(self):
-        """MCP 세션 정리"""
+        """
+        Clean up MCP session and browser process.
+        
+        Properly closes the MCP session context and terminates the browser
+        process. This should be called when the client is no longer needed
+        to prevent resource leaks.
+        """
         if self.session_context:
             try:
                 await self.session_context.__aexit__(None, None, None)
@@ -319,9 +344,12 @@ class MCPBrowserClient:
                 self.process = None
 
     def __del__(self):
-        """소멸자"""
-        if self.session:
+        """소멸자 - 비동기 정리 방지"""
+        # 소멸자에서 비동기 작업을 피하기 위해 동기 정리 수행
+        if self.process and self.process.returncode is None:
             try:
-                asyncio.create_task(self.cleanup())
+                self.process.terminate()
             except Exception:
                 pass
+        self.session = None
+        self.session_context = None

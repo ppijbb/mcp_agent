@@ -40,20 +40,20 @@ scipy
 scikit-learn
 
 # HTTP Clients
-requests>=2.32.3
-aiohttp>=3.11.12
-httpx>=0.28.2
+requests==2.32.3
+aiohttp==3.11.12
+httpx==0.28.2
 
 # Security and validation
-urllib3>=2.2.3
-certifi>=2024.8.30
+urllib3==2.2.3
+certifi==2024.8.30
 
 # Configuration and Utilities
-python-dotenv>=1.1.0
-PyYAML>=6.0.2
-pydantic>=2.10.4
-pydantic-settings>=2.6.1
-email-validator>=2.2.0
+python-dotenv==1.1.0
+PyYAML==6.0.2
+pydantic==2.10.4
+pydantic-settings==2.6.1
+email-validator==2.2.0
 
 # Testing
 pytest
@@ -83,11 +83,11 @@ reportlab
 weasyprint
 
 # Web Scraping
-beautifulsoup4>=4.12.3
-markdownify>=0.11.6
-selenium>=4.27.0
-playwright>=1.51.0
-scrapy>=2.11.2
+beautifulsoup4==4.12.3
+markdownify==0.11.6
+selenium==4.27.0
+playwright==1.51.0
+scrapy==2.11.2
 
 # Database and Vector Stores
 chromadb
@@ -125,10 +125,10 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=46.1.0
-passlib>=1.7.4
-PyJWT>=2.8.0
-pycryptodome>=3.20.0
+cryptography==46.1.0
+passlib==1.7.4
+PyJWT==2.8.0
+pycryptodome==3.20.0
 
 # Message Queues and Async
 asyncio-mqtt

@@ -6,7 +6,8 @@ No data generation or simulation - only fetching existing data from APIs and MCP
 """
 
 import httpx
-from typing import Dict, List, Any
+import logging
+from typing import Dict, List, Any, Optional
 import os
 from datetime import datetime
 
@@ -19,11 +20,19 @@ class ExternalAPIClient:
 
     def __init__(self):
         self.timeout = 30.0
+        self.logger = logging.getLogger(__name__)
+        
+        # Validate API keys
         self.api_keys = {
             "korea_data": os.getenv("KOREA_DATA_API_KEY"),
             "seoul_open": os.getenv("SEOUL_OPEN_API_KEY"),
             "statistics": os.getenv("STATISTICS_API_KEY")
         }
+        
+        # Check for missing API keys
+        missing_keys = [k for k, v in self.api_keys.items() if not v]
+        if missing_keys:
+            self.logger.warning(f"Missing API keys: {missing_keys}")
 
         # Real API endpoints - no simulation
         self.endpoints = {
@@ -34,7 +43,7 @@ class ExternalAPIClient:
             "resources": "https://api.seoul.go.kr/sharing-economy"
         }
 
-    async def fetch_districts(self, region: str = "seoul") -> List[str]:
+    async def fetch_districts(self, region: Optional[str] = "seoul") -> List[str]:
         """Fetch real district data from Korean government APIs."""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -53,10 +62,16 @@ class ExternalAPIClient:
 
                 return []
 
+        except httpx.TimeoutException:
+            raise ExternalDataUnavailableError("Timeout fetching districts from external API")
+        except httpx.HTTPStatusError as e:
+            raise ExternalDataUnavailableError(f"HTTP error fetching districts: {e.response.status_code}")
+        except httpx.RequestError as e:
+            raise ExternalDataUnavailableError(f"Network error fetching districts: {e}")
+        except ValueError as e:
+            raise ExternalDataUnavailableError(f"Invalid response format for districts: {e}")
         except Exception as e:
-            raise ExternalDataUnavailableError(
-                f"Failed to fetch districts from external API: {e}"
-            )
+            raise ExternalDataUnavailableError(f"Unexpected error fetching districts: {e}")
 
     async def fetch_community_data(self) -> Dict[str, List]:
         """Fetch real community data from Seoul Open Data API."""
@@ -77,8 +92,16 @@ class ExternalAPIClient:
                     "groups": data.get("groups", [])
                 }
 
+        except httpx.TimeoutException:
+            raise ExternalDataUnavailableError("Timeout fetching community data from external API")
+        except httpx.HTTPStatusError as e:
+            raise ExternalDataUnavailableError(f"HTTP error fetching community data: {e.response.status_code}")
+        except httpx.RequestError as e:
+            raise ExternalDataUnavailableError(f"Network error fetching community data: {e}")
+        except ValueError as e:
+            raise ExternalDataUnavailableError(f"Invalid response format for community data: {e}")
         except Exception as e:
-            raise ExternalDataUnavailableError(f"Failed to fetch community data: {e}")
+            raise ExternalDataUnavailableError(f"Unexpected error fetching community data: {e}")
 
     async def fetch_resource_data(self) -> Dict[str, List]:
         """Fetch real resource sharing data from Seoul APIs."""
@@ -99,10 +122,18 @@ class ExternalAPIClient:
                     "requests": data.get("resource_requests", [])
                 }
 
+        except httpx.TimeoutException:
+            raise ExternalDataUnavailableError("Timeout fetching resource data from external API")
+        except httpx.HTTPStatusError as e:
+            raise ExternalDataUnavailableError(f"HTTP error fetching resource data: {e.response.status_code}")
+        except httpx.RequestError as e:
+            raise ExternalDataUnavailableError(f"Network error fetching resource data: {e}")
+        except ValueError as e:
+            raise ExternalDataUnavailableError(f"Invalid response format for resource data: {e}")
         except Exception as e:
-            raise ExternalDataUnavailableError(f"Failed to fetch resource data: {e}")
+            raise ExternalDataUnavailableError(f"Unexpected error fetching resource data: {e}")
 
-    async def fetch_activity_data(self, category: str = None) -> List[Dict]:
+    async def fetch_activity_data(self, category: Optional[str] = None) -> List[Dict]:
         """Fetch real activity data from cultural APIs."""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -121,8 +152,16 @@ class ExternalAPIClient:
                 data = response.json()
                 return data.get("activities", [])
 
+        except httpx.TimeoutException:
+            raise ExternalDataUnavailableError("Timeout fetching activity data from external API")
+        except httpx.HTTPStatusError as e:
+            raise ExternalDataUnavailableError(f"HTTP error fetching activity data: {e.response.status_code}")
+        except httpx.RequestError as e:
+            raise ExternalDataUnavailableError(f"Network error fetching activity data: {e}")
+        except ValueError as e:
+            raise ExternalDataUnavailableError(f"Invalid response format for activity data: {e}")
         except Exception as e:
-            raise ExternalDataUnavailableError(f"Failed to fetch activity data: {e}")
+            raise ExternalDataUnavailableError(f"Unexpected error fetching activity data: {e}")
 
 
 class MCPDataClient:
@@ -147,7 +186,7 @@ class MCPDataClient:
             print(f"Failed to fetch from MCP {server}/{resource}: {e}")
             return None
 
-    async def get_districts_from_mcp(self, region: str = "seoul") -> List[str]:
+    async def get_districts_from_mcp(self, region: Optional[str] = "seoul") -> List[str]:
         """Get districts from MCP server."""
         result = await self.fetch_from_mcp("seoul_data", "districts", region=region)
         return result if isinstance(result, list) else []
@@ -172,6 +211,7 @@ class ExternalDataManager:
         self.cache = {}
         self.cache_timestamps = {}
         self.cache_duration = 3600  # 1 hour
+        self.logger = logging.getLogger(__name__)
 
     def _is_cache_valid(self, key: str) -> bool:
         """Check if cached data is still valid."""
@@ -182,11 +222,20 @@ class ExternalDataManager:
         return age < self.cache_duration
 
     def _update_cache(self, key: str, data: Any):
-        """Update cache with fetched data."""
+        """
+        Update cache with fetched data and timestamp.
+        
+        Args:
+            key: Cache key for the data
+            data: Data to cache
+            
+        Stores the data in the cache and records the current timestamp
+        for cache validation purposes.
+        """
         self.cache[key] = data
         self.cache_timestamps[key] = datetime.now().timestamp()
 
-    async def get_districts(self, region: str = "seoul") -> List[str]:
+    async def get_districts(self, region: Optional[str] = "seoul") -> List[str]:
         """Get districts from external sources only."""
         cache_key = f"districts_{region}"
 
@@ -272,7 +321,7 @@ class ExternalDataManager:
         # No data available from any source
         raise ExternalDataUnavailableError("No external resource data available from any source")
 
-    async def get_activity_data(self, category: str = None) -> List[Dict]:
+    async def get_activity_data(self, category: Optional[str] = None) -> List[Dict]:
         """Get activity data from external sources only."""
         cache_key = f"activities_{category or 'all'}"
 
@@ -321,7 +370,7 @@ external_data_manager = ExternalDataManager()
 
 
 # Convenience functions
-async def get_external_districts(region: str = "seoul") -> List[str]:
+async def get_external_districts(region: Optional[str] = "seoul") -> List[str]:
     """Get districts from external sources only."""
     return await external_data_manager.get_districts(region)
 
@@ -336,7 +385,7 @@ async def get_external_resource_data() -> Dict[str, List]:
     return await external_data_manager.get_resource_data()
 
 
-async def get_external_activity_data(category: str = None) -> List[Dict]:
+async def get_external_activity_data(category: Optional[str] = None) -> List[Dict]:
     """Get activity data from external sources only."""
     return await external_data_manager.get_activity_data(category)
 
