@@ -27,6 +27,23 @@ from .performance import (
     memoize_strict, ResourceMonitor, default_cache
 )
 
+# New infrastructure modules
+try:
+    from .compatibility import apply_all_compatibility_patches
+    from .error_handling import (
+        ErrorHandler, AgentError, ErrorSeverity, ErrorCategory,
+        handle_errors, safe_execute, validate_input, default_error_handler
+    )
+    from .logging_utils import (
+        get_optimized_logger, setup_application_logging,
+        LoggerManager, PerformanceLogger, OptimizedHTTPErrorFilter
+    )
+    from .connection_pool import create_improved_connection_pool, ImprovedConnectionPool
+    
+    INFRASTRUCTURE_AVAILABLE = True
+except ImportError:
+    INFRASTRUCTURE_AVAILABLE = False
+
 __all__ = [
     # Config exports
     'DEFAULT_SERVERS', 'COMPLIANCE_FRAMEWORKS', 'REPORT_TIMESTAMP_FORMAT',
@@ -41,5 +58,26 @@ __all__ = [
 
     # Performance exports
     'SimpleCache', 'rate_limit', 'performance_monitor',
-    'memoize_strict', 'ResourceMonitor', 'default_cache'
+    'memoize_strict', 'ResourceMonitor', 'default_cache',
+    
+    # Infrastructure exports (new modules)
+    'INFRASTRUCTURE_AVAILABLE'
 ]
+
+# Add infrastructure exports if available
+if INFRASTRUCTURE_AVAILABLE:
+    __all__.extend([
+        # Compatibility
+        'apply_all_compatibility_patches',
+        
+        # Error Handling
+        'ErrorHandler', 'AgentError', 'ErrorSeverity', 'ErrorCategory',
+        'handle_errors', 'safe_execute', 'validate_input', 'default_error_handler',
+        
+        # Logging
+        'get_optimized_logger', 'setup_application_logging',
+        'LoggerManager', 'PerformanceLogger', 'OptimizedHTTPErrorFilter',
+        
+        # Connection Pool
+        'create_improved_connection_pool', 'ImprovedConnectionPool'
+    ])
