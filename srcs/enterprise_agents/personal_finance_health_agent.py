@@ -34,6 +34,18 @@ class PersonalFinanceAgent:
         Returns:
             A dictionary containing the analysis results.
         """
+        # Input validation
+        from srcs.core.errors import validate_input, ValidationError
+        try:
+            validate_input(user_data, "user_data", required=True, value_type=dict)
+            # Validate required fields
+            required_fields = ["income", "expenses", "savings", "debts"]
+            for field in required_fields:
+                if field not in user_data:
+                    raise ValidationError(f"Required field '{field}' missing from user_data")
+        except ValidationError as e:
+            return {"error": f"Input validation error: {e}", "analysis": None}
+        
         os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 

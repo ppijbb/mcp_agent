@@ -7,7 +7,7 @@
 
 import random
 import math
-import numpy as np
+
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple, Callable
 from dataclasses import dataclass
@@ -15,7 +15,7 @@ from enum import Enum
 
 
 class DistributionType(Enum):
-    """확률 분포 타입"""
+    """Probability distribution types"""
     NORMAL = "normal"
     UNIFORM = "uniform"
     EXPONENTIAL = "exponential"
@@ -24,11 +24,12 @@ class DistributionType(Enum):
 
 
 class TimeSeriesGenerator:
-    """시계열 데이터 생성기 - 트렌드, 계절성, 노이즈 포함"""
+    """Time series data generator - includes trend, seasonality, and noise"""
 
     def __init__(self, seed: Optional[int] = None):
-        """초기화"""
+        """Initialize the time series generator"""
         self.rng = random.Random(seed) if seed else random.Random()
+        import numpy as np
         self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
 
     def generate(
@@ -141,6 +142,7 @@ class NoiseGenerator:
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
         self.rng = random.Random(seed) if seed else random.Random()
+        import numpy as np
         self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
 
     def add_gaussian_noise(
@@ -196,6 +198,7 @@ class ProbabilityDistributions:
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
         self.rng = random.Random(seed) if seed else random.Random()
+        import numpy as np
         self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
 
     def sample(
@@ -324,6 +327,7 @@ class PatternGenerator:
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
         self.rng = random.Random(seed) if seed else random.Random()
+        import numpy as np
         self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
 
     def generate_burst_pattern(

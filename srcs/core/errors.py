@@ -47,3 +47,86 @@ class ValidationError(MCPError):
 
 class SecurityError(MCPError):
     """Raised for security-related errors."""
+
+
+def safe_execute(func: callable, default: Any = None, error_type: type = MCPError, *args, **kwargs) -> Any:
+    """
+    Safely execute a function with standardized error handling.
+    
+    Args:
+        func: Function to execute
+        default: Default value to return on error
+        error_type: Type of error to raise on failure (default: MCPError)
+        *args: Function arguments
+        **kwargs: Function keyword arguments
+        
+    Returns:
+        Function result or default value if error occurs
+        
+    Raises:
+        error_type: If error occurs and default is None
+    """
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        if default is not None:
+            return default
+        raise error_type(f"Failed to execute {func.__name__}: {str(e)}")
+
+
+def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
+    """
+    Standardized error handler for data processing operations.
+    
+    Args:
+        data_item: The data item being processed
+        operation: Description of the operation being performed
+        default_result: Default result to return on error
+        
+    Returns:
+        Processing result or default_result if error occurs
+    """
+    try:
+        return data_item
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
+        # Log error if logging is available
+        try:
+            import structlog
+            logger = structlog.get_logger()
+            logger.warning("Data processing error", operation=operation, error=str(e))
+        except ImportError:
+            pass
+        return default_result
+
+
+def validate_input(value: Any, field_name: str, required: bool = True, 
+                  value_type: type = None, min_length: int = None, 
+                  max_length: int = None) -> None:
+    """
+    Standardized input validation with consistent error messages.
+    
+    Args:
+        value: Value to validate
+        field_name: Name of the field for error messages
+        required: Whether the field is required
+        value_type: Expected type of the value
+        min_length: Minimum length (for strings/lists)
+        max_length: Maximum length (for strings/lists)
+        
+    Raises:
+        ValidationError: If validation fails
+    """
+    from srcs.core.errors import ValidationError
+    
+    if required and value is None:
+        raise ValidationError(f"{field_name} is required")
+    
+    if value is not None:
+        if value_type and not isinstance(value, value_type):
+            raise ValidationError(f"{field_name} must be of type {value_type.__name__}")
+        
+        if isinstance(value, (str, list)) and min_length is not None and len(value) < min_length:
+            raise ValidationError(f"{field_name} must be at least {min_length} characters/items")
+        
+        if isinstance(value, (str, list)) and max_length is not None and len(value) > max_length:
+            raise ValidationError(f"{field_name} must be at most {max_length} characters/items")

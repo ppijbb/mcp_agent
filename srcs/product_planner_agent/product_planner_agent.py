@@ -401,6 +401,13 @@ class ProductPlannerAgent(BaseAgent):
 
     async def process_message(self, user_message: str) -> Dict[str, Any]:
         """Process a user message and advance the planning state."""
+        # Input validation
+        from srcs.core.errors import validate_input, ValidationError
+        try:
+            validate_input(user_message, "user_message", required=True, value_type=str, min_length=1, max_length=10000)
+        except ValidationError as e:
+            return {"message": f"Input validation error: {e}", "state": self.state["step"]}
+        
         self.state["history"].append({"role": "user", "content": user_message})
         response = {"message": "", "state": self.state["step"]}
 

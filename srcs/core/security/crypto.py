@@ -32,8 +32,8 @@ def get_encryption_key() -> str:
 ENCRYPTION_KEY = None  # Will be loaded on demand
 
 
-def get_cipher_suite():
-    """환경 변수에서 키를 가져와 Fernet 암호화 객체를 생성합니다."""
+def get_cipher_suite() -> Fernet:
+    """Create Fernet encryption object using key from environment variables."""
     key = get_encryption_key()
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
@@ -55,8 +55,6 @@ def encrypt_file(file_path: str, output_path: Optional[str] = None) -> str:
         FileNotFoundError: If input file doesn't exist
         EncryptionError: If encryption fails
     """
-    from srcs.core.errors import EncryptionError
-    
     if not output_path:
         output_path = f"{file_path}.enc"
 
@@ -77,11 +75,17 @@ def encrypt_file(file_path: str, output_path: Optional[str] = None) -> str:
     except FileNotFoundError:
         raise FileNotFoundError(f"Input file not found: {file_path}")
     except Exception as e:
-        raise EncryptionError(f"Failed to encrypt file: {str(e)}")
+        # Deferred import to avoid circular dependency
+        try:
+            from srcs.core.errors import EncryptionError
+            raise EncryptionError(f"Failed to encrypt file: {str(e)}")
+        except ImportError:
+            # Fallback if import fails
+            raise RuntimeError(f"Failed to encrypt file: {str(e)}")
 
 
 def decrypt_file_content(encrypted_path: str) -> bytes:
-    """암호화된 파일의 내용을 복호화하여 바이트로 반환합니다."""
+    """Decrypt the content of an encrypted file and return as bytes."""
     cipher = get_cipher_suite()
 
     with open(encrypted_path, "rb") as f:
@@ -94,8 +98,8 @@ def decrypt_file_content(encrypted_path: str) -> bytes:
         raise ValueError("암호화된 파일을 복호화할 수 없습니다. 키가 잘못되었거나 파일이 손상되었습니다.")
 
 
-def decrypt_file(encrypted_path: str, output_path: str | None = None):
-    """암호화된 파일을 복호화하여 저장합니다."""
+def decrypt_file(encrypted_path: str, output_path: str | None = None) -> None:
+    """Decrypt an encrypted file and save it."""
     if not output_path:
         if not encrypted_path.endswith(".enc"):
             raise ValueError("출력 파일 경로를 지정해야 합니다.")
@@ -110,7 +114,7 @@ def decrypt_file(encrypted_path: str, output_path: str | None = None):
 
 
 def generate_key() -> str:
-    """새로운 암호화 키를 생성합니다."""
+    """Generate a new encryption key."""
     key = Fernet.generate_key()
     key_str = key.decode()
     print("🔑 새로운 암호화 키가 생성되었습니다. 이 키를 MCP_SECRET_KEY 환경 변수에 안전하게 저장하세요.")

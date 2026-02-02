@@ -9,8 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
-import pandas as pd
-import plotly.express as px
+
 
 
 class ResultReader:
@@ -240,6 +239,7 @@ class ResultDisplay:
         # Check if it's a list of dictionaries (table-like data)
         if all(isinstance(item, dict) for item in data):
             try:
+                import pandas as pd
                 df = pd.DataFrame(data)
                 st.dataframe(df, use_container_width=True)
 
@@ -271,7 +271,7 @@ class ResultDisplay:
         try:
             json_data = json.loads(data)
             st.json(json_data)
-        except:
+        except (json.JSONDecodeError, ValueError):
             # Regular text
             st.text_area("결과 내용", data, height=300)
 
@@ -280,7 +280,7 @@ class ResultDisplay:
         st.subheader("📊 결과 수치")
         st.metric("결과값", data)
 
-    def _create_data_visualizations(self, df: pd.DataFrame):
+    def _create_data_visualizations(self, df):
         """Create visualizations for dataframe data."""
         if df.empty:
             return
@@ -299,6 +299,7 @@ class ResultDisplay:
                 y_col = st.selectbox("Y축 선택", [col for col in numeric_cols if col != x_col], key="scatter_y")
 
                 if x_col and y_col:
+                    import plotly.express as px
                     fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col}")
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -306,11 +307,13 @@ class ResultDisplay:
                 # Histogram
                 hist_col = st.selectbox("히스토그램 컬럼 선택", numeric_cols, key="hist_col")
                 if hist_col:
+                    import plotly.express as px
                     fig = px.histogram(df, x=hist_col, title=f"{hist_col} 분포")
                     st.plotly_chart(fig, use_container_width=True)
 
         elif len(numeric_cols) == 1:
             # Single numeric column - histogram
+            import plotly.express as px
             fig = px.histogram(df, x=numeric_cols[0], title=f"{numeric_cols[0]} 분포")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -330,6 +333,7 @@ class ResultDisplay:
                     st.dataframe(value_counts.reset_index().rename(columns={cat_col: '카테고리', 'count': '개수'}))
 
                 with col2:
+                    import plotly.express as px
                     fig = px.pie(values=value_counts.values, names=value_counts.index, title=f"{cat_col} 분포")
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -375,6 +379,7 @@ class ResultDisplay:
                     "파일경로": result["file_path"]
                 })
 
+            import pandas as pd
             df = pd.DataFrame(results_data)
             st.dataframe(df, use_container_width=True)
 

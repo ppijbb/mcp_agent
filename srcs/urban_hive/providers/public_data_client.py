@@ -92,7 +92,7 @@ class PublicDataClient:
                         "severity": item.get("seCdNm", "Unknown"),
                         "category": item.get("wasteSeNm", "Unknown"),
                     })
-                except Exception:
+                except (KeyError, ValueError, TypeError):
                     continue
 
             if district:

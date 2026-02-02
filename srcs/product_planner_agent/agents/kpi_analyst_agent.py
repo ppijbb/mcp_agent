@@ -1,23 +1,22 @@
 """
 KPI Analyst Agent
-핵심 성과 지표 설정, 분석 프레임워크 및 성능 추적 시스템을 관리하는 Agent
+Core performance indicator setup, analysis framework, and performance tracking system agent
 """
 
 from typing import Dict, Any
 import json
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
-from srcs.core.agent.base import BaseAgent
-from srcs.core.errors import APIError, WorkflowError
+from srcs.product_planner_agent.agents.base_product_planner_agent import BaseProductPlannerAgent
 
 
-class KPIAnalystAgent(BaseAgent):
-    """KPI 설정 및 성과 분석 전문 Agent"""
+class KPIAnalystAgent(BaseProductPlannerAgent):
+    """KPI setup and performance analysis specialist agent"""
 
     def __init__(self):
         super().__init__("kpi_analyst_agent")
 
-    async def run_workflow(self, context: Any) -> Dict[str, Any]:
+    async def _execute_workflow(self, context: Any) -> Dict[str, Any]:
         """
         PRD와 비즈니스 계획을 바탕으로 제품의 성공을 측정할 핵심 성과 지표(KPI)를 정의합니다.
         """
