@@ -124,3 +124,6 @@
 [submodule "open_researcher/openclaw"]
 	path = open_researcher/openclaw
 	url = https://github.com/openclaw/openclaw.git
+[submodule "open_researcher/oh-my-opencode"]
+	path = open_researcher/oh-my-opencode
+	url = https://github.com/code-yeongyu/oh-my-opencode.git
