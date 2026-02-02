@@ -74,6 +74,7 @@ class SearchResult:
     verification_score: float = 0.0
     
     def __post_init__(self):
+        """Initialize default values for dataclass fields."""
         if self.metadata is None:
             self.metadata = {}
 
@@ -358,7 +359,9 @@ class BaseResearchTool(ABC):
         logger.info(f"Performance stats reset for {self.name}")
     
     def __str__(self) -> str:
+        """Return string representation of the tool."""
         return f"{self.__class__.__name__}(name={self.name}, type={self.tool_type.value}, status={self.status.value})"
     
     def __repr__(self) -> str:
+        """Return detailed string representation of the tool."""
         return self.__str__()

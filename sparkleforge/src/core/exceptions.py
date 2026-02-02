@@ -51,6 +51,7 @@ class BaseResearcherException(Exception):
         self.context = context or {}
     
     def __str__(self) -> str:
+        """Return formatted string representation of the exception."""
         base_msg = f"[{self.category.value.upper()}] {self.message}"
         if self.details:
             base_msg += f" | Details: {self.details}"

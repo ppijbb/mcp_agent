@@ -145,11 +145,16 @@ def verify_signature(payload: bytes, signature: str) -> bool:
 
         return is_valid
 
-    except Exception as e:
+    except (ValueError, KeyError, AttributeError, TypeError) as e:
         logger.error(f"웹훅 서명 검증 중 오류: {e}")
         if config.github.fail_fast_on_error:
             sys.exit(1)
         raise ValueError(f"웹훅 서명 검증 실패: {e}")
+    except Exception as e:
+        logger.error(f"웹훅 서명 검증 중 예상치 못한 오류: {e}")
+        if config.github.fail_fast_on_error:
+            sys.exit(1)
+        raise
 
 
 def parse_payload(payload: bytes) -> Dict[str, Any]:
