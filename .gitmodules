@@ -22,9 +22,6 @@
 [submodule "reference/DeepMCPAgent"]
 	path = reference/DeepMCPAgent
 	url = https://github.com/cryxnet/DeepMCPAgent.git
-[submodule "local_researcher_project/reference/skyvern"]
-	path = local_researcher_project/reference/skyvern
-	url = https://github.com/Skyvern-AI/skyvern.git
 [submodule "reference/llm-council"]
 	path = reference/llm-council
 	url = https://github.com/karpathy/llm-council.git
