@@ -49,7 +49,7 @@ class SafeCodeValidator(ast.NodeVisitor):
     """AST visitor to validate code for safe execution."""
     
     ALLOWED_NODES = {
-        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Num, ast.Constant,
+        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
         ast.Name, ast.Load, ast.Call, ast.Compare, ast.BoolOp,
         ast.And, ast.Or, ast.Not, ast.Eq, ast.NotEq, ast.Lt, ast.LtE,
         ast.Gt, ast.GtE, ast.Is, ast.IsNot, ast.In, ast.NotIn,
