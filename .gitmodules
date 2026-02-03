@@ -130,3 +130,6 @@
 [submodule "SparkleForge"]
 	path = SparkleForge
 	url = https://github.com/ppijbb/sparkleforge.git
+[submodule "dimescav_agent"]
+	path = dimescav_agent
+	url = https://github.com/ppijbb/dimescav_agent.git
