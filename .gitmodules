@@ -127,3 +127,6 @@
 [submodule "open_researcher/oh-my-opencode"]
 	path = open_researcher/oh-my-opencode
 	url = https://github.com/code-yeongyu/oh-my-opencode.git
+[submodule "SparkleForge"]
+	path = SparkleForge
+	url = https://github.com/ppijbb/sparkleforge.git
