@@ -1,135 +1,132 @@
-[submodule "gemini-cli"]
-	path = gemini-cli
+[submodule "reference/gemini-cli"]
+	path = reference/gemini-cli
 	url = https://github.com/google-gemini/gemini-cli.git
-[submodule "claude-code"]
-	path = claude-code
+[submodule "reference/claude-code"]
+	path = reference/claude-code
 	url = https://github.com/anthropics/claude-code.git
-[submodule "open_researcher/open_researcher/DeepResearch"]
-	path = open_researcher/open_researcher/DeepResearch
+[submodule "reference/DeepResearch"]
+	path = reference/DeepResearch
 	url = https://github.com/Alibaba-NLP/DeepResearch.git
-[submodule "open_researcher/DeepResearch"]
-	path = open_researcher/DeepResearch
-	url = https://github.com/Alibaba-NLP/DeepResearch.git
-[submodule "open_researcher/open-agent"]
-	path = open_researcher/open-agent
+[submodule "reference/open-agent"]
+	path = reference/open-agent
 	url = https://github.com/AFK-surf/open-agent.git
-[submodule "open_researcher/AgentFlow"]
-	path = open_researcher/AgentFlow
+[submodule "reference/AgentFlow"]
+	path = reference/AgentFlow
 	url = https://github.com/lupantech/AgentFlow.git
-[submodule "open_researcher/LightMem"]
-	path = open_researcher/LightMem
+[submodule "reference/LightMem"]
+	path = reference/LightMem
 	url = https://github.com/zjunlp/LightMem.git
-[submodule "open_researcher/Hephaestus"]
-	path = open_researcher/Hephaestus
+[submodule "reference/Hephaestus"]
+	path = reference/Hephaestus
 	url = https://github.com/Ido-Levi/Hephaestus.git
-[submodule "open_researcher/DeepMCPAgent"]
-	path = open_researcher/DeepMCPAgent
+[submodule "reference/DeepMCPAgent"]
+	path = reference/DeepMCPAgent
 	url = https://github.com/cryxnet/DeepMCPAgent.git
-[submodule "local_researcher_project/open_researcher/skyvern"]
-	path = local_researcher_project/open_researcher/skyvern
+[submodule "local_researcher_project/reference/skyvern"]
+	path = local_researcher_project/reference/skyvern
 	url = https://github.com/Skyvern-AI/skyvern.git
-[submodule "open_researcher/llm-council"]
-	path = open_researcher/llm-council
+[submodule "reference/llm-council"]
+	path = reference/llm-council
 	url = https://github.com/karpathy/llm-council.git
-[submodule "open_researcher/skyvern"]
-	path = open_researcher/skyvern
+[submodule "reference/skyvern"]
+	path = reference/skyvern
 	url = https://github.com/Skyvern-AI/skyvern.git
-[submodule "open_researcher/cascadeflow"]
-	path = open_researcher/cascadeflow
+[submodule "reference/cascadeflow"]
+	path = reference/cascadeflow
 	url = https://github.com/lemony-ai/cascadeflow.git
-[submodule "open_researcher/prompt-refiner"]
-	path = open_researcher/prompt-refiner
+[submodule "reference/prompt-refiner"]
+	path = reference/prompt-refiner
 	url = https://github.com/JacobHuang91/prompt-refiner.git
-[submodule "open_researcher/beads"]
-	path = open_researcher/beads
+[submodule "reference/beads"]
+	path = reference/beads
 	url = https://github.com/steveyegge/beads.git
-[submodule "open_researcher/ERA"]
-	path = open_researcher/ERA
+[submodule "reference/ERA"]
+	path = reference/ERA
 	url = https://github.com/BinSquare/ERA.git
-[submodule "open_researcher/AI-reseach-SKILLs"]
-	path = open_researcher/AI-reseach-SKILLs
+[submodule "reference/AI-reseach-SKILLs"]
+	path = reference/AI-reseach-SKILLs
 	url = https://github.com/zechenzhangAGI/AI-research-SKILLs.git
-[submodule "open_researcher/agentpg"]
-	path = open_researcher/agentpg
+[submodule "reference/agentpg"]
+	path = reference/agentpg
 	url = https://github.com/youssefsiam38/agentpg.git
-[submodule "open_researcher/DataDesigner"]
-	path = open_researcher/DataDesigner
+[submodule "reference/DataDesigner"]
+	path = reference/DataDesigner
 	url = https://github.com/NVIDIA-NeMo/DataDesigner.git
-[submodule "open_researcher/Guardrails"]
-	path = open_researcher/Guardrails
+[submodule "reference/Guardrails"]
+	path = reference/Guardrails
 	url = https://github.com/NVIDIA-NeMo/Guardrails.git
-[submodule "open_researcher/Alibaba_DeepResearch"]
-	path = open_researcher/Alibaba_DeepResearch
+[submodule "reference/Alibaba_DeepResearch"]
+	path = reference/Alibaba_DeepResearch
 	url = https://github.com/Alibaba-NLP/DeepResearch.git
-[submodule "open_researcher/DeepResearchAgent"]
-	path = open_researcher/DeepResearchAgent
+[submodule "reference/DeepResearchAgent"]
+	path = reference/DeepResearchAgent
 	url = https://github.com/SkyworkAI/DeepResearchAgent.git
-[submodule "open_researcher/deepagent_tutorial"]
-	path = open_researcher/deepagent_tutorial
+[submodule "reference/deepagent_tutorial"]
+	path = reference/deepagent_tutorial
 	url = https://github.com/langchain-ai/deepagents-quickstarts.git
-[submodule "open_researcher/deepagent_ui_example"]
-	path = open_researcher/deepagent_ui_example
+[submodule "reference/deepagent_ui_example"]
+	path = reference/deepagent_ui_example
 	url = https://github.com/langchain-ai/deep-agents-ui.git
-[submodule "open_researcher/crewAI"]
-	path = open_researcher/crewAI
+[submodule "reference/crewAI"]
+	path = reference/crewAI
 	url = https://github.com/crewAIInc/crewAI.git
-[submodule "open_researcher/autogen"]
-	path = open_researcher/autogen
+[submodule "reference/autogen"]
+	path = reference/autogen
 	url = https://github.com/microsoft/autogen.git
-[submodule "open_researcher/cline"]
-	path = open_researcher/cline
+[submodule "reference/cline"]
+	path = reference/cline
 	url = https://github.com/cline/cline.git
-[submodule "open_researcher/dspydantic"]
-	path = open_researcher/dspydantic
+[submodule "reference/dspydantic"]
+	path = reference/dspydantic
 	url = https://github.com/davidberenstein1957/dspydantic.git
-[submodule "open_researcher/mdflow"]
-	path = open_researcher/mdflow
+[submodule "reference/mdflow"]
+	path = reference/mdflow
 	url = https://github.com/johnlindquist/mdflow.git
-[submodule "open_researcher/A2UI"]
-	path = open_researcher/A2UI
+[submodule "reference/A2UI"]
+	path = reference/A2UI
 	url = https://github.com/google/A2UI.git
-[submodule "open_researcher/candleview"]
-	path = open_researcher/candleview
+[submodule "reference/candleview"]
+	path = reference/candleview
 	url = https://github.com/0xhappyboy/candleview.git
-[submodule "open_researcher/DataFlow"]
-	path = open_researcher/DataFlow
+[submodule "reference/DataFlow"]
+	path = reference/DataFlow
 	url = https://github.com/OpenDCAI/DataFlow.git
-[submodule "open_researcher/deeotutor"]
-	path = open_researcher/deeotutor
+[submodule "reference/deeotutor"]
+	path = reference/deeotutor
 	url = https://github.com/HKUDS/DeepTutor.git
-[submodule "open_researcher/rlm"]
-	path = open_researcher/rlm
+[submodule "reference/rlm"]
+	path = reference/rlm
 	url = https://github.com/alexzhang13/rlm.git
-[submodule "open_researcher/zeroshot"]
-	path = open_researcher/zeroshot
+[submodule "reference/zeroshot"]
+	path = reference/zeroshot
 	url = https://github.com/covibes/zeroshot.git
-[submodule "open_researcher/OpenAgnets"]
-	path = open_researcher/OpenAgnets
+[submodule "reference/OpenAgnets"]
+	path = reference/OpenAgnets
 	url = https://github.com/darrenhinde/OpenAgents.git
-[submodule "open_researcher/opencode"]
-	path = open_researcher/opencode
+[submodule "reference/opencode"]
+	path = reference/opencode
 	url = https://github.com/anomalyco/opencode.git
-[submodule "open_researcher/ROMA"]
-	path = open_researcher/ROMA
+[submodule "reference/ROMA"]
+	path = reference/ROMA
 	url = https://github.com/sentient-agi/ROMA.git
-[submodule "open_researcher/suna"]
-	path = open_researcher/suna
+[submodule "reference/suna"]
+	path = reference/suna
 	url = https://github.com/kortix-ai/suna.git
-[submodule "open_researcher/OpenManus"]
-	path = open_researcher/OpenManus
+[submodule "reference/OpenManus"]
+	path = reference/OpenManus
 	url = https://github.com/FoundationAgents/OpenManus.git
-[submodule "open_researcher/open_deep_research"]
-	path = open_researcher/open_deep_research
+[submodule "reference/open_deep_research"]
+	path = reference/open_deep_research
 	url = https://github.com/langchain-ai/open_deep_research.git
-[submodule "open_researcher/openclaw"]
-	path = open_researcher/openclaw
+[submodule "reference/openclaw"]
+	path = reference/openclaw
 	url = https://github.com/openclaw/openclaw.git
-[submodule "open_researcher/oh-my-opencode"]
-	path = open_researcher/oh-my-opencode
+[submodule "reference/oh-my-opencode"]
+	path = reference/oh-my-opencode
 	url = https://github.com/code-yeongyu/oh-my-opencode.git
-[submodule "SparkleForge"]
-	path = SparkleForge
+[submodule "primary/SparkleForge"]
+	path = primary/SparkleForge
 	url = https://github.com/ppijbb/sparkleforge.git
-[submodule "dimescav_agent"]
-	path = dimescav_agent
+[submodule "primary/dimescav_agent"]
+	path = primary/dimescav_agent
 	url = https://github.com/ppijbb/dimescav_agent.git
