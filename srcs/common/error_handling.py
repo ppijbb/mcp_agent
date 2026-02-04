@@ -300,7 +300,7 @@ def safe_execute(
         return default_value
 
 
-def validate_input(data: Any, required_fields: list = None) -> Dict[str, Any]:
+def validate_input(data: Any, required_fields: Optional[list] = None) -> Dict[str, Any]:
     """
     Validate input data with common checks.
     

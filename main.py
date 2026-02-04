@@ -5,13 +5,19 @@
 """
 
 import importlib
+import sys
+from pathlib import Path
 
-# HACK: 새롭게 설치된 패키지(jsonref 등)를 활성 프로세스에서 인식하도록 캐시 초기화
-importlib.invalidate_caches()
+# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
 
 # Apply compatibility patches safely
-from srcs.common.compatibility import apply_all_compatibility_patches
-apply_all_compatibility_patches()
+try:
+    from srcs.common.compatibility import apply_all_compatibility_patches
+    apply_all_compatibility_patches()
+except ImportError:
+    pass  # Compatibility patches not available
 
 # Force config reload for fresh imports
 try:
@@ -28,17 +34,12 @@ try:
 except Exception:
     pass
 
+# Only invalidate caches if really needed (performance optimization)
+if len(sys.modules) > 100:  # Only if many modules are already loaded
+    importlib.invalidate_caches()
+
+# Import streamlit and styles
 import streamlit as st
-import sys
-from pathlib import Path
-
-# MCP compatibility patches are now handled in srcs.common.compatibility
-
-# 프로젝트 루트를 Python 경로에 추가
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
-# 공통 스타일 모듈 임포트
 from srcs.common.styles import get_common_styles
 
 # 페이지 설정
