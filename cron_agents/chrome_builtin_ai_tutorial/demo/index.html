@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chrome Built-in AI (Gemini Nano) 데모</title>
+  <style>
+    :root { --bg: #0f0f12; --card: #1a1a20; --text: #e4e4e7; --muted: #71717a; --accent: #a78bfa; --border: #27272a; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.5rem; line-height: 1.6; }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    h2 { font-size: 1.1rem; color: var(--accent); margin: 1.5rem 0 0.5rem; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    button { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    textarea, input[type="text"] { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.5rem; border-radius: 6px; font-family: inherit; margin: 0.25rem 0; }
+    textarea { min-height: 80px; resize: vertical; }
+    .output { margin-top: 0.5rem; padding: 0.5rem; background: var(--bg); border-radius: 6px; white-space: pre-wrap; word-break: break-word; min-height: 1.5em; }
+    .err { color: #f87171; }
+    .ok { color: #4ade80; }
+  </style>
+</head>
+<body>
+  <h1>Chrome Built-in AI (Gemini Nano) 데모</h1>
+  <p class="muted">localhost에서 사용하려면 chrome://flags 에서 optimization-guide-on-device-model, prompt-api-for-gemini-nano 를 활성화한 뒤 Chrome을 재시작하세요. 각 작업 전에 페이지를 한 번 클릭해 사용자 활성화를 주세요.</p>
+
+  <div class="card">
+    <h2>1. Prompt API (자유 질문)</h2>
+    <p class="muted">Gemini Nano에 짧은 질문을 보냅니다.</p>
+    <input type="text" id="promptInput" placeholder="예: 오늘 점심 메뉴 한 가지 추천해줘" />
+    <button id="promptBtn">실행</button>
+    <div id="promptOut" class="output"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Summarizer API (요약)</h2>
+    <p class="muted">긴 텍스트를 짧게 요약합니다.</p>
+    <textarea id="summarizeInput" placeholder="요약할 긴 글을 붙여넣으세요."></textarea>
+    <button id="summarizeBtn">요약</button>
+    <div id="summarizeOut" class="output"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. Language Detector + Translator</h2>
+    <p class="muted">언어 감지 후 번역합니다.</p>
+    <textarea id="translateInput" placeholder="번역할 문장 (출발어 자동 감지)"></textarea>
+    <input type="text" id="translateTarget" placeholder="도착어 코드 (예: en, ko, ja)" value="en" />
+    <button id="detectBtn">언어 감지</button>
+    <button id="translateBtn">번역</button>
+    <div id="translateOut" class="output"></div>
+  </div>
+
+  <script>
+    (function () {
+      const hasPrompt = typeof globalThis.LanguageModel !== 'undefined';
+      const hasSummarizer = typeof globalThis.Summarizer !== 'undefined';
+      const hasTranslator = typeof globalThis.Translator !== 'undefined';
+      const hasLangDetector = typeof globalThis.LanguageDetector !== 'undefined';
+
+      function out(id, text, isErr) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'output' + (isErr ? ' err' : ' ok');
+      }
+
+      function setBusy(btn, busy) {
+        if (btn) btn.disabled = busy;
+      }
+
+      // --- Prompt API ---
+      const promptBtn = document.getElementById('promptBtn');
+      const promptInput = document.getElementById('promptInput');
+      if (!hasPrompt) {
+        promptBtn.disabled = true;
+        out('promptOut', '이 브라우저에서는 Prompt API(LanguageModel)를 사용할 수 없습니다. Chrome 138+ 및 localhost 플래그 또는 확장 프로그램을 확인하세요.', true);
+      } else {
+        promptBtn.addEventListener('click', async () => {
+          const text = (promptInput && promptInput.value) ? promptInput.value.trim() : '';
+          if (!text) { out('promptOut', '질문을 입력하세요.', true); return; }
+          setBusy(promptBtn, true);
+          out('promptOut', '처리 중...');
+          try {
+            const availability = await globalThis.LanguageModel.availability();
+            if (availability === 'unavailable') {
+              out('promptOut', 'Gemini Nano를 사용할 수 없습니다. (기기/플래그/다운로드 확인)', true);
+              return;
+            }
+            if (availability === 'downloadable' || availability === 'downloading') {
+              out('promptOut', '모델 다운로드 중이거나 필요합니다. 잠시 후 다시 시도하거나 chrome://on-device-internals 에서 상태를 확인하세요.', true);
+              return;
+            }
+            const session = await globalThis.LanguageModel.create();
+            const result = await session.prompt(text);
+            session.destroy && session.destroy();
+            out('promptOut', result);
+          } catch (e) {
+            out('promptOut', '오류: ' + (e && e.message ? e.message : String(e)), true);
+          } finally {
+            setBusy(promptBtn, false);
+          }
+        });
+      }
+
+      // --- Summarizer API ---
+      const summarizeBtn = document.getElementById('summarizeBtn');
+      const summarizeInput = document.getElementById('summarizeInput');
+      if (!hasSummarizer) {
+        summarizeBtn.disabled = true;
+        out('summarizeOut', '이 브라우저에서는 Summarizer API를 사용할 수 없습니다.', true);
+      } else {
+        summarizeBtn.addEventListener('click', async () => {
+          const text = (summarizeInput && summarizeInput.value) ? summarizeInput.value.trim() : '';
+          if (!text) { out('summarizeOut', '요약할 텍스트를 입력하세요.', true); return; }
+          setBusy(summarizeBtn, true);
+          out('summarizeOut', '요약 중...');
+          try {
+            const availability = await globalThis.Summarizer.availability();
+            if (availability === 'unavailable') {
+              out('summarizeOut', 'Summarizer를 사용할 수 없습니다.', true);
+              return;
+            }
+            const summarizer = await globalThis.Summarizer.create();
+            const result = await summarizer.summarize(text);
+            summarizer.destroy && summarizer.destroy();
+            out('summarizeOut', result);
+          } catch (e) {
+            out('summarizeOut', '오류: ' + (e && e.message ? e.message : String(e)), true);
+          } finally {
+            setBusy(summarizeBtn, false);
+          }
+        });
+      }
+
+      // --- Language Detector + Translator ---
+      const detectBtn = document.getElementById('detectBtn');
+      const translateBtn = document.getElementById('translateBtn');
+      const translateInput = document.getElementById('translateInput');
+      const translateTarget = document.getElementById('translateTarget');
+      if (!hasLangDetector) {
+        detectBtn.disabled = true;
+        out('translateOut', 'Language Detector API를 사용할 수 없습니다.', true);
+      } else {
+        detectBtn.addEventListener('click', async () => {
+          const text = (translateInput && translateInput.value) ? translateInput.value.trim() : '';
+          if (!text) { out('translateOut', '텍스트를 입력하세요.', true); return; }
+          setBusy(detectBtn, true);
+          out('translateOut', '감지 중...');
+          try {
+            const detector = await globalThis.LanguageDetector.create();
+            const result = await detector.detect(text);
+            detector.destroy && detector.destroy();
+            out('translateOut', '감지된 언어: ' + (result || '(알 수 없음)'));
+          } catch (e) {
+            out('translateOut', '오류: ' + (e && e.message ? e.message : String(e)), true);
+          } finally {
+            setBusy(detectBtn, false);
+          }
+        });
+      }
+      if (!hasTranslator) {
+        translateBtn.disabled = true;
+        if (document.getElementById('translateOut').textContent === '') out('translateOut', 'Translator API를 사용할 수 없습니다.', true);
+      } else {
+        translateBtn.addEventListener('click', async () => {
+          const text = (translateInput && translateInput.value) ? translateInput.value.trim() : '';
+          const target = (translateTarget && translateTarget.value) ? translateTarget.value.trim() : 'en';
+          if (!text) { out('translateOut', '번역할 텍스트를 입력하세요.', true); return; }
+          setBusy(translateBtn, true);
+          out('translateOut', '번역 중...');
+          try {
+            const translator = await globalThis.Translator.create({ targetLanguage: target });
+            const result = await translator.translate(text);
+            translator.destroy && translator.destroy();
+            out('translateOut', result);
+          } catch (e) {
+            out('translateOut', '오류: ' + (e && e.message ? e.message : String(e)), true);
+          } finally {
+            setBusy(translateBtn, false);
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

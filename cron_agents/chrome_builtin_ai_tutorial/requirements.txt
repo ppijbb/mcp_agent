@@ -1,0 +1,3 @@
+# 로컬 데모는 HTML만 있으면 되며, 별도 패키지 불필요.
+# Playwright로 데모를 자동으로 열 때만 필요 (scripts/run_demo_via_browser.py)
+playwright>=1.40.0
