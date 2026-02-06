@@ -89,24 +89,47 @@ def ensure_output_directory(output_dir: str) -> str:
     """
     Create output directory if it doesn't exist.
 
-    Ensures the specified directory exists for file output operations.
+    Ensures that specified directory exists for file output operations.
     If the directory already exists, no action is taken.
+    
+    Enhanced with robust error handling for permissions and other filesystem issues.
 
     Args:
         output_dir: Path to the directory to create
 
     Returns:
         The same directory path that was provided
-
+        
     Raises:
-        OSError: If directory creation fails due to permissions
-
+        PermissionError: If directory creation fails due to insufficient permissions
+        OSError: If directory creation fails for other reasons (disk full, invalid path)
+        
     Example:
         output_path = ensure_output_directory("./reports")
-        # Directory is guaranteed to exist
+        # Directory is guaranteed to exist or an exception is raised
     """
-    os.makedirs(output_dir, exist_ok=True)
-    return output_dir
+    try:
+        # Normalize path to prevent traversal issues
+        normalized_path = os.path.normpath(output_dir)
+        
+        # Check for suspicious path patterns
+        if '..' in normalized_path.split(os.path.sep):
+            raise ValueError(f"Potentially unsafe path detected: {output_dir}")
+        
+        os.makedirs(normalized_path, exist_ok=True)
+        
+        # Verify directory is actually writable
+        if not os.access(normalized_path, os.W_OK):
+            raise PermissionError(f"Directory is not writable: {normalized_path}")
+            
+        return normalized_path
+        
+    except PermissionError as e:
+        raise PermissionError(f"Permission denied creating directory '{output_dir}': {e}")
+    except OSError as e:
+        raise OSError(f"Failed to create directory '{output_dir}': {e}")
+    except Exception as e:
+        raise OSError(f"Unexpected error creating directory '{output_dir}': {e}")
 
 
 def configure_filesystem_server(context, logger):
@@ -223,35 +246,51 @@ def save_deliverables(orchestrator_result, output_dir, deliverable_files):
 
 
 def save_report(report_data, file_path: str | None = None, output_dir: str | None = None) -> str:
-    """Persist *report_data* to disk and return the absolute file path.
+    """
+    Persist *report_data* to disk and return the absolute file path.
 
     • If *file_path* is provided it is treated as relative to *output_dir* (when
-      given) or the current working directory.
+      given) or current working directory.
     • If omitted, an auto‐generated name of the form ``report_YYYYmmdd_HHMMSS.json``
       is created in *output_dir* (defaults to ``reports/``).
 
     The function handles both ``dict``/``list`` (saved as JSON) and plain strings
     (saved verbatim).
+    
+    Enhanced with security checks to prevent path traversal attacks.
     """
     if output_dir is None:
         output_dir = os.getenv("MCP_REPORTS_DIR", "reports")
-    os.makedirs(output_dir, exist_ok=True)
+    
+    # Use secure directory creation with error handling
+    output_dir = ensure_output_directory(output_dir)
 
     if file_path is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_path = f"report_{timestamp}.json"
 
+    # Security: Normalize and validate path
     if not os.path.isabs(file_path):
         file_path = os.path.join(output_dir, file_path)
+    
+    # Prevent directory traversal
+    file_path = os.path.normpath(file_path)
+    if not file_path.startswith(os.path.normpath(output_dir)):
+        raise ValueError(f"Path traversal attempt detected: {file_path}")
 
     # Choose encoding/format based on data type
-    if isinstance(report_data, (dict, list)):
-        with open(file_path, "w", encoding="utf-8") as fp:
-            json.dump(report_data, fp, indent=2, cls=EnhancedJSONEncoder, ensure_ascii=False)
-    else:
-        # Fallback: store as plain UTF-8 text
-        with open(file_path, "w", encoding="utf-8") as fp:
-            fp.write(str(report_data))
+    try:
+        if isinstance(report_data, (dict, list)):
+            with open(file_path, "w", encoding="utf-8") as fp:
+                json.dump(report_data, fp, indent=2, cls=EnhancedJSONEncoder, ensure_ascii=False)
+        else:
+            # Fallback: store as plain UTF-8 text
+            with open(file_path, "w", encoding="utf-8") as fp:
+                fp.write(str(report_data))
+    except PermissionError as e:
+        raise PermissionError(f"Permission denied writing to '{file_path}': {e}")
+    except OSError as e:
+        raise OSError(f"Failed to write report to '{file_path}': {e}")
 
     return os.path.abspath(file_path)
 

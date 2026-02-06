@@ -14,23 +14,76 @@ import threading
 class PerformanceMonitor:
     """
     Simple performance monitoring utility for tracking function execution times.
+    
+    A lightweight, thread-safe performance monitoring system that tracks execution
+    metrics for functions without external dependencies. Uses deques for efficient
+    memory management and provides statistical analysis of timing data.
+    
+    Attributes:
+        max_history: Maximum number of timing records to keep per function
+        _timings: Thread-safe storage of execution timing data
+        _counts: Thread-safe execution count tracking
+        _lock: Threading lock for thread-safe operations
+        
+    Example:
+        monitor = PerformanceMonitor(max_history=500)
+        
+        @monitor_performance(monitor=monitor)
+        def my_function():
+            pass
+            
+        # Get statistics
+        stats = monitor.get_stats("my_function")
+        print(f"Average: {stats['avg']:.3f}s, Count: {stats['count']}")
     """
     
     def __init__(self, max_history: int = 1000):
-        """Initialize the performance monitor."""
+        """
+        Initialize performance monitor with configurable history size.
+        
+        Args:
+            max_history: Maximum number of timing records to retain per function.
+                        Uses deque with maxlen for automatic memory management.
+        """
         self.max_history = max_history
         self._timings: Dict[str, deque] = defaultdict(lambda: deque(maxlen=max_history))
         self._counts: Dict[str, int] = defaultdict(int)
         self._lock = threading.Lock()
     
     def record_timing(self, func_name: str, duration: float) -> None:
-        """Record a function execution timing."""
+        """
+        Record a function execution timing in a thread-safe manner.
+        
+        Args:
+            func_name: Name of the function being tracked
+            duration: Execution time in seconds
+            
+        Note:
+            Thread-safe - can be called from multiple threads concurrently.
+            Old records are automatically discarded when max_history is exceeded.
+        """
         with self._lock:
             self._timings[func_name].append(duration)
             self._counts[func_name] += 1
     
     def get_stats(self, func_name: str) -> Optional[Dict[str, Any]]:
-        """Get performance statistics for a specific function."""
+        """
+        Get performance statistics for a specific function.
+        
+        Args:
+            func_name: Name of the function to retrieve stats for
+            
+        Returns:
+            Dictionary containing statistics or None if no data exists:
+            - count: Total number of executions
+            - avg: Average execution time
+            - min: Minimum execution time
+            - max: Maximum execution time  
+            - total: Total execution time
+            
+        Note:
+            Returns None if the function has not been tracked.
+        """
         with self._lock:
             if func_name not in self._timings or not self._timings[func_name]:
                 return None
@@ -44,12 +97,29 @@ class PerformanceMonitor:
                 "total": sum(timings)
             }
     
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
-        """Get performance statistics for all tracked functions."""
+def get_all_stats(self) -> Dict[str, Optional[Dict[str, Any]]]:
+        """
+        Get performance statistics for all tracked functions.
+        
+        Returns:
+            Dictionary mapping function names to their statistics dictionaries.
+            Functions with no recorded timings will return None values.
+            
+        Note:
+            This method creates a snapshot of current statistics.
+        """
         return {name: self.get_stats(name) for name in self._timings.keys()}
     
     def clear_stats(self, func_name: Optional[str] = None) -> None:
-        """Clear statistics for a function or all functions."""
+        """
+        Clear statistics for a specific function or all functions.
+        
+        Args:
+            func_name: Function name to clear, or None to clear all functions
+            
+        Note:
+            Thread-safe operation. Use with caution as it permanently deletes data.
+        """
         with self._lock:
             if func_name:
                 self._timings[func_name].clear()

@@ -33,7 +33,24 @@ T = TypeVar('T')
 
 
 class ErrorSeverity(Enum):
-    """Error severity levels for categorization."""
+    """
+    Error severity levels for categorization and prioritization.
+    
+    Defines the severity levels used throughout the application to classify
+    errors and determine appropriate response strategies. Each severity level
+    has different implications for logging, user notification, and recovery actions.
+    
+    Values:
+        LOW: Minor issues that don't affect core functionality
+        MEDIUM: Significant issues that may impact user experience
+        HIGH: Serious issues that require immediate attention
+        CRITICAL: Critical failures that may cause data loss or system instability
+        
+    Example:
+        @handle_errors(severity=ErrorSeverity.HIGH)
+        def critical_function():
+            pass
+    """
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -41,7 +58,26 @@ class ErrorSeverity(Enum):
 
 
 class ErrorCategory(Enum):
-    """Error categories for better organization."""
+    """
+    Error categories for better organization and targeted handling.
+    
+    Groups related error types together to enable category-specific
+    error handling strategies, monitoring, and alerting. Each category
+    represents a different domain of errors with distinct characteristics.
+    
+    Categories:
+        NETWORK: Network connectivity, timeouts, DNS resolution issues
+        API: External API failures, rate limits, authentication issues
+        VALIDATION: Input validation failures, malformed data
+        PROCESSING: Data processing errors, transformation failures
+        SYSTEM: Operating system, filesystem, resource exhaustion
+        USER_INPUT: Invalid user input, formatting errors
+        
+    Example:
+        raise APIError("Rate limit exceeded", 
+                      category=ErrorCategory.API,
+                      severity=ErrorSeverity.HIGH)
+    """
     NETWORK = "network"
     API = "api"
     VALIDATION = "validation"

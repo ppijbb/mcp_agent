@@ -85,6 +85,12 @@ class BaseAgent(ABC):
     """
     모든 MCP 에이전트의 최상위 기반 클래스.
     공통적인 설정, 로깅, MCPApp 초기화를 처리합니다.
+    
+    Features:
+    - Automatic session management with proper cleanup
+    - Circuit breaker pattern for resilience
+    - MCP app lifecycle management
+    - Configurable retry logic with exponential backoff
     """
     def __init__(self, name: str, instruction: str = "", server_names: List[str] | None = None):
         """
@@ -104,9 +110,9 @@ class BaseAgent(ABC):
         self.logger = self.app.logger  # MCPApp이 생성한 로거를 사용
         self._session = None
 
-        # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
-        failure_threshold = 5
-        recovery_timeout = 30
+        # Configuration with defaults
+        failure_threshold = getattr(self.settings, 'circuit_breaker_failure_threshold', 5)
+        recovery_timeout = getattr(self.settings, 'circuit_breaker_recovery_timeout', 30)
         self.circuit_breaker = CircuitBreaker(
             fail_max=failure_threshold,
             reset_timeout=recovery_timeout,
@@ -117,7 +123,8 @@ class BaseAgent(ABC):
         if self._session is None or self._session.closed:
             # Configure session with reasonable defaults
             timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            connector = aiohttp.TCPConnector(limit=100, limit_per_host=30, force_close=False)
+            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
         return self._session
 
     async def close_session(self):
@@ -125,6 +132,15 @@ class BaseAgent(ABC):
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit with cleanup."""
+        await self.close_session()
+        return False
 
     @property
     def session(self) -> aiohttp.ClientSession:
@@ -137,7 +153,8 @@ class BaseAgent(ABC):
         )
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            connector = aiohttp.TCPConnector(limit=100, limit_per_host=30, force_close=False)
+            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
         return self._session
 
     def _setup_app(self) -> MCPApp:
@@ -208,9 +225,9 @@ class BaseAgent(ABC):
         """
         self.logger.info(f"'{self.name}' 에이전트 워크플로우를 시작합니다.")
         try:
-            # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
-            max_retries = 3
-            retry_delay = 5
+            # Configuration with defaults
+            max_retries = getattr(self.settings, 'max_retries', 3)
+            retry_delay = getattr(self.settings, 'retry_delay', 5)
 
             for attempt in range(max_retries):
                 try:
