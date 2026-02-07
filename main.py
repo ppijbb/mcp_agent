@@ -18,40 +18,66 @@ try:
     apply_all_compatibility_patches()
 except ImportError:
     pass  # Compatibility patches not available
+except Exception as e:
+    # Log error but don't break startup
+    print(f"Warning: Compatibility patches failed: {e}")
 
-# Force config reload for fresh imports
-try:
-    import mcp_agent.config
-    if hasattr(mcp_agent.config, '_settings'):
-        mcp_agent.config._settings = None
-except Exception:
-    pass
+# Force config reload for fresh imports - optimized with better error handling
+config_modules = [
+    ('mcp_agent.config', '_settings'),
+    ('srcs.core.config.loader', '_config')
+]
 
-try:
-    import srcs.core.config.loader
-    if hasattr(srcs.core.config.loader, '_config'):
-        srcs.core.config.loader._config = None
-except Exception:
-    pass
+for module_name, attr_name in config_modules:
+    try:
+        module = __import__(module_name, fromlist=[attr_name])
+        if hasattr(module, attr_name):
+            setattr(module, attr_name, None)
+    except ImportError:
+        continue  # Module not available, skip
+    except Exception as e:
+        print(f"Warning: Config reload failed for {module_name}: {e}")
 
 # Only invalidate caches if really needed (performance optimization)
 if len(sys.modules) > 100:  # Only if many modules are already loaded
     importlib.invalidate_caches()
 
-# Import streamlit and styles
-import streamlit as st
-from srcs.common.styles import get_common_styles
+# Import streamlit and styles with fallback
+try:
+    import streamlit as st
+    from srcs.common.styles import get_common_styles
+    STREAMLIT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Streamlit not available: {e}")
+    STREAMLIT_AVAILABLE = False
+    # Create dummy objects for graceful degradation
+    class DummyContextManager:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    
+    class DummyStreamlit:
+        def set_page_config(self, **kwargs): pass
+        def markdown(self, content, unsafe_allow_html=False): pass
+        def switch_page(self, page): pass
+        def container(self, border=False): return DummyContextManager()
+        def columns(self, n): return [DummyContextManager()] * n
+        def button(self, label, key=None, use_container_width=False): return False
+        def expander(self, label, expanded=False): return DummyContextManager()
+    
+    st = DummyStreamlit()
+    def get_common_styles() -> str: return ""
 
 # 페이지 설정
-st.set_page_config(
-    page_title="🤖 MCP Agent Hub",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+if STREAMLIT_AVAILABLE:
+    st.set_page_config(
+        page_title="🤖 MCP Agent Hub",
+        page_icon="🤖",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
-# 공통 스타일 적용
-st.markdown(get_common_styles(), unsafe_allow_html=True)
+    # 공통 스타일 적용
+    st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 def main():
     """메인 페이지"""

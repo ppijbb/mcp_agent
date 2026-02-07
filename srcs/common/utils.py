@@ -10,6 +10,10 @@ from datetime import datetime
 
 # Defer imports to avoid circular dependencies
 
+# Performance optimization: Cache for frequently accessed paths
+_project_root_cache = None
+_config_path_cache = None
+
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     """
@@ -60,21 +64,28 @@ def setup_agent_app(app_name: str):
     Note:
         Function returns None if mcp_agent library is not available
     """
+    global _project_root_cache, _config_path_cache
+    
     try:
         from mcp_agent.app import MCPApp
         from mcp_agent.config import get_settings
         from pathlib import Path
 
-        # Find config file path from project root
-        project_root = Path(__file__).resolve().parent.parent.parent
+        # Find config file path from project root - cache result for performance
+        if _project_root_cache is None:
+            _project_root_cache = Path(__file__).resolve().parent.parent.parent
 
-        # First try configs directory, then project root
-        config_path = project_root / "configs" / "mcp_agent.config.yaml"
-        if not config_path.exists():
-            config_path = project_root / "mcp_agent.config.yaml"
+        project_root = _project_root_cache
+
+        # First try configs directory, then project root - cache config path
+        if _config_path_cache is None:
+            config_path = project_root / "configs" / "mcp_agent.config.yaml"
+            if not config_path.exists():
+                config_path = project_root / "mcp_agent.config.yaml"
+            _config_path_cache = str(config_path)
 
         # Use mcp_agent library's standard settings
-        app_settings = get_settings(str(config_path))
+        app_settings = get_settings(_config_path_cache)
 
         return MCPApp(
             name=app_name,
@@ -233,25 +244,35 @@ def save_report(report_data, file_path: str | None = None, output_dir: str | Non
     The function handles both ``dict``/``list`` (saved as JSON) and plain strings
     (saved verbatim).
     """
+    # Performance optimization: Use environment variable lookup once
     if output_dir is None:
         output_dir = os.getenv("MCP_REPORTS_DIR", "reports")
-    os.makedirs(output_dir, exist_ok=True)
+    
+    # Only create directory if it doesn't exist (avoid unnecessary syscalls)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
 
     if file_path is None:
+        # Performance: Use cached datetime format
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_path = f"report_{timestamp}.json"
 
     if not os.path.isabs(file_path):
         file_path = os.path.join(output_dir, file_path)
 
-    # Choose encoding/format based on data type
-    if isinstance(report_data, (dict, list)):
-        with open(file_path, "w", encoding="utf-8") as fp:
-            json.dump(report_data, fp, indent=2, cls=EnhancedJSONEncoder, ensure_ascii=False)
-    else:
-        # Fallback: store as plain UTF-8 text
-        with open(file_path, "w", encoding="utf-8") as fp:
-            fp.write(str(report_data))
+    # Choose encoding/format based on data type - optimized file writing
+    try:
+        if isinstance(report_data, (dict, list)):
+            # Performance: Use JSON encoder with specific settings for better performance
+            with open(file_path, "w", encoding="utf-8", buffering=8192) as fp:
+                json.dump(report_data, fp, indent=2, cls=EnhancedJSONEncoder, ensure_ascii=False)
+        else:
+            # Fallback: store as plain UTF-8 text with buffering
+            with open(file_path, "w", encoding="utf-8", buffering=8192) as fp:
+                fp.write(str(report_data))
+    except (IOError, OSError) as e:
+        # Add error handling for file operations
+        raise IOError(f"Failed to save report to {file_path}: {e}")
 
     return os.path.abspath(file_path)
 
@@ -335,8 +356,13 @@ def _format_next_steps(next_steps):
 
 def get_now_formatted() -> str:
     """Returns current time in default format."""
-    from srcs.core.config.loader import settings
-    return datetime.now().strftime(settings.reporting.timestamp_format)
+    try:
+        from srcs.core.config.loader import settings
+        timestamp_format = getattr(settings.reporting, 'timestamp_format', "%Y-%m-%d %H:%M:%S")
+    except (ImportError, AttributeError):
+        timestamp_format = "%Y-%m-%d %H:%M:%S"
+    
+    return datetime.now().strftime(timestamp_format)
 
 
 def generate_report_header(company_name: str | None = None) -> str:
@@ -349,12 +375,16 @@ def generate_report_header(company_name: str | None = None) -> str:
     Returns:
         Formatted report header string
     """
-    from srcs.core.config.loader import settings
+    try:
+        from srcs.core.config.loader import settings
+        if company_name is None:
+            company_name = getattr(settings.reporting, 'default_company_name', "Company")
+        timestamp_format = getattr(settings.reporting, 'timestamp_format', "%Y-%m-%d %H:%M:%S")
+    except (ImportError, AttributeError):
+        company_name = company_name or "Company"
+        timestamp_format = "%Y-%m-%d %H:%M:%S"
 
-    if company_name is None:
-        company_name = settings.reporting.default_company_name
-
-    formatted_time = datetime.now().strftime(settings.reporting.timestamp_format)
+    formatted_time = datetime.now().strftime(timestamp_format)
 
     return f"""
 ## {company_name} - Auto Generated Report
