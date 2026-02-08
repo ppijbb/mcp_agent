@@ -20,7 +20,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MarketDataMCP:
+    """Market Data Collection MCP Server for cryptocurrency and trading data.
+    
+    Provides secure access to market data from multiple sources including
+    CoinGecko, Binance, and Coinbase APIs.
+    """
+    
     def __init__(self):
+        """Initialize MarketDataMCP with API keys from environment variables."""
         self.api_keys = {
             'coinbase': os.getenv('COINBASE_API_KEY'),
             'binance': os.getenv('BINANCE_API_KEY'),
@@ -29,10 +36,12 @@ class MarketDataMCP:
         self.session = None
     
     async def __aenter__(self):
+        """Async context manager entry - initialize HTTP session."""
         self.session = aiohttp.ClientSession()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup HTTP session."""
         if self.session:
             await self.session.close()
     
@@ -70,7 +79,15 @@ class MarketDataMCP:
             return {"status": "error", "message": str(e)}
     
     async def get_market_trends(self, timeframe: str = "24h") -> Dict[str, Any]:
-        """Get market trends and indicators"""
+        """Get market trends and indicators for specified timeframe.
+        
+        Args:
+            timeframe: Time period for analysis (default: "24h")
+            
+        Returns:
+            Dict containing market trends, price changes, volume changes,
+            and trend direction indicators.
+        """
         try:
             # Get price change data
             async with self.session.get(f'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1') as response:
@@ -107,7 +124,12 @@ class MarketDataMCP:
             return {"status": "error", "message": str(e)}
     
     async def get_technical_indicators(self) -> Dict[str, Any]:
-        """Get technical analysis indicators"""
+        """Get technical analysis indicators including SMA, RSI, and trading signals.
+        
+        Returns:
+            Dict containing technical indicators like moving averages, RSI,
+            and generated trading signals based on the analysis.
+        """
         try:
             # Get historical data for technical analysis
             async with self.session.get('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=30') as response:
@@ -154,7 +176,17 @@ class MarketDataMCP:
             return {"status": "error", "message": str(e)}
     
     def _generate_signal(self, current_price: float, sma_7: float, sma_30: float, rsi: float) -> str:
-        """Generate trading signal based on technical indicators"""
+        """Generate trading signal based on technical indicators.
+        
+        Args:
+            current_price: Current cryptocurrency price
+            sma_7: 7-day simple moving average
+            sma_30: 30-day simple moving average  
+            rsi: Relative Strength Index
+            
+        Returns:
+            Trading signal: 'strong_buy', 'buy', 'sell', or 'hold'
+        """
         signals = []
         
         # Price vs SMA signals

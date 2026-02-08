@@ -58,8 +58,25 @@ class SafeCodeValidator(ast.NodeVisitor):
         ast.BitXor, ast.Invert, ast.UAdd, ast.USub, ast.List,
         ast.Tuple, ast.Dict, ast.Set, ast.comprehension, ast.GeneratorExp,
         ast.ListComp, ast.SetComp, ast.DictComp, ast.IfExp,
-        ast.Subscript, ast.Index, ast.Slice, ast.For, ast.While,
+        ast.Subscript, ast.Slice, ast.For, ast.While,
         ast.If, ast.Break, ast.Continue, ast.Pass, ast.Return,
+    }
+    
+    # Dangerous builtins and attributes that are explicitly forbidden
+    FORBIDDEN_NAMES = {
+        'open', 'exec', 'eval', 'compile', '__import__', 'globals',
+        'locals', 'vars', 'dir', 'hasattr', 'getattr', 'setattr',
+        'delattr', 'callable', 'isinstance', 'issubclass', 'iter',
+        'next', 'help', 'input', 'raw_input', 'reload', 'super',
+        'property', 'classmethod', 'staticmethod', 'type', 'isinstance'
+    }
+    
+    # Dangerous attribute access patterns
+    FORBIDDEN_ATTRIBUTES = {
+        '__class__', '__bases__', '__subclasses__', '__mro__',
+        '__globals__', '__code__', '__func__', '__closure__',
+        '__dict__', '__module__', '__name__', '__file__', '__doc__',
+        '__builtins__', '__import__', '__package__', '__annotations__'
     }
     
     def __init__(self):
@@ -70,12 +87,53 @@ class SafeCodeValidator(ast.NodeVisitor):
             self.errors.append(f"Unsafe node type: {type(node).__name__}")
         super().generic_visit(node)
     
+    def visit_Name(self, node):
+        """Check for forbidden names and variables."""
+        if isinstance(node.ctx, ast.Load) and node.id in self.FORBIDDEN_NAMES:
+            self.errors.append(f"Forbidden name '{node.id}' is not allowed")
+        super().generic_visit(node)
+    
     def visit_Call(self, node):
+        """Validate function calls for safety."""
         if isinstance(node.func, ast.Name):
-            if node.func.id not in SAFE_BUILTINS:
-                self.errors.append(f"Function '{node.func.id}' is not allowed")
+            func_name = node.func.id
+            if func_name not in SAFE_BUILTINS:
+                self.errors.append(f"Function '{func_name}' is not allowed")
+            if func_name in self.FORBIDDEN_NAMES:
+                self.errors.append(f"Forbidden function '{func_name}' is not allowed")
         elif isinstance(node.func, ast.Attribute):
-            self.errors.append(f"Attribute access '{ast.unparse(node.func)}' is not allowed")
+            # Check for dangerous attribute access
+            attr_chain = []
+            current = node.func
+            while isinstance(current, ast.Attribute):
+                attr_chain.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                attr_chain.append(current.id)
+            
+            attr_chain_str = '.'.join(reversed(attr_chain))
+            if any(attr in self.FORBIDDEN_ATTRIBUTES for attr in attr_chain):
+                self.errors.append(f"Dangerous attribute access '{attr_chain_str}' is not allowed")
+            else:
+                self.errors.append(f"Attribute access '{attr_chain_str}' is not allowed")
+        
+        # Check argument count for safety (prevent DoS)
+        if len(node.args) > 100:
+            self.errors.append("Too many arguments - potential DoS attack")
+            
+        super().generic_visit(node)
+    
+    def visit_Attribute(self, node):
+        """Check for dangerous attribute access."""
+        if node.attr in self.FORBIDDEN_ATTRIBUTES:
+            self.errors.append(f"Dangerous attribute '{node.attr}' access is not allowed")
+        super().generic_visit(node)
+    
+    def visit_Subscript(self, node):
+        """Prevent dangerous subscript operations that could lead to memory issues."""
+        if isinstance(node.slice, ast.Slice):
+            if node.slice.step and isinstance(node.slice.step, ast.Constant) and node.slice.step.value == 0:
+                self.errors.append("Zero step slice is not allowed")
         super().generic_visit(node)
 
 @server.tool()
@@ -101,6 +159,17 @@ async def execute_python(code: str) -> str:
             return "Error: Empty code provided"
         
         code = code.strip()
+        
+        # Additional security checks
+        if len(code) > 10000:  # Reasonable code length limit
+            return "Error: Code too long - potential DoS attack"
+        
+        # Check for suspicious patterns
+        suspicious_patterns = ['__', 'import', 'exec', 'eval', 'compile', 'open', 'file']
+        code_lower = code.lower()
+        for pattern in suspicious_patterns:
+            if pattern in code_lower:
+                return f"Security error: Suspicious pattern '{pattern}' detected"
         
         # Parse and validate the AST
         try:

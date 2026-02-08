@@ -25,19 +25,44 @@ except Exception as exc:  # pragma: no cover
     # If core settings cannot be imported we still provide best-effort paths so
     # that the UI can run in degraded mode (e.g. during development).
     _settings = None  # type: ignore[misc]
+    import logging
+    logging.getLogger(__name__).warning(f"Could not import core settings: {exc}. Running in degraded mode.")
 
 
 def get_reports_path(agent_name: str) -> str:
     """Return (and auto-create) the reports directory for *agent_name*.
 
+    Args:
+        agent_name: Name of the agent requiring a reports directory
+        
+    Returns:
+        String path to the created/verified reports directory
+        
+    Raises:
+        ValueError: If agent_name is empty or None
+        OSError: If directory creation fails due to permissions
+        
+    Environment priority:
     1. ``$MCP_REPORTS_DIR`` takes precedence when defined – allowing users to
        customise output locations without code changes.
     2. Falls back to the project-local ``reports/`` folder.
+    
+    Examples:
+        >>> get_reports_path("business_strategy")
+        '/path/to/reports/business_strategy'
     """
-    base_dir: Path = Path(os.getenv("MCP_REPORTS_DIR", str(_DEFAULT_REPORTS_DIR)))
-    path: Path = base_dir / agent_name
-    path.mkdir(parents=True, exist_ok=True)
-    return str(path)
+    if not agent_name or not agent_name.strip():
+        raise ValueError("Agent name cannot be empty or None")
+    
+    agent_name = agent_name.strip()
+    
+    try:
+        base_dir: Path = Path(os.getenv("MCP_REPORTS_DIR", str(_DEFAULT_REPORTS_DIR)))
+        path: Path = base_dir / agent_name
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+    except OSError as e:
+        raise OSError(f"Failed to create reports directory for agent '{agent_name}': {e}")
 
 
 # ---------------------------------------------------------------------------

@@ -46,7 +46,7 @@ httpx>=0.28.2
 
 # Security and validation
 urllib3>=2.2.3
-certifi>=2024.12.14
+certifi>=2026.1.4
 
 # Configuration and Utilities
 python-dotenv>=1.1.0
@@ -125,7 +125,7 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=42.0.9
+cryptography>=46.0.4
 passlib>=1.7.4
 PyJWT>=2.9.0
 pycryptodome>=3.21.0
