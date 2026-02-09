@@ -39,7 +39,9 @@ class EthereumTradingMCP:
             private_key = os.getenv('ETHEREUM_PRIVATE_KEY')
             if private_key:
                 self.account = self.w3.eth.account.from_key(private_key)
-                logger.info(f"Account loaded: {self.account.address}")
+                # Log only masked address for security
+                masked_address = f"{self.account.address[:6]}...{self.account.address[-4:]}"
+                logger.info(f"Account loaded: {masked_address}")
             
         except Exception as e:
             logger.error(f"Failed to setup Web3: {e}")

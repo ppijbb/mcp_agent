@@ -7,6 +7,7 @@
 import importlib
 import sys
 from pathlib import Path
+from functools import lru_cache
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent
@@ -41,6 +42,12 @@ for module_name, attr_name in config_modules:
 # Only invalidate caches if really needed (performance optimization)
 if len(sys.modules) > 100:  # Only if many modules are already loaded
     importlib.invalidate_caches()
+
+# Cache for expensive operations
+@lru_cache(maxsize=128)
+def get_cached_page_content(page_name: str) -> str:
+    """Cache page content to improve performance."""
+    return f"Loading {page_name}..."
 
 # Import streamlit and styles with fallback
 try:

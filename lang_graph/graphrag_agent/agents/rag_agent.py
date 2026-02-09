@@ -162,7 +162,7 @@ class RAGAgentNode:
                 )
             else:
                 # Fallback to NetworkX graph traversal
-            retrieval_results = self._retrieve_information_intelligently(
+                retrieval_results = self._retrieve_information_intelligently(
                 state["knowledge_graph"], 
                 query_analysis,
                 state.get("user_intent", "")

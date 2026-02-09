@@ -274,7 +274,7 @@ class TestSecurityPrivacyAgent:
         assert len(security_agent.privacy_rules) > 0
         assert len(security_agent.security_events) == 0
     
-    def test_classify_data(self, security_agent):
+    async def test_classify_data(self, security_agent):
         """데이터 분류 테스트"""
         # 공개 데이터
         public_data = {"content": "일반적인 정보"}
