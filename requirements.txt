@@ -1,20 +1,20 @@
 # Core LangChain and LangGraph
 # Note: Using pinned versions with security fixes applied
-langgraph>=0.2.65
-langgraph-cli>=0.2.65
-langchain>=0.3.22
-langchain-community>=0.3.22
-langchain-core>=0.3.22
-langchain-openai>=2.3.0
-langchain-google-genai>=2.1.8
-langchain-google-vertexai>=2.0.32
-langchain-groq>=0.2.7
-langchain-anthropic>=0.2.7
-langchain-mcp-adapters>=0.1.8
-langchain-deepseek>=0.1.7
-langchain-tavily>=0.2.2
-langchain-aws>=0.2.7
-langsmith>=0.1.142
+langgraph>=0.2.68
+langgraph-cli>=0.2.68
+langchain>=0.3.25
+langchain-community>=0.3.25
+langchain-core>=0.3.25
+langchain-openai>=2.4.0
+langchain-google-genai>=2.1.10
+langchain-google-vertexai>=2.0.35
+langchain-groq>=0.2.8
+langchain-anthropic>=0.2.8
+langchain-mcp-adapters>=0.1.10
+langchain-deepseek>=0.1.8
+langchain-tavily>=0.2.3
+langchain-aws>=0.2.8
+langsmith>=0.1.145
 
 # LLM Providers
 groq
@@ -45,8 +45,8 @@ aiohttp>=3.11.14
 httpx>=0.28.3
 
 # Security and validation
-urllib3>=2.2.5
-certifi>=2026.2.2
+urllib3>=2.2.6
+certifi>=2026.2.9
 
 # Configuration and Utilities
 python-dotenv>=1.1.1

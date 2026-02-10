@@ -102,8 +102,20 @@ class FinancialAgentWorkflow:
     def run(self, initial_state: AgentState):
         """
         워크플로우를 실행하고 최종 상태를 반환합니다.
+        
+        Args:
+            initial_state: 초기 에이전트 상태
+            
+        Returns:
+            최종 상태 또는 에러 메시지가 포함된 상태
         """
-        return self.graph.invoke(initial_state)
+        try:
+            return self.graph.invoke(initial_state)
+        except Exception as e:
+            error_msg = f"워크플로우 실행 중 에러 발생: {str(e)}"
+            initial_state['error_message'] = error_msg
+            initial_state['log'] = initial_state.get('log', []) + [error_msg]
+            return initial_state
 
 # 이 파일이 직접 실행될 때 테스트를 위한 코드
 if __name__ == "__main__":

@@ -87,7 +87,12 @@ if STREAMLIT_AVAILABLE:
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 def main():
-    """메인 페이지"""
+    """
+    메인 페이지 - MCP Agent Hub의 진입점
+    
+    에이전트 허브의 메인 화면을 표시하고 사용자가 다양한 AI 에이전트를 
+    탐색하고 접근할 수 있도록 합니다.
+    """
     
     # 헤더
     st.markdown("""

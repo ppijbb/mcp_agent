@@ -68,7 +68,7 @@ class SafeCodeValidator(ast.NodeVisitor):
         'locals', 'vars', 'dir', 'hasattr', 'getattr', 'setattr',
         'delattr', 'callable', 'isinstance', 'issubclass', 'iter',
         'next', 'help', 'input', 'raw_input', 'reload', 'super',
-        'property', 'classmethod', 'staticmethod', 'type', 'isinstance'
+        'property', 'classmethod', 'staticmethod', 'type'
     }
     
     # Dangerous attribute access patterns
