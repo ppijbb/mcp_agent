@@ -1,11 +1,11 @@
 # Core LangChain and LangGraph
-# Note: Using pinned versions with security fixes applied
+# Note: PyPI langchain-openai has no 2.x; latest is 1.1.9. Use ==1.1.9 for Streamlit Cloud.
 langgraph>=0.2.69
 langgraph-cli>=0.2.69
 langchain>=0.3.26
 langchain-community>=0.3.26
 langchain-core>=0.3.26
-langchain-openai>=1.1.9
+langchain-openai==1.1.9
 langchain-google-genai>=2.1.11
 langchain-google-vertexai>=2.0.36
 langchain-groq>=0.2.9
