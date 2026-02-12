@@ -19,13 +19,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EthereumTradingMCP:
+    """
+    Ethereum Trading MCP Server implementation.
+    
+    Provides trading execution capabilities for Ethereum including balance checking,
+    gas price monitoring, transaction sending, and status tracking.
+    """
+    
     def __init__(self):
+        """Initialize the Ethereum Trading MCP server."""
         self.w3 = None
         self.account = None
         self.setup_web3()
     
     def setup_web3(self):
-        """Setup Web3 connection and account"""
+        """
+        Setup Web3 connection and account.
+        
+        Connects to Ethereum network using RPC URL from environment variables,
+        configures POA middleware for testnets, and sets up account from private key.
+        """
         try:
             # Connect to Ethereum network (mainnet or testnet)
             rpc_url = os.getenv('ETHEREUM_RPC_URL', 'https://mainnet.infura.io/v3/YOUR_PROJECT_ID')
@@ -63,7 +76,12 @@ class EthereumTradingMCP:
             return {"status": "error", "message": str(e)}
     
     async def get_gas_price(self) -> Dict[str, Any]:
-        """Get current gas price"""
+        """
+        Get current gas price from the network.
+        
+        Returns:
+            Dict containing gas price in Wei and Gwei with status information.
+        """
         try:
             gas_price = self.w3.eth.gas_price
             gas_price_gwei = self.w3.from_wei(gas_price, 'gwei')
@@ -77,7 +95,17 @@ class EthereumTradingMCP:
             return {"status": "error", "message": str(e)}
     
     async def send_transaction(self, to_address: str, amount_eth: float, gas_limit: int = 21000) -> Dict[str, Any]:
-        """Send ETH transaction"""
+        """
+        Send ETH transaction to specified address.
+        
+        Args:
+            to_address: Recipient Ethereum address
+            amount_eth: Amount of ETH to send in decimal format
+            gas_limit: Gas limit for the transaction (default: 21000)
+            
+        Returns:
+            Dict containing transaction details and status information.
+        """
         try:
             if not self.account:
                 return {"status": "error", "message": "No account configured"}
@@ -119,7 +147,16 @@ class EthereumTradingMCP:
             return {"status": "error", "message": str(e)}
     
     async def get_transaction_status(self, tx_hash: str) -> Dict[str, Any]:
-        """Get transaction status and details"""
+        """
+        Get transaction status and details from the blockchain.
+        
+        Args:
+            tx_hash: Transaction hash to query
+            
+        Returns:
+            Dict containing transaction receipt information including
+            block number, gas used, and confirmation status.
+        """
         try:
             tx_receipt = self.w3.eth.get_transaction_receipt(tx_hash)
             if tx_receipt:
@@ -140,6 +177,12 @@ class EthereumTradingMCP:
 
 # MCP Server implementation
 async def main():
+    """
+    Main entry point for the Ethereum Trading MCP server.
+    
+    Initializes the server and demonstrates basic functionality
+    including balance checking and gas price monitoring.
+    """
     trading_mcp = EthereumTradingMCP()
     
     # Example usage

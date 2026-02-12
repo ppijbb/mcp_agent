@@ -1,20 +1,20 @@
 # Core LangChain and LangGraph
 # Note: Using pinned versions with security fixes applied
-langgraph>=0.2.68
-langgraph-cli>=0.2.68
-langchain>=0.3.25
-langchain-community>=0.3.25
-langchain-core>=0.3.25
-langchain-openai>=2.4.0
-langchain-google-genai>=2.1.10
-langchain-google-vertexai>=2.0.35
-langchain-groq>=0.2.8
-langchain-anthropic>=0.2.8
-langchain-mcp-adapters>=0.1.10
-langchain-deepseek>=0.1.8
-langchain-tavily>=0.2.3
-langchain-aws>=0.2.8
-langsmith>=0.1.145
+langgraph>=0.2.69
+langgraph-cli>=0.2.69
+langchain>=0.3.26
+langchain-community>=0.3.26
+langchain-core>=0.3.26
+langchain-openai>=2.4.1
+langchain-google-genai>=2.1.11
+langchain-google-vertexai>=2.0.36
+langchain-groq>=0.2.9
+langchain-anthropic>=0.2.9
+langchain-mcp-adapters>=0.1.11
+langchain-deepseek>=0.1.9
+langchain-tavily>=0.2.4
+langchain-aws>=0.2.9
+langsmith>=0.1.146
 
 # LLM Providers
 groq
@@ -40,20 +40,20 @@ scipy
 scikit-learn
 
 # HTTP Clients
-requests>=2.32.6
-aiohttp>=3.11.14
-httpx>=0.28.3
+requests>=2.32.7
+aiohttp>=3.11.15
+httpx>=0.28.4
 
 # Security and validation
-urllib3>=2.2.6
-certifi>=2026.2.9
+urllib3>=2.2.7
+certifi>=2026.2.10
 
 # Configuration and Utilities
-python-dotenv>=1.1.1
-PyYAML>=6.0.4
-pydantic>=2.10.6
-pydantic-settings>=2.6.3
-email-validator>=2.2.1
+python-dotenv>=1.1.2
+PyYAML>=6.0.5
+pydantic>=2.10.7
+pydantic-settings>=2.6.4
+email-validator>=2.2.2
 
 # Testing
 pytest
@@ -83,11 +83,11 @@ reportlab
 weasyprint
 
 # Web Scraping
-beautifulsoup4>=4.13.3
-markdownify>=0.11.8
-selenium>=4.29.0
-playwright>=1.50.0
-scrapy>=2.12.0
+beautifulsoup4>=4.13.4
+markdownify>=0.11.9
+selenium>=4.29.1
+playwright>=1.50.1
+scrapy>=2.12.1
 
 # Database and Vector Stores
 chromadb
@@ -125,10 +125,10 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=46.0.4
+cryptography>=47.0.0
 passlib>=1.7.4
 PyJWT>=2.9.0
-pycryptodome>=3.21.0
+pycryptodome>=3.21.1
 
 # Message Queues and Async
 asyncio-mqtt

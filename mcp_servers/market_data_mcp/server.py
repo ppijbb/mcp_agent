@@ -37,8 +37,10 @@ class MarketDataMCP:
         self.session = None
     
     async def __aenter__(self):
-        """Async context manager entry - initialize HTTP session."""
-        self.session = aiohttp.ClientSession()
+        """Async context manager entry - initialize HTTP session with connection pooling."""
+        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+        timeout = aiohttp.ClientTimeout(total=30)
+        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -47,12 +49,12 @@ class MarketDataMCP:
             await self.session.close()
     
     async def get_ethereum_price(self) -> Dict[str, Any]:
-        """Get current Ethereum price from multiple sources"""
+        """Get current Ethereum price from multiple sources with optimized request."""
         try:
             prices = {}
             
-            # CoinGecko API (free, no key required)
-            async with self.session.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd,eur,btc') as response:
+            # CoinGecko API (free, no key required) - optimized request
+            async with self.session.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd,eur,btc', timeout=aiohttp.ClientTimeout(total=10)) as response:
                 if response.status == 200:
                     data = await response.json()
                     prices['coingecko'] = {
@@ -61,9 +63,9 @@ class MarketDataMCP:
                         'btc': data['ethereum']['btc']
                     }
             
-            # Binance API
+            # Binance API with timeout
             if self.api_keys['binance']:
-                async with self.session.get('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT') as response:
+                async with self.session.get('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT', timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         data = await response.json()
                         prices['binance'] = {'usd': float(data['price'])}

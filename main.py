@@ -40,13 +40,13 @@ for module_name, attr_name in config_modules:
         print(f"Warning: Config reload failed for {module_name}: {e}")
 
 # Only invalidate caches if really needed (performance optimization)
-if len(sys.modules) > 100:  # Only if many modules are already loaded
+if len(sys.modules) > 50:  # Reduced threshold for more aggressive cleanup
     importlib.invalidate_caches()
 
 # Cache for expensive operations
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=64)
 def get_cached_page_content(page_name: str) -> str:
-    """Cache page content to improve performance."""
+    """Cache page content to improve performance with smaller cache size."""
     return f"Loading {page_name}..."
 
 # Import streamlit and styles with fallback
