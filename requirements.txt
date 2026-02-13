@@ -39,10 +39,10 @@ numpy
 scipy
 scikit-learn
 
-# HTTP Clients
+# HTTP Clients (httpx: PyPI max 0.28.1, no 0.28.4)
 requests>=2.32.5
 aiohttp>=3.11.15
-httpx>=0.28.4
+httpx==0.28.1
 
 # Security and validation
 urllib3>=2.2.7
