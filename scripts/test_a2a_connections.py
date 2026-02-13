@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Dict, Any, List
 from datetime import datetime
 
-# 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+_primary = project_root / "primary"
+if _primary.exists():
+    sys.path.insert(0, str(_primary))
 
 from srcs.common.a2a_integration import (
     get_global_registry,
@@ -24,7 +26,7 @@ from srcs.common.a2a_integration import (
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
 from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
 from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
-from primary.SparkleForge.common.a2a_adapter import SparkleForgeA2AWrapper
+from SparkleForge.common.a2a_adapter import SparkleForgeA2AWrapper
 
 
 async def test_a2a_message_sending():
