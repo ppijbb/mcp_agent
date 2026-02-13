@@ -157,6 +157,7 @@ bokeh
 
 # Cron and Scheduling
 apscheduler
+schedule
 celery
 kombu
 pika
