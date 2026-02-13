@@ -125,7 +125,7 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=47.0.0
+cryptography>=46.0.5
 passlib>=1.7.4
 PyJWT>=2.9.0
 pycryptodome>=3.21.1
