@@ -6,6 +6,7 @@ Wrapper 간 메시지 송수신 및 상태 체크를 수행합니다.
 """
 
 import asyncio
+import importlib.util
 import sys
 from pathlib import Path
 from typing import Dict, Any, List
@@ -13,9 +14,6 @@ from datetime import datetime
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-_primary = project_root / "primary"
-if _primary.exists():
-    sys.path.insert(0, str(_primary))
 
 from srcs.common.a2a_integration import (
     get_global_registry,
@@ -26,7 +24,14 @@ from srcs.common.a2a_integration import (
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
 from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
 from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
-from SparkleForge.common.a2a_adapter import SparkleForgeA2AWrapper
+_sf_adapter = project_root / "primary" / "SparkleForge" / "common" / "a2a_adapter.py"
+if _sf_adapter.exists():
+    _spec = importlib.util.spec_from_file_location("_sf_a2a", _sf_adapter)
+    _sf_mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_sf_mod)
+    SparkleForgeA2AWrapper = _sf_mod.SparkleForgeA2AWrapper
+else:
+    SparkleForgeA2AWrapper = None
 
 
 async def test_a2a_message_sending():
