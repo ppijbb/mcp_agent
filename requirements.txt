@@ -50,7 +50,7 @@ certifi>=2026.1.4
 
 # Configuration and Utilities
 python-dotenv>=1.1.2
-PyYAML>=6.0.5
+PyYAML>=6.0.3
 pydantic>=2.10.7
 pydantic-settings>=2.6.4
 email-validator>=2.2.2
