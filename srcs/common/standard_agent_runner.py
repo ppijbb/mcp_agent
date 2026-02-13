@@ -54,7 +54,7 @@ from srcs.common.a2a_integration import get_global_registry
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
 from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
 from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
-from sparkleforge.common.a2a_adapter import SparkleForgeA2AWrapper
+from primary.SparkleForge.common.a2a_adapter import SparkleForgeA2AWrapper
 
 logger = logging.getLogger(__name__)
 
