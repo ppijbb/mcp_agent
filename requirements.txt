@@ -40,7 +40,7 @@ scipy
 scikit-learn
 
 # HTTP Clients
-requests>=2.32.7
+requests>=2.32.5
 aiohttp>=3.11.15
 httpx>=0.28.4
 
