@@ -116,8 +116,6 @@ def validate_input(value: Any, field_name: str, required: bool = True,
     Raises:
         ValidationError: If validation fails
     """
-    from srcs.core.errors import ValidationError
-    
     if required and value is None:
         raise ValidationError(f"{field_name} is required")
     

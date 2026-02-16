@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class GeminiConfig(BaseSettings):
     """Gemini CLI 설정 - 무료 로컬 AI"""
     gemini_cli_path: str = Field("gemini", env="GEMINI_CLI_PATH")
-    gemini_model: str = Field("gemini-pro", env="GEMINI_MODEL")
+    gemini_model: str = Field("gemini-2.0-flash", env="GEMINI_MODEL")
     max_requests_per_day: int = Field(1000, env="GEMINI_MAX_REQUESTS_PER_DAY")
     timeout: int = Field(60, env="GEMINI_TIMEOUT")
     # Fallback 방지 설정 - 오류 발생 시 즉시 종료

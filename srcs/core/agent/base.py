@@ -66,6 +66,18 @@ def _register_cleanup():
 
 
 def async_memoize(func):
+    """
+    Memoization decorator for async functions using LRU cache.
+
+    Caches async function results with a maximum cache size of 128 entries.
+    Uses cachetools.LRUCache for efficient in-memory caching.
+
+    Args:
+        func: The async function to memoize
+
+    Returns:
+        Wrapped async function with caching capability
+    """
     cache = LRUCache(maxsize=128)
 
     @functools.wraps(func)

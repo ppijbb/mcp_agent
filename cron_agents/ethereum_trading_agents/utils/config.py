@@ -162,7 +162,7 @@ class Config:
 
         # Security validation - NO FALLBACKS
         if not cls.HARDWARE_WALLET_ENABLED:
-            if not cls._encrypted_private_key:
+            if not cls._encrypted_ethereum_private_key:
                 raise ValueError("ETHEREUM_PRIVATE_KEY_ENCRYPTED is required when hardware wallet is disabled")
             if not cls.ENCRYPTION_KEY:
                 raise ValueError("ENCRYPTION_KEY is required for private key decryption")

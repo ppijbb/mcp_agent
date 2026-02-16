@@ -115,9 +115,10 @@ def _normalize_agent_type(agent_type: Any) -> str:
 
 
 class StandardAgentRunner:
-    """표준 Agent 실행 시스템"""
+    """Standard Agent execution system for running all agent types in a unified way."""
 
     def __init__(self):
+        """Initialize the StandardAgentRunner with a registry and agent cache."""
         self.registry = get_global_registry()
         self._agent_cache: Dict[str, Any] = {}
 
@@ -218,7 +219,18 @@ class StandardAgentRunner:
         input_data: Dict[str, Any],
         use_a2a: bool
     ) -> AgentExecutionResult:
-        """MCP Agent 실행"""
+        """
+        Execute an MCP Agent.
+
+        Args:
+            agent_id: The agent ID to execute
+            metadata: Agent metadata including entry_point and capabilities
+            input_data: Input data for the agent
+            use_a2a: Whether to use A2A messaging
+
+        Returns:
+            AgentExecutionResult: The execution result
+        """
         start_time = datetime.now()
 
         try:
@@ -420,7 +432,18 @@ class StandardAgentRunner:
         input_data: Dict[str, Any],
         use_a2a: bool
     ) -> AgentExecutionResult:
-        """LangGraph Agent 실행"""
+        """
+        Execute a LangGraph Agent.
+
+        Args:
+            agent_id: The agent ID to execute
+            metadata: Agent metadata including entry_point and capabilities
+            input_data: Input data for the agent
+            use_a2a: Whether to use A2A messaging
+
+        Returns:
+            AgentExecutionResult: The execution result
+        """
         start_time = datetime.now()
 
         try:
@@ -476,7 +499,18 @@ class StandardAgentRunner:
         input_data: Dict[str, Any],
         use_a2a: bool
     ) -> AgentExecutionResult:
-        """Cron Agent 실행"""
+        """
+        Execute a Cron Agent.
+
+        Args:
+            agent_id: The agent ID to execute
+            metadata: Agent metadata including cron_schedule and entry_point
+            input_data: Input data for the agent
+            use_a2a: Whether to use A2A messaging
+
+        Returns:
+            AgentExecutionResult: The execution result
+        """
         start_time = datetime.now()
 
         try:
@@ -521,7 +555,18 @@ class StandardAgentRunner:
         input_data: Dict[str, Any],
         use_a2a: bool
     ) -> AgentExecutionResult:
-        """SparkleForge Agent 실행"""
+        """
+        Execute a SparkleForge Agent.
+
+        Args:
+            agent_id: The agent ID to execute
+            metadata: Agent metadata
+            input_data: Input data for the agent including query and context
+            use_a2a: Whether to use A2A messaging
+
+        Returns:
+            AgentExecutionResult: The execution result
+        """
         if SparkleForgeA2AWrapper is None:
             return AgentExecutionResult(
                 success=False,
