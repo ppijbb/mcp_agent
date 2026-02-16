@@ -28,6 +28,7 @@
 [submodule "reference/skyvern"]
 	path = reference/skyvern
 	url = https://github.com/Skyvern-AI/skyvern.git
+	fetch = +refs/heads/main:refs/remotes/origin/main
 [submodule "reference/cascadeflow"]
 	path = reference/cascadeflow
 	url = https://github.com/lemony-ai/cascadeflow.git
