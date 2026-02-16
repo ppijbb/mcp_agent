@@ -57,10 +57,14 @@ from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
 _root = Path(__file__).resolve().parent.parent.parent
 _sf_adapter = _root / "primary" / "SparkleForge" / "common" / "a2a_adapter.py"
 if _sf_adapter.exists():
-    _spec = importlib.util.spec_from_file_location("_sf_a2a", _sf_adapter)
-    _sf_mod = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_sf_mod)
-    SparkleForgeA2AWrapper = _sf_mod.SparkleForgeA2AWrapper
+    try:
+        _spec = importlib.util.spec_from_file_location("_sf_a2a", _sf_adapter)
+        _sf_mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_sf_mod)
+        SparkleForgeA2AWrapper = _sf_mod.SparkleForgeA2AWrapper
+    except Exception as e:
+        logger.warning(f"Failed to load SparkleForgeA2AWrapper: {e}")
+        SparkleForgeA2AWrapper = None
 else:
     SparkleForgeA2AWrapper = None
 

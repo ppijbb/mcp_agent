@@ -6,6 +6,7 @@ cron_agents/ 폴더의 Cron 기반 agent들을 위한 A2A wrapper
 
 import asyncio
 import logging
+import time
 from typing import Dict, Any, List, Optional, Callable
 import schedule
 import threading
@@ -122,7 +123,7 @@ class CronAgentA2AWrapper(A2AAdapter):
         def run_scheduler():
             while self._scheduler_running:
                 schedule.run_pending()
-                asyncio.sleep(1)
+                time.sleep(1)
 
         self._scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         self._scheduler_thread.start()
