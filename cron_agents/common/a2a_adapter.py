@@ -66,7 +66,19 @@ class CronAgentA2AWrapper(A2AAdapter):
         priority: int = MessagePriority.MEDIUM.value,
         correlation_id: Optional[str] = None
     ) -> bool:
-        """메시지 전송"""
+        """
+        Send message to another agent.
+        
+        Args:
+            target_agent: Target agent ID
+            message_type: Type of message (e.g., "task_request", "task_response")
+            payload: Message payload data
+            priority: Message priority (default: MEDIUM)
+            correlation_id: Optional correlation ID for tracking related messages
+            
+        Returns:
+            bool: True if message was routed successfully
+        """
         message = A2AMessage(
             source_agent=self.agent_id,
             target_agent=target_agent,
@@ -80,7 +92,12 @@ class CronAgentA2AWrapper(A2AAdapter):
         return await broker.route_message(message)
 
     async def start_listener(self) -> None:
-        """메시지 리스너 시작"""
+        """
+        Start the message listener and cron scheduler.
+        
+        Initializes the message processing task and starts the cron scheduler
+        if a cron schedule is configured.
+        """
         if self.is_listening:
             logger.warning(f"Listener already started for agent {self.agent_id}")
             return
@@ -95,7 +112,11 @@ class CronAgentA2AWrapper(A2AAdapter):
         logger.info(f"Message listener started for Cron agent {self.agent_id}")
 
     async def stop_listener(self) -> None:
-        """메시지 리스너 중지"""
+        """
+        Stop the message listener and cron scheduler.
+        
+        Cancels the message processing task and stops the cron scheduler.
+        """
         if not self.is_listening:
             return
 
@@ -143,7 +164,12 @@ class CronAgentA2AWrapper(A2AAdapter):
             self._scheduler_thread.join(timeout=5.0)
 
     def _run_scheduled_task(self) -> None:
-        """스케줄된 작업 실행"""
+        """
+        Execute the scheduled task.
+        
+        Runs the configured execute_function either as an async coroutine
+        or as a synchronous function, with error handling and logging.
+        """
         if self.execute_function:
             try:
                 if asyncio.iscoroutinefunction(self.execute_function):
@@ -158,7 +184,12 @@ class CronAgentA2AWrapper(A2AAdapter):
                 logger.error(f"Error executing scheduled task for agent {self.agent_id}: {e}")
 
     async def _process_messages(self) -> None:
-        """메시지 처리 루프"""
+        """
+        Process incoming messages from the queue.
+        
+        Continuously listens for messages and handles them using registered
+        message handlers. Runs until is_listening is set to False.
+        """
         while self.is_listening:
             try:
                 message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)

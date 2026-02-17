@@ -1,3 +1,11 @@
+"""
+Configuration loader for MCP Agent system.
+
+Loads and merges configuration from YAML files, supports encrypted config files,
+and provides environment variable substitution for sensitive values.
+Uses singleton pattern to cache configuration after first load.
+"""
+
 import os
 from pathlib import Path
 from typing import Dict, Any

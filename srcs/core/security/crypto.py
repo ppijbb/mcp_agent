@@ -1,11 +1,25 @@
+"""
+Cryptography utilities for MCP Agent system.
+
+Provides encryption and decryption functionality using Fernet (AES 128-bit)
+for securing sensitive configuration files and data.
+"""
+
 import os
-import re
 from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional
 
 
 def validate_encryption_key(key: str) -> bool:
-    """Validate encryption key format and strength."""
+    """
+    Validate encryption key format and strength.
+    
+    Args:
+        key: Encryption key string to validate
+        
+    Returns:
+        bool: True if key is valid Fernet key
+    """
     if not key:
         return False
     # Fernet key should be 32 bytes base64-encoded
@@ -18,7 +32,17 @@ def validate_encryption_key(key: str) -> bool:
 
 
 def get_encryption_key() -> str:
-    """Get and validate encryption key from environment."""
+    """
+    Get and validate encryption key from environment.
+    
+    Retrieves MCP_SECRET_KEY from environment variables and validates it.
+    
+    Returns:
+        str: Validated encryption key
+        
+    Raises:
+        ValueError: If key is not set or invalid
+    """
     key = os.getenv("MCP_SECRET_KEY")
     if not key:
         raise ValueError("MCP_SECRET_KEY 환경 변수가 설정되지 않았습니다. 암호화 기능을 사용할 수 없습니다.")
@@ -33,7 +57,15 @@ ENCRYPTION_KEY = None  # Will be loaded on demand
 
 
 def get_cipher_suite() -> Fernet:
-    """Create Fernet encryption object using key from environment variables."""
+    """
+    Create Fernet encryption object using key from environment variables.
+    
+    Returns:
+        Fernet: Configured Fernet cipher suite
+        
+    Raises:
+        ValueError: If encryption key is invalid
+    """
     key = get_encryption_key()
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
