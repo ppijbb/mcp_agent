@@ -4,6 +4,7 @@ Performance Monitoring Utilities
 Simple performance monitoring for key functions without complex dependencies.
 """
 
+import asyncio
 import time
 import functools
 from typing import Dict, Any, Optional, Callable
@@ -44,7 +45,7 @@ class PerformanceMonitor:
                 "total": sum(timings)
             }
     
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_stats(self) -> Dict[str, Any]:
         """Get performance statistics for all tracked functions."""
         return {name: self.get_stats(name) for name in self._timings.keys()}
     
@@ -107,14 +108,10 @@ def monitor_performance(func_name: Optional[str] = None, monitor: Optional[Perfo
 def get_performance_stats(func_name: Optional[str] = None) -> Dict[str, Any]:
     """Get performance statistics from the global monitor."""
     if func_name:
-        return _global_monitor.get_stats(func_name)
+        return _global_monitor.get_stats(func_name) or {}
     return _global_monitor.get_all_stats()
 
 
 def clear_performance_stats(func_name: Optional[str] = None) -> None:
     """Clear performance statistics from the global monitor."""
     _global_monitor.clear_stats(func_name)
-
-
-# Import asyncio for function type checking
-import asyncio

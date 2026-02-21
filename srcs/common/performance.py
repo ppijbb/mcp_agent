@@ -9,7 +9,7 @@ import time
 import asyncio
 import threading
 from functools import wraps, lru_cache
-from typing import Dict, Any, Optional, Callable, Union
+from typing import Dict, Any, Optional, Callable
 import logging
 
 logger = logging.getLogger(__name__)

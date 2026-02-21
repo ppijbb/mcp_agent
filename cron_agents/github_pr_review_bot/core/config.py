@@ -29,6 +29,12 @@ class GeminiConfig(BaseSettings):
         env="GEMINI_REVIEW_PROMPT_TEMPLATE"
     )
 
+    @validator("gemini_cli_path")
+    def validate_gemini_path(cls, v):
+        if not v:
+            raise ValueError("gemini_cli_path is required")
+        return v
+
 
 class VLLMConfig(BaseSettings):
     """vLLM 설정 - OpenAI 형식 API"""
@@ -40,12 +46,6 @@ class VLLMConfig(BaseSettings):
     # Fallback 방지 설정
     fail_on_vllm_error: bool = Field(True, env="VLLM_FAIL_ON_ERROR")
     require_valid_response: bool = Field(True, env="VLLM_REQUIRE_VALID_RESPONSE")
-
-    @validator("gemini_cli_path")
-    def validate_gemini_path(cls, v):
-        if not v:
-            raise ValueError("gemini_cli_path is required")
-        return v
 
 
 class GitHubConfig(BaseSettings):
