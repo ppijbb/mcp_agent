@@ -1,8 +1,15 @@
 """
 Common LLM Utilities Module
 
-공통 LLM factory 및 fallback 메커니즘 제공
-모든 agent에서 동일한 fallback 로직 사용
+Provides common LLM factory and fallback mechanisms for consistent
+error handling across all agents.
+
+Functions:
+    get_best_fallback_models: Get list of best fallback models
+    create_fallback_llm_factory: Create fallback LLM factory
+    create_fallback_llm_for_agents: Create fallback LLM for agents
+    create_fallback_orchestrator_llm_factory: Create orchestrator fallback factory
+    try_fallback_orchestrator_execution: Try fallback execution for orchestrator
 """
 
 from .fallback_llm import (

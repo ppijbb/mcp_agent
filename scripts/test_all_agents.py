@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-모든 Agent 테스트 스크립트
+Test All Agents Script
 
-등록된 모든 agent를 표준 입력으로 실행하여 동작을 검증합니다.
+Tests all registered agents by running them with standard input to verify functionality.
 """
 
 import asyncio

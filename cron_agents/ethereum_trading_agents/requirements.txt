@@ -131,9 +131,6 @@ websockets>=15.0
 aiofiles>=24.1.0
 pathlib2>=2.3.7
 
-# Real-time data processing
-structlog>=25.4.0
-
 # Monitoring and observability
 opentelemetry-api>=1.36.0
 opentelemetry-sdk>=1.36.0

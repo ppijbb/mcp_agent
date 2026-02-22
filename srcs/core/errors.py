@@ -1,4 +1,22 @@
-from typing import Dict, Any, Optional
+"""
+Error definitions and utilities for MCP Agent Hub.
+
+Provides custom exception classes for different error types encountered
+in the MCP Agent system, along with utility functions for safe execution
+and error handling.
+
+Classes:
+    MCPError: Base exception for all MCP-Agent errors
+    ConfigError: Configuration-related errors
+    APIError: External API errors
+    WorkflowError: Workflow-related errors
+    CircuitBreakerOpen: Circuit breaker state errors
+    EncryptionError: Encryption/decryption errors
+    ValidationError: Input validation errors
+    SecurityError: Security-related errors
+"""
+
+from typing import Dict, Any, Optional, Callable
 
 
 class MCPError(Exception):
@@ -49,7 +67,7 @@ class SecurityError(MCPError):
     """Raised for security-related errors."""
 
 
-def safe_execute(func: callable, default: Any = None, error_type: type = MCPError, *args, **kwargs) -> Any:
+def safe_execute(func: Callable, default: Any = None, error_type: type = MCPError, *args, **kwargs) -> Any:
     """
     Safely execute a function with standardized error handling.
     
@@ -100,8 +118,8 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
 
 
 def validate_input(value: Any, field_name: str, required: bool = True, 
-                  value_type: type = None, min_length: int = None, 
-                  max_length: int = None) -> None:
+                  value_type: Optional[type] = None, min_length: Optional[int] = None, 
+                  max_length: Optional[int] = None) -> None:
     """
     Standardized input validation with consistent error messages.
     

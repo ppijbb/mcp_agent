@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Pages 마이그레이션 스크립트
+Page Migration Script
 
-표준 A2A 패턴으로 pages를 자동 마이그레이션하는 스크립트
+Automates migration of pages to standard A2A patterns.
 """
 
 import re

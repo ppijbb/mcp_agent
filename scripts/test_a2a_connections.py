@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-A2A 연결 테스트 스크립트
+A2A Connection Test Script
 
-Wrapper 간 메시지 송수신 및 상태 체크를 수행합니다.
+Tests message sending/receiving and status checks between A2A wrappers.
 """
 
 import asyncio

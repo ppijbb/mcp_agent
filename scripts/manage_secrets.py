@@ -1,8 +1,25 @@
+"""
+Secrets Management Script
+
+Utility script for generating encryption keys and encrypting/decrypting
+configuration files for the MCP Agent system.
+
+Usage:
+    1. Generate new secret key:
+       python scripts/manage_secrets.py generate-key
+       
+    2. Encrypt config file (e.g., production.yaml -> production.yaml.enc):
+       python scripts/manage_secrets.py encrypt --file configs/production.yaml
+       
+    3. Decrypt config file (e.g., production.yaml.enc -> production.yaml):
+       python scripts/manage_secrets.py decrypt --file configs/production.yaml.enc
+"""
+
 import argparse
 import sys
 import os
 
-# 스크립트가 프로젝트 루트에서 실행되도록 경로 추가
+# Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from srcs.core.security.crypto import generate_key, encrypt_file, decrypt_file
