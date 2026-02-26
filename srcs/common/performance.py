@@ -228,38 +228,35 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
     """
     cache: Dict[str, Dict[str, Any]] = {}
     keys_order = []
+    lock = threading.Lock()
     
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Create cache key
             key = str(args) + str(sorted(kwargs.items()))
             
-            # Check cache
-            if key in cache:
-                entry = cache[key]
-                if ttl is None or (time.time() - entry['timestamp']) < ttl:
-                    return entry['result']
-                else:
-                    # Remove expired entry
-                    cache.pop(key)
-                    if key in keys_order:
-                        keys_order.remove(key)
+            with lock:
+                if key in cache:
+                    entry = cache[key]
+                    if ttl is None or (time.time() - entry['timestamp']) < ttl:
+                        return entry['result']
+                    else:
+                        cache.pop(key)
+                        if key in keys_order:
+                            keys_order.remove(key)
             
-            # Compute result
             result = func(*args, **kwargs)
             
-            # Store in cache
-            if len(cache) >= maxsize:
-                # Remove oldest entry
-                oldest_key = keys_order.pop(0)
-                cache.pop(oldest_key)
-            
-            cache[key] = {
-                'result': result,
-                'timestamp': time.time()
-            }
-            keys_order.append(key)
+            with lock:
+                if len(cache) >= maxsize:
+                    oldest_key = keys_order.pop(0)
+                    cache.pop(oldest_key, None)
+                
+                cache[key] = {
+                    'result': result,
+                    'timestamp': time.time()
+                }
+                keys_order.append(key)
             
             return result
         

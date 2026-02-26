@@ -35,14 +35,12 @@ _cleanup_lock = threading.Lock()
 
 
 def _cleanup_mcp_apps():
-    """모든 활성 MCPApp 인스턴스 정리"""
+    """Clean up all active MCPApp instances on process exit."""
     import logging
     logger = logging.getLogger(__name__)
-    for app in _active_mcp_apps[:]:  # 복사본으로 순회 (리스트 변경 가능)
+    for app in _active_mcp_apps[:]:
         try:
-            # MCPApp이 cleanup 메서드를 가지고 있는지 확인
             if hasattr(app, 'cleanup'):
-                # 동기 cleanup이면 직접 호출, 비동기면 무시 (atexit에서는 async 불가)
                 if not asyncio.iscoroutinefunction(app.cleanup):
                     app.cleanup()
         except Exception as e:
@@ -52,17 +50,16 @@ def _cleanup_mcp_apps():
 
 
 def _register_cleanup():
-    """cleanup 핸들러 등록 (메인 스레드에서만)"""
+    """Register cleanup handler for MCPApp instances (only in main thread)."""
     global _cleanup_registered
     with _cleanup_lock:
         if not _cleanup_registered:
-            # 메인 스레드인지 확인
             if threading.current_thread() is threading.main_thread():
                 try:
                     atexit.register(_cleanup_mcp_apps)
                     _cleanup_registered = True
                 except Exception:
-                    pass  # 등록 실패해도 계속 진행
+                    pass
 
 
 def async_memoize(func):

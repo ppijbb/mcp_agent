@@ -24,8 +24,7 @@ def validate_encryption_key(key: str) -> bool:
         return False
     # Fernet key should be 32 bytes base64-encoded
     try:
-        from cryptography.fernet import Fernet
-        Fernet(key)  # This will raise an error if key is invalid
+        Fernet(key)
         return True
     except Exception:
         return False
