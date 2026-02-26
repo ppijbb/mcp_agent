@@ -128,3 +128,6 @@
 [submodule "primary/dimescav_agent"]
 	path = primary/dimescav_agent
 	url = https://github.com/ppijbb/dimescav_agent.git
+[submodule "reference/Agent-Skills-for-Context-Engineering"]
+	path = reference/Agent-Skills-for-Context-Engineering
+	url = https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering.git
