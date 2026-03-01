@@ -11,7 +11,14 @@ from .styles import get_common_styles, get_page_header
 
 
 def setup_page(title, icon, layout="wide"):
-    """페이지 기본 설정"""
+    """
+    페이지 기본 설정.
+    
+    Args:
+        title: 페이지 제목
+        icon: 페이지 아이콘 (emoji)
+        layout: 페이지 레이아웃 ("wide" 또는 "centered")
+    """
     try:
         st.set_page_config(
             page_title=title,
@@ -24,37 +31,59 @@ def setup_page(title, icon, layout="wide"):
 
 
 def add_project_root():
-    """프로젝트 루트를 Python 경로에 추가"""
+    """프로젝트 루트를 Python 경로에 추가하여 모듈 임포트가 가능하도록 함."""
     project_root = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(project_root))
 
 
 def setup_page_header(title, subtitle=""):
-    """페이지 헤더 설정 (간단 버전)"""
+    """
+    페이지 헤더 설정 (간단 버전).
+    
+    Args:
+        title: 페이지 제목
+        subtitle: 페이지 서브타이틀 (선택)
+    """
     st.title(f"🚀 {title}")
     if subtitle:
         st.subheader(subtitle)
 
 
 def render_page_header(page_type, title, subtitle):
-    """페이지 헤더 렌더링"""
+    """
+    페이지 헤더를 HTML로 렌더링합니다.
+    
+    Args:
+        page_type: 페이지 유형
+        title: 제목
+        subtitle: 서브타이틀
+    """
     header_html = get_page_header(page_type, title, subtitle)
     st.markdown(header_html, unsafe_allow_html=True)
 
 
 def render_common_styles():
-    """공통 스타일 적용"""
+    """공통 CSS 스타일을 페이지에 적용합니다."""
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 
 def render_home_button():
-    """홈으로 돌아가기 버튼 렌더링"""
+    """홈으로 돌아가는 Streamlit 버튼을 렌더링합니다."""
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
 
 
 def safe_import_agent(module_path, fallback_name="Agent"):
-    """안전한 agent 모듈 임포트"""
+    """
+    에이전트 모듈을 안전하게 임포트합니다.
+    
+    Args:
+        module_path: 임포트할 모듈 경로
+        fallback_name: 폴백 에이전트 이름
+        
+    Returns:
+        Tuple[bool, Optional[module], Optional[str]]: (성공여부, 모듈, 오류메시지)
+    """
     try:
         module = __import__(module_path, fromlist=[fallback_name])
         return True, module, None
@@ -63,7 +92,13 @@ def safe_import_agent(module_path, fallback_name="Agent"):
 
 
 def render_import_error(agent_name, error_message):
-    """임포트 오류 표시"""
+    """
+    에이전트 임포트 오류를 화면에 표시합니다.
+    
+    Args:
+        agent_name: 에이전트 이름
+        error_message: 오류 메시지
+    """
     st.error(f"{agent_name}을 불러올 수 없습니다.")
     st.error(f"오류 내용: {error_message}")
 

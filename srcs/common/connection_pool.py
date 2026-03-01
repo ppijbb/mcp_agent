@@ -226,7 +226,13 @@ class ImprovedConnectionPool:
                 pass
     
     def _add_weak_ref(self, connection: Any, pool_key: str) -> None:
-        """Add weak reference for connection tracking."""
+        """
+        Add weak reference for connection tracking.
+
+        Args:
+            connection: Connection object to track
+            pool_key: Pool key for logging purposes
+        """
         def cleanup_callback(ref):
             with self._lock:
                 self._remove_weak_ref(ref)

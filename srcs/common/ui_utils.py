@@ -1,11 +1,26 @@
+"""
+UI Utilities Module
+
+Provides common UI utilities for Streamlit-based agent pages including
+process management, agent execution monitoring, and result display.
+
+Functions:
+    run_agent_process: Execute agent process and monitor in real-time via Streamlit UI
+"""
+
 import streamlit as st
 import json
 from pathlib import Path
 from datetime import datetime
-import streamlit_process_manager as spm
-from streamlit_process_manager.process import Process
 import os
 from typing import Optional, Callable, Any
+
+try:
+    import streamlit_process_manager as spm
+    from streamlit_process_manager.process import Process
+    SPROCM_AVAILABLE = True
+except ImportError:
+    SPROCM_AVAILABLE = False
 
 
 def run_agent_process(
@@ -30,6 +45,10 @@ def run_agent_process(
     """
     if placeholder is None:
         st.error("결과를 표시할 UI 컨테이너가 지정되지 않았습니다.")
+        return None
+
+    if not SPROCM_AVAILABLE:
+        st.error("streamlit-process-manager가 설치되지 않았습니다. pip install streamlit-process-manager를 실행해주세요.")
         return None
 
     with placeholder.container():
