@@ -131,3 +131,6 @@
 [submodule "reference/Agent-Skills-for-Context-Engineering"]
 	path = reference/Agent-Skills-for-Context-Engineering
 	url = https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering.git
+[submodule "reference/claude-context-mode"]
+	path = reference/claude-context-mode
+	url = https://github.com/mksglu/claude-context-mode.git
