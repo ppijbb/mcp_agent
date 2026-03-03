@@ -1,7 +1,22 @@
 """
 Page Utilities Module
 
-페이지에서 공통으로 사용하는 유틸리티 함수들
+Provides common utility functions for Streamlit pages including page setup,
+rendering, and agent integration. Supports both standard and A2A agent workflows.
+
+Functions:
+    setup_page: Configure Streamlit page settings
+    add_project_root: Add project root to Python path
+    setup_page_header: Render page header with title and subtitle
+    render_page_header: Render HTML page header
+    render_common_styles: Apply common CSS styles
+    render_home_button: Render home navigation button
+    safe_import_agent: Safely import agent modules with fallback
+    render_import_error: Display agent import errors
+    render_agent_intro: Render agent introduction with features
+    create_agent_page: Create unified agent page
+    render_demo_content: Render demo content with tabs
+    render_metrics_row: Render metrics row
 """
 
 import streamlit as st

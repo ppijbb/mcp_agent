@@ -180,6 +180,9 @@ class ImprovedConnectionPool:
             
         Returns:
             True if connection is valid
+            
+        Raises:
+            Exception: Any exception during validation is logged and returns False
         """
         try:
             # Basic validation - check if connection object exists and has expected attributes
@@ -245,7 +248,12 @@ class ImprovedConnectionPool:
             logger.debug(f"Failed to create weak reference: {e}")
     
     def _remove_weak_ref(self, connection_or_ref: Any) -> None:
-        """Remove weak reference from tracking."""
+        """
+        Remove weak reference from tracking.
+
+        Args:
+            connection_or_ref: Connection object or weak reference to remove
+        """
         try:
             if isinstance(connection_or_ref, weakref.ref):
                 ref = connection_or_ref
