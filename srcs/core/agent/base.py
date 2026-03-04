@@ -156,10 +156,7 @@ class BaseAgent(ABC):
             DeprecationWarning,
             stacklevel=2
         )
-        if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            self._session = aiohttp.ClientSession(timeout=timeout)
-        return self._session
+        return asyncio.run(self.get_session())
 
     def _setup_app(self) -> MCPApp:
         """

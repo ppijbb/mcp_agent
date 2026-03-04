@@ -19,16 +19,16 @@ _config_path = Path(os.getenv("MCP_CONFIG_PATH", "configs/"))
 
 def load_config() -> AppConfig:
     """
-    설정 파일을 로드, 병합, 유효성 검사를 수행하고 AppConfig 객체를 반환합니다.
-    싱글톤 패턴을 사용하여 한 번만 로드합니다.
+    Load, merge, and validate configuration files and return AppConfig object.
+    Uses singleton pattern to cache configuration after first load.
     
     Returns:
-        AppConfig: 로드된 애플리케이션 설정 객체
+        AppConfig: Loaded application configuration object
         
     Note:
-        - 성능 최적화를 위해 싱글톤 패턴 사용
-        - 첫 로드 이후 캐시된 설정 반환
-        - 환경 변수 치환 포함
+        - Uses singleton pattern for performance optimization
+        - Returns cached config after first load
+        - Includes environment variable substitution
     """
     global _config
     if _config:
@@ -63,19 +63,19 @@ def load_config() -> AppConfig:
 
 def _load_config_file(path: Path) -> Dict[str, Any]:
     """
-    설정 파일을 로드합니다. '.enc' 확장자로 끝나면 암호화된 파일로 간주하고 복호화합니다.
+    Load a configuration file. If path ends with '.enc', decrypt the file.
     
     Args:
-        path: 로드할 설정 파일의 경로
+        path: Path to the configuration file to load
         
     Returns:
-        Dict[str, Any]: 로드된 설정 데이터. 파일이 없으면 빈 딕셔너리 반환
+        Dict[str, Any]: Loaded configuration data. Returns empty dict if file not found
         
     Note:
-        - 우선 {path}.enc 암호화 파일 확인
-        - 암호화 파일이 있으면 복호화 시도, 실패 시 일반 파일 로드
-        - 둘 다 없으면 빈 딕셔너리 반환
-        - 성능 최적화를 위해 파일 존재 여부를 한 번만 확인
+        - First checks for {path}.enc encrypted file
+        - If encrypted file exists, attempts decryption; falls back to regular file on failure
+        - Returns empty dict if neither exists
+        - Optimized to check file existence only once
     """
     encrypted_path = Path(f"{path}.enc")
     regular_path = path
@@ -113,19 +113,19 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
 
 def _deep_merge(source: Dict, destination: Dict) -> Dict:
     """
-    두 딕셔너리를 재귀적으로 병합합니다.
+    Recursively merge two dictionaries.
     
     Args:
-        source: 소스 딕셔너리 (우선순위 높음, 이 값으로 덮어씁니다)
-        destination: 목적지 딕셔너리 (우선순위 낮음, 여기에 병합됨)
+        source: Source dictionary (higher priority, overwrites destination)
+        destination: Destination dictionary (lower priority, merged into)
         
     Returns:
-        Dict: 병합된 목적지 딕셔너리
+        Dict: Merged destination dictionary
         
     Note:
-        - source의 값들이 destination으로 병합됨
-        - 두 딕셔너리에 모두 있는 키가 딕셔너리 타입이면 재귀적으로 병합
-        - 그 외 경우 source의 값으로 destination 값을 덮어씀
+        - Source values are merged into destination
+        - If both dicts have a key that is a dict type, recursively merge
+        - Otherwise source value overwrites destination value
     """
     for key, value in source.items():
         if isinstance(value, dict) and key in destination and isinstance(destination[key], dict):
@@ -137,23 +137,24 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
 
 def _load_secrets_from_env(config: AppConfig):
     """
-    환경 변수에서 민감한 설정들을 로드하여 AppConfig 객체를 업데이트합니다.
+    Load environment variable and update AppConfig object.
     
     Args:
-        config: 업데이트할 AppConfig 객체
+        config: AppConfig object to update
         
     Note:
-        - ENCRYPTION_KEY 환경 변수를 config.security.encryption_key에 설정
-        - ${VAR_NAME} 형식의 환경 변수 참조를 실제 값으로 치환
-        - 예: GITHUB_TOKEN -> mcp_servers.github.env.GITHUB_TOKEN
-        - 예: GOOGLE_API_KEY -> mcp_servers.g-search.env.GOOGLE_API_KEY
+        - ENCRYPTION_KEY environment variable sets config.security.encryption_key
+        - ${VAR_NAME} format in config values are replaced with env values
+        - Example: GITHUB_TOKEN -> mcp_servers.github.env.GITHUB_TOKEN
+        - Example: GOOGLE_API_KEY -> mcp_servers.g-search.env.GOOGLE_API_KEY
     """
-    if key := os.getenv("ENCRYPTION_KEY"):
-        config.security.encryption_key = key
+    encryption_key = os.getenv("ENCRYPTION_KEY")
+    if encryption_key:
+        config.security.encryption_key = encryption_key
 
     for server_name, server_config in config.mcp_servers.items():
         for key, value in server_config.env.items():
-            # ${VAR_NAME} 형식의 값을 환경 변수로 치환
+            # Replace ${VAR_NAME} format with environment variable values
             if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
                 env_var = value[2:-1]
                 env_value = os.getenv(env_var)
@@ -161,5 +162,5 @@ def _load_secrets_from_env(config: AppConfig):
                     server_config.env[key] = env_value
 
 
-# 애플리케이션 전체에서 사용할 설정 객체
+# Configuration object for use throughout the application
 settings = load_config()
