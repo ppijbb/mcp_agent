@@ -24,6 +24,20 @@ class EnhancedJSONEncoder(json.JSONEncoder):
     """
     
     def default(self, o):
+        """
+        Convert non-serializable objects to JSON-serializable format.
+
+        Args:
+            o: Object to serialize
+
+        Returns:
+            JSON-serializable representation of the object
+
+        Handles:
+            - dataclasses: Converted to dictionary using asdict()
+            - datetime objects: Converted to ISO format strings
+            - objects with 'value' attribute: Uses the value attribute
+        """
         if is_dataclass(o):
             return asdict(o)
         if isinstance(o, datetime):

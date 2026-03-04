@@ -116,8 +116,8 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
     두 딕셔너리를 재귀적으로 병합합니다.
     
     Args:
-        source: 소스 딕셔너리 (우선순위 낮음)
-        destination: 목적지 딕셔너리 (우선순위 높음, 이 딕셔너리에 병합 결과가 저장됨)
+        source: 소스 딕셔너리 (우선순위 높음, 이 값으로 덮어씁니다)
+        destination: 목적지 딕셔너리 (우선순위 낮음, 여기에 병합됨)
         
     Returns:
         Dict: 병합된 목적지 딕셔너리

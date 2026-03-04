@@ -147,7 +147,30 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
                            impact_metrics=None, initiatives=None,
                            action_items=None, investment_analysis=None,
                            kpis=None, timeline=None, next_steps=None):
-    """Create standardized executive summary report"""
+    """
+    Create standardized executive summary report.
+
+    Generates a formatted markdown report with business metrics, strategic initiatives,
+    action items, investment analysis, KPIs, timeline, and next steps.
+
+    Args:
+        output_dir: Directory path where the report will be saved
+        agent_name: Name identifier for the agent generating the report
+        company_name: Optional company name (defaults to settings value)
+        timestamp: Optional timestamp for the report (defaults to current time)
+        title: Optional report title (defaults to agent name based title)
+        overview: Optional dict with 'title' and 'content' keys for overview section
+        impact_metrics: Optional dict of impact metrics to display
+        initiatives: Optional dict of strategic initiatives
+        action_items: Optional list of action items
+        investment_analysis: Optional dict of investment analysis by phase
+        kpis: Optional dict of key performance indicators
+        timeline: Optional dict of timeline phases and activities
+        next_steps: Optional list of next steps
+
+    Returns:
+        Path to the generated executive summary markdown file
+    """
 
     if not timestamp:
         timestamp = get_now_formatted()
@@ -208,7 +231,21 @@ For comprehensive strategies and detailed implementation plans, please review th
 
 
 def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
-    """Create standardized KPI tracking template"""
+    """
+    Create standardized KPI tracking template.
+
+    Generates a JSON template file with the specified KPI structure for tracking
+    performance indicators over time.
+
+    Args:
+        output_dir: Directory path where the template will be saved
+        agent_name: Name identifier for the agent creating the template
+        kpi_structure: Dict containing the KPI structure to use as template
+        timestamp: Optional timestamp string (defaults to current time)
+
+    Returns:
+        Path to the generated KPI template JSON file
+    """
 
     if not timestamp:
         timestamp = get_now_formatted()
@@ -278,7 +315,7 @@ def save_report(report_data, file_path: str | None = None, output_dir: str | Non
 
 
 def _format_metrics(metrics):
-    """Format impact metrics for executive summary"""
+    """Format impact metrics for executive summary."""
     if not metrics:
         return "- Metrics to be defined based on specific analysis"
 
@@ -289,7 +326,7 @@ def _format_metrics(metrics):
 
 
 def _format_initiatives(initiatives):
-    """Format strategic initiatives for executive summary"""
+    """Format strategic initiatives for executive summary."""
     if not initiatives:
         return "1. **Initiative Planning** - Define specific strategic initiatives"
 
@@ -300,7 +337,7 @@ def _format_initiatives(initiatives):
 
 
 def _format_action_items(action_items):
-    """Format action items for executive summary"""
+    """Format action items for executive summary."""
     if not action_items:
         return "- [ ] Define specific action items based on analysis"
 
@@ -311,7 +348,7 @@ def _format_action_items(action_items):
 
 
 def _format_investment_analysis(investment_analysis):
-    """Format investment analysis for executive summary"""
+    """Format investment analysis for executive summary."""
     if not investment_analysis:
         return "**Investment Analysis**: To be determined based on specific requirements and scope."
 
@@ -322,7 +359,7 @@ def _format_investment_analysis(investment_analysis):
 
 
 def _format_kpis(kpis):
-    """Format KPIs for executive summary"""
+    """Format KPIs for executive summary."""
     if not kpis:
         return "- Performance metrics to be defined based on specific objectives"
 
@@ -333,7 +370,7 @@ def _format_kpis(kpis):
 
 
 def _format_timeline(timeline):
-    """Format implementation timeline for executive summary"""
+    """Format implementation timeline for executive summary."""
     if not timeline:
         return "**Timeline**: Phased implementation approach to be defined."
 
@@ -344,7 +381,7 @@ def _format_timeline(timeline):
 
 
 def _format_next_steps(next_steps):
-    """Format next steps for executive summary"""
+    """Format next steps for executive summary."""
     if not next_steps:
         return "1. Define specific next steps based on analysis results"
 

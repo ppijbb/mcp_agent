@@ -61,8 +61,6 @@ def _cleanup_mcp_apps():
         except Exception as e:
             logger.warning(f"Error cleaning up MCPApp: {e}")
 
-# 프로세스 종료 시 cleanup 등록 (한 번만)
-
 
 def _register_cleanup():
     """Register cleanup handler for MCPApp instances (only in main thread)."""
@@ -128,9 +126,8 @@ class BaseAgent(ABC):
         self.logger = self.app.logger  # MCPApp이 생성한 로거를 사용
         self._session = None
 
-        # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
-        failure_threshold = 5
-        recovery_timeout = 30
+        failure_threshold = self.settings.cache.ttl // 10 if self.settings.cache.ttl else 5
+        recovery_timeout = self.settings.cache.ttl // 20 if self.settings.cache.ttl else 30
         self.circuit_breaker = CircuitBreaker(
             fail_max=failure_threshold,
             reset_timeout=recovery_timeout,
