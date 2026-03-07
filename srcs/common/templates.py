@@ -7,29 +7,25 @@ Base templates and patterns for creating new agents with standardized structure.
 from abc import ABC, abstractmethod
 
 # Defer imports to avoid circular dependencies
+# Import Agent from mcp_agent for use in templates
+try:
+    from mcp_agent.agents.agent import Agent as MCP_Agent
+    from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
+    from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM, QualityRating
+    from mcp_agent.workflows.llm.augmented_llm import RequestParams
+except ImportError:
+    MCP_Agent = None
+    Orchestrator = None
+    EvaluatorOptimizerLLM = None
+    QualityRating = None
+    RequestParams = None
 
-
-def _get_orchestrator_imports():
-    try:
-        from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
-        from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluatorOptimizerLLM
-        from mcp_agent.workflows.llm.augmented_llm import RequestParams
-        from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
-        return Orchestrator, QualityRating, EvaluatorOptimizerLLM, RequestParams, OpenAIAugmentedLLM
-    except ImportError:
-        return None, None, None, None, None
-
+# Alias for Agent - use MCP_Agent if available
+Agent = MCP_Agent
 
 from .config import *
 from .utils import *
-
-
-def _get_llm_imports():
-    try:
-        from .llm import create_fallback_llm_factory, try_fallback_orchestrator_execution
-        return create_fallback_llm_factory, try_fallback_orchestrator_execution
-    except ImportError:
-        return None, None
+from .llm import create_fallback_llm_factory, try_fallback_orchestrator_execution
 
 
 class AgentTemplate(ABC):

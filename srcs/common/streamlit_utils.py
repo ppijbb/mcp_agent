@@ -1,3 +1,16 @@
+"""
+Streamlit Utilities Module
+
+Provides Streamlit-specific utilities for agent integration including
+state management and agent initialization helpers.
+
+Classes:
+    AgentState: Container for agent and its associated LLM
+
+Functions:
+    get_agent_state: Get or create agent state with session persistence
+"""
+
 import streamlit as st
 from dataclasses import dataclass
 from typing import Optional, Type, TypeVar

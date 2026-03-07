@@ -44,7 +44,6 @@ COMPANY_NAME = "Apple" if len(sys.argv) <= 1 else sys.argv[1]
 MAX_ITERATIONS = 3
 
 # Initialize app
-from srcs.common.utils import setup_agent_app
 app = setup_agent_app("unified_stock_analyzer")
 
 
