@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any
 
 
 def list_agents():
-    """List all available agents"""
+    """List all available agents in the MCP Agent system."""
     print("\n=== Available Agents ===\n")
 
     print("📝 Basic Agents:")
@@ -81,8 +81,16 @@ def list_agents():
         print(f"  • {agent:20} - {description}")
 
 
-def run_basic_agent(agent_name):
-    """Run a basic agent"""
+def run_basic_agent(agent_name: str) -> bool:
+    """
+    Run a basic agent by name.
+    
+    Args:
+        agent_name: Name of the basic agent to run.
+        
+    Returns:
+        True if agent ran successfully, False otherwise.
+    """
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
@@ -136,8 +144,16 @@ def run_basic_agent(agent_name):
         return False
 
 
-def run_enterprise_agent(agent_name):
-    """Run an enterprise agent"""
+def run_enterprise_agent(agent_name: str) -> bool:
+    """
+    Run an enterprise agent by name.
+    
+    Args:
+        agent_name: Name of the enterprise agent to run.
+        
+    Returns:
+        True if agent ran successfully, False otherwise.
+    """
     agent_map = {
         "hr_recruitment": "enterprise_agents.hr_recruitment_agent",
         "legal_compliance": "enterprise_agents.legal_compliance_agent",
@@ -176,8 +192,16 @@ def run_enterprise_agent(agent_name):
         return False
 
 
-def run_specialized_agent(agent_name):
-    """Run a specialized agent"""
+def run_specialized_agent(agent_name: str) -> bool:
+    """
+    Run a specialized agent by name.
+    
+    Args:
+        agent_name: Name of the specialized agent to run.
+        
+    Returns:
+        True if agent ran successfully, False otherwise.
+    """
     agent_map = {
         "genome": "genome_agent.run_genome_agent",
         "goal_setter": "goal_setter_agent.goal_setter",
@@ -212,8 +236,16 @@ def run_specialized_agent(agent_name):
         return False
 
 
-def run_utility(util_name):
-    """Run a utility script"""
+def run_utility(util_name: str) -> bool:
+    """
+    Run a utility script by name.
+    
+    Args:
+        util_name: Name of the utility to run.
+        
+    Returns:
+        True if utility ran successfully, False otherwise.
+    """
     util_map = {
         "mental": "enterprise_agents.mental",
         "mental_viz": "utils.mental_visualization",
@@ -251,8 +283,16 @@ def run_utility(util_name):
         return False
 
 
-def run_development_example(example_name):
-    """Run development examples and demonstrations"""
+def run_development_example(example_name: str) -> bool:
+    """
+    Run development examples and demonstrations.
+    
+    Args:
+        example_name: Name of the example to run.
+        
+    Returns:
+        True if example ran successfully, False otherwise.
+    """
     if example_name == "common_demo":
         print("🔧 Common Modules Demonstration")
         print("\nThe common modules provide shared functionality across all agents:")

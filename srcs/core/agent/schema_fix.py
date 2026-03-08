@@ -56,9 +56,17 @@ def normalize_schema_type(schema: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def patch_transform_mcp_tool_schema():
+def patch_transform_mcp_tool_schema() -> None:
     """
     Monkey patch transform_mcp_tool_schema to handle list-type schemas.
+    
+    Patches the transform function in mcp_agent.workflows.llm.augmented_llm_google
+    to handle schema type fields that are lists (e.g., type: ['boolean', 'null'])
+    instead of the standard JSON Schema format.
+    
+    Note:
+        If patching fails, the function logs a warning and continues without
+        the patch to avoid breaking the application.
     """
     try:
         from mcp_agent.workflows.llm import augmented_llm_google

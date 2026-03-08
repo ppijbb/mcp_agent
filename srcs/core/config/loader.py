@@ -127,12 +127,13 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
         - If both dicts have a key that is a dict type, recursively merge
         - Otherwise source value overwrites destination value
     """
+    result = destination.copy()
     for key, value in source.items():
-        if isinstance(value, dict) and key in destination and isinstance(destination[key], dict):
-            destination[key] = _deep_merge(value, destination[key])
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            result[key] = _deep_merge(value, result[key])
         else:
-            destination[key] = value
-    return destination
+            result[key] = value
+    return result
 
 
 def _load_secrets_from_env(config: AppConfig):

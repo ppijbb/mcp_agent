@@ -126,8 +126,9 @@ class BaseAgent(ABC):
         self.logger = self.app.logger  # MCPApp이 생성한 로거를 사용
         self._session = None
 
-        failure_threshold = self.settings.cache.ttl // 10 if self.settings.cache.ttl else 5
-        recovery_timeout = self.settings.cache.ttl // 20 if self.settings.cache.ttl else 30
+        ttl = self.settings.cache.ttl
+        failure_threshold = ttl // 10 if ttl else 5
+        recovery_timeout = ttl // 20 if ttl else 30
         self.circuit_breaker = CircuitBreaker(
             fail_max=failure_threshold,
             reset_timeout=recovery_timeout,
