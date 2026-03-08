@@ -137,3 +137,6 @@
 [submodule "reference/open-claude-cowork"]
 	path = reference/open-claude-cowork
 	url = https://github.com/ComposioHQ/open-claude-cowork.git
+[submodule "reference/agent-skills"]
+	path = reference/agent-skills
+	url = https://github.com/anthropics/skills.git
