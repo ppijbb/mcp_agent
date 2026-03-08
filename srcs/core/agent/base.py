@@ -150,14 +150,27 @@ class BaseAgent(ABC):
 
     @property
     def session(self) -> aiohttp.ClientSession:
-        """Legacy property for backward compatibility. Use get_session() in async contexts."""
+        """
+        Legacy property for backward compatibility. Use get_session() in async contexts.
+
+        Note:
+            This property creates a new event loop each call and may cause issues
+            if used in async contexts. Prefer get_session() method instead.
+        """
         import warnings
         warnings.warn(
             "session property is deprecated, use get_session() in async contexts",
             DeprecationWarning,
             stacklevel=2
         )
-        return asyncio.run(self.get_session())
+        try:
+            loop = asyncio.get_running_loop()
+            raise RuntimeError(
+                "session property cannot be used in async context. "
+                "Use await get_session() instead."
+            )
+        except RuntimeError:
+            return asyncio.run(self.get_session())
 
     def _setup_app(self) -> MCPApp:
         """

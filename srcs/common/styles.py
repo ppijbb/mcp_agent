@@ -222,23 +222,47 @@ MOBILE_STYLES = """
 
 
 def get_common_styles():
-    """모든 공통 스타일을 결합하여 반환"""
+    """
+    Combine and return all common styles for the application.
+
+    Returns:
+        Combined CSS string containing header, button, card, and dark mode styles.
+    """
     return HEADER_STYLES["main_style_block"] + BUTTON_STYLES + CARD_STYLES + DARK_MODE_STYLES
 
 
 def get_mobile_styles():
-    """모바일 최적화 스타일 반환"""
+    """
+    Return mobile-optimized styles.
+
+    Returns:
+        CSS string for mobile-responsive design.
+    """
     return MOBILE_STYLES
 
 
 def apply_custom_styles():
-    """Streamlit에 공통 스타일 적용"""
+    """
+    Apply common styles to Streamlit application.
+
+    Uses Streamlit's markdown to inject CSS styles with unsafe_allow_html=True.
+    """
     import streamlit as st
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 
 def get_page_header(page_type, title, subtitle):
-    """페이지별 헤더 HTML 생성"""
+    """
+    Generate page header HTML with custom styling.
+
+    Args:
+        page_type: Type of page for styling (e.g., 'main', 'agent', etc.)
+        title: Main title to display in the header.
+        subtitle: Subtitle text to display below the title.
+
+    Returns:
+        HTML string containing the styled page header.
+    """
     background = HEADER_STYLES.get(page_type, HEADER_STYLES["main"])
 
     return f"""
@@ -252,7 +276,12 @@ def get_page_header(page_type, title, subtitle):
 
 
 def get_home_button():
-    """홈 버튼 HTML 생성"""
+    """
+    Generate home button HTML for navigation.
+
+    Returns:
+        HTML string containing the styled home button.
+    """
     return """
     <div class="home-button">
         🏠 홈으로 돌아가기

@@ -25,7 +25,15 @@ CACHE_DURATION = timedelta(hours=1)
 
 
 def _fetch_openrouter_models(api_key: str) -> List[str]:
-    """OpenRouter API에서 사용 가능한 모델 목록을 동적으로 가져와서 순위별로 정렬"""
+    """
+    Fetch available models from OpenRouter API and sort by dynamic scoring.
+
+    Args:
+        api_key: OpenRouter API key for authentication.
+
+    Returns:
+        List of sorted model IDs based on dynamic scoring (recency, context length, etc).
+    """
     cache_key = "openrouter"
     now = datetime.now()
 
@@ -131,7 +139,15 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
 
 
 def _fetch_groq_models(api_key: str) -> List[str]:
-    """Groq API에서 사용 가능한 모델 목록을 동적으로 가져와서 정렬"""
+    """
+    Fetch available models from Groq API and sort alphabetically.
+
+    Args:
+        api_key: Groq API key for authentication.
+
+    Returns:
+        List of sorted model IDs from Groq.
+    """
     cache_key = "groq"
     now = datetime.now()
 
@@ -223,7 +239,18 @@ def get_best_fallback_models() -> List[Dict[str, Any]]:
 
 
 class DirectHTTPLLM:
-    """OpenAI 클라이언트 없이 직접 HTTP 요청을 사용하는 LLM 래퍼"""
+    """
+    LLM wrapper using direct HTTP requests without OpenAI client.
+
+    Provides a simple HTTP-based LLM implementation for fallback scenarios
+    when the standard OpenAI client is not available or encounters errors.
+
+    Attributes:
+        model: Model identifier to use for generation.
+        base_url: Base URL for the API endpoint.
+        api_key: API key for authentication.
+        provider: Provider name (e.g., 'openrouter', 'groq').
+    """
 
     def __init__(self, model: str, base_url: str, api_key: str, provider: str):
         self.model = model
@@ -233,7 +260,16 @@ class DirectHTTPLLM:
         self._client = None
 
     async def generate_str(self, message: str, request_params=None) -> str:
-        """텍스트 생성 (직접 HTTP 요청)"""
+        """
+        Generate text using direct HTTP request.
+
+        Args:
+            message: User message to generate response for.
+            request_params: Optional request parameters (temperature, etc).
+
+        Returns:
+            Generated text response from the LLM.
+        """
         messages = [{"role": "user", "content": message}]
 
         headers = {
@@ -369,6 +405,15 @@ def create_fallback_llm_for_agents(
     log = logger_instance or logger
 
     def llm_factory_for_agents(**kwargs):
+        """
+        Factory function for creating agent LLM instances with fallback support.
+
+        Attempts to create a GoogleAugmentedLLM and falls back to alternative
+        providers if the primary fails due to API errors.
+
+        Returns:
+            LLM instance (GoogleAugmentedLLM or fallback).
+        """
         try:
             return GoogleAugmentedLLM(model=primary_model)
         except Exception as e:
