@@ -134,3 +134,6 @@
 [submodule "reference/claude-context-mode"]
 	path = reference/claude-context-mode
 	url = https://github.com/mksglu/claude-context-mode.git
+[submodule "reference/open-claude-cowork"]
+	path = reference/open-claude-cowork
+	url = https://github.com/ComposioHQ/open-claude-cowork.git
