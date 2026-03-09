@@ -353,9 +353,9 @@ class ExternalDataManager:
                     try:
                         response = await client.get(endpoint, timeout=5.0)
                         results[f"api_{name}"] = response.status_code < 500
-                    except:
+                    except httpx.RequestError:
                         results[f"api_{name}"] = False
-        except:
+        except Exception:
             pass
 
         # Check MCP servers (would be actual MCP health checks)
