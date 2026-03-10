@@ -265,7 +265,17 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
 
 
 def save_deliverables(orchestrator_result, output_dir, deliverable_files):
-    """Save orchestrator results to specified deliverable files"""
+    """
+    Save orchestrator results to specified deliverable files.
+    
+    Args:
+        orchestrator_result: The result object from orchestrator execution
+        output_dir: Directory path where deliverables will be saved
+        deliverable_files: List of file paths or identifiers for deliverables
+        
+    Returns:
+        List of paths to saved deliverable files
+    """
     # Implementation would depend on orchestrator result format
     # This is a placeholder for the actual implementation
 
@@ -315,7 +325,15 @@ def save_report(report_data, file_path: str | None = None, output_dir: str | Non
 
 
 def _format_metrics(metrics):
-    """Format impact metrics for executive summary."""
+    """
+    Format impact metrics for executive summary.
+    
+    Args:
+        metrics: Dictionary of metric names to values
+        
+    Returns:
+        Formatted markdown string with bullet points for each metric
+    """
     if not metrics:
         return "- Metrics to be defined based on specific analysis"
 
@@ -326,7 +344,15 @@ def _format_metrics(metrics):
 
 
 def _format_initiatives(initiatives):
-    """Format strategic initiatives for executive summary."""
+    """
+    Format strategic initiatives for executive summary.
+    
+    Args:
+        initiatives: Dictionary of initiative titles to descriptions
+        
+    Returns:
+        Formatted markdown string with numbered list of initiatives
+    """
     if not initiatives:
         return "1. **Initiative Planning** - Define specific strategic initiatives"
 
@@ -337,7 +363,15 @@ def _format_initiatives(initiatives):
 
 
 def _format_action_items(action_items):
-    """Format action items for executive summary."""
+    """
+    Format action items for executive summary.
+    
+    Args:
+        action_items: List of action item strings
+        
+    Returns:
+        Formatted markdown string with checkbox items
+    """
     if not action_items:
         return "- [ ] Define specific action items based on analysis"
 
@@ -348,7 +382,15 @@ def _format_action_items(action_items):
 
 
 def _format_investment_analysis(investment_analysis):
-    """Format investment analysis for executive summary."""
+    """
+    Format investment analysis for executive summary.
+    
+    Args:
+        investment_analysis: Dictionary of phase names to details
+        
+    Returns:
+        Formatted markdown string with phase breakdowns
+    """
     if not investment_analysis:
         return "**Investment Analysis**: To be determined based on specific requirements and scope."
 
@@ -359,7 +401,15 @@ def _format_investment_analysis(investment_analysis):
 
 
 def _format_kpis(kpis):
-    """Format KPIs for executive summary."""
+    """
+    Format KPIs for executive summary.
+    
+    Args:
+        kpis: Dictionary of KPI names to target values
+        
+    Returns:
+        Formatted markdown string with KPI list
+    """
     if not kpis:
         return "- Performance metrics to be defined based on specific objectives"
 
@@ -370,7 +420,15 @@ def _format_kpis(kpis):
 
 
 def _format_timeline(timeline):
-    """Format implementation timeline for executive summary."""
+    """
+    Format implementation timeline for executive summary.
+    
+    Args:
+        timeline: Dictionary of timeline periods to activities
+        
+    Returns:
+        Formatted markdown string with timeline breakdown
+    """
     if not timeline:
         return "**Timeline**: Phased implementation approach to be defined."
 
@@ -381,7 +439,15 @@ def _format_timeline(timeline):
 
 
 def _format_next_steps(next_steps):
-    """Format next steps for executive summary."""
+    """
+    Format next steps for executive summary.
+    
+    Args:
+        next_steps: List of next step strings
+        
+    Returns:
+        Formatted markdown string with numbered next steps
+    """
     if not next_steps:
         return "1. Define specific next steps based on analysis results"
 

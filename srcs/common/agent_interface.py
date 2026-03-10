@@ -184,10 +184,6 @@ class AgentRunner:
                 execution_time=execution_time,
                 metadata={"agent_id": self.agent.metadata.agent_id}
             )
-        finally:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            if self.agent.current_result:
-                self.agent.current_result.execution_time = execution_time
 
     def run_sync(self, input_data: Dict[str, Any]) -> AgentExecutionResult:
         """
