@@ -172,7 +172,7 @@ def run_agent_via_a2a(
             # UI 업데이트 시도 (비동기에서는 제한적)
             try:
                 update_log_ui()
-            except:
+            except Exception:
                 pass  # 비동기 컨텍스트에서는 실패할 수 있음
 
         try:
@@ -191,7 +191,7 @@ def run_agent_via_a2a(
                 def update_status(text: str):
                     try:
                         status_placeholder.info(f"🔄 {text}")
-                    except:
+                    except Exception:
                         pass  # 비동기 컨텍스트에서는 실패할 수 있음
 
                 def update_log(message: str, level: str = "info"):

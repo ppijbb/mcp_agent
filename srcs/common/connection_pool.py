@@ -225,7 +225,7 @@ class ImprovedConnectionPool:
             # Force garbage collection for the connection object
             try:
                 del connection
-            except:
+            except Exception:
                 pass
     
     def _add_weak_ref(self, connection: Any, pool_key: str) -> None:
@@ -362,7 +362,7 @@ class ImprovedConnectionPool:
         try:
             if not hasattr(self, '_shutdown') or not self._shutdown:
                 self.shutdown()
-        except:
+        except Exception:
             pass  # Ignore errors during destruction
 
 
