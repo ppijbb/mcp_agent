@@ -15,6 +15,12 @@ import threading
 class PerformanceMonitor:
     """
     Simple performance monitoring utility for tracking function execution times.
+    
+    Provides thread-safe performance monitoring with configurable history
+    for tracking function execution statistics.
+    
+    Attributes:
+        max_history: Maximum number of timing records to keep per function
     """
     
     def __init__(self, max_history: int = 1000):

@@ -29,7 +29,19 @@ from .llm import create_fallback_llm_factory, try_fallback_orchestrator_executio
 
 
 class AgentTemplate(ABC):
-    """Base template for all agents"""
+    """
+    Base template for all agents.
+    
+    Provides a standardized structure for creating new agents with common
+    functionality including app setup, orchestrator creation, and execution.
+    
+    Attributes:
+        agent_name: Unique identifier for the agent
+        company_name: Company name for reports (defaults to "Company")
+        custom_scope: Custom scope or domain for agent operations
+        output_dir: Directory path for agent output files
+        timestamp: Timestamp for report generation
+    """
 
     def __init__(self, agent_name, company_name=None, custom_scope=None):
         self.agent_name = agent_name
@@ -40,18 +52,38 @@ class AgentTemplate(ABC):
 
     @abstractmethod
     def create_agents(self):
-        """Create and return list of specialized agents"""
+        """
+        Create and return list of specialized agents.
+        
+        Returns:
+            List of agent instances for orchestrator execution
+        """
 
     @abstractmethod
     def create_evaluator(self):
-        """Create and return quality evaluator agent"""
+        """
+        Create and return quality evaluator agent.
+        
+        Returns:
+            Agent instance for quality evaluation
+        """
 
     @abstractmethod
     def define_task(self):
-        """Define the main task for orchestrator execution"""
+        """
+        Define the main task for orchestrator execution.
+        
+        Returns:
+            Task string describing the work to be done
+        """
 
     def setup_app(self):
-        """Setup MCP application"""
+        """
+        Setup MCP application.
+        
+        Returns:
+            Configured MCPApp instance
+        """
         return setup_agent_app(f"{self.agent_name}_system")
 
     def create_orchestrator(self, agents, evaluator):
@@ -75,7 +107,15 @@ class AgentTemplate(ABC):
         )
 
     async def run(self):
-        """Main execution method"""
+        """
+        Main execution method.
+        
+        Sets up the application, creates agents and orchestrator,
+        executes the task, and generates summary reports.
+        
+        Returns:
+            bool: True if execution was successful, False otherwise
+        """
         ensure_output_directory(self.output_dir)
 
         async with self.setup_app().run() as app:
@@ -125,7 +165,15 @@ class AgentTemplate(ABC):
 
 
 class EnterpriseAgentTemplate(AgentTemplate):
-    """Template specifically for enterprise-level agents"""
+    """
+    Template specifically for enterprise-level agents.
+    
+    Extends AgentTemplate with enterprise-specific features including
+    quality controllers, standardized evaluators, and business scope management.
+    
+    Attributes:
+        business_scope: Business scope for enterprise operations (defaults to "Global Operations")
+    """
 
     def __init__(self, agent_name, company_name=None, business_scope=None):
         super().__init__(agent_name, company_name, business_scope)
@@ -192,7 +240,15 @@ class EnterpriseAgentTemplate(AgentTemplate):
 
 
 class BasicAgentTemplate(AgentTemplate):
-    """Template for basic/simple agents"""
+    """
+    Template for basic/simple agents.
+    
+    Provides a simplified agent template for quick prototyping and
+    basic agent implementations with minimal configuration.
+    
+    Attributes:
+        task_description: Description of the task the agent should perform
+    """
 
     def __init__(self, agent_name, task_description):
         super().__init__(agent_name)
