@@ -65,8 +65,8 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         Returns:
             Filtered message with sensitive data masked
         """
-        # Check cache first
-        cache_key = hash(message)
+        # Check cache first - use message itself as key with size limit
+        cache_key = message[:500] if len(message) > 500 else message
         if cache_key in self._cache:
             return self._cache[cache_key]
         
