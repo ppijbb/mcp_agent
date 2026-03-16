@@ -140,3 +140,6 @@
 [submodule "reference/agent-skills"]
 	path = reference/agent-skills
 	url = https://github.com/anthropics/skills.git
+[submodule "reference/CLI-Anything"]
+	path = reference/CLI-Anything
+	url = https://github.com/HKUDS/CLI-Anything.git
