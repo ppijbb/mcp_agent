@@ -143,3 +143,6 @@
 [submodule "reference/CLI-Anything"]
 	path = reference/CLI-Anything
 	url = https://github.com/HKUDS/CLI-Anything.git
+[submodule "reference/deepagents"]
+	path = reference/deepagents
+	url = https://github.com/langchain-ai/deepagents.git
