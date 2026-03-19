@@ -15,10 +15,18 @@ def normalize_schema_type(schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize schema types that are lists to standard JSON Schema anyOf format.
 
-    Converts:
-        type: ['boolean', 'null']
-    To:
-        anyOf: [{type: 'boolean'}, {type: 'null'}]
+    Converts non-standard type formats like `type: ['boolean', 'null']`
+    to the standard JSON Schema format using `anyOf`.
+
+    Args:
+        schema: The MCP tool schema dictionary to normalize
+
+    Returns:
+        Normalized schema dictionary with list-type fields converted to anyOf format
+
+    Example:
+        Input:  {"type": ["boolean", "null"]}
+        Output: {"anyOf": [{"type": "boolean"}, {"type": "null"}]}
     """
     if not isinstance(schema, dict):
         return schema

@@ -50,7 +50,7 @@ class TestSecurityImprovements(unittest.TestCase):
             key = generate_key()
         
         output = f.getvalue()
-        self.assertIn("새로운 암호화 키가 생성되었습니다", output)
+        self.assertIn("New encryption key generated", output)
         self.assertIsNotNone(key)
         
     def test_encrypt_file_missing_key(self):

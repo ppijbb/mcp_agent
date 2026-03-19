@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 리더보드 관련 MCP 도구
 """
@@ -83,13 +84,13 @@ class LeaderboardTools:
             """
             logger.info(f"Updating leaderboard: user {user_id}, score {score}, category {category}")
 
-            if category not in self.leaderboard:
-                self.leaderboard[category] = {}
+            cat_key = str(category)
+            if cat_key not in self.leaderboard:
+                self.leaderboard[cat_key] = {}
 
-            # 기존 점수와 비교하여 더 높은 점수로 업데이트
-            current_score = self.leaderboard[category].get(user_id, 0.0)
+            current_score = self.leaderboard[cat_key].get(user_id, 0.0)
             if score > current_score:
-                self.leaderboard[category][user_id] = score
+                self.leaderboard[cat_key][user_id] = score
                 self._save_data()
 
                 result = {

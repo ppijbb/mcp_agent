@@ -46,7 +46,12 @@ httpx==0.28.1
 
 # Security and validation
 urllib3>=2.2.7
-certifi>=2023.7.22
+certifi>=2024.12.31
+click>=8.3.1
+cryptography>=46.0.5
+MarkupSafe>=3.0.3
+PyYAML>=6.0.3
+requests>=2.32.5
 
 # Configuration and Utilities
 python-dotenv>=1.1.2
