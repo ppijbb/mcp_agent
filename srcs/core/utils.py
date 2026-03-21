@@ -38,10 +38,10 @@ class EnhancedJSONEncoder(json.JSONEncoder):
             - datetime objects: Converted to ISO format strings
             - objects with 'value' attribute: Uses the value attribute
         """
-        if is_dataclass(o):
+        if is_dataclass(o) and not isinstance(o, type):
             return asdict(o)
         if isinstance(o, datetime):
             return o.isoformat()
-        if hasattr(o, 'value'):
+        if hasattr(o, 'value') and not isinstance(o, type):
             return o.value
         return super().default(o)

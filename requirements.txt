@@ -51,11 +51,9 @@ click>=8.3.1
 cryptography>=46.0.5
 MarkupSafe>=3.0.3
 PyYAML>=6.0.3
-requests>=2.32.5
 
 # Configuration and Utilities
 python-dotenv>=1.1.2
-PyYAML>=6.0.3
 pydantic>=2.10.7
 pydantic-settings>=2.6.4
 email-validator>=2.2.2
@@ -130,7 +128,6 @@ prometheus-client
 tenacity
 
 # Security
-cryptography>=46.0.5
 passlib>=1.7.4
 PyJWT>=2.9.0
 pycryptodome>=3.21.1

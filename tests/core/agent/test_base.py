@@ -1,8 +1,14 @@
+"""
+Test suite for BaseAgent core functionality.
+"""
 import pytest
 from srcs.core.agent.base import BaseAgent
 from mcp_agent import MCPApp
 
+
 class MockAgent(BaseAgent):
+    """Mock agent for testing BaseAgent functionality."""
+
     async def run_workflow(self, *args, **kwargs):
         return "workflow executed"
 
