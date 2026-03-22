@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """
-진짜 LangGraph 에이전트 연동 UI 시스템
-실제 AI 에이전트가 게임을 분석하고 UI를 생성하는 시스템
+Board Game UI Generator Page Module.
+
+Real-time LangGraph agent integration UI system for board game analysis and UI generation.
+Enables AI agents to analyze board games and generate interactive UI components.
+
+Features:
+    - LangGraph agent integration via A2A protocol
+    - BGG (BoardGameGeek) web scraping for game data
+    - Real-time game state visualization
+    - Agent-driven UI generation
+
+Korean: 진짜 LangGraph 에이전트 연동 UI 시스템
+        실제 AI 에이전트가 게임을 분석하고 UI를 생성하는 시스템
 """
 
 import streamlit as st

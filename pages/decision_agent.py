@@ -1,3 +1,15 @@
+"""
+Decision Agent Page Module.
+
+Provides a Streamlit UI for the Decision Agent that analyzes complex situations
+and recommends optimal decisions based on interaction context.
+
+Module:
+    - Displays decision analysis results with confidence scores and risk levels
+    - Supports multiple interaction types (ProductPurchase, ContractSigning, ServiceCancellation, etc.)
+    - Executes agent via A2A protocol for standardized communication
+"""
+
 import streamlit as st
 from pathlib import Path
 import sys
@@ -5,7 +17,8 @@ import json
 import os
 from datetime import datetime
 
-# 프로젝트 루트를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 

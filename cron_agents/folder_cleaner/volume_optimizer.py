@@ -1,3 +1,23 @@
+"""
+Volume Optimizer Module.
+
+AI-powered disk space optimization tool that scans partitions for cleanup candidates
+and uses Gemini AI to suggest intelligent cleanup actions.
+
+Features:
+    - Scans mounted partitions for optimization opportunities
+    - Identifies large, old, and temporary files
+    - Uses Gemini AI for intelligent cleanup suggestions
+    - Supports dry-run mode for safe execution
+    - Handles cross-platform admin privilege detection
+
+Usage:
+    python volume_optimizer.py
+
+Author:
+    MCP Agent Team
+"""
+
 import os
 import sys
 import json

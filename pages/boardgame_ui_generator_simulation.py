@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """
-게임 시뮬레이션을 위한 A2A 실시간 통신 시스템
-표준 A2A 헬퍼를 사용하여 실시간 진행 상황 표시
+Board Game UI Generator Simulation Page.
+
+A2A real-time communication system for game simulation using standard A2A helpers.
+Provides real-time progress display during agent-driven game simulations.
+
+Features:
+    - Real-time A2A communication
+    - Progress tracking and display
+    - Standardized agent execution
+    - Game state simulation
+
+Korean: 게임 시뮬레이션을 위한 A2A 실시간 통신 시스템
+        표준 A2A 헬퍼를 사용하여 실시간 진행 상황 표시
 """
 
 import streamlit as st
