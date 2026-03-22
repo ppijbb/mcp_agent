@@ -1,9 +1,22 @@
+"""
+Supply Chain Orchestrator Agent
+
+A comprehensive supply chain optimization and risk management system that handles:
+- Real-time supply chain monitoring and alerts
+- Predictive demand planning and inventory optimization
+- Supplier risk assessment and performance tracking
+- Automated alternative sourcing and contract management
+- Logistics optimization and route planning
+- Sustainability and ESG supply chain compliance
+- Cost optimization and margin analysis
+- Crisis response and business continuity planning
+"""
+
 import asyncio
 import os
 import json
 from datetime import datetime
 
-from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
@@ -15,16 +28,9 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
 from srcs.common.utils import setup_agent_app
 
 
-# Configuration
 OUTPUT_DIR = "supply_chain_reports"
 COMPANY_NAME = "TechCorp Inc."
 SUPPLY_CHAIN_SCOPE = "Global Manufacturing & Distribution"
-
-app = MCPApp(
-    name="supply_chain_orchestrator_system",
-    settings=None,
-    human_input_callback=None
-)
 
 
 async def main():

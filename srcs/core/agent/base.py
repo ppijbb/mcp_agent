@@ -156,6 +156,10 @@ class BaseAgent(ABC):
         Note:
             This property creates a new event loop each call and may cause issues
             if used in async contexts. Prefer get_session() method instead.
+
+        Warning:
+            Creates a new event loop on each call. Previous loops are closed to
+            prevent resource leaks.
         """
         import warnings
         warnings.warn(
@@ -170,11 +174,22 @@ class BaseAgent(ABC):
                 "Use await get_session() instead."
             )
         except RuntimeError:
-            return asyncio.run(self.get_session())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(self.get_session())
+            finally:
+                loop.close()
 
     def _setup_app(self) -> MCPApp:
         """
-        MCPApp을 설정합니다. mcp_agent 라이브러리의 get_settings를 사용합니다.
+        Create and configure the MCPApp instance.
+
+        Uses mcp_agent library's get_settings for configuration management.
+        Sets up logging and registers cleanup handlers for the app instance.
+
+        Returns:
+            MCPApp: Configured MCPApp instance.
         """
         from mcp_agent.config import get_settings
         from pathlib import Path

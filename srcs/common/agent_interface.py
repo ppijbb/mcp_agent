@@ -118,12 +118,22 @@ class BaseAgent(ABC):
 
         Returns:
             AgentExecutionResult: 실행 결과
+
+        Note:
+            Creates a new event loop for synchronous execution.
+            Properly closes the loop in the finally block to prevent leaks.
         """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             result = loop.run_until_complete(self.execute(input_data))
             return result
+        except Exception as e:
+            return AgentExecutionResult(
+                success=False,
+                error=str(e),
+                metadata={"agent_id": self.metadata.agent_id}
+            )
         finally:
             loop.close()
 
@@ -194,10 +204,20 @@ class AgentRunner:
 
         Returns:
             AgentExecutionResult: 실행 결과
+
+        Note:
+            Creates a new event loop for synchronous execution.
+            Properly closes the loop in the finally block to prevent leaks.
         """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(self.run(input_data))
+        except Exception as e:
+            return AgentExecutionResult(
+                success=False,
+                error=str(e),
+                metadata={"agent_id": self.agent.metadata.agent_id}
+            )
         finally:
             loop.close()
