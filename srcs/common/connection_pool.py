@@ -310,7 +310,19 @@ class ImprovedConnectionPool:
                 logger.error(f"Background cleanup error: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get connection pool statistics."""
+        """
+        Get connection pool statistics.
+        
+        Returns:
+            Dictionary containing:
+                - total_pooled_connections: Number of idle connections in pools
+                - total_active_connections: Number of active connections
+                - pool_size_limit: Maximum pool size per model
+                - max_idle_time: Maximum idle time in seconds
+                - weak_refs_count: Number of tracked weak references
+                - connection_stats: Statistics per pool key
+                - pools: Current pool sizes by key
+        """
         with self._lock:
             total_pooled = sum(len(conns) for conns in self._pools.values())
             total_active = sum(len(conns) for conns in self._active_connections.values())

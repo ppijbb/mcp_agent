@@ -37,7 +37,16 @@ class PerformanceMonitor:
             self._counts[func_name] += 1
     
     def get_stats(self, func_name: str) -> Optional[Dict[str, Any]]:
-        """Get performance statistics for a specific function."""
+        """
+        Get performance statistics for a specific function.
+        
+        Args:
+            func_name: Name of the function to get stats for
+            
+        Returns:
+            Dictionary containing count, avg, min, max, and total,
+            or None if no timings recorded for the function
+        """
         with self._lock:
             if func_name not in self._timings or not self._timings[func_name]:
                 return None

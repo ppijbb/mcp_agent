@@ -332,3 +332,9 @@ class CommonAgentA2AWrapper(A2AAdapter):
             "is_listening": self.is_listening,
             "message_queue_size": self._message_queue.qsize(),
         }
+
+
+__all__ = [
+    "A2ALogHandler",
+    "CommonAgentA2AWrapper",
+]

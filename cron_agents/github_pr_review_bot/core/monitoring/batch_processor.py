@@ -272,7 +272,13 @@ class BatchProcessor:
                 logger.error(f"에러 콜백 실패: {e}")
 
     def get_queue_status(self) -> Dict[str, Any]:
-        """대기열 상태 조회"""
+        """
+        대기열 상태 조회
+        
+        Returns:
+            Dictionary containing pending requests count, processing status,
+            batch size, and rate limiter states
+        """
         with self.lock:
             return {
                 "pending_requests": len(self.pending_requests),
@@ -290,15 +296,28 @@ class BatchProcessor:
                 }
             }
 
-    def clear_queue(self):
-        """대기열 정리"""
+    def clear_queue(self) -> None:
+        """
+        대기열 정리
+        
+        Clears all pending requests from the queue.
+        Logs the number of requests that were cleared.
+        """
         with self.lock:
             cleared_count = len(self.pending_requests)
             self.pending_requests.clear()
             logger.info(f"대기열 정리 완료: {cleared_count}개 요청 제거")
 
     def wait_for_completion(self, timeout: float = 30.0) -> bool:
-        """모든 요청 완료 대기"""
+        """
+        모든 요청 완료 대기
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            True if all requests completed within timeout, False otherwise
+        """
         start_time = time.time()
 
         while time.time() - start_time < timeout:

@@ -114,7 +114,6 @@ supabase
 browser-use
 
 # CLI and Interface
-click
 rich
 typer
 
