@@ -175,14 +175,20 @@ class ImprovedConnectionPool:
         """
         Validate if connection is still usable.
         
+        Performs basic validation to check if the connection object is still
+        valid and can be reused from the pool. Subclasses can override this
+        method to add provider-specific validation logic.
+        
         Args:
-            connection: Connection to validate
+            connection: Connection object to validate
             
         Returns:
-            True if connection is valid
+            True if connection is valid and can be reused; False otherwise.
+            Returns False if connection is None or validation raises an exception.
             
-        Raises:
-            Exception: Any exception during validation is logged and returns False
+        Note:
+            Override this method in subclasses to add provider-specific checks,
+            such as testing network connectivity or verifying session state.
         """
         try:
             # Basic validation - check if connection object exists and has expected attributes

@@ -122,7 +122,15 @@ def render_import_error(agent_name, error_message):
 
 
 def render_agent_intro(agent_name, features, special_features=None, use_cases=None):
-    """에이전트 소개 렌더링"""
+    """
+    Render agent introduction with features and use cases.
+    
+    Args:
+        agent_name: Name of the agent to display in the header
+        features: List of main features to display
+        special_features: Optional list of special features (displayed in right column)
+        use_cases: Optional list of use cases for the agent
+    """
     st.markdown(f"### 🎯 {agent_name} 소개")
 
     col1, col2 = st.columns(2)
@@ -156,7 +164,21 @@ def create_agent_page(
     special_features=None,
     use_cases=None
 ):
-    """통합 에이전트 페이지 생성 함수"""
+    """
+    Create a unified agent page with standard layout and styling.
+    
+    Args:
+        agent_name: Display name for the agent
+        page_icon: Emoji icon for the page
+        page_type: Type identifier for page styling
+        title: Main title to display in header
+        subtitle: Subtitle text for the header
+        module_path: Optional path to agent module for imports
+        main_function_name: Name of the main function to call (default: "main")
+        features: Optional list of main features
+        special_features: Optional list of special features
+        use_cases: Optional list of use cases
+    """
 
     # 페이지 설정
     setup_page(f"{page_icon} {agent_name}", page_icon)
@@ -177,7 +199,19 @@ def create_agent_page(
 
 
 def render_demo_content(demo_data):
-    """데모 콘텐츠 렌더링"""
+    """
+    Render demo content with tabs containing various content types.
+    
+    Supports rendering markdown, Plotly charts, and DataFrames within tabs.
+    
+    Args:
+        demo_data: Dictionary containing tab definitions with keys:
+            - tabs: List of tab objects, each with:
+                - name: Tab display name
+                - markdown: Optional markdown content to render
+                - chart: Optional Plotly chart figure
+                - dataframe: Optional pandas DataFrame to display
+    """
     if "tabs" in demo_data:
         tabs = st.tabs([tab["name"] for tab in demo_data["tabs"]])
 
@@ -192,7 +226,15 @@ def render_demo_content(demo_data):
 
 
 def render_metrics_row(metrics):
-    """메트릭 행 렌더링"""
+    """
+    Render a row of metric cards.
+    
+    Args:
+        metrics: List of metric dictionaries, each containing:
+            - label: Metric label text
+            - value: Main metric value to display
+            - delta: Optional change/delta value to show
+    """
     cols = st.columns(len(metrics))
 
     for i, metric in enumerate(metrics):

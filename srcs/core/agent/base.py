@@ -24,7 +24,7 @@ from typing import Any, List
 try:
     import mcp_agent.config
     mcp_agent.config._settings = None
-except Exception:
+except ImportError:
     pass
 
 from mcp_agent.app import MCPApp
@@ -71,7 +71,7 @@ def _register_cleanup():
                 try:
                     atexit.register(_cleanup_mcp_apps)
                     _cleanup_registered = True
-                except Exception:
+                except (OSError, RuntimeError):
                     pass
 
 

@@ -7,14 +7,13 @@ Gemini API 503 오류 시 자동으로 최고 성능 모델로 fallback하는 �
 
 import os
 import logging
-import requests
+import httpx
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +48,10 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
             "HTTP-Referer": "https://github.com/mcp-agent",
             "X-Title": "MCP Agent Fallback"
         }
-        response = requests.get(
+        response = httpx.get(
             "https://openrouter.ai/api/v1/models",
             headers=headers,
-            timeout=10
+            timeout=10.0
         )
         if response.status_code == 200:
             data = response.json()
@@ -161,10 +160,10 @@ def _fetch_groq_models(api_key: str) -> List[str]:
         headers = {
             "Authorization": f"Bearer {api_key}"
         }
-        response = requests.get(
+        response = httpx.get(
             "https://api.groq.com/openai/v1/models",
             headers=headers,
-            timeout=10
+            timeout=10.0
         )
         if response.status_code == 200:
             data = response.json()
