@@ -36,26 +36,22 @@ def load_config() -> AppConfig:
 
     env = os.getenv("MCP_ENV", "development")
 
-    # 병렬로 설정 파일 로드하여 성능 최적화
     base_config = _load_config_file(_config_path / "base.yaml")
     env_config = _load_config_file(_config_path / f"{env}.yaml")
 
-    # 빈 설정인 경우 early return
     if not base_config and not env_config:
-        print(f"⚠️ 경고: 설정 파일을 찾을 수 없습니다. 경로: {_config_path}")
-        base_config = {}  # 기본값 설정
+        print(f"Warning: Configuration files not found at path: {_config_path}")
+        base_config = {}
 
     merged_config = _deep_merge(base_config, env_config)
     merged_config["environment"] = env
 
-    # AppConfig 모델로 유효성 검사 및 객체 생성
     try:
         _config = AppConfig(**merged_config)
     except Exception as e:
-        print(f"❌ 오류: 설정 유효성 검사 실패: {e}")
+        print(f"Error: Configuration validation failed: {e}")
         raise
 
-    # 환경 변수에서 민감한 정보 로드 (예: API 키)
     _load_secrets_from_env(_config)
 
     return _config
@@ -80,33 +76,29 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
     encrypted_path = Path(f"{path}.enc")
     regular_path = path
     
-    # 한 번에 파일 존재 여부 확인하여 시스템 콜 최소화
     encrypted_exists = encrypted_path.exists()
     regular_exists = regular_path.exists()
     
     if not encrypted_exists and not regular_exists:
         return {}
 
-    # 암호화 파일이 있으면 우선 시도
     if encrypted_exists:
         try:
             decrypted_content = decrypt_file_content(str(encrypted_path))
             result = yaml.safe_load(decrypted_content)
             return result if result is not None else {}
         except Exception as e:
-            # 암호화된 파일 복호화 실패 시, 경고를 남기고 일반 파일 로드를 시도합니다.
-            print(f"⚠️ 경고: 암호화된 설정 파일({encrypted_path})을 복호화하는 데 실패했습니다. 일반 설정 파일을 찾습니다. 오류: {e}")
+            print(f"Warning: Failed to decrypt encrypted config file ({encrypted_path}). Trying regular config file. Error: {e}")
             if not regular_exists:
                 return {}
 
-    # 일반 파일 로드
     if regular_exists:
         try:
             with open(regular_path, "r", encoding="utf-8") as f:
                 result = yaml.safe_load(f)
                 return result if result is not None else {}
         except Exception as e:
-            print(f"⚠️ 경고: 설정 파일({regular_path}) 로드 실패: {e}")
+            print(f"Warning: Failed to load config file ({regular_path}): {e}")
 
     return {}
 

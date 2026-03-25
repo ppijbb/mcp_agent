@@ -1,7 +1,20 @@
 """
-LangGraph Agent용 A2A Adapter
+LangGraph Agent A2A Adapter.
 
-lang_graph/ 폴더의 LangGraph 기반 agent들을 위한 A2A wrapper
+A2A (Agent-to-Agent) wrapper for LangGraph-based agents in the lang_graph/
+directory. Provides message passing, capability registration, and state
+serialization for LangGraph applications.
+
+Classes:
+    LangGraphAgentA2AWrapper: A2A adapter for LangGraph agents
+
+Example:
+    wrapper = LangGraphAgentA2AWrapper(
+        agent_id="analysis_agent",
+        agent_metadata={"name": "Analysis Agent"},
+        graph_app=graph_app
+    )
+    await wrapper.start_listener()
 """
 
 import asyncio
@@ -28,7 +41,21 @@ logger = logging.getLogger(__name__)
 
 
 class LangGraphAgentA2AWrapper(A2AAdapter):
-    """LangGraph Agent용 A2A Wrapper"""
+    """
+    A2A adapter for LangGraph-based agents.
+    
+    Extends A2AAdapter to provide LangGraph-specific functionality including
+    graph execution, state management, and message processing.
+    
+    Attributes:
+        agent_id: Unique identifier for the agent
+        agent_metadata: Metadata dictionary containing agent information
+        graph_app: LangGraph application instance
+        state_manager: Optional callable for managing agent state
+        is_listening: Whether the message listener is active
+        _message_processor_task: Background task for processing messages
+        _current_state: Current state of the agent
+    """
     
     def __init__(
         self,
@@ -38,13 +65,13 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         state_manager: Optional[Callable] = None
     ):
         """
-        초기화
+        Initialize the LangGraph A2A wrapper.
         
         Args:
-            agent_id: Agent ID
-            agent_metadata: Agent 메타데이터
-            graph_app: LangGraph app 인스턴스
-            state_manager: 상태 관리 함수 (선택)
+            agent_id: Unique identifier for the agent
+            agent_metadata: Dictionary containing agent metadata
+            graph_app: LangGraph application instance (optional)
+            state_manager: Optional callable for managing agent state
         """
         super().__init__(agent_id, agent_metadata)
         self.graph_app = graph_app
@@ -60,7 +87,19 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         priority: int = MessagePriority.MEDIUM.value,
         correlation_id: Optional[str] = None
     ) -> bool:
-        """메시지 전송"""
+        """
+        Send a message to another agent.
+        
+        Args:
+            target_agent: Target agent ID (empty string for broadcast)
+            message_type: Type of message being sent
+            payload: Message payload data
+            priority: Message priority (default: MEDIUM)
+            correlation_id: Optional correlation ID for tracking
+            
+        Returns:
+            True if message was routed successfully
+        """
         message = A2AMessage(
             source_agent=self.agent_id,
             target_agent=target_agent,
@@ -74,7 +113,12 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         return await broker.route_message(message)
     
     async def start_listener(self) -> None:
-        """메시지 리스너 시작"""
+        """
+        Start the message listener for this agent.
+        
+        Creates and starts a background task that processes incoming messages
+        from the message queue.
+        """
         if self.is_listening:
             logger.warning(f"Listener already started for agent {self.agent_id}")
             return
@@ -84,7 +128,12 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         logger.info(f"Message listener started for LangGraph agent {self.agent_id}")
     
     async def stop_listener(self) -> None:
-        """메시지 리스너 중지"""
+        """
+        Stop the message listener for this agent.
+        
+        Cancels the background message processing task and marks the
+        listener as inactive.
+        """
         if not self.is_listening:
             return
         
@@ -98,7 +147,12 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         logger.info(f"Message listener stopped for LangGraph agent {self.agent_id}")
     
     async def _process_messages(self) -> None:
-        """메시지 처리 루프"""
+        """
+        Message processing loop.
+        
+        Continuously listens for messages from the queue and processes them
+        using registered message handlers. Runs until is_listening is False.
+        """
         while self.is_listening:
             try:
                 message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
@@ -109,7 +163,12 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
                 logger.error(f"Error processing message in LangGraph agent: {e}")
     
     async def register_capabilities(self, capabilities: List[str]) -> None:
-        """Agent 능력 등록"""
+        """
+        Register agent capabilities with the global registry.
+        
+        Args:
+            capabilities: List of capability strings this agent supports
+        """
         self.agent_metadata["capabilities"] = capabilities
         registry = get_global_registry()
         await registry.register_agent(
@@ -126,25 +185,22 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
         stream: bool = False
     ) -> Any:
         """
-        LangGraph 실행
+        Execute the LangGraph with given input data.
         
         Args:
-            input_data: 입력 데이터 (LangGraph state 형식 또는 일반 dict)
-            stream: 스트리밍 모드 여부
+            input_data: Input data (can be LangGraph state format or plain dict)
+            stream: Whether to use streaming mode
             
         Returns:
-            실행 결과 또는 스트림
+            Execution result or stream iterator
         """
         if not self.graph_app:
             raise ValueError(f"Graph app not initialized for agent {self.agent_id}")
         
-        # input_data가 GameUIAnalysisState 형식이 아닌 경우 변환
-        # LangGraph는 state 객체를 받지만, dict도 받을 수 있음
         if stream:
             return self.graph_app.astream(input_data)
         else:
             result = await self.graph_app.ainvoke(input_data)
-            # result가 state 객체인 경우 dict로 변환
             if hasattr(result, "model_dump"):
                 return result.model_dump()
             elif hasattr(result, "dict"):
@@ -152,11 +208,15 @@ class LangGraphAgentA2AWrapper(A2AAdapter):
             elif isinstance(result, dict):
                 return result
             else:
-                # 그 외의 경우 dict로 래핑
                 return {"result": result, "state": str(result)}
     
     def serialize_state(self) -> Dict[str, Any]:
-        """상태 직렬화"""
+        """
+        Serialize the current agent state for persistence.
+        
+        Returns:
+            Dictionary containing serialized state information
+        """
         state = {
             "agent_id": self.agent_id,
             "agent_metadata": self.agent_metadata,

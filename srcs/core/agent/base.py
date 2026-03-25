@@ -20,7 +20,7 @@ import threading
 from abc import ABC, abstractmethod
 from typing import Any, List
 
-# HACK: mcp-agent 설정 캐시 초기화 (파일 변경사항 반영)
+# HACK: mcp-agent config cache reset for file change reflection
 try:
     import mcp_agent.config
     mcp_agent.config._settings = None
@@ -43,7 +43,7 @@ from srcs.core.agent.schema_fix import patch_transform_mcp_tool_schema
 # Patch the schema transformer on module import
 patch_transform_mcp_tool_schema()
 
-# 전역 MCPApp 인스턴스 추적 (cleanup용)
+# Global MCPApp instance tracking (for cleanup)
 _active_mcp_apps: List[MCPApp] = []
 _cleanup_registered = False
 _cleanup_lock = threading.Lock()
@@ -105,17 +105,18 @@ def async_memoize(func):
 
 class BaseAgent(ABC):
     """
-    모든 MCP 에이전트의 최상위 기반 클래스.
-    공통적인 설정, 로깅, MCPApp 초기화를 처리합니다.
+    Base class for all MCP agents.
+    
+    Handles common setup, logging, and MCPApp initialization.
     """
     def __init__(self, name: str, instruction: str = "", server_names: List[str] | None = None):
         """
-        BaseAgent를 초기화합니다.
+        Initialize BaseAgent.
 
         Args:
-            name (str): 에이전트의 고유 이름.
-            instruction (str): 에이전트가 수행할 작업에 대한 자연어 설명.
-            server_names (List[str] | None): 에이전트가 사용할 MCP 서버 목록.
+            name: Unique name for the agent
+            instruction: Natural language description of the agent's task
+            server_names: List of MCP servers the agent will use
         """
         self.name = name
         self.instruction = instruction
@@ -194,18 +195,18 @@ class BaseAgent(ABC):
         from mcp_agent.config import get_settings
         from pathlib import Path
 
-        # 프로젝트 루트에서 설정 파일 경로 찾기
+        # Find config file path from project root
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         config_path = project_root / "mcp_agent.config.yaml"
 
-        # mcp_agent 라이브러리의 표준 설정 사용
-        # HACK: 설정 캐시 강제 초기화 (google 섹션 누락 방지)
+        # Use mcp_agent library's standard settings
+        # HACK: Force config cache reset to prevent google section missing
         import mcp_agent.config
         mcp_agent.config._settings = None
         settings = get_settings(str(config_path))
 
         if not settings.google or not settings.google.api_key:
-             # 만약 여전히 None이면 직접 주입 시도 (최후의 수단)
+             # Last resort: inject directly if still None
              import os
              if os.getenv("GOOGLE_API_KEY"):
                  from mcp_agent.config import GoogleSettings
@@ -216,27 +217,28 @@ class BaseAgent(ABC):
             settings=settings,
             human_input_callback=None
         )
-        # 전역 리스트에 추가 (cleanup용)
+        # Add to global list (for cleanup)
         _active_mcp_apps.append(app)
-        # cleanup 핸들러 등록 시도 (메인 스레드에서만)
+        # Try to register cleanup handler (only in main thread)
         _register_cleanup()
         return app
 
     @abstractmethod
     async def run_workflow(self, *args, **kwargs) -> Any:
         """
-        에이전트의 핵심 워크플로우를 실행하는 추상 메서드.
-        자식 클래스에서 반드시 구현해야 합니다.
+        Execute the agent's core workflow.
+        
+        Must be implemented by child classes.
         """
 
     def get_orchestrator(self, agents: List[MCP_Agent]) -> Orchestrator:
         """
-        주어진 에이전트들로 오케스트레이터를 생성합니다.
-        Fallback 지원 포함.
+        Create an orchestrator with the given agents.
+        
+        Includes fallback support.
         """
         from srcs.common.llm import create_fallback_orchestrator_llm_factory
 
-        # Fallback이 가능한 LLM factory 사용 (common 모듈)
         llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash",
             logger_instance=self.logger
@@ -250,12 +252,12 @@ class BaseAgent(ABC):
 
     async def run(self, *args, **kwargs):
         """
-        에이전트 워크플로우를 실행하고 결과를 반환합니다.
-        API 오류에 대한 재시도 로직과 서킷 브레이커를 포함합니다.
+        Execute the agent workflow and return the result.
+        
+        Includes retry logic for API errors and circuit breaker protection.
         """
-        self.logger.info(f"'{self.name}' 에이전트 워크플로우를 시작합니다.")
+        self.logger.info(f"Starting agent workflow for '{self.name}'.")
         try:
-            # Pydantic 모델은 .get() 메서드가 없으므로 기본값 직접 사용
             max_retries = 3
             retry_delay = 5
 
@@ -263,24 +265,24 @@ class BaseAgent(ABC):
                 try:
                     result = await self.circuit_breaker.call_async(self.run_workflow, *args, **kwargs)
 
-                    self.logger.info(f"'{self.name}' 에이전트 워크플로우를 성공적으로 완료했습니다.")
+                    self.logger.info(f"Agent workflow for '{self.name}' completed successfully.")
 
                     return result
                 except CircuitBreakerError as e:
-                    self.logger.error(f"서킷 브레이커가 열렸습니다. '{self.name}' 워크플로우를 중단합니다.")
+                    self.logger.error(f"Circuit breaker opened. Stopping workflow '{self.name}'.")
                     raise CircuitBreakerOpen(f"Circuit breaker is open for workflow '{self.name}'") from e
                 except APIError as e:
-                    self.logger.warning(f"API 오류 발생 (시도 {attempt + 1}/{max_retries}): {e}")
+                    self.logger.warning(f"API error (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt + 1 == max_retries:
-                        self.logger.error("최대 재시도 횟수 도달. API 오류로 워크플로우 실패.")
+                        self.logger.error("Max retries reached. Workflow failed due to API error.")
                         raise WorkflowError(f"API Error after {max_retries} retries: {e}") from e
-                    await asyncio.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                    await asyncio.sleep(retry_delay * (2 ** attempt))
                 except MCPError as e:
-                    self.logger.error(f"'{self.name}' 워크플로우 중 처리된 오류 발생: {e}", exc_info=True)
+                    self.logger.error(f"Handled error in workflow '{self.name}': {e}", exc_info=True)
                     raise
                 except Exception as e:
-                    self.logger.critical(f"'{self.name}' 워크플로우 중 예기치 않은 심각한 오류 발생: {e}", exc_info=True)
+                    self.logger.critical(f"Unexpected critical error in workflow '{self.name}': {e}", exc_info=True)
                     raise WorkflowError(f"Unexpected error in workflow '{self.name}': {e}") from e
         finally:
             await self.close_session()
-            self.logger.info(f"'{self.name}' 에이전트 세션을 정리했습니다.")
+            self.logger.info(f"Agent session cleaned up for '{self.name}'.")

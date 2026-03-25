@@ -1,7 +1,24 @@
 """
-A2A (Agent-to-Agent) 통합 시스템
+A2A (Agent-to-Agent) Integration System.
 
-모든 agent 간 통신을 위한 공통 인터페이스 및 메시지 브로커
+Common interface and message broker for all agent-to-agent communication.
+Provides message routing, agent registration, and capability management.
+
+Classes:
+    MessagePriority: Enum for message priority levels
+    A2AMessage: Dataclass representing an A2A protocol message
+    A2AAdapter: Abstract base class for A2A adapters
+    AgentRegistry: Central agent registration system
+    A2AMessageBroker: Message routing and distribution broker
+
+Functions:
+    get_global_registry: Get the global agent registry instance
+    get_global_broker: Get the global message broker instance
+
+Example:
+    registry = get_global_registry()
+    broker = get_global_broker()
+    await registry.register_agent(agent_id="agent1", agent_type="mcp", metadata={})
 """
 
 from abc import ABC, abstractmethod
@@ -17,7 +34,14 @@ logger = logging.getLogger(__name__)
 
 
 class MessagePriority(Enum):
-    """메시지 우선순위"""
+    """
+    Message priority levels for A2A communication.
+    
+    Attributes:
+        HIGH: High priority messages (value: 1)
+        MEDIUM: Medium priority messages (value: 2)
+        LOW: Low priority messages (value: 3)
+    """
     HIGH = 1
     MEDIUM = 2
     LOW = 3
@@ -25,19 +49,40 @@ class MessagePriority(Enum):
 
 @dataclass
 class A2AMessage:
-    """A2A 프로토콜 메시지"""
+    """
+    A2A protocol message.
+    
+    Represents a message in the agent-to-agent communication protocol,
+    including routing information, payload, and metadata.
+    
+    Attributes:
+        message_id: Unique identifier for the message
+        timestamp: ISO format timestamp when message was created
+        source_agent: ID of the agent that sent the message
+        target_agent: ID of the target agent (empty for broadcast)
+        message_type: Type of message (e.g., "task_request", "help_request")
+        payload: Message payload data dictionary
+        correlation_id: Optional ID for correlating related messages
+        priority: Message priority (default: MEDIUM)
+        ttl: Time to live in seconds (default: 300)
+    """
     message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + 'Z')
     source_agent: str = ""
-    target_agent: str = ""  # 빈 문자열이면 브로드캐스트
+    target_agent: str = ""
     message_type: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
     correlation_id: Optional[str] = None
     priority: int = MessagePriority.MEDIUM.value
-    ttl: int = 300  # Time to live in seconds
+    ttl: int = 300
 
     def to_dict(self) -> Dict[str, Any]:
-        """딕셔너리로 변환"""
+        """
+        Convert message to dictionary.
+        
+        Returns:
+            Dictionary representation of the message
+        """
         return {
             "message_id": self.message_id,
             "timestamp": self.timestamp,
@@ -52,7 +97,15 @@ class A2AMessage:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "A2AMessage":
-        """딕셔너리에서 생성"""
+        """
+        Create message from dictionary.
+        
+        Args:
+            data: Dictionary containing message data
+            
+        Returns:
+            A2AMessage instance created from the dictionary
+        """
         return cls(
             message_id=data.get("message_id", str(uuid.uuid4())),
             timestamp=data.get("timestamp", datetime.utcnow().isoformat() + 'Z'),
@@ -67,45 +120,57 @@ class A2AMessage:
 
 
 class A2AAdapter(ABC):
-    """A2A 프로토콜 어댑터 추상 클래스"""
+    """
+    Abstract base class for A2A protocol adapters.
+    
+    Defines the interface that all agent adapters must implement to
+    participate in agent-to-agent communication.
+    
+    Attributes:
+        agent_id: Unique identifier for the agent
+        agent_metadata: Metadata dictionary containing agent information
+        message_handlers: Dictionary of message type to handler mappings
+        is_listening: Whether the message listener is active
+        _message_queue: Asyncio queue for incoming messages
+    """
 
     def __init__(self, agent_id: str, agent_metadata: Dict[str, Any]):
         self.agent_id = agent_id
         self.agent_metadata = agent_metadata
         self.message_handlers: Dict[str, Callable] = {}
         self.is_listening = False
-        # 현재 event loop에서 queue 생성 (페이지 전환 시 새 event loop에서 재생성)
-        # Queue는 나중에 실제로 사용될 때 생성 (lazy initialization)
         self._message_queue: Optional[asyncio.Queue] = None
 
     def _ensure_queue(self) -> asyncio.Queue:
-        """Queue가 없거나 다른 event loop에 바인딩된 경우 새로 생성"""
+        """
+        Get or create the message queue for this adapter.
+        
+        Creates a new queue if needed, handling event loop binding
+        and recreation when necessary (e.g., page transitions).
+        
+        Returns:
+            asyncio.Queue instance for this adapter
+        """
         try:
             current_loop = asyncio.get_running_loop()
             if self._message_queue is None:
                 logger.debug(f"Creating new queue for agent {self.agent_id} in loop {id(current_loop)}")
                 self._message_queue = asyncio.Queue()
             else:
-                # Queue가 다른 loop에 바인딩되어 있는지 확인
                 try:
-                    # Queue의 loop 확인 시도
                     if hasattr(self._message_queue, '_loop'):
                         queue_loop = self._message_queue._loop
                         if queue_loop is not None:
                             if queue_loop != current_loop:
-                                # 다른 loop에 바인딩된 경우 새로 생성
                                 logger.warning(f"Queue for agent {self.agent_id} is bound to different loop, recreating")
                                 self._message_queue = asyncio.Queue()
                             elif queue_loop.is_closed():
-                                # 같은 loop지만 닫혀있는 경우 새로 생성
                                 logger.warning(f"Queue for agent {self.agent_id} is bound to closed loop, recreating")
                                 self._message_queue = asyncio.Queue()
                 except (AttributeError, RuntimeError) as e:
-                    # Queue가 다른 loop에 바인딩된 경우 새로 생성
                     logger.warning(f"Error checking queue loop for agent {self.agent_id}: {e}, recreating")
                     self._message_queue = asyncio.Queue()
         except RuntimeError:
-            # Event loop가 없는 경우 새로 생성
             logger.debug(f"No event loop for agent {self.agent_id}, creating queue without loop")
             self._message_queue = asyncio.Queue()
 
@@ -121,37 +186,51 @@ class A2AAdapter(ABC):
         correlation_id: Optional[str] = None
     ) -> bool:
         """
-        메시지 전송
-
+        Send a message to another agent.
+        
         Args:
-            target_agent: 대상 agent ID (빈 문자열이면 브로드캐스트)
-            message_type: 메시지 타입
-            payload: 메시지 페이로드
-            priority: 우선순위
-            correlation_id: 상관관계 ID
-
+            target_agent: Target agent ID (empty string for broadcast)
+            message_type: Type of message being sent
+            payload: Message payload data
+            priority: Message priority (default: MEDIUM)
+            correlation_id: Optional correlation ID for tracking
+            
         Returns:
-            bool: 전송 성공 여부
+            True if message was routed successfully
         """
 
     @abstractmethod
     async def start_listener(self) -> None:
-        """메시지 리스너 시작"""
+        """Start the message listener for this agent."""
 
     @abstractmethod
     async def stop_listener(self) -> None:
-        """메시지 리스너 중지"""
+        """Stop the message listener for this agent."""
 
     @abstractmethod
     async def register_capabilities(self, capabilities: List[str]) -> None:
-        """Agent 능력 등록"""
+        """Register agent capabilities with the global registry."""
 
     def register_handler(self, message_type: str, handler: Callable) -> None:
-        """메시지 핸들러 등록"""
+        """
+        Register a handler for a specific message type.
+        
+        Args:
+            message_type: Type of message to handle
+            handler: Callable to handle the message (sync or async)
+        """
         self.message_handlers[message_type] = handler
 
     async def handle_message(self, message: A2AMessage) -> Optional[Dict[str, Any]]:
-        """메시지 처리"""
+        """
+        Handle an incoming message.
+        
+        Args:
+            message: The A2AMessage to handle
+            
+        Returns:
+            Result from the handler if one exists, None otherwise
+        """
         handler = self.message_handlers.get(message.message_type)
         if handler:
             try:
@@ -168,7 +247,16 @@ class A2AAdapter(ABC):
 
 
 class AgentRegistry:
-    """Agent 레지스트리 - 중앙 등록 시스템"""
+    """
+    Central agent registration system.
+    
+    Maintains a registry of all active agents and their metadata,
+    enabling discovery and routing of messages between agents.
+    
+    Attributes:
+        agents: Dictionary of agent_id to agent info mappings
+        _lock: Async lock for thread-safe operations
+    """
 
     def __init__(self):
         self.agents: Dict[str, Dict[str, Any]] = {}
@@ -181,7 +269,15 @@ class AgentRegistry:
         metadata: Dict[str, Any],
         a2a_adapter: Optional[A2AAdapter] = None
     ) -> None:
-        """Agent 등록"""
+        """
+        Register an agent with the registry.
+        
+        Args:
+            agent_id: Unique identifier for the agent
+            agent_type: Type of agent (e.g., "mcp", "langgraph")
+            metadata: Agent metadata dictionary
+            a2a_adapter: Optional A2A adapter instance
+        """
         async with self._lock:
             self.agents[agent_id] = {
                 "agent_id": agent_id,
@@ -194,19 +290,40 @@ class AgentRegistry:
             logger.info(f"Agent registered: {agent_id}")
 
     async def unregister_agent(self, agent_id: str) -> None:
-        """Agent 등록 해제"""
+        """
+        Unregister an agent from the registry.
+        
+        Args:
+            agent_id: ID of the agent to unregister
+        """
         async with self._lock:
             if agent_id in self.agents:
                 del self.agents[agent_id]
                 logger.info(f"Agent unregistered: {agent_id}")
 
     async def get_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
-        """Agent 정보 조회"""
+        """
+        Get agent information by ID.
+        
+        Args:
+            agent_id: ID of the agent to retrieve
+            
+        Returns:
+            Agent info dictionary or None if not found
+        """
         async with self._lock:
             return self.agents.get(agent_id)
 
     async def list_agents(self, agent_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Agent 목록 조회"""
+        """
+        List all registered agents.
+        
+        Args:
+            agent_type: Optional filter for agent type
+            
+        Returns:
+            List of agent info dictionaries
+        """
         async with self._lock:
             agents = list(self.agents.values())
             if agent_type:
@@ -214,7 +331,15 @@ class AgentRegistry:
             return agents
 
     async def find_agents_by_capability(self, capability: str) -> List[Dict[str, Any]]:
-        """능력으로 Agent 검색"""
+        """
+        Find agents that have a specific capability.
+        
+        Args:
+            capability: Capability string to search for
+            
+        Returns:
+            List of agent info dictionaries with matching capability
+        """
         async with self._lock:
             matching_agents = []
             for agent in self.agents.values():
@@ -225,7 +350,17 @@ class AgentRegistry:
 
 
 class A2AMessageBroker:
-    """A2A 메시지 브로커 - 메시지 라우팅 및 배포"""
+    """
+    Message routing and distribution broker.
+    
+    Handles routing of A2A messages between agents, including
+    unicast routing to specific agents and broadcast to all agents.
+    
+    Attributes:
+        registry: AgentRegistry instance for agent lookup
+        _message_history: List of recent messages
+        _max_history: Maximum number of messages to retain
+    """
 
     def __init__(self, registry: AgentRegistry):
         self.registry = registry
@@ -234,20 +369,18 @@ class A2AMessageBroker:
 
     async def route_message(self, message: A2AMessage) -> bool:
         """
-        메시지 라우팅
-
+        Route a message to its destination.
+        
         Args:
-            message: A2A 메시지
-
+            message: A2AMessage to route
+            
         Returns:
-            bool: 라우팅 성공 여부
+            True if message was routed successfully
         """
-        # 메시지 히스토리에 추가
         self._message_history.append(message)
         if len(self._message_history) > self._max_history:
             self._message_history.pop(0)
 
-        # TTL 확인
         if message.ttl > 0:
             message_time = datetime.fromisoformat(message.timestamp.replace('Z', '+00:00'))
             age = (datetime.utcnow() - message_time.replace(tzinfo=None)).total_seconds()
@@ -255,11 +388,9 @@ class A2AMessageBroker:
                 logger.warning(f"Message {message.message_id} expired (age: {age}s, ttl: {message.ttl}s)")
                 return False
 
-        # 브로드캐스트인 경우
         if not message.target_agent:
             return await self._broadcast_message(message)
 
-        # 특정 agent로 전송
         target_agent_info = await self.registry.get_agent(message.target_agent)
         if not target_agent_info:
             logger.warning(f"Target agent not found: {message.target_agent}")
@@ -270,10 +401,8 @@ class A2AMessageBroker:
             logger.warning(f"Target agent has no A2A adapter: {message.target_agent}")
             return False
 
-        # 메시지 큐에 추가 (비동기 처리)
         logger.info(f"Routing message {message.message_id} ({message.message_type}) from {message.source_agent} to {message.target_agent}")
         try:
-            # adapter가 listener를 시작했는지 확인
             if not a2a_adapter.is_listening:
                 logger.warning(f"Agent {message.target_agent} listener is not running, starting it...")
                 await a2a_adapter.start_listener()
@@ -284,9 +413,8 @@ class A2AMessageBroker:
 
             await queue.put(message)
             queue_size_after = queue.qsize()
-            logger.info(f"✅ Message {message.message_id} added to queue for agent {message.target_agent}, size after: {queue_size_after}")
+            logger.info(f"Message {message.message_id} added to queue for agent {message.target_agent}, size after: {queue_size_after}")
 
-            # listener task가 실행 중인지 확인
             if hasattr(a2a_adapter, "_message_processor_task") and a2a_adapter._message_processor_task:
                 if a2a_adapter._message_processor_task.done():
                     logger.warning(f"Listener task for agent {message.target_agent} is done, restarting...")
@@ -302,14 +430,22 @@ class A2AMessageBroker:
             raise
 
     async def _broadcast_message(self, message: A2AMessage) -> bool:
-        """브로드캐스트 메시지 전송"""
+        """
+        Broadcast a message to all registered agents.
+        
+        Args:
+            message: A2AMessage to broadcast
+            
+        Returns:
+            True if message was sent to at least one agent
+        """
         agents = await self.registry.list_agents()
         success_count = 0
 
         for agent_info in agents:
             agent_id = agent_info.get("agent_id")
             if agent_id == message.source_agent:
-                continue  # 자기 자신에게는 전송하지 않음
+                continue
 
             a2a_adapter = agent_info.get("a2a_adapter")
             if a2a_adapter:
@@ -329,17 +465,29 @@ class A2AMessageBroker:
         return success_count > 0
 
     def get_message_history(self, limit: int = 100) -> List[A2AMessage]:
-        """메시지 히스토리 조회"""
+        """
+        Get recent message history.
+        
+        Args:
+            limit: Maximum number of messages to return
+            
+        Returns:
+            List of recent A2AMessage objects
+        """
         return self._message_history[-limit:]
 
 
-# 전역 레지스트리 및 브로커 인스턴스
 _global_registry: Optional[AgentRegistry] = None
 _global_broker: Optional[A2AMessageBroker] = None
 
 
 def get_global_registry() -> AgentRegistry:
-    """전역 레지스트리 인스턴스 반환"""
+    """
+    Get the global AgentRegistry instance.
+    
+    Returns:
+        Singleton AgentRegistry instance
+    """
     global _global_registry
     if _global_registry is None:
         _global_registry = AgentRegistry()
@@ -347,7 +495,12 @@ def get_global_registry() -> AgentRegistry:
 
 
 def get_global_broker() -> A2AMessageBroker:
-    """전역 브로커 인스턴스 반환"""
+    """
+    Get the global A2AMessageBroker instance.
+    
+    Returns:
+        Singleton A2AMessageBroker instance
+    """
     global _global_broker
     if _global_broker is None:
         _global_broker = A2AMessageBroker(get_global_registry())
