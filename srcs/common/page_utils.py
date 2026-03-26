@@ -22,10 +22,11 @@ Functions:
 import streamlit as st
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 from .styles import get_common_styles, get_page_header
 
 
-def setup_page(title, icon, layout="wide"):
+def setup_page(title: str, icon: str, layout: str = "wide") -> None:
     """
     페이지 기본 설정.
     
@@ -41,17 +42,16 @@ def setup_page(title, icon, layout="wide"):
             layout=layout
         )
     except Exception:
-        # set_page_config가 이미 호출된 경우 무시
         pass
 
 
-def add_project_root():
+def add_project_root() -> None:
     """프로젝트 루트를 Python 경로에 추가하여 모듈 임포트가 가능하도록 함."""
     project_root = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(project_root))
 
 
-def setup_page_header(title, subtitle=""):
+def setup_page_header(title: str, subtitle: str = "") -> None:
     """
     페이지 헤더 설정 (간단 버전).
     
@@ -64,7 +64,7 @@ def setup_page_header(title, subtitle=""):
         st.subheader(subtitle)
 
 
-def render_page_header(page_type, title, subtitle):
+def render_page_header(page_type: str, title: str, subtitle: str) -> None:
     """
     페이지 헤더를 HTML로 렌더링합니다.
     
@@ -77,18 +77,18 @@ def render_page_header(page_type, title, subtitle):
     st.markdown(header_html, unsafe_allow_html=True)
 
 
-def render_common_styles():
+def render_common_styles() -> None:
     """공통 CSS 스타일을 페이지에 적용합니다."""
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 
-def render_home_button():
+def render_home_button() -> None:
     """홈으로 돌아가는 Streamlit 버튼을 렌더링합니다."""
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
 
 
-def safe_import_agent(module_path, fallback_name="Agent"):
+def safe_import_agent(module_path: str, fallback_name: str = "Agent") -> Tuple[bool, Optional[Any], Optional[str]]:
     """
     에이전트 모듈을 안전하게 임포트합니다.
     
@@ -97,7 +97,7 @@ def safe_import_agent(module_path, fallback_name="Agent"):
         fallback_name: 폴백 에이전트 이름
         
     Returns:
-        Tuple[bool, Optional[module], Optional[str]]: (성공여부, 모듈, 오류메시지)
+        Tuple of (성공여부, 모듈, 오류메시지)
     """
     try:
         module = __import__(module_path, fromlist=[fallback_name])
@@ -106,7 +106,7 @@ def safe_import_agent(module_path, fallback_name="Agent"):
         return False, None, str(e)
 
 
-def render_import_error(agent_name, error_message):
+def render_import_error(agent_name: str, error_message: str) -> None:
     """
     에이전트 임포트 오류를 화면에 표시합니다.
     
@@ -121,7 +121,12 @@ def render_import_error(agent_name, error_message):
     st.info(f"{agent_name}를 별도로 실행해주세요.")
 
 
-def render_agent_intro(agent_name, features, special_features=None, use_cases=None):
+def render_agent_intro(
+    agent_name: str,
+    features: List[str],
+    special_features: Optional[List[str]] = None,
+    use_cases: Optional[List[str]] = None
+) -> None:
     """
     Render agent introduction with features and use cases.
     
@@ -153,17 +158,17 @@ def render_agent_intro(agent_name, features, special_features=None, use_cases=No
 
 
 def create_agent_page(
-    agent_name,
-    page_icon,
-    page_type,
-    title,
-    subtitle,
-    module_path=None,
-    main_function_name="main",
-    features=None,
-    special_features=None,
-    use_cases=None
-):
+    agent_name: str,
+    page_icon: str,
+    page_type: str,
+    title: str,
+    subtitle: str,
+    module_path: Optional[str] = None,
+    main_function_name: str = "main",
+    features: Optional[List[str]] = None,
+    special_features: Optional[List[str]] = None,
+    use_cases: Optional[List[str]] = None
+) -> None:
     """
     Create a unified agent page with standard layout and styling.
     
@@ -180,25 +185,20 @@ def create_agent_page(
         use_cases: Optional list of use cases
     """
 
-    # 페이지 설정
     setup_page(f"{page_icon} {agent_name}", page_icon)
 
-    # 프로젝트 루트 추가
     add_project_root()
 
-    # 공통 스타일 적용
     render_common_styles()
 
-    # 헤더 렌더링
     render_page_header(page_type, title, subtitle)
 
-    # 홈 버튼
     render_home_button()
 
     st.markdown("---")
 
 
-def render_demo_content(demo_data):
+def render_demo_content(demo_data: Dict[str, Any]) -> None:
     """
     Render demo content with tabs containing various content types.
     
@@ -225,7 +225,7 @@ def render_demo_content(demo_data):
                     st.dataframe(tab_data["dataframe"])
 
 
-def render_metrics_row(metrics):
+def render_metrics_row(metrics: List[Dict[str, Any]]) -> None:
     """
     Render a row of metric cards.
     

@@ -75,10 +75,9 @@ async def main():
 
         # --- DEFINE AGENTS ---
 
-        # Research agent: Collects data using Google Search
         research_agent = Agent(
             name="search_finder",
-            instruction=f"""Use Google Search to find information about {COMPANY_NAME} in the current month of May 2025:
+            instruction=f"""Use Google Search to find information about {COMPANY_NAME} in the current month:
             You are a world class research analyst.
             Execute these exact search queries:
             1. "{COMPANY_NAME} stock price today"

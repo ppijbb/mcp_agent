@@ -275,6 +275,22 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
 class ResourceMonitor:
     """
     Monitor system resources for performance optimization.
+    
+    Tracks function call counts, execution times, and provides statistical
+    analysis of performance metrics across the application.
+    
+    Attributes:
+        start_time: Timestamp when the monitor was initialized
+        call_counts: Dictionary tracking number of calls per function
+        execution_times: Dictionary tracking execution times per function
+        
+    Example:
+        >>> monitor = ResourceMonitor()
+        >>> monitor.record_call("process_data", 0.5)
+        >>> monitor.record_call("process_data", 0.3)
+        >>> stats = monitor.get_stats()
+        >>> print(stats['performance']['process_data']['avg_time'])
+        0.4
     """
     
     def __init__(self):
