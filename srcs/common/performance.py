@@ -36,7 +36,8 @@ class SimpleCache:
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._max_size = max_size
         self._default_ttl = default_ttl
-        self._lock = threading.Lock()  # Use threading.Lock for sync/async compatibility
+        self._lock = threading.Lock()
+        self._access_order: list = []
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -52,10 +53,14 @@ class SimpleCache:
             if key in self._cache:
                 item = self._cache[key]
                 if time.time() < item['expires']:
+                    if key in self._access_order:
+                        self._access_order.remove(key)
+                    self._access_order.append(key)
                     return item['value']
                 else:
-                    # Remove expired item
                     del self._cache[key]
+                    if key in self._access_order:
+                        self._access_order.remove(key)
         return None
 
     async def aget(self, key: str) -> Optional[Any]:
@@ -68,7 +73,7 @@ class SimpleCache:
         Returns:
             Cached value if valid, None otherwise
         """
-        return self.get(key)  # Use sync method with thread-safe lock
+        return self.get(key)
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
@@ -80,11 +85,10 @@ class SimpleCache:
             ttl: Custom TTL in seconds, uses default if not provided
         """
         with self._lock:
-            # Remove oldest item if cache is full
-            if len(self._cache) >= self._max_size:
-                oldest_key = min(self._cache.keys(),
-                              key=lambda k: self._cache[k]['created'])
-                del self._cache[oldest_key]
+            if len(self._cache) >= self._max_size and key not in self._cache:
+                oldest_key = self._access_order.pop(0) if self._access_order else None
+                if oldest_key:
+                    self._cache.pop(oldest_key, None)
 
             ttl = ttl or self._default_ttl
             self._cache[key] = {
@@ -92,6 +96,8 @@ class SimpleCache:
                 'created': time.time(),
                 'expires': time.time() + ttl
             }
+            if key not in self._access_order:
+                self._access_order.append(key)
 
     async def aset(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
@@ -102,16 +108,17 @@ class SimpleCache:
             value: Value to cache
             ttl: Custom TTL in seconds, uses default if not provided
         """
-        self.set(key, value, ttl)  # Use sync method with thread-safe lock
+        self.set(key, value, ttl)
 
     def clear(self) -> None:
         """Clear all cached items."""
         with self._lock:
             self._cache.clear()
+            self._access_order.clear()
 
     async def aclear(self) -> None:
         """Async clear all cached items."""
-        self.clear()  # Use sync method with thread-safe lock
+        self.clear()
 
 
 def rate_limit(calls_per_second: float = 1.0):

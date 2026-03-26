@@ -15,14 +15,35 @@ from langchain.schema.output_parser import StrOutputParser
 
 
 class AnalysisChain:
-    """Chain for comprehensive market and data analysis"""
+    """
+    Chain for comprehensive market and data analysis.
+    
+    Provides four main analysis types:
+    - Technical Analysis: Price trends, indicators, chart patterns
+    - Fundamental Analysis: Token metrics, network stats, ecosystem data
+    - Sentiment Analysis: Social media, news, community sentiment
+    - Pattern Recognition: Historical patterns, market structure, anomalies
+    
+    Attributes:
+        llm: LangChain LLM instance
+        technical_analysis_chain: LLMChain for technical analysis
+        fundamental_analysis_chain: LLMChain for fundamental analysis
+        sentiment_analysis_chain: LLMChain for sentiment analysis
+        pattern_recognition_chain: LLMChain for pattern recognition
+    """
 
     def __init__(self, llm):
+        """
+        Initialize the AnalysisChain.
+        
+        Args:
+            llm: LangChain LLM instance for generating analysis
+        """
         self.llm = llm
         self._setup_analysis_chains()
 
     def _setup_analysis_chains(self):
-        """Setup various analysis chains"""
+        """Set up various analysis chains with prompt templates."""
 
         # Technical Analysis Chain
         technical_analysis_prompt = PromptTemplate(
@@ -141,7 +162,29 @@ class AnalysisChain:
         market_data: Dict[str, Any],
         analysis_type: str = "all"
     ) -> Dict[str, Any]:
-        """Execute comprehensive market analysis"""
+        """
+        Execute comprehensive market analysis.
+        
+        Args:
+            market_data: Dictionary containing market data including:
+                - price_data: Historical price data
+                - volume_data: Trading volume data
+                - indicators: Technical indicators
+                - token_metrics: Token fundamental metrics
+                - network_stats: Network statistics
+                - ecosystem_data: Ecosystem information
+                - social_media: Social media data
+                - news_data: News articles and sentiment
+                - community_sentiment: Community sentiment data
+                - historical_patterns: Historical market patterns
+                - current_market: Current market conditions
+            analysis_type: Type of analysis to perform ("all", "technical", 
+                          "fundamental", "sentiment", or "patterns")
+        
+        Returns:
+            Dictionary containing analysis results with keys for each
+            analysis type performed, plus "summary", "timestamp", and "status"
+        """
 
         try:
             results = {}

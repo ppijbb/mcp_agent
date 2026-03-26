@@ -51,11 +51,9 @@ class ReviewGenerator:
         Raises:
             ValueError: 필수 파라미터가 없거나 리뷰 생성에 실패한 경우
         """
-        # 필수 파라미터 검증
         if not diff_content:
             raise ValueError("diff_content가 비어있습니다.")
 
-            # PR 메타데이터 준비
         metadata = pr_metadata or {}
         pr_title = metadata.get("title", "")
         pr_description = metadata.get("description", "")
@@ -123,7 +121,6 @@ class ReviewGenerator:
         if not file_path:
             raise ValueError("file_path가 비어있습니다.")
 
-            # 파일 확장자 추출
         file_extension = file_path.split(".")[-1] if "." in file_path else ""
         language = self._get_language_from_extension(file_extension)
 
@@ -174,7 +171,6 @@ class ReviewGenerator:
         if not file_path:
             raise ValueError("file_path가 비어있습니다.")
 
-            # 파일 확장자 추출
         file_extension = file_path.split(".")[-1] if "." in file_path else ""
         language = self._get_language_from_extension(file_extension)
 

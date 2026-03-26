@@ -1,3 +1,21 @@
+"""
+Financial Agent LangGraph Workflow
+
+This module defines the LangGraph workflow for the financial agent system.
+The workflow implements a comprehensive financial management pipeline that includes:
+- Financial analysis and budgeting
+- Tax optimization
+- Debt management
+- Goal tracking
+- Investment workflow (market data, news, chart analysis)
+- Trading execution
+- Commission calculation
+- Audit reporting
+
+The workflow uses a state graph architecture where each node represents
+a specialized agent or processing step.
+"""
+
 from langgraph.graph import StateGraph, END, START
 from .state import AgentState
 from .config import get_workflow_config, initialize_config
@@ -23,6 +41,29 @@ from .agents import (
 )
 
 class FinancialAgentWorkflow:
+    """
+    LangGraph-based workflow for the financial agent system.
+    
+    This class manages the complete financial management pipeline including
+    financial analysis, tax optimization, debt management, investment workflows,
+    trading execution, and audit reporting.
+    
+    The workflow is built using LangGraph's StateGraph for flexible state
+    management and node-based processing.
+    
+    Attributes:
+        graph: Compiled LangGraph workflow
+        
+    Workflow Pipeline:
+        1. Financial Analysis → Tax Optimization → Debt Management → Goal Tracking
+        2. Investment Workflow: Market Data + News + Chart Analysis → Sync → Analysis → Strategy → Trading
+        3. Commission Calculation → Audit Reporting
+        
+    Example:
+        workflow = FinancialAgentWorkflow()
+        result = workflow.run(initial_state)
+    """
+    
     def __init__(self):
         # LLM 클라이언트 초기화 (설정은 이미 초기화됨)
         try:
@@ -37,8 +78,17 @@ class FinancialAgentWorkflow:
 
     def _build_graph(self):
         """
-        에이전트 워크플로우를 정의하고 그래프를 빌드합니다.
-        재무 분석 → 세금 최적화 → 부채 관리 → 재무 목표 추적 → 투자 워크플로우 → 수수료 계산 → 감사
+        Build the LangGraph workflow.
+        
+        Defines the complete financial management pipeline as a state graph.
+        The workflow connects the following stages:
+        - Financial Management: Analyzer → Tax Optimizer → Debt Manager → Goal Tracker
+        - Investment Workflow: Data Collectors → Sync → News Analyzer → Chief Strategist 
+          → Technical Synthesizer → Exit Predictor → Portfolio Manager → Trader
+        - Finalization: Commission Calculator → Auditor
+        
+        Returns:
+            Compiled LangGraph workflow ready for execution
         """
         workflow = StateGraph(AgentState)
 
