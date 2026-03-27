@@ -1,15 +1,26 @@
 """
-성능 최적화 모듈
+Performance Optimization Module
+
+This module provides caching and performance measurement utilities for the
+hobby starter pack agent system, including decorators for timing and caching.
+
+Classes:
+    CacheManager: TTL-based cache manager for storing computed values
+    PerformanceOptimizer: Performance measurement and caching utilities
+
+Example:
+    >>> optimizer = PerformanceOptimizer()
+    >>> cached_func = optimizer.cached(ttl=3600)(my_function)
 """
 
 import asyncio
+import functools
+import hashlib
+import json
 import logging
 import time
-import functools
-from typing import Dict, Any, Optional, Callable, TypeVar, Awaitable
 from datetime import datetime, timedelta
-import json
-import hashlib
+from typing import Any, Callable, Dict, Optional, TypeVar, Awaitable
 
 logger = logging.getLogger(__name__)
 
@@ -17,48 +28,62 @@ T = TypeVar("T")
 
 
 class CacheManager:
-    """캐시 관리자"""
+    """
+    TTL-based cache manager for storing computed values.
+    
+    Provides simple in-memory caching with time-to-live (TTL) support.
+    Automatically evicts expired entries on access.
+    
+    Attributes:
+        cache: Internal dictionary storing cached values
+        default_ttl: Default time-to-live in seconds
+    
+    Example:
+        >>> cache = CacheManager(default_ttl=3600)
+        >>> cache.set("key", "value", ttl=1800)
+        >>> cache.get("key")
+        'value'
+    """
     
     def __init__(self, default_ttl: int = 3600):
         """
-        CacheManager 초기화
+        Initialize the CacheManager.
         
         Args:
-            default_ttl: 기본 TTL (초)
+            default_ttl: Default TTL in seconds for cached entries
         """
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.default_ttl = default_ttl
     
     def get(self, key: str) -> Optional[Any]:
         """
-        캐시에서 값 가져오기
+        Retrieve a value from cache.
         
         Args:
-            key: 캐시 키
-        
+            key: Cache key to retrieve
+            
         Returns:
-            캐시된 값 또는 None
+            Cached value if found and not expired, None otherwise
         """
         if key not in self.cache:
             return None
         
         entry = self.cache[key]
         
-        # TTL 확인
         if datetime.now() > entry["expires_at"]:
             del self.cache[key]
             return None
         
         return entry["value"]
     
-    def set(self, key: str, value: Any, ttl: Optional[int] = None):
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
-        캐시에 값 저장
+        Store a value in cache.
         
         Args:
-            key: 캐시 키
-            value: 저장할 값
-            ttl: TTL (초, None이면 기본값 사용)
+            key: Cache key
+            value: Value to store
+            ttl: TTL in seconds (uses default if None)
         """
         ttl = ttl or self.default_ttl
         expires_at = datetime.now() + timedelta(seconds=ttl)
@@ -69,26 +94,31 @@ class CacheManager:
             "created_at": datetime.now(),
         }
     
-    def delete(self, key: str):
-        """캐시에서 값 삭제"""
+    def delete(self, key: str) -> None:
+        """
+        Delete a value from cache.
+        
+        Args:
+            key: Cache key to delete
+        """
         if key in self.cache:
             del self.cache[key]
     
-    def clear(self):
-        """캐시 전체 삭제"""
+    def clear(self) -> None:
+        """Clear all cached values."""
         self.cache.clear()
     
-    def generate_key(self, prefix: str, *args, **kwargs) -> str:
+    def generate_key(self, prefix: str, *args: Any, **kwargs: Any) -> str:
         """
-        캐시 키 생성
+        Generate a cache key from prefix and arguments.
         
         Args:
-            prefix: 키 접두사
-            *args: 위치 인자
-            **kwargs: 키워드 인자
-        
+            prefix: Key prefix for namespacing
+            *args: Positional arguments to include in key
+            **kwargs: Keyword arguments to include in key
+            
         Returns:
-            생성된 캐시 키
+            Generated cache key string
         """
         key_data = {
             "prefix": prefix,
@@ -101,18 +131,46 @@ class CacheManager:
 
 
 class PerformanceOptimizer:
-    """성능 최적화 도구"""
+    """
+    Performance measurement and caching utilities.
+    
+    Provides decorators for measuring execution time and caching function
+    results. Tracks metrics for performance analysis.
+    
+    Attributes:
+        metrics: Dictionary storing execution time metrics
+        cache_manager: CacheManager instance for caching
+    
+    Example:
+        >>> optimizer = PerformanceOptimizer()
+        >>> 
+        >>> @optimizer.cached(ttl=3600)
+        ... def expensive_function(x):
+        ...     return x * 2
+        >>> 
+        >>> @optimizer.measure_time("my_function")
+        ... def my_function():
+        ...     pass
+    """
     
     def __init__(self):
-        """PerformanceOptimizer 초기화"""
+        """Initialize the PerformanceOptimizer."""
         self.metrics: Dict[str, list] = {}
         self.cache_manager = CacheManager()
     
-    def measure_time(self, func_name: str):
-        """실행 시간 측정 데코레이터"""
+    def measure_time(self, func_name: str) -> Callable[[Callable[..., T]], Callable[..., T]]:
+        """
+        Create a decorator that measures and logs execution time.
+        
+        Args:
+            func_name: Name to use for logging metrics
+            
+        Returns:
+            Decorator function
+        """
         def decorator(func: Callable[..., T]) -> Callable[..., T]:
             @functools.wraps(func)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> T:
                 start_time = time.time()
                 try:
                     result = func(*args, **kwargs)
@@ -126,11 +184,19 @@ class PerformanceOptimizer:
             return wrapper
         return decorator
     
-    async def measure_time_async(self, func_name: str):
-        """비동기 실행 시간 측정 데코레이터"""
+    def measure_time_async(self, func_name: str):
+        """
+        Create an async decorator that measures and logs execution time.
+        
+        Args:
+            func_name: Name to use for logging metrics
+            
+        Returns:
+            Decorator function for async functions
+        """
         def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
             @functools.wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args: Any, **kwargs: Any) -> T:
                 start_time = time.time()
                 try:
                     result = await func(*args, **kwargs)
@@ -145,7 +211,13 @@ class PerformanceOptimizer:
         return decorator
     
     def get_statistics(self) -> Dict[str, Any]:
-        """성능 통계 반환"""
+        """
+        Get performance statistics for all measured functions.
+        
+        Returns:
+            Dictionary with function names as keys and stats as values,
+            including count, average, min, max, and total time
+        """
         stats = {}
         for func_name, times in self.metrics.items():
             if times:
@@ -158,24 +230,30 @@ class PerformanceOptimizer:
                 }
         return stats
     
-    def cached(self, ttl: Optional[int] = None):
-        """캐싱 데코레이터"""
+    def cached(self, ttl: Optional[int] = None) -> Callable[[Callable[..., T]], Callable[..., T]]:
+        """
+        Create a caching decorator with TTL support.
+        
+        Args:
+            ttl: Time-to-live in seconds (uses default if None)
+            
+        Returns:
+            Decorator function that caches function results
+        """
         def decorator(func: Callable[..., T]) -> Callable[..., T]:
             @functools.wraps(func)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> T:
                 cache_key = self.cache_manager.generate_key(
                     func.__name__,
                     *args,
                     **kwargs
                 )
                 
-                # 캐시에서 확인
                 cached_value = self.cache_manager.get(cache_key)
                 if cached_value is not None:
                     logger.debug(f"Cache hit for {func.__name__}")
                     return cached_value
                 
-                # 캐시 미스 - 함수 실행
                 result = func(*args, **kwargs)
                 self.cache_manager.set(cache_key, result, ttl)
                 logger.debug(f"Cache miss for {func.__name__}, cached result")
@@ -183,24 +261,30 @@ class PerformanceOptimizer:
             return wrapper
         return decorator
     
-    async def cached_async(self, ttl: Optional[int] = None):
-        """비동기 캐싱 데코레이터"""
+    def cached_async(self, ttl: Optional[int] = None):
+        """
+        Create an async caching decorator with TTL support.
+        
+        Args:
+            ttl: Time-to-live in seconds (uses default if None)
+            
+        Returns:
+            Decorator function for async functions that caches results
+        """
         def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
             @functools.wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args: Any, **kwargs: Any) -> T:
                 cache_key = self.cache_manager.generate_key(
                     func.__name__,
                     *args,
                     **kwargs
                 )
                 
-                # 캐시에서 확인
                 cached_value = self.cache_manager.get(cache_key)
                 if cached_value is not None:
                     logger.debug(f"Cache hit for {func.__name__}")
                     return cached_value
                 
-                # 캐시 미스 - 함수 실행
                 result = await func(*args, **kwargs)
                 self.cache_manager.set(cache_key, result, ttl)
                 logger.debug(f"Cache miss for {func.__name__}, cached result")

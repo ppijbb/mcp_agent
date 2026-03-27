@@ -1,14 +1,24 @@
 """
 Multi-Model LLM Manager for Financial Agent
 
-Groq/OpenRouter 우선 사용, Gemini/OpenAI/Claude 지원
-NO FALLBACK 정책: 실패 시 명확한 에러 발생
+Manages multiple LLM providers with fallback support for financial analysis tasks.
+Supports Groq, OpenRouter, Gemini, OpenAI, and Claude with automatic failover.
+
+Classes:
+    ModelProvider: Enum of supported LLM providers
+    ModelConfig: Configuration for individual model instances
+    ModelManager: Multi-model LLM manager with fallback support
+
+Example:
+    >>> manager = ModelManager(budget_limit=100.0)
+    >>> llm = manager.get_llm(preferred_provider=ModelProvider.GROQ)
+    >>> cost = manager.estimate_cost(1000, "gpt-4o-mini")
 """
 
 import os
 import logging
-from typing import Dict, List, Optional, Any, Union
 from enum import Enum
+from typing import Dict, List, Optional
 
 try:
     from langchain_groq import ChatGroq
@@ -21,6 +31,11 @@ except ImportError:
     ChatOpenAI = None
 
 try:
+    from langchain_openai import ChatOpenAI as OpenRouterChat
+except ImportError:
+    OpenRouterChat = None
+
+try:
     from langchain_google_genai import ChatGoogleGenerativeAI
 except ImportError:
     ChatGoogleGenerativeAI = None
@@ -30,19 +45,13 @@ try:
 except ImportError:
     ChatAnthropic = None
 
-try:
-    from langchain_openai import ChatOpenAI as OpenRouterChat
-except ImportError:
-    OpenRouterChat = None
-
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
 
 logger = logging.getLogger(__name__)
 
 
 class ModelProvider(Enum):
-    """LLM Provider Enum"""
+    """Supported LLM provider types."""
     GROQ = "groq"
     OPENROUTER = "openrouter"
     GEMINI = "gemini"
@@ -51,7 +60,19 @@ class ModelProvider(Enum):
 
 
 class ModelConfig:
-    """모델 설정 클래스"""
+    """
+    Configuration for individual model instances.
+    
+    Attributes:
+        name: Human-readable model name
+        provider: LLM provider type
+        model_id: Provider-specific model identifier
+        temperature: Sampling temperature (0.0-1.0)
+        max_tokens: Maximum tokens in response
+        cost_per_1k_tokens: Cost per 1000 tokens for budget tracking
+        api_key_env: Environment variable name for API key
+        enabled: Whether model is available (has valid API key)
+    """
     
     def __init__(
         self,
@@ -73,7 +94,7 @@ class ModelConfig:
         self.enabled = self._check_api_key()
     
     def _get_default_api_key_env(self) -> str:
-        """기본 API 키 환경 변수 이름 반환"""
+        """Get the default environment variable name for the API key."""
         env_map = {
             ModelProvider.GROQ: "GROQ_API_KEY",
             ModelProvider.OPENROUTER: "OPENROUTER_API_KEY",
@@ -84,25 +105,34 @@ class ModelConfig:
         return env_map.get(self.provider, "")
     
     def _check_api_key(self) -> bool:
-        """API 키 존재 여부 확인"""
+        """Check if the API key exists and is non-empty."""
         api_key = os.getenv(self.api_key_env)
         return api_key is not None and api_key.strip() != ""
 
 
 class ModelManager:
     """
-    Multi-Model LLM Manager
+    Multi-Model LLM Manager with fallback support.
     
-    우선순위: Groq → OpenRouter → Gemini → OpenAI → Claude
-    오류 발생 시 자동으로 다음 모델로 Fallback
+    Manages multiple LLM providers and automatically falls back to
+    the next available provider when an error occurs.
+    
+    Priority order: Groq -> OpenRouter -> Gemini -> OpenAI -> Claude
+    
+    Attributes:
+        budget_limit: Optional spending limit for token usage
+        current_cost: Accumulated cost from model usage
+        models: Dictionary of configured models
+        model_clients: Dictionary of initialized LLM clients
+        fallback_order: Priority order for provider fallback
     """
     
     def __init__(self, budget_limit: Optional[float] = None):
         """
-        ModelManager 초기화
+        Initialize the ModelManager.
         
         Args:
-            budget_limit: 예산 제한 (선택)
+            budget_limit: Optional budget limit for token costs
         """
         self.budget_limit = budget_limit
         self.current_cost = 0.0
@@ -119,9 +149,8 @@ class ModelManager:
         self._initialize_models()
         self._initialize_clients()
     
-    def _initialize_models(self):
-        """모델 설정 초기화"""
-        # 1. Groq 모델 (무료, 우선순위 1)
+    def _initialize_models(self) -> None:
+        """Initialize model configurations for all supported providers."""
         self.models["groq-llama-70b"] = ModelConfig(
             name="groq-llama-70b",
             provider=ModelProvider.GROQ,
@@ -140,7 +169,6 @@ class ModelManager:
             cost_per_1k_tokens=0.0,
         )
         
-        # 2. OpenRouter 모델 (무료 모델 우선, 우선순위 2)
         self.models["openrouter-gemini-flash"] = ModelConfig(
             name="openrouter-gemini-flash",
             provider=ModelProvider.OPENROUTER,
@@ -159,7 +187,6 @@ class ModelManager:
             cost_per_1k_tokens=0.0,
         )
         
-        # 3. Gemini 모델 (Fallback 1)
         self.models["gemini-flash-lite"] = ModelConfig(
             name="gemini-flash-lite",
             provider=ModelProvider.GEMINI,
@@ -169,7 +196,6 @@ class ModelManager:
             cost_per_1k_tokens=0.0001,
         )
         
-        # 4. OpenAI 모델 (Fallback 2)
         self.models["gpt-4o-mini"] = ModelConfig(
             name="gpt-4o-mini",
             provider=ModelProvider.OPENAI,
@@ -179,7 +205,6 @@ class ModelManager:
             cost_per_1k_tokens=0.15,
         )
         
-        # 5. Claude 모델 (Fallback 3)
         self.models["claude-sonnet"] = ModelConfig(
             name="claude-sonnet",
             provider=ModelProvider.CLAUDE,
@@ -191,8 +216,8 @@ class ModelManager:
         
         logger.info(f"Initialized {len(self.models)} models")
     
-    def _initialize_clients(self):
-        """모델 클라이언트 초기화"""
+    def _initialize_clients(self) -> None:
+        """Initialize LLM clients for enabled models."""
         for name, config in self.models.items():
             if not config.enabled:
                 logger.warning(f"Model {name} disabled - API key not found")
@@ -207,7 +232,15 @@ class ModelManager:
                 logger.warning(f"Failed to initialize client for {name}: {e}")
     
     def _create_client(self, config: ModelConfig) -> Optional[BaseChatModel]:
-        """모델 클라이언트 생성"""
+        """
+        Create an LLM client for the given model configuration.
+        
+        Args:
+            config: Model configuration with provider details
+            
+        Returns:
+            Initialized BaseChatModel or None if creation fails
+        """
         api_key = os.getenv(config.api_key_env)
         if not api_key:
             return None
@@ -266,22 +299,20 @@ class ModelManager:
     
     def get_llm(self, preferred_provider: Optional[ModelProvider] = None) -> Optional[BaseChatModel]:
         """
-        사용 가능한 LLM 반환 (우선순위에 따라)
+        Get an available LLM client based on priority order.
         
         Args:
-            preferred_provider: 선호하는 Provider (선택)
-        
+            preferred_provider: Optional preferred provider to try first
+            
         Returns:
-            BaseChatModel 인스턴스 또는 None
+            BaseChatModel instance or None if no models available
         """
-        # 선호하는 Provider가 있으면 해당 Provider의 모델부터 시도
         if preferred_provider:
             for name, config in self.models.items():
                 if config.provider == preferred_provider and config.enabled:
                     if name in self.model_clients:
                         return self.model_clients[name]
         
-        # Fallback 순서에 따라 시도
         for provider in self.fallback_order:
             for name, config in self.models.items():
                 if config.provider == provider and config.enabled:
@@ -294,13 +325,13 @@ class ModelManager:
     
     def get_llm_by_name(self, model_name: str) -> Optional[BaseChatModel]:
         """
-        모델 이름으로 LLM 반환
+        Get a specific LLM client by model name.
         
         Args:
-            model_name: 모델 이름
-        
+            model_name: Name of the model to retrieve
+            
         Returns:
-            BaseChatModel 인스턴스 또는 None
+            BaseChatModel instance or None if not found
         """
         if model_name in self.model_clients:
             return self.model_clients[model_name]
@@ -309,29 +340,28 @@ class ModelManager:
         return None
     
     def get_available_models(self) -> List[str]:
-        """사용 가능한 모델 목록 반환"""
+        """Get list of available model names."""
         return list(self.model_clients.keys())
     
     def estimate_cost(self, tokens: int, model_name: str) -> float:
         """
-        토큰 수 기반 비용 추정
+        Estimate the cost for a given token count.
         
         Args:
-            tokens: 토큰 수
-            model_name: 모델 이름
-        
+            tokens: Number of tokens
+            model_name: Name of the model to estimate cost for
+            
         Returns:
-            예상 비용
+            Estimated cost in the configured currency
         """
         if model_name not in self.models:
             return 0.0
         
         config = self.models[model_name]
-        cost = (tokens / 1000) * config.cost_per_1k_tokens
-        return cost
+        return (tokens / 1000) * config.cost_per_1k_tokens
     
     def check_budget(self) -> bool:
-        """예산 제한 확인"""
+        """Check if current cost is within budget limit."""
         if self.budget_limit is None:
             return True
         
