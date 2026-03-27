@@ -310,19 +310,19 @@ class TravelAIAnalyzer:
         ]
 
     def _extract_rating_numeric(self, rating_text: str) -> float:
-        """평점 텍스트에서 숫자 추출"""
+        """Extract numeric rating from text."""
         try:
             import re
             match = re.search(r'(\d+\.?\d*)', str(rating_text))
             return float(match.group(1)) if match else 0.0
-        except:
+        except Exception:
             return 0.0
 
     def _extract_price_numeric(self, price_text: str) -> float:
-        """가격 텍스트에서 숫자 추출"""
+        """Extract numeric price from text."""
         try:
             import re
             match = re.search(r'(\d+)', str(price_text).replace(',', ''))
             return float(match.group(1)) if match else float('inf')
-        except:
+        except Exception:
             return float('inf')

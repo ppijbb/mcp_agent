@@ -8,6 +8,7 @@ for agent operations to improve efficiency and reduce resource usage.
 import time
 import asyncio
 import threading
+from collections import deque
 from functools import wraps, lru_cache
 from typing import Dict, Any, Optional, Callable
 import logging
@@ -37,7 +38,7 @@ class SimpleCache:
         self._max_size = max_size
         self._default_ttl = default_ttl
         self._lock = threading.Lock()
-        self._access_order: list = []
+        self._access_order: deque = deque()
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -53,14 +54,12 @@ class SimpleCache:
             if key in self._cache:
                 item = self._cache[key]
                 if time.time() < item['expires']:
-                    if key in self._access_order:
-                        self._access_order.remove(key)
+                    self._access_order.remove(key)
                     self._access_order.append(key)
                     return item['value']
                 else:
                     del self._cache[key]
-                    if key in self._access_order:
-                        self._access_order.remove(key)
+                    self._access_order.remove(key)
         return None
 
     async def aget(self, key: str) -> Optional[Any]:
@@ -86,7 +85,7 @@ class SimpleCache:
         """
         with self._lock:
             if len(self._cache) >= self._max_size and key not in self._cache:
-                oldest_key = self._access_order.pop(0) if self._access_order else None
+                oldest_key = self._access_order.popleft() if self._access_order else None
                 if oldest_key:
                     self._cache.pop(oldest_key, None)
 
@@ -234,7 +233,7 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
         ttl: Time-to-live in seconds (None for no expiry)
     """
     cache: Dict[str, Dict[str, Any]] = {}
-    keys_order = []
+    keys_order: deque = deque()
     lock = threading.Lock()
     
     def decorator(func: Callable) -> Callable:
@@ -249,14 +248,13 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
                         return entry['result']
                     else:
                         cache.pop(key)
-                        if key in keys_order:
-                            keys_order.remove(key)
+                        keys_order.remove(key)
             
             result = func(*args, **kwargs)
             
             with lock:
                 if len(cache) >= maxsize:
-                    oldest_key = keys_order.pop(0)
+                    oldest_key = keys_order.popleft()
                     cache.pop(oldest_key, None)
                 
                 cache[key] = {

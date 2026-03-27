@@ -240,12 +240,12 @@ runLighthouse().catch(console.error);
         return f"{emergency_info['emoji']} {emergency_info['label']}"
 
     def __del__(self):
-        """임시 디렉토리 정리"""
+        """Clean up temporary directory on object destruction."""
         try:
             import shutil
             if os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
-        except:
+        except Exception:
             pass
 
 
