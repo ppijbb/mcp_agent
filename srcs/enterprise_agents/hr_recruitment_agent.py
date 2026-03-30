@@ -1,3 +1,15 @@
+"""
+HR Recruitment Agent
+
+Enterprise-grade HR recruitment automation system that handles:
+- Job posting creation and optimization
+- Resume screening and candidate evaluation
+- Interview question generation
+- Reference check processes
+- Offer letter templates
+- Onboarding program creation
+"""
+
 import asyncio
 import os
 from datetime import datetime
@@ -361,7 +373,7 @@ class HRRecruitmentAgent:
         )
 
         # Create quality controller
-        agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )

@@ -18,7 +18,7 @@ import json
 from datetime import datetime
 
 from mcp_agent.agents.agent import Agent
-from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator, QualityRating
+from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (

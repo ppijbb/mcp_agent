@@ -45,7 +45,7 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
     try:
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": "https://github.com/mcp-agent",
+            "Referer": "https://github.com/mcp-agent",
             "X-Title": "MCP Agent Fallback"
         }
         response = httpx.get(

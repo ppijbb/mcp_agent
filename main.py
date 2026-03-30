@@ -1,7 +1,8 @@
 """
-🤖 MCP Agent Hub - 통합 AI 에이전트 플랫폼
+MCP Agent Hub - Unified AI Agent Platform
 
-모든 AI 에이전트들을 한 곳에서 체험할 수 있는 Streamlit 데모
+A Streamlit demo application that provides access to all AI agents
+from a single interface.
 """
 
 import importlib

@@ -1,3 +1,10 @@
+"""
+RAG Agent
+
+A Retrieval-Augmented Generation agent that uses Qdrant for vector-based
+retrieval and an LLM for response generation.
+"""
+
 from mcp_agent.context import AgentContext
 from srcs.core.agent.base import BaseAgent
 from srcs.core.errors import APIError, WorkflowError
