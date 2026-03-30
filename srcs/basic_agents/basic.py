@@ -1,3 +1,14 @@
+"""
+Basic Agent Example
+
+Demonstrates basic MCP Agent functionality including tool listing, LLM switching,
+and multi-turn conversations. Shows how to use the Agent class with various
+language models (OpenAI, Google) and filesystem tools.
+
+Example:
+    python -m srcs.basic_agents.basic
+"""
+
 import asyncio
 import os
 import time

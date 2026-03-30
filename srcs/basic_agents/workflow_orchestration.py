@@ -1,3 +1,15 @@
+"""
+Workflow Orchestration Example
+
+Demonstrates workflow orchestration using MCP Agent's Orchestrator for coordinating
+multiple specialized agents (finder, writer, proofreader, fact_checker, style_enforcer)
+to process student assignments. The orchestrator generates dynamic plans and executes
+them using multiple agents and servers.
+
+The workflow follows a plan-generation pattern where a planner creates steps that are
+executed by specialized agents, enabling flexible and extensible automation pipelines.
+"""
+
 import asyncio
 import os
 

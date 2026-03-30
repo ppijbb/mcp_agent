@@ -1,8 +1,18 @@
 """
 Stock Analyzer with Orchestrator and EvaluatorOptimizerLLM Workflow
-------------------------------------------------------------
+
 An integrated financial analysis tool using the latest orchestrator implementation
-that now supports AugmentedLLM components directly.
+that now supports AugmentedLLM components directly. This module provides a multi-agent
+workflow for conducting stock analysis with quality control through evaluation and
+optimization steps.
+
+The workflow consists of:
+- Research Agent: Gathers financial data with quality evaluation
+- Analyst Agent: Analyzes research data for insights
+- Report Writer: Creates professional stock reports
+
+Example:
+    python -m srcs.basic_agents.agent AAPL
 """
 
 import asyncio

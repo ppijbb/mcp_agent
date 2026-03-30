@@ -1,13 +1,16 @@
 """
-Example of using Temporal as the execution engine for MCP Agent workflows.
-This example demonstrates how to create a workflow using the app.workflow and app.workflow_run
-decorators, and how to run it using the Temporal executor.
+Parallel Agent Execution Example
+
+Demonstrates parallel execution of multiple agents with fan-in/fan-out pattern
+using MCP Agent workflows. Creates specialized agents for proofreading, fact-checking,
+and style enforcement that run concurrently before combining results.
 """
 
 import asyncio
 from typing import List, Dict, Any
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM
+from mcp_agent.workflows.parallel.parallel_llm import ParallelLLM
 from srcs.common.utils import setup_agent_app
 
 
@@ -86,7 +89,11 @@ if __name__ == "__main__":
     import time
 
     start = time.time()
-    asyncio.run(example_usage())
+    asyncio.run(run_parallel_agents([
+        {"task": "proofread", "content": SHORT_STORY},
+        {"task": "fact_check", "content": SHORT_STORY},
+        {"task": "style_check", "content": SHORT_STORY},
+    ]))
     end = time.time()
     t = end - start
 
