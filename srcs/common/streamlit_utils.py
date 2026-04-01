@@ -9,6 +9,15 @@ Classes:
 
 Functions:
     get_agent_state: Get or create agent state with session persistence
+
+Example:
+    >>> async def init_agent():
+    ...     state = await get_agent_state(
+    ...         key="my_agent",
+    ...         agent_class=MyAgent,
+    ...         llm_class=OpenAIAugmentedLLM
+    ...     )
+    ...     return state.agent
 """
 
 import streamlit as st
@@ -28,6 +37,10 @@ class AgentState:
     Attributes:
         agent: The agent instance
         llm: Optional LLM instance attached to the agent
+    
+    Example:
+        >>> state = AgentState(agent=my_agent, llm=my_llm)
+        >>> print(state.agent.name)
     """
 
     agent: Agent

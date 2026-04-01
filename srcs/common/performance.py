@@ -88,6 +88,8 @@ class SimpleCache:
                 oldest_key = self._access_order.popleft() if self._access_order else None
                 if oldest_key:
                     self._cache.pop(oldest_key, None)
+            elif key in self._access_order:
+                self._access_order.remove(key)
 
             ttl = ttl or self._default_ttl
             self._cache[key] = {
@@ -95,8 +97,7 @@ class SimpleCache:
                 'created': time.time(),
                 'expires': time.time() + ttl
             }
-            if key not in self._access_order:
-                self._access_order.append(key)
+            self._access_order.append(key)
 
     async def aset(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
@@ -173,12 +174,21 @@ def rate_limit(calls_per_second: float = 1.0):
     return decorator
 
 
-def performance_monitor(func: Callable = None, *, log_calls: bool = True):
+def performance_monitor(func: Optional[Callable] = None, *, log_calls: bool = True):
     """
     Decorator to monitor function performance.
     
     Args:
-        log_calls: Whether to log function calls and timing
+        func: Function to decorate (optional, for direct usage)
+        log_calls: Whether to log function calls and timing (default: True)
+    
+    Returns:
+        Decorated function with performance monitoring
+    
+    Example:
+        >>> @performance_monitor(log_calls=True)
+        ... async def my_function():
+        ...     return await do_work()
     """
     def decorator(f: Callable) -> Callable:
         @wraps(f)
@@ -229,8 +239,16 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
     Strict memoization with optional TTL.
     
     Args:
-        maxsize: Maximum cache size
+        maxsize: Maximum cache size (default: 128)
         ttl: Time-to-live in seconds (None for no expiry)
+    
+    Returns:
+        Decorator function for memoization
+    
+    Example:
+        >>> @memoize_strict(maxsize=64, ttl=300)
+        ... def expensive_computation(x, y):
+        ...     return x + y
     """
     cache: Dict[str, Dict[str, Any]] = {}
     keys_order: deque = deque()
@@ -281,7 +299,7 @@ class ResourceMonitor:
         start_time: Timestamp when the monitor was initialized
         call_counts: Dictionary tracking number of calls per function
         execution_times: Dictionary tracking execution times per function
-        
+    
     Example:
         >>> monitor = ResourceMonitor()
         >>> monitor.record_call("process_data", 0.5)

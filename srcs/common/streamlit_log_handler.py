@@ -2,6 +2,17 @@
 Streamlit Log Handler Module
 
 Custom logging handler for redirecting logs to Streamlit containers.
+
+Classes:
+    StreamlitLogHandler: Custom logging handler for Streamlit containers
+
+Functions:
+    setup_streamlit_logging: Configure loggers to output to Streamlit
+
+Example:
+    >>> import streamlit as st
+    >>> container = st.container()
+    >>> setup_streamlit_logging(["my_agent", "mcp_agent"], container)
 """
 
 import logging
@@ -22,9 +33,16 @@ class StreamlitLogHandler(logging.Handler):
         log_messages: Deque containing log messages
     """
     def __init__(self, container, max_lines=100):
+        """
+        Initialize the Streamlit log handler.
+        
+        Args:
+            container: Streamlit container widget for log output
+            max_lines: Maximum number of log lines to retain (default: 100)
+        """
         super().__init__()
         self.container = container
-        # Use a deque to automatically manage the max number of log lines
+        self.max_lines = max_lines
         self.log_messages = deque(maxlen=max_lines)
 
     def emit(self, record):

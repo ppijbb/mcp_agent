@@ -28,12 +28,12 @@ from .styles import get_common_styles, get_page_header
 
 def setup_page(title: str, icon: str, layout: str = "wide") -> None:
     """
-    페이지 기본 설정.
+    Configure Streamlit page settings.
     
     Args:
-        title: 페이지 제목
-        icon: 페이지 아이콘 (emoji)
-        layout: 페이지 레이아웃 ("wide" 또는 "centered")
+        title: Page title
+        icon: Page icon (emoji)
+        layout: Page layout ("wide" or "centered")
     """
     try:
         st.set_page_config(
@@ -46,18 +46,18 @@ def setup_page(title: str, icon: str, layout: str = "wide") -> None:
 
 
 def add_project_root() -> None:
-    """프로젝트 루트를 Python 경로에 추가하여 모듈 임포트가 가능하도록 함."""
+    """Add project root to Python path to enable module imports."""
     project_root = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(project_root))
 
 
 def setup_page_header(title: str, subtitle: str = "") -> None:
     """
-    페이지 헤더 설정 (간단 버전).
+    Configure page header (simple version).
     
     Args:
-        title: 페이지 제목
-        subtitle: 페이지 서브타이틀 (선택)
+        title: Page title
+        subtitle: Page subtitle (optional)
     """
     st.title(f"🚀 {title}")
     if subtitle:
@@ -66,38 +66,38 @@ def setup_page_header(title: str, subtitle: str = "") -> None:
 
 def render_page_header(page_type: str, title: str, subtitle: str) -> None:
     """
-    페이지 헤더를 HTML로 렌더링합니다.
+    Render page header as HTML.
     
     Args:
-        page_type: 페이지 유형
-        title: 제목
-        subtitle: 서브타이틀
+        page_type: Page type identifier
+        title: Header title
+        subtitle: Header subtitle
     """
     header_html = get_page_header(page_type, title, subtitle)
     st.markdown(header_html, unsafe_allow_html=True)
 
 
 def render_common_styles() -> None:
-    """공통 CSS 스타일을 페이지에 적용합니다."""
+    """Apply common CSS styles to the page."""
     st.markdown(get_common_styles(), unsafe_allow_html=True)
 
 
 def render_home_button() -> None:
-    """홈으로 돌아가는 Streamlit 버튼을 렌더링합니다."""
+    """Render home navigation button."""
     if st.button("🏠 홈으로 돌아가기", key="home"):
         st.switch_page("main.py")
 
 
 def safe_import_agent(module_path: str, fallback_name: str = "Agent") -> Tuple[bool, Optional[Any], Optional[str]]:
     """
-    에이전트 모듈을 안전하게 임포트합니다.
+    Safely import agent module with fallback.
     
     Args:
-        module_path: 임포트할 모듈 경로
-        fallback_name: 폴백 에이전트 이름
+        module_path: Module path to import
+        fallback_name: Fallback agent name
         
     Returns:
-        Tuple of (성공여부, 모듈, 오류메시지)
+        Tuple of (success, module, error_message)
     """
     try:
         module = __import__(module_path, fromlist=[fallback_name])
@@ -108,11 +108,11 @@ def safe_import_agent(module_path: str, fallback_name: str = "Agent") -> Tuple[b
 
 def render_import_error(agent_name: str, error_message: str) -> None:
     """
-    에이전트 임포트 오류를 화면에 표시합니다.
+    Display agent import errors.
     
     Args:
-        agent_name: 에이전트 이름
-        error_message: 오류 메시지
+        agent_name: Agent name
+        error_message: Error message
     """
     st.error(f"{agent_name}을 불러올 수 없습니다.")
     st.error(f"오류 내용: {error_message}")
