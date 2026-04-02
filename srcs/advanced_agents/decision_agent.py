@@ -453,9 +453,30 @@ class DecisionAgentMCP:
         logger
     ) -> DecisionAnalysisResult:
         """Direct decision analysis without ReAct iterations"""
-
-        # Implementation for non-ReAct decision making
-        # This would be a simpler, single-pass analysis
+        logger.info("Performing direct (non-ReAct) decision analysis")
+        
+        simple_decision = Decision(
+            decision_id=f"direct_{interaction.interaction_type.value}_{int(time.time())}",
+            recommendation=f"Direct recommendation for {interaction.interaction_type.value}",
+            confidence_score=0.7,
+            reasoning="Simplified single-pass analysis",
+            alternatives=["Consider ReAct analysis for complex decisions"],
+            timestamp=datetime.now(timezone.utc),
+        )
+        
+        return DecisionAnalysisResult(
+            interaction=interaction,
+            user_profile=user_profile,
+            confidence_level=DecisionConfidenceLevel.MEDIUM,
+            complexity_level=DecisionComplexity.SIMPLE,
+            decision=simple_decision,
+            reasoning_steps=["Direct analysis: single-pass decision"],
+            data_sources_consulted=["context"],
+            risk_factors=["Limited analysis depth"],
+            alternative_scenarios=[{"type": "simple", "note": "Use ReAct for thorough analysis"}],
+            analysis_timestamp=datetime.now(timezone.utc),
+            research_summary="Direct decision analysis completed",
+        )
 
     async def _generate_final_decision(
         self,

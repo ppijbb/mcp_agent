@@ -1,3 +1,18 @@
+"""
+Flight Airline Swarm Agent System
+
+Multi-agent customer service system for Flight Airlines using MCP swarm architecture.
+Implements specialized agents for different customer service scenarios including
+flight modifications, cancellations, and baggage handling.
+
+Classes:
+    SwarmAgent: Base agent class for swarm coordination
+    AnthropicSwarm: Swarm orchestrator using Anthropic models
+
+Functions:
+    Tools for escalation, flight changes, refunds, and case resolution
+"""
+
 import asyncio
 import os
 
@@ -138,12 +153,7 @@ flight_modification = SwarmAgent(
 flight_cancel = SwarmAgent(
     name="Flight cancel traversal",
     instruction=lambda context_variables: f"""
-        {
-        FLY_AIR_AGENT_PROMPT.format(
-            customer_context=context_variables.get("customer_context", "None"),
-            flight_context=context_variables.get("flight_context", "None"),
-        )
-    }\n Flight cancellation policy: policies/flight_cancellation_policy.md""",
+        {FLY_AIR_AGENT_PROMPT}\n Flight cancellation policy: policies/flight_cancellation_policy.md""",
     functions=[
         escalate_to_agent,
         initiate_refund,
@@ -158,12 +168,7 @@ flight_cancel = SwarmAgent(
 flight_change = SwarmAgent(
     name="Flight change traversal",
     instruction=lambda context_variables: f"""
-        {
-        FLY_AIR_AGENT_PROMPT.format(
-            customer_context=context_variables.get("customer_context", "None"),
-            flight_context=context_variables.get("flight_context", "None"),
-        )
-    }\n Flight change policy: policies/flight_change_policy.md""",
+        {FLY_AIR_AGENT_PROMPT}\n Flight change policy: policies/flight_change_policy.md""",
     functions=[
         escalate_to_agent,
         change_flight,
@@ -178,12 +183,7 @@ flight_change = SwarmAgent(
 lost_baggage = SwarmAgent(
     name="Lost baggage traversal",
     instruction=lambda context_variables: f"""
-        {
-        FLY_AIR_AGENT_PROMPT.format(
-            customer_context=context_variables.get("customer_context", "None"),
-            flight_context=context_variables.get("flight_context", "None"),
-        )
-    }\n Lost baggage policy: policies/lost_baggage_policy.md""",
+        {FLY_AIR_AGENT_PROMPT}\n Lost baggage policy: policies/lost_baggage_policy.md""",
     functions=[
         escalate_to_agent,
         initiate_baggage_search,
@@ -196,6 +196,8 @@ lost_baggage = SwarmAgent(
 
 
 async def example_usage():
+    """Example usage of the swarm agent system."""
+    app = setup_agent_app("swarm_app")
     logger = app.logger
     context = app.context
 

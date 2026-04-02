@@ -155,12 +155,10 @@ class BaseAgent(ABC):
         Legacy property for backward compatibility. Use get_session() in async contexts.
 
         Note:
-            This property creates a new event loop each call and may cause issues
-            if used in async contexts. Prefer get_session() method instead.
+            This property raises an error in async contexts. Prefer get_session() method instead.
 
-        Warning:
-            Creates a new event loop on each call. Previous loops are closed to
-            prevent resource leaks.
+        Raises:
+            RuntimeError: If used in async context. Use await get_session() instead.
         """
         import warnings
         warnings.warn(
@@ -168,19 +166,11 @@ class BaseAgent(ABC):
             DeprecationWarning,
             stacklevel=2
         )
-        try:
-            loop = asyncio.get_running_loop()
-            raise RuntimeError(
-                "session property cannot be used in async context. "
-                "Use await get_session() instead."
-            )
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(self.get_session())
-            finally:
-                loop.close()
+        loop = asyncio.get_running_loop()
+        raise RuntimeError(
+            "session property cannot be used in async context. "
+            "Use await get_session() instead."
+        )
 
     def _setup_app(self) -> MCPApp:
         """
