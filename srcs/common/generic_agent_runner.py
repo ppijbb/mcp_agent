@@ -1,3 +1,20 @@
+"""
+Generic Agent Runner Module
+
+Provides a flexible command-line interface for executing agents dynamically
+by specifying module path, class name, and method name.
+
+Allows running agents with custom configuration and saving results to JSON.
+
+Example:
+    python -m srcs.common.generic_agent_runner \\
+        --module-path srcs.basic_agents.data_generator \\
+        --class-name DataGenerator \\
+        --method-name generate \\
+        --config-json '{"count": 10}' \\
+        --result-json-path results/output.json
+"""
+
 import argparse
 import json
 import sys
@@ -5,7 +22,6 @@ from pathlib import Path
 import importlib
 import asyncio
 from typing import Dict, Any, Optional
-
 
 
 def main():
@@ -105,7 +121,7 @@ def main():
             # Overwrite final_result to ensure the error is reported
             final_result["error"] = f"Failed to save result JSON: {e}"
             with open(result_json_path, 'w', encoding='utf-8') as f:
-                 json.dump(final_result, f, indent=2, ensure_ascii=False)
+                json.dump(final_result, f, indent=2, ensure_ascii=False)
 
         if not final_result["success"]:
             sys.exit(1)
