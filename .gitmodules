@@ -146,3 +146,6 @@
 [submodule "reference/deepagents"]
 	path = reference/deepagents
 	url = https://github.com/langchain-ai/deepagents.git
+[submodule "reference/claw-code"]
+	path = reference/claw-code
+	url = https://github.com/mzpatrick0529-mzyh/claw-code.git
