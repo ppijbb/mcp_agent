@@ -1,3 +1,5 @@
+"""Custom exceptions for the urban hive module."""
+
 class ExternalDataUnavailableError(Exception):
     """Raised when all external data sources fail or return no data."""
 

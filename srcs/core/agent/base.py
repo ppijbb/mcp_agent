@@ -23,7 +23,9 @@ from typing import Any, List
 # HACK: mcp-agent config cache reset for file change reflection
 try:
     import mcp_agent.config
-    mcp_agent.config._settings = None
+    config_settings = getattr(mcp_agent.config, '_settings', None)
+    if config_settings is not None:
+        mcp_agent.config._settings = None
 except ImportError:
     pass
 
