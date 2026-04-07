@@ -636,8 +636,11 @@ class DecisionAgentMCP:
 - **Reasoning**: {analysis.decision.reasoning}
 
 ## ⚠️ Risk Assessment
-- **Level**: {analysis.decision.risk_assessment['level']}
-- **Factors**: {', '.join(analysis.decision.risk_assessment['factors'])}
+""")
+                risk = analysis.decision.risk_assessment or {}
+                f.write(f"- **Level**: {risk.get('level', 'N/A')}\n")
+                factors = risk.get('factors', [])
+                f.write(f"- **Factors**: {', '.join(factors) if factors else 'None'}\n")
 
 ## 📊 Research Summary
 {analysis.research_summary}

@@ -114,9 +114,11 @@ def run_basic_agent(agent_name: str) -> bool:
         if agent_name == "streamlit":
             # Special handling for Streamlit agent
             import subprocess
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            streamlit_path = os.path.join(script_dir, "basic_agents", "streamlit_agent.py")
             result = subprocess.run(
-                ["python", "streamlit_agent.py"],
-                cwd="basic_agents",
+                ["python", streamlit_path],
                 capture_output=True,
                 text=True,
                 timeout=300

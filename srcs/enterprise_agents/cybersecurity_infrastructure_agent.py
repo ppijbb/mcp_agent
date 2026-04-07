@@ -1,3 +1,10 @@
+"""
+Cybersecurity and Infrastructure Agent
+
+Enterprise-grade agent for comprehensive security assessments,
+vulnerability scanning, and infrastructure security evaluation.
+"""
+
 import asyncio
 import os
 import json
@@ -10,14 +17,12 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
 from srcs.core.config.loader import settings
 
-# ✅ P2-1: Cybersecurity Agent 메서드 구현 (2개 함수)
-
 
 def load_assessment_types():
-    """평가 유형을 동적으로 로드"""
+    """Load available security assessment types dynamically."""
     return [
-        "전체 보안 평가 (Comprehensive Security Assessment)",
-        "취약점 스캔 (Vulnerability Scanning)",
+        "Comprehensive Security Assessment",
+        "Vulnerability Scanning",
         "침투 테스트 (Penetration Testing)",
         "컴플라이언스 감사 (Compliance Audit)",
         "사고 대응 계획 (Incident Response Planning)",

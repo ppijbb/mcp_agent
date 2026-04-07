@@ -6,13 +6,15 @@ Shared utility functions used across all agents for common operations.
 
 import os
 import json
+import threading
 from datetime import datetime
 
 # Defer imports to avoid circular dependencies
 
-# Performance optimization: Cache for frequently accessed paths
+# Performance optimization: Cache for frequently accessed paths (thread-safe)
 _project_root_cache = None
 _config_path_cache = None
+_cache_lock = threading.Lock()
 
 
 class EnhancedJSONEncoder(json.JSONEncoder):
@@ -71,20 +73,18 @@ def setup_agent_app(app_name: str):
         from mcp_agent.config import get_settings
         from pathlib import Path
 
-        # Find config file path from project root - cache result for performance
-        if _project_root_cache is None:
-            _project_root_cache = Path(__file__).resolve().parent.parent.parent
+        with _cache_lock:
+            if _project_root_cache is None:
+                _project_root_cache = Path(__file__).resolve().parent.parent.parent
 
-        project_root = _project_root_cache
+            project_root = _project_root_cache
 
-        # First try configs directory, then project root - cache config path
-        if _config_path_cache is None:
-            config_path = project_root / "configs" / "mcp_agent.config.yaml"
-            if not config_path.exists():
-                config_path = project_root / "mcp_agent.config.yaml"
-            _config_path_cache = str(config_path)
+            if _config_path_cache is None:
+                config_path = project_root / "configs" / "mcp_agent.config.yaml"
+                if not config_path.exists():
+                    config_path = project_root / "mcp_agent.config.yaml"
+                _config_path_cache = str(config_path)
 
-        # Use mcp_agent library's standard settings
         app_settings = get_settings(_config_path_cache)
 
         return MCPApp(
@@ -265,8 +265,7 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
 
 
 def save_deliverables(orchestrator_result, output_dir, deliverable_files):
-    """
-    Save orchestrator results to specified deliverable files.
+    """Save orchestrator results to specified deliverable files.
     
     Args:
         orchestrator_result: The result object from orchestrator execution
@@ -276,8 +275,35 @@ def save_deliverables(orchestrator_result, output_dir, deliverable_files):
     Returns:
         List of paths to saved deliverable files
     """
-    # Implementation would depend on orchestrator result format
-    # This is a placeholder for the actual implementation
+    import os
+    import json
+    
+    os.makedirs(output_dir, exist_ok=True)
+    saved_paths = []
+    
+    if hasattr(orchestrator_result, 'model_dump'):
+        data = orchestrator_result.model_dump()
+    elif hasattr(orchestrator_result, 'dict'):
+        data = orchestrator_result.dict()
+    elif isinstance(orchestrator_result, dict):
+        data = orchestrator_result
+    else:
+        data = {'result': str(orchestrator_result)}
+    
+    for file_path in deliverable_files:
+        abs_path = os.path.join(output_dir, file_path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        
+        if abs_path.endswith('.json'):
+            with open(abs_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, cls=EnhancedJSONEncoder)
+        else:
+            with open(abs_path, 'w', encoding='utf-8') as f:
+                f.write(str(data))
+        
+        saved_paths.append(abs_path)
+    
+    return saved_paths
 
 
 def save_report(report_data, file_path: str | None = None, output_dir: str | None = None) -> str:
