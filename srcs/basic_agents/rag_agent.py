@@ -98,7 +98,7 @@ class RAGAgent(BaseAgent):
 
 
 def get_qdrant_status() -> Dict[str, Any]:
-    """Qdrant 서버 상태 확인"""
+    """Check Qdrant server status and return connection information."""
     try:
         client = QdrantClient("http://localhost:6333")
         collections = client.get_collections()

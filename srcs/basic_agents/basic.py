@@ -22,6 +22,12 @@ from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
 
 async def main():
+    """Demonstrate basic MCP Agent functionality with tool listing and LLM switching.
+    
+    Shows how to use the Agent class with filesystem tools, list available tools,
+    switch between different LLMs (OpenAI, Google), and conduct multi-turn
+    conversations with model preference configuration.
+    """
     app = setup_agent_app("basic_app")
 
     # Run the app

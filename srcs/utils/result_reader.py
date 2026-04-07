@@ -13,8 +13,10 @@ from datetime import datetime
 
 
 class ResultReader:
-    """
-    Reads and displays agent results in Streamlit pages.
+    """Reads and displays agent results from standardized result storage.
+    
+    Provides methods to list available agents, retrieve agent results,
+    load specific result files, and get the latest result for an agent.
     """
 
     def __init__(self, base_results_dir: str = "agent_results"):

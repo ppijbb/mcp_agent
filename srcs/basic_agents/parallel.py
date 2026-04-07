@@ -38,6 +38,15 @@ and whispers of a hidden agenda linger among the villagers.
 
 
 async def run_parallel_agents(tasks: List[Dict[str, Any]]):
+    """Run multiple specialized agents in parallel for content analysis.
+    
+    Creates proofreader, fact_checker, and style_enforcer agents that
+    analyze content concurrently, then combines their feedback via a
+    grader agent using fan-in/fan-out pattern.
+    
+    Args:
+        tasks: List of task dictionaries containing 'task' and 'content' keys
+    """
     app = setup_agent_app("parallel_agent_app")
 
     async with app.run() as app_context:

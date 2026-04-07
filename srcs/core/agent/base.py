@@ -122,9 +122,9 @@ class BaseAgent(ABC):
         self.instruction = instruction
         self.server_names = server_names or []
 
-        self.settings = settings  # 중앙 설정 객체 사용
+        self.settings = settings
         self.app = self._setup_app()
-        self.logger = self.app.logger  # MCPApp이 생성한 로거를 사용
+        self.logger = self.app.logger
         self._session = None
 
         ttl = self.settings.cache.ttl

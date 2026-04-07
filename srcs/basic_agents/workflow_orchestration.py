@@ -101,14 +101,18 @@ app = MCPApp(name="assignment_grader_orchestrator")
 
 async def run_workflow(task: str, model_name: str, plan_type: str):
     """
-    주어진 태스크를 실행하고 결과를 반환하는 워크플로우
+    Execute the given task and return the result.
+    
+    Creates and runs a workflow orchestrator with specialized agents for
+    assignment grading including finder, writer, proofreader, fact checker,
+    and style enforcer agents.
     """
     async with app.run() as orchestrator_app:
         logger = orchestrator_app.logger
 
         context = orchestrator_app.context
 
-        # 파일시스템 서버의 인자에 현재 디렉토리 추가
+        # Add current directory to filesystem server args
         if "filesystem" in context.config.mcp.servers:
             context.config.mcp.servers["filesystem"].args.extend([os.getcwd()])
 
@@ -175,18 +179,18 @@ async def run_workflow(task: str, model_name: str, plan_type: str):
 if __name__ == "__main__":
     import time
 
-    # 기본 작업을 사용하여 테스트
+    # Default task for testing
     default_task = """Load the student's short story from a file named 'short_story.md',
     and generate a report with feedback across proofreading,
     factuality/logical consistency and style adherence.
     Write the graded report to 'graded_report.md' in the same directory."""
 
-    # 테스트용 임시 파일 생성
+    # Create temporary test file
     with open("short_story.md", "w") as f:
         f.write("This is a tale of bravery and waffles. The knight sir Reginald ate 12 waffles before the dragon came.")
 
     start = time.time()
-    # 수정된 함수 호출
+    # Call the workflow function
     final_result = asyncio.run(run_workflow(default_task, "gemini-2.5-flash-lite", "full"))
     print("--- FINAL ORCHESTRATOR RESULT ---")
     print(final_result)
@@ -195,7 +199,7 @@ if __name__ == "__main__":
 
     print(f"Total run time: {t:.2f}s")
 
-    # 생성된 파일 내용 확인
+    # Check generated file content
     if os.path.exists("graded_report.md"):
         print("\n--- GRADED REPORT CONTENT ---")
         with open("graded_report.md", "r") as f:
