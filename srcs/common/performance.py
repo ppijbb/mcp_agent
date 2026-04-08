@@ -8,7 +8,7 @@ for agent operations to improve efficiency and reduce resource usage.
 import time
 import asyncio
 import threading
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from functools import wraps, lru_cache
 from typing import Dict, Any, Optional, Callable
 import logging

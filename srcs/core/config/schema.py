@@ -80,6 +80,21 @@ class CacheConfig(BaseModel):
     redis_url: Optional[str] = None
 
 
+class ReportingConfig(BaseModel):
+    """
+    Reporting configuration schema.
+
+    Defines reporting behavior including default company name,
+    timestamp formats, and output settings.
+
+    Attributes:
+        default_company_name: Default company name for reports
+        timestamp_format: Format string for timestamps
+    """
+    default_company_name: str = "Company"
+    timestamp_format: str = "%Y-%m-%d %H:%M:%S"
+
+
 class AppConfig(BaseModel):
     """
     Main application configuration schema.
@@ -101,6 +116,7 @@ class AppConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
+    reporting: ReportingConfig = Field(default_factory=ReportingConfig)
 
     mcp_servers: Dict[str, MCPServerConfig] = Field(default_factory=dict)
 
