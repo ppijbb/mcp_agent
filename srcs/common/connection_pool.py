@@ -21,7 +21,7 @@ import time
 import threading
 import weakref
 import gc
-from typing import Dict, Any, List, Callable, Optional
+from typing import Dict, Any, List, Callable
 from collections import defaultdict
 import logging
 
@@ -64,6 +64,7 @@ class ImprovedConnectionPool:
         )
         
         # Weak reference tracking for cleanup
+        # Stores weak references to connections for garbage collection monitoring
         self._weak_refs: List[weakref.ref] = []
         
         # Monitoring and cleanup
@@ -71,7 +72,7 @@ class ImprovedConnectionPool:
         self.cleanup_interval = 60  # seconds
         self._shutdown = False
         
-        # Start background cleanup thread
+        # Background cleanup thread for periodic connection expiration
         self._cleanup_thread = threading.Thread(
             target=self._background_cleanup,
             daemon=True

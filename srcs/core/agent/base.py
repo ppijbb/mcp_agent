@@ -168,7 +168,6 @@ class BaseAgent(ABC):
             DeprecationWarning,
             stacklevel=2
         )
-        loop = asyncio.get_running_loop()
         raise RuntimeError(
             "session property cannot be used in async context. "
             "Use await get_session() instead."

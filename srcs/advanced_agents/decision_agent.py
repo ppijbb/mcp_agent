@@ -642,6 +642,7 @@ class DecisionAgentMCP:
                 factors = risk.get('factors', [])
                 f.write(f"- **Factors**: {', '.join(factors) if factors else 'None'}\n")
 
+                f.write(f"""
 ## 📊 Research Summary
 {analysis.research_summary}
 

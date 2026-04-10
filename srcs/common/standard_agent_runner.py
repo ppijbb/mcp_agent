@@ -515,7 +515,6 @@ class StandardAgentRunner:
 
         try:
             cron_schedule = metadata.get("cron_schedule", "")
-            entry_point = metadata.get("entry_point")
 
             wrapper = CronAgentA2AWrapper(
                 agent_id,

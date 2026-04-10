@@ -191,7 +191,7 @@ def _fetch_groq_models(api_key: str) -> List[str]:
         return []
 
 
-def get_best_fallback_models() -> List[Dict[str, Any]]:
+def get_best_fallback_models() -> List[Dict[str, str]]:
     """
     각 서비스에서 사용 가능한 최고 성능 모델 목록 반환
     API에서 동적으로 모델 목록을 가져와서 사용
@@ -298,9 +298,12 @@ class DirectHTTPLLM:
             return data['choices'][0]['message']['content']
 
 
-def _try_fallback_llm(primary_model: str, logger_instance: Optional[logging.Logger] = None) -> Optional[Any]:
+def _try_fallback_llm(primary_model: str, logger_instance: Optional[logging.Logger] = None) -> Optional[DirectHTTPLLM]:
     """
-    503 오류 발생 시 fallback LLM 생성 시도 (OpenAI 사용 안 함)
+    Create fallback LLM when primary fails due to API errors (503, 429, etc.).
+    
+    Attempts to create a DirectHTTPLLM instance using OpenRouter or Groq providers.
+    OpenAI is excluded from fallback options.
 
     Args:
         primary_model: 기본 모델명
@@ -365,7 +368,7 @@ def create_fallback_llm_factory(
     """
     log = logger_instance or logger
 
-    def llm_factory_with_fallback(**kwargs):
+    def llm_factory_with_fallback(**kwargs) -> GoogleAugmentedLLM | DirectHTTPLLM:
         """Fallback이 가능한 LLM factory"""
         try:
             return GoogleAugmentedLLM(model=primary_model)
@@ -403,7 +406,7 @@ def create_fallback_llm_for_agents(
     """
     log = logger_instance or logger
 
-    def llm_factory_for_agents(**kwargs):
+    def llm_factory_for_agents(**kwargs) -> GoogleAugmentedLLM | DirectHTTPLLM:
         """
         Factory function for creating agent LLM instances with fallback support.
 
@@ -446,7 +449,7 @@ def create_fallback_orchestrator_llm_factory(
     """
     log = logger_instance or logger
 
-    def orchestrator_llm_factory(**kwargs):
+    def orchestrator_llm_factory(**kwargs) -> GoogleAugmentedLLM | DirectHTTPLLM:
         """Orchestrator용 fallback LLM factory"""
         try:
             # "Both GOOGLE_API_KEY..." 메시지 억제를 위해 stdout 일시 리다이렉트
@@ -584,7 +587,7 @@ async def try_fallback_orchestrator_execution(
             # EPIPE 또는 파이프 관련 에러 처리
             error_code = getattr(api_error, 'errno', None)
             if error_code == 32 or 'EPIPE' in str(api_error):
-                log.error(f"MCP server process terminated unexpectedly (EPIPE). This may indicate the server crashed or was closed.")
+                log.error("MCP server process terminated unexpectedly (EPIPE). This may indicate the server crashed or was closed.")
                 raise RuntimeError(f"MCP server connection lost: {api_error}") from api_error
             raise
         else:

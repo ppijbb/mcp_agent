@@ -275,9 +275,6 @@ def save_deliverables(orchestrator_result, output_dir, deliverable_files):
     Returns:
         List of paths to saved deliverable files
     """
-    import os
-    import json
-    
     os.makedirs(output_dir, exist_ok=True)
     saved_paths = []
     

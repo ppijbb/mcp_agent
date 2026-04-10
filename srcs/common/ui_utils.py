@@ -67,8 +67,9 @@ def run_agent_process(
             log_path = Path(process_key)
             process = Process(command, log_path, label=process_key).start()
 
-            # expander 중첩 문제를 피하기 위해 직접 process monitor 사용
+                    # expander 중첩 문제를 피하기 위해 직접 process monitor 사용
             st.info(f"🔄 {log_expander_title}")
+            spm.st_process_monitor(process, label=f"monitor_{process_key}").loop_until_finished()
             spm.st_process_monitor(process, label=f"monitor_{process_key}").loop_until_finished()
 
             if process.get_return_code() == 0:

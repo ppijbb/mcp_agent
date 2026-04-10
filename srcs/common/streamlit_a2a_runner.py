@@ -666,13 +666,6 @@ def run_agent_via_a2a(
 
                 return result_data
             else:
-                # 상세한 에러 정보 표시
-                error_details = {
-                    "error": result.error,
-                    "metadata": result.metadata,
-                    "execution_time": result.execution_time,
-                }
-
                 st.error(f"❌ Agent 실행 실패: {result.error}")
 
                 # 메타데이터에 상세 정보가 있으면 표시
@@ -779,10 +772,9 @@ def send_a2a_message(
         return False
 
     from srcs.common.a2a_adapter import CommonAgentA2AWrapper
-    from srcs.common.a2a_integration import get_global_broker, MessagePriority
+    from srcs.common.a2a_integration import MessagePriority
 
     registry = get_global_registry()
-    broker = get_global_broker()
 
     async def send():
         source_agent = await registry.get_agent(source_agent_id)

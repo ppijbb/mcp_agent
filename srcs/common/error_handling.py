@@ -21,7 +21,7 @@ Example:
 import logging
 import traceback
 import functools
-from typing import Dict, Any, Optional, Callable, TypeVar, Union
+from typing import Dict, Any, Optional, Callable, TypeVar
 from enum import Enum
 import json
 import sys
@@ -221,8 +221,8 @@ def handle_errors(
     severity: ErrorSeverity = ErrorSeverity.MEDIUM,
     category: ErrorCategory = ErrorCategory.PROCESSING,
     reraise: bool = False,
-    return_on_error: Any = None
-):
+    return_on_error: Optional[T] = None
+) -> Callable[[F], F]:
     """
     Decorator for standardized error handling in functions.
     
