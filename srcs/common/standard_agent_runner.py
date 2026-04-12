@@ -50,7 +50,7 @@ from srcs.common.agent_interface import (
     AgentType,
     AgentExecutionResult,
 )
-from srcs.common.a2a_integration import get_global_registry
+from srcs.common.a2a_integration import get_global_registry, A2AMessage, MessagePriority
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
 from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
 from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
@@ -333,7 +333,7 @@ class StandardAgentRunner:
 
             # A2A를 통한 실행인 경우, 메시지로 요청 전송하고 응답 대기
             if use_a2a and wrapper:
-                from srcs.common.a2a_integration import get_global_broker, A2AMessage, MessagePriority
+                from srcs.common.a2a_integration import get_global_broker
                 import uuid
 
                 # Streamlit UI agent ID (요청자)
@@ -618,7 +618,19 @@ class StandardAgentRunner:
         entry_point: str,
         input_data: Dict[str, Any]
     ) -> AgentExecutionResult:
-        """CLI 방식 Agent 실행"""
+        """
+        Execute an agent via CLI (command-line interface).
+        
+        Converts input data to CLI arguments and executes the agent as a subprocess.
+        Supports Python module execution, script files, and direct CLI commands.
+        
+        Args:
+            entry_point: CLI command or script path to execute
+            input_data: Dictionary of input data to convert to CLI arguments
+            
+        Returns:
+            AgentExecutionResult: Execution result with success status and data
+        """
         try:
             # input_data에서 CLI 인자 추출
             # input_data에 직접 CLI 인자가 있는 경우 (예: {"input_json_path": "...", "result_json_path": "..."})
@@ -709,7 +721,20 @@ class StandardAgentRunner:
         entry_point: str,
         input_data: Dict[str, Any]
     ) -> AgentExecutionResult:
-        """모듈 import 방식 Agent 실행"""
+        """
+        Execute an agent via module import.
+        
+        Dynamically imports and executes an agent module, supporting both
+        function-based and class-based agents. Automatically detects the
+        agent type and handles async/sync functions appropriately.
+        
+        Args:
+            entry_point: Module path (e.g., 'module.submodule.function')
+            input_data: Dictionary of input data to pass to the agent
+            
+        Returns:
+            AgentExecutionResult: Execution result with success status and data
+        """
         try:
             import importlib
 
@@ -918,7 +943,18 @@ class StandardAgentRunner:
             )
 
     async def _load_langgraph_app(self, entry_point: str) -> Optional[Any]:
-        """LangGraph app 로드"""
+        """
+        Load a LangGraph application from a module or file path.
+        
+        Supports loading LangGraph apps from both Python module paths and direct
+        file paths. Looks for 'app' or 'graph' attributes in the loaded module.
+        
+        Args:
+            entry_point: Module path or file path to the LangGraph application
+            
+        Returns:
+            LangGraph compiled application (app or graph) if found, None otherwise
+        """
         try:
             # entry_point는 모듈 경로 또는 파일 경로
             if entry_point.endswith(".py"):

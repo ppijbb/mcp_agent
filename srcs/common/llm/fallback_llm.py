@@ -99,10 +99,12 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
                 try:
                     if isinstance(prompt_price, str):
                         prompt_price = float(prompt_price) if prompt_price else 0
+                    elif not isinstance(prompt_price, (int, float)):
+                        prompt_price = 0
                     if isinstance(completion_price, str):
                         completion_price = float(completion_price) if completion_price else 0
-                    prompt_price = float(prompt_price) if prompt_price else 0
-                    completion_price = float(completion_price) if completion_price else 0
+                    elif not isinstance(completion_price, (int, float)):
+                        completion_price = 0
                 except (ValueError, TypeError):
                     prompt_price = 0
                     completion_price = 0
