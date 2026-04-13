@@ -657,9 +657,8 @@ class StandardAgentRunner:
 
             # 사용할 Python 인터프리터 결정
             python_exe = sys.executable
-            # mcp_agent_env가 있으면 사용 (허브가 다른 환경에서 실행될 경우 대비)
-            env_python = "/home/user/miniconda3/envs/mcp_agent_env/bin/python"
-            if os.path.exists(env_python):
+            env_python = os.environ.get("MCP_AGENT_PYTHON")
+            if env_python and os.path.exists(env_python):
                 python_exe = env_python
 
             # 명령어 구성

@@ -98,8 +98,8 @@ class A2ALogHandler(logging.Handler):
                         },
                         correlation_id=self.correlation_id
                     ))
-            except RuntimeError:
-                pass
+            except RuntimeError as e:
+                logger.debug(f"Event loop context unavailable: {e}")
         except Exception:
             self.handleError(record)
 

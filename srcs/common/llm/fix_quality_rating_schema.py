@@ -14,7 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    pass
+    from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import EvaluationResult, QualityRating
 
 logger = logging.getLogger(__name__)
 

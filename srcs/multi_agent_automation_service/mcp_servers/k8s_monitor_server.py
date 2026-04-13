@@ -509,7 +509,7 @@ class K8sMonitorServer:
                     else:
                         cpu_val = float(cpu_percent)
                     total_cpu_percent += cpu_val
-                except:
+                except (ValueError, AttributeError):
                     pass
 
                 try:
@@ -520,7 +520,7 @@ class K8sMonitorServer:
                     else:
                         mem_val = float(memory_percent)
                     total_memory_percent += mem_val
-                except:
+                except (ValueError, AttributeError):
                     pass
 
         if len(data_lines) > 0:
@@ -542,7 +542,7 @@ class K8sMonitorServer:
                                   capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 info["nodes"] = result.stdout
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             info["nodes"] = "Error getting node info"
 
         # Pod 정보
@@ -551,7 +551,7 @@ class K8sMonitorServer:
                                   capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 info["pods"] = result.stdout
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             info["pods"] = "Error getting pod info"
 
         # 이벤트 정보
@@ -560,7 +560,7 @@ class K8sMonitorServer:
                                   capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 info["events"] = result.stdout
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             info["events"] = "Error getting event info"
 
         return info
@@ -610,7 +610,7 @@ class K8sMonitorServer:
                 analysis += "- ✅ ClusterRoles configured\n"
             else:
                 analysis += "- ⚠️ ClusterRoles not accessible\n"
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             analysis += "- ❌ Cannot check ClusterRoles\n"
 
         # 네트워크 정책 체크
@@ -625,7 +625,7 @@ class K8sMonitorServer:
                     analysis += "- ⚠️ No NetworkPolicies configured\n"
             else:
                 analysis += "- ⚠️ NetworkPolicies not accessible\n"
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             analysis += "- ❌ Cannot check NetworkPolicies\n"
 
         return analysis
@@ -651,7 +651,7 @@ class K8sMonitorServer:
                             memory_usage = parts[3]
                             memory_capacity = parts[4]
                             analysis += f"- {node_name}: CPU {cpu_usage}/{cpu_capacity}, Memory {memory_usage}/{memory_capacity}\n"
-        except:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             analysis += "❌ Cannot get node metrics\n"
 
         return analysis

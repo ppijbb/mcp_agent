@@ -22,6 +22,7 @@ Example:
 """
 
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
@@ -364,7 +365,7 @@ class A2AMessageBroker:
 
     def __init__(self, registry: AgentRegistry):
         self.registry = registry
-        self._message_history: List[A2AMessage] = []
+        self._message_history: deque[A2AMessage] = deque(maxlen=1000)
         self._max_history = 1000
 
     async def route_message(self, message: A2AMessage) -> bool:
@@ -378,8 +379,6 @@ class A2AMessageBroker:
             True if message was routed successfully
         """
         self._message_history.append(message)
-        if len(self._message_history) > self._max_history:
-            self._message_history.pop(0)
 
         if message.ttl > 0:
             message_time = datetime.fromisoformat(message.timestamp.replace('Z', '+00:00'))
