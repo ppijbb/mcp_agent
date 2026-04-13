@@ -37,6 +37,9 @@ class MCPError(Exception):
 class ConfigError(MCPError):
     """Raised for errors in configuration."""
 
+    def __str__(self):
+        return f"ConfigError: {self.message}"
+
 
 class APIError(MCPError):
     """Raised for errors related to external APIs."""
@@ -46,25 +49,45 @@ class APIError(MCPError):
         self.status_code = status_code
         self.response = response or {}
 
+    def __str__(self):
+        if self.status_code:
+            return f"APIError [{self.status_code}]: {self.message}"
+        return f"APIError: {self.message}"
+
 
 class WorkflowError(MCPError):
     """Workflow-related errors."""
+
+    def __str__(self):
+        return f"WorkflowError: {self.message}"
 
 
 class CircuitBreakerOpen(MCPError):
     """Raised when the circuit breaker is open."""
 
+    def __str__(self):
+        return f"CircuitBreakerOpen: {self.message}"
+
 
 class EncryptionError(MCPError):
     """Raised for errors during encryption or decryption."""
+
+    def __str__(self):
+        return f"EncryptionError: {self.message}"
 
 
 class ValidationError(MCPError):
     """Raised for input validation errors."""
 
+    def __str__(self):
+        return f"ValidationError: {self.message}"
+
 
 class SecurityError(MCPError):
     """Raised for security-related errors."""
+
+    def __str__(self):
+        return f"SecurityError: {self.message}"
 
 
 def safe_execute(func: Callable, default: Any = None, error_type: type = MCPError, *args, **kwargs) -> Any:

@@ -230,29 +230,33 @@ def performance_monitor(func: Optional[Callable] = None, *, log_calls: bool = Tr
 
 def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
     """
-    Strict memoization with optional TTL.
-    
+    Strict memoization with optional TTL. Supports both sync and async functions.
+
     Args:
         maxsize: Maximum cache size (default: 128)
         ttl: Time-to-live in seconds (None for no expiry)
-    
+
     Returns:
         Decorator function for memoization
-    
+
     Example:
         >>> @memoize_strict(maxsize=64, ttl=300)
         ... def expensive_computation(x, y):
         ...     return x + y
+
+        >>> @memoize_strict(maxsize=64, ttl=300)
+        ... async def async_expensive_computation(x, y):
+        ...     return await compute(x, y)
     """
     cache: Dict[str, Dict[str, Any]] = {}
     keys_order: deque = deque()
     lock = threading.Lock()
-    
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
             key = str(args) + str(sorted(kwargs.items()))
-            
+
             with lock:
                 if key in cache:
                     entry = cache[key]
@@ -261,24 +265,54 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
                     else:
                         cache.pop(key)
                         keys_order.remove(key)
-            
+
             result = func(*args, **kwargs)
-            
+
             with lock:
                 if len(cache) >= maxsize:
                     oldest_key = keys_order.popleft()
                     cache.pop(oldest_key, None)
-                
+
                 cache[key] = {
                     'result': result,
                     'timestamp': time.time()
                 }
                 keys_order.append(key)
-            
+
             return result
-        
+
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            key = str(args) + str(sorted(kwargs.items()))
+
+            with lock:
+                if key in cache:
+                    entry = cache[key]
+                    if ttl is None or (time.time() - entry['timestamp']) < ttl:
+                        return entry['result']
+                    else:
+                        cache.pop(key)
+                        keys_order.remove(key)
+
+            result = await func(*args, **kwargs)
+
+            with lock:
+                if len(cache) >= maxsize:
+                    oldest_key = keys_order.popleft()
+                    cache.pop(oldest_key, None)
+
+                cache[key] = {
+                    'result': result,
+                    'timestamp': time.time()
+                }
+                keys_order.append(key)
+
+            return result
+
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
         return wrapper
-    
+
     return decorator
 
 
