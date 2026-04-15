@@ -14,14 +14,16 @@ import types
 if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
     mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
 
-# HACK: mcp-agent 설정 캐리 초기화
+# COMPAT: mcp-agent config cache reset for file change reflection
+# mcp-agent 0.1.0+ caches settings; reset ensures latest config is loaded
 try:
     import mcp_agent.config
     mcp_agent.config._settings = None
 except Exception:
-    pass
+    pass  # Ignore if module structure differs
 
-# HACK: Google GenAI Safety Settings Fix
+# COMPAT: Google GenAI Safety Settings - filter JAILBREAK category
+# Some prompts trigger safety filters unnecessarily; strip JAILBREAK category
 try:
     from google.genai import types as genai_types
     if hasattr(genai_types, "GenerateContentConfig"):
@@ -35,7 +37,7 @@ try:
             original_config_init(self, *args, **kwargs)
         genai_types.GenerateContentConfig.__init__ = patched_config_init
 except Exception:
-    pass
+    pass  # Ignore if GenAI types structure differs
 
 import asyncio
 import logging

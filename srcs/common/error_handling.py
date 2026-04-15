@@ -265,7 +265,7 @@ def handle_errors(
                 else:
                     return return_on_error
         
-        return wrapper  # type: ignore
+        return wrapper
     return decorator
 
 
@@ -341,9 +341,17 @@ def validate_input(data: Any, required_fields: Optional[list] = None) -> Dict[st
 
 # HTTPErrorFilter for filtering sensitive information from logs
 class HTTPErrorFilter(logging.Filter):
-    """Filter to hide sensitive information in HTTP error logs."""
+    """
+    Filter to hide sensitive information in HTTP error logs.
     
-    SENSITIVE_PATTERNS = [
+    Prevents sensitive data like API keys, passwords, and tokens
+    from being exposed in log output.
+    
+    Attributes:
+        SENSITIVE_PATTERNS: List of patterns to filter from logs
+    """
+    
+    SENSITIVE_PATTERNS: list[str] = [
         "api_key", "password", "token", "secret", "credential"
     ]
     

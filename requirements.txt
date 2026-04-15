@@ -45,8 +45,8 @@ httpx>=0.28.1
 
 # Security and validation
 urllib3>=2.2.7
-certifi>=2024.12.31
-click>=8.3.1
+certifi>=2026.2.25
+click>=8.3.2
 cryptography>=46.0.8
 MarkupSafe>=3.0.3
 PyYAML>=6.0.3
@@ -177,7 +177,7 @@ flake8
 mypy
 
 # Additional Utilities
-jinja2
+jinja2>=3.1.6
 markdown
 pdfkit
 ipykernel

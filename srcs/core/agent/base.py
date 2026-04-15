@@ -20,14 +20,15 @@ import threading
 from abc import ABC, abstractmethod
 from typing import Any, List
 
-# HACK: mcp-agent config cache reset for file change reflection
+# COMPAT: mcp-agent config cache reset for file change reflection
+# mcp-agent caches settings on import; reset ensures latest config is used
 try:
     import mcp_agent.config
     config_settings = getattr(mcp_agent.config, '_settings', None)
     if config_settings is not None:
         mcp_agent.config._settings = None
 except ImportError:
-    pass
+    pass  # Ignore if module structure differs
 
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent as MCP_Agent
@@ -191,7 +192,7 @@ class BaseAgent(ABC):
         config_path = project_root / "mcp_agent.config.yaml"
 
         # Use mcp_agent library's standard settings
-        # HACK: Force config cache reset to prevent google section missing
+        # COMPAT: Force config cache reset to ensure google section loads
         import mcp_agent.config
         mcp_agent.config._settings = None
         settings = get_settings(str(config_path))
