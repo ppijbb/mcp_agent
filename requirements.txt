@@ -24,7 +24,7 @@ openrouter
 # MCP (Model Context Protocol)
 mcp>=1.1.0
 fastmcp>=0.4.2
-mcp-agent>=0.1.2
+mcp-agent>=0.2.6
 
 # Web Framework
 streamlit

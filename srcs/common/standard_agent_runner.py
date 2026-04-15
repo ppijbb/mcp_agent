@@ -817,8 +817,12 @@ class StandardAgentRunner:
                     try:
                         agent_instance = agent_class()
                     except TypeError:
-                        # 생성자가 필요한 인자를 요구하는 경우, input_data에서 추출
-                        agent_instance = agent_class()
+                        # 생성자가 필요한 인자를 요구하는 경우, init_kwargs에서 추출하여 생성
+                        if init_kwargs:
+                            agent_instance = agent_class(**init_kwargs)
+                        else:
+                            logger.error(f"Cannot instantiate {agent_class.__name__}: requires init arguments")
+                            raise
 
                 # 메서드 호출
                 method = getattr(agent_instance, method_name)

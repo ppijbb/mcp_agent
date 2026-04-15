@@ -252,8 +252,8 @@ class RealLangGraphUI:
         finally:
             try:
                 await connector.close()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to close connector: {e}")
     
     async def _get_bgg_game_details_direct(self, bgg_id: int) -> Dict[str, Any]:
         """BGG 게임 상세 정보 - 웹 페이지 스크래핑"""
@@ -399,8 +399,8 @@ class RealLangGraphUI:
         finally:
             try:
                 await connector.close()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to close connector: {e}")
     
     async def handle_game_search(self, game_description: str):
         st.session_state.analysis_in_progress = True

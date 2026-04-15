@@ -310,7 +310,8 @@ def main():
                                 col3.metric("실행 시간", time_str)
                             else:
                                 col3.metric("실행 시간", "N/A")
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Failed to read execution time: {e}")
                         col3.metric("실행 시간", "N/A")
                 else:
                     col3.metric("실행 시간", "N/A")
@@ -376,8 +377,8 @@ def main():
                                 exec_time = datetime.fromisoformat(timestamp_str)
                                 time_str = exec_time.strftime('%Y-%m-%d %H:%M:%S')
                                 st.caption(f"⏰ 분석 시간: {time_str}")
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not read timestamp from file: {e}")
     else:
         st.info("💡 아직 Business Strategy Agent의 결과가 없습니다. 위에서 비즈니스 전략 분석을 실행해보세요.")
 
