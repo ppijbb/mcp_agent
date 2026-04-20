@@ -73,7 +73,7 @@ class AgentError(Exception):
         self.category = category
         self.details = details or {}
         self.original_error = original_error
-        self.timestamp = datetime.utcnow().isoformat()
+        self.timestamp = datetime.now().isoformat()
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert error to dictionary for logging/response."""
