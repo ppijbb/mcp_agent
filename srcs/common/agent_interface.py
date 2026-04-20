@@ -13,7 +13,7 @@ import asyncio
 
 
 class AgentType(Enum):
-    """Agent 타입 정의"""
+    """Enumeration of agent types supported by the system."""
     MCP_AGENT = "mcp_agent"
     LANGGRAPH_AGENT = "langgraph_agent"
     CRON_AGENT = "cron_agent"
@@ -23,7 +23,7 @@ class AgentType(Enum):
 
 
 class AgentStatus(Enum):
-    """Agent 상태"""
+    """Enumeration of possible agent execution states."""
     IDLE = "idle"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -33,7 +33,7 @@ class AgentStatus(Enum):
 
 @dataclass
 class AgentMetadata:
-    """Agent 메타데이터"""
+    """Metadata container for agent information and configuration."""
     agent_id: str
     agent_name: str
     agent_type: AgentType
@@ -42,14 +42,14 @@ class AgentMetadata:
     author: str = ""
     capabilities: List[str] = field(default_factory=list)
     requirements: List[str] = field(default_factory=list)
-    entry_point: Optional[str] = None  # 모듈 경로 또는 실행 스크립트
+    entry_point: Optional[str] = None
     config_schema: Optional[Dict[str, Any]] = None
-    a2a_endpoint: Optional[str] = None  # A2A 통신 엔드포인트
+    a2a_endpoint: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> Dict[str, Any]:
-        """딕셔너리로 변환"""
+        """Convert agent metadata to dictionary representation."""
         return {
             "agent_id": self.agent_id,
             "agent_name": self.agent_name,
@@ -69,7 +69,7 @@ class AgentMetadata:
 
 @dataclass
 class AgentExecutionResult:
-    """Agent 실행 결과"""
+    """Container for agent execution results and status information."""
     success: bool
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -78,7 +78,7 @@ class AgentExecutionResult:
     timestamp: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> Dict[str, Any]:
-        """딕셔너리로 변환"""
+        """Convert execution result to dictionary representation."""
         return {
             "success": self.success,
             "data": self.data,
@@ -139,18 +139,17 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def get_capabilities(self) -> List[str]:
-        """Agent의 능력 목록 반환"""
+        """Return list of agent capabilities."""
 
     @abstractmethod
     def validate_input(self, input_data: Dict[str, Any]) -> bool:
-        """입력 데이터 검증"""
+        """Validate input data for agent execution."""
 
     def get_status(self) -> AgentStatus:
-        """현재 상태 반환"""
-        return self.status
+        """Return current agent status."""
 
     def get_metadata(self) -> AgentMetadata:
-        """메타데이터 반환"""
+        """Return agent metadata."""
         return self.metadata
 
 

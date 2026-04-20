@@ -248,11 +248,11 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
         ... async def async_expensive_computation(x, y):
         ...     return await compute(x, y)
     """
-    cache: Dict[str, Dict[str, Any]] = {}
-    keys_order: deque = deque()
-    lock = threading.Lock()
 
     def decorator(func: Callable) -> Callable:
+        cache: Dict[str, Dict[str, Any]] = {}
+        keys_order: deque = deque()
+        lock = threading.Lock()
         @wraps(func)
         def wrapper(*args, **kwargs):
             key = str(args) + str(sorted(kwargs.items()))
