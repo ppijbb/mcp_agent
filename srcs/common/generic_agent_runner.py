@@ -23,11 +23,11 @@ import importlib
 import asyncio
 
 
-
+# Main function with docstring
 def main():
     """
-    범용 에이전트 실행 스크립트.
-    모듈 경로, 클래스 이름, 메서드 이름을 인자로 받아 동적으로 에이전트를 실행합니다.
+    Execute a generic agent by module path, class name, and method name.
+    Supports both sync and async methods, with JSON result persistence.
     """
     parser = argparse.ArgumentParser(description="Generic agent runner.")
     parser.add_argument("--module-path", required=True, help="Dot-separated path to the agent module (e.g., 'srcs.basic_agents.data_generator').")

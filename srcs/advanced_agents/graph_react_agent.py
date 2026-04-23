@@ -1,3 +1,16 @@
+"""
+Graph-based ReAct Agent Module
+
+Implements a GraphReActAgent that combines ReAct reasoning patterns
+with knowledge graph capabilities for step-by-step complex query resolution.
+
+Classes:
+    GraphReActAgent: Agent using knowledge graph for ReAct-style reasoning
+
+Functions:
+    clear_graph: Utility to clear all nodes and relationships from graph
+"""
+
 import asyncio
 import re
 import uuid

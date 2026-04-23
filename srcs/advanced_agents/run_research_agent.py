@@ -1,3 +1,16 @@
+"""
+Research Agent Entry Point
+
+CLI interface for running the ResearcherAgent workflow.
+Handles research topic processing and result persistence.
+
+Example:
+    python -m srcs.advanced_agents.run_research_agent \\
+        --topic "AI trends" \\
+        --focus "2024 developments" \\
+        --result-json-path results/research.json
+"""
+
 import argparse
 import json
 import sys

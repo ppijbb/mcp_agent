@@ -82,7 +82,7 @@ def async_memoize(func):
     """
     Memoization decorator for async functions using LRU cache.
 
-    Caches async function results with a maximum cache size of 128 entries.
+    Caches async function results with a maximum cache size of 512 entries.
     Uses cachetools.LRUCache for efficient in-memory caching.
 
     Args:
@@ -91,7 +91,7 @@ def async_memoize(func):
     Returns:
         Wrapped async function with caching capability
     """
-    cache = LRUCache(maxsize=128)
+    cache = LRUCache(maxsize=512)
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):

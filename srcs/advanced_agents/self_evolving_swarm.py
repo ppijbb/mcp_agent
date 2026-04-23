@@ -1,3 +1,15 @@
+"""
+Self-Evolving Swarm Agent Module
+
+Multi-agent system where agents can evolve and adapt over time.
+Manages a population of EvolvingAgent instances for collaborative problem solving.
+
+Classes:
+    SelfEvolvingSwarm: Swarm orchestrator managing agent population
+    EvolvingAgent: Individual agent capable of evolution
+    SwarmConfig: Configuration for swarm behavior
+"""
+
 import asyncio
 import os
 import time
