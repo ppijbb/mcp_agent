@@ -177,13 +177,11 @@ class MCPDataClient:
     async def fetch_from_mcp(self, server: str, resource: str, **params) -> Any:
         """Fetch data from MCP server."""
         try:
-            # This would use actual MCP protocol
-            # For now, return None since we only want external data
-            print(f"MCP fetch from {server}/{resource} with params: {params}")
+            self.logger.debug(f"MCP fetch from {server}/{resource} with params: {params}")
             return None
 
         except Exception as e:
-            print(f"Failed to fetch from MCP {server}/{resource}: {e}")
+            self.logger.warning(f"Failed to fetch from MCP {server}/{resource}: {e}")
             return None
 
     async def get_districts_from_mcp(self, region: Optional[str] = "seoul") -> List[str]:

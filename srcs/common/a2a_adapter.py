@@ -269,7 +269,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
                     queue_size = queue.qsize()
                     if queue_size > 0:
                         logger.info(f"Agent {self.agent_id} has {queue_size} messages in queue")
-                    logger.debug(f"Agent {self.agent_id} waiting for message, queue size: {queue_size}")
+                        logger.debug(f"Agent {self.agent_id} waiting for message, queue size: {queue_size}")
                     try:
                         message = await asyncio.wait_for(queue.get(), timeout=1.0)
                     except asyncio.TimeoutError:

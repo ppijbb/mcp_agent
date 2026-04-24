@@ -20,7 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_agent_type(entry_point: str) -> str:
-    """entry_point를 분석하여 agent 타입 자동 판단"""
+    """
+    Detect agent type from entry point string.
+
+    Args:
+        entry_point: Module path or CLI command string
+
+    Returns:
+        Agent type string (langgraph, cron, sparkleforge, or mcp)
+    """
     if entry_point.startswith("lang_graph.") or "lang_graph/" in entry_point:
         return AgentType.LANGGRAPH_AGENT.value
     elif entry_point.startswith("cron_agents.") or "cron_agents/" in entry_point:
@@ -32,7 +40,15 @@ def _detect_agent_type(entry_point: str) -> str:
 
 
 def _normalize_entry_point(entry_point: str) -> str:
-    """entry_point를 정규화 (CLI 명령에서 모듈 경로 추출)"""
+    """
+    Normalize entry point string to module path format.
+
+    Args:
+        entry_point: CLI command or file path
+
+    Returns:
+        Normalized module path (e.g., 'srcs.enterprise_agents.esg_carbon_neutral_agent')
+    """
     # "python -m srcs.enterprise_agents.esg_carbon_neutral_agent" -> "srcs.enterprise_agents.esg_carbon_neutral_agent"
     if entry_point.startswith("python -m "):
         return entry_point.replace("python -m ", "")

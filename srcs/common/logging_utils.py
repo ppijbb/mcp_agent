@@ -58,32 +58,27 @@ class OptimizedHTTPErrorFilter(logging.Filter):
     def _filter_sensitive_data(self, message: str) -> str:
         """
         Filter sensitive data from message using pre-compiled patterns.
-        
+
         Args:
             message: Original message
-            
+
         Returns:
             Filtered message with sensitive data masked
         """
-        # Check cache first - use message itself as key with size limit
-        cache_key = message[:500] if len(message) > 500 else message
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-        
         filtered = message
         for pattern in SENSITIVE_PATTERNS:
-            # Replace sensitive values while preserving keys
             filtered = pattern.sub(
                 lambda m: f"{m.group(1)}{self.mask_char * len(m.group(2))}",
                 filtered
             )
-        
-        # Update cache (simple size management)
+
+        cache_key = hash(filtered)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         if len(self._cache) >= self._cache_size:
-            # Remove oldest entry (simple FIFO)
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-        
+            self._cache.popitem(last=False)
+
         self._cache[cache_key] = filtered
         return filtered
     
