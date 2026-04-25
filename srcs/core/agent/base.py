@@ -131,8 +131,8 @@ class BaseAgent(ABC):
         self._session = None
 
         ttl = self.settings.cache.ttl
-        failure_threshold = ttl // 10 if ttl else 5
-        recovery_timeout = ttl // 20 if ttl else 30
+        failure_threshold = max(ttl // 10, 1) if ttl else 5
+        recovery_timeout = max(ttl // 20, 1) if ttl else 30
         self.circuit_breaker = CircuitBreaker(
             fail_max=failure_threshold,
             reset_timeout=recovery_timeout,
@@ -147,9 +147,10 @@ class BaseAgent(ABC):
         return self._session
 
     async def close_session(self):
-        """Close the aiohttp session safely."""
+        """Close the aiohttp session safely to prevent resource warnings."""
         if self._session and not self._session.closed:
             await self._session.close()
+            await asyncio.sleep(0)
             self._session = None
 
     @property
