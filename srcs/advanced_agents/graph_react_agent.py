@@ -312,7 +312,7 @@ Thought:
 
             observation = ""
             try:
-                response_text = llm_response.choices[0].message.content
+                response_text = llm_response.choices[0].message.content if llm_response.choices else ""
                 response_json = json.loads(response_text)
                 thought = response_json.get("thought", "")
                 action = response_json.get("action", {})

@@ -76,7 +76,7 @@ class BookingComScraper:
         eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
 
         hotels_data = []
-        if eval_result and not eval_result.isError and eval_result.content:
+        if eval_result and not eval_result.isError and eval_result.content and len(eval_result.content) > 0:
             raw_data = json.loads(eval_result.content[0].text)
             for item in raw_data:
                 try:
@@ -155,7 +155,7 @@ class GoogleFlightsScraper:
         eval_result = await self.mcp_client.session.call_tool("puppeteer_evaluate", {"script": extract_script})
 
         flights_data = []
-        if eval_result and not eval_result.isError and eval_result.content:
+        if eval_result and not eval_result.isError and eval_result.content and len(eval_result.content) > 0:
             raw_data = json.loads(eval_result.content[0].text)
             for item in raw_data:
                 try:

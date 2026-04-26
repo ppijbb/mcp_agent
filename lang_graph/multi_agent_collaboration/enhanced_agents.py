@@ -52,7 +52,7 @@ class EnhancedAgent(A2AAgent):
     async def _initialize_security_context(self, agent_card: AgentCard):
         """보안 컨텍스트 초기화"""
         try:
-            permissions = agent_card.capabilities[0].supported_operations if agent_card.capabilities else []
+            permissions = agent_card.capabilities[0].supported_operations if agent_card.capabilities and len(agent_card.capabilities) > 0 else []
             
             # 향상된 보안 세션 생성
             self.security_context = await security_manager.create_secure_session(

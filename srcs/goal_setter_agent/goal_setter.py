@@ -159,11 +159,11 @@ class MCPGoalSetterAgent:
         try:
             # List available tools first
             tools_response = await session.call_tool("list_tools", {})
-            tools = tools_response.content[0].text if tools_response.content else "[]"
+            tools = tools_response.content[0].text if tools_response.content and len(tools_response.content) > 0 else "[]"
 
             # Call the specific tool
             result = await session.call_tool(tool_name, arguments)
-            return json.loads(result.content[0].text) if result.content else {}
+            return json.loads(result.content[0].text) if result.content and len(result.content) > 0 else {}
         except Exception as e:
             self.logger.error(f"Failed to call MCP tool {tool_name}: {e}")
             return {"error": str(e)}

@@ -202,7 +202,7 @@ class MCPBrowserClient:
                 logger.info(f"✅ 탐색 성공: {url}")
                 return {"success": True, "url": url}
             else:
-                error_msg = result.content[0].text if result and result.content else "알 수 없는 오류"
+                error_msg = result.content[0].text if result and result.content and len(result.content) > 0 else "알 수 없는 오류"
                 logger.error(f"❌ 탐색 실패: {error_msg}")
                 return {"success": False, "error": error_msg}
 
@@ -278,7 +278,7 @@ class MCPBrowserClient:
                 return {"success": True, "filepath": filepath, "data": screenshot_data}
 
             else:
-                error_msg = result.content[0].text if result and result.content else "스크린샷 캡처 실패"
+                error_msg = result.content[0].text if result and result.content and len(result.content) > 0 else "스크린샷 캡처 실패"
                 logger.error(error_msg)
                 return {"success": False, "error": error_msg}
 
