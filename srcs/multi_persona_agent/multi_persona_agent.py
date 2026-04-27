@@ -2,20 +2,29 @@
 Main entry point for the Multi-Persona Dialogue Agent system.
 """
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import sys
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from mcp_agent.agents.agent import Agent
-import google.generativeai as genai
 from .multi_persona_config import config, get_persona_config, get_dialogue_config, get_llm_config
 from .personas import PERSONA_INSTRUCTIONS
 from .dialogue_manager import DialogueManager
+
+
+class Agent:
+    """Simple agent data class without MCP dependencies."""
+    def __init__(self, name: str, instruction: str, server_names: Optional[list] = None):
+        self.name = name
+        self.instruction = instruction
+        self.server_names = server_names or []
+        self.model = None
+
+    def __repr__(self):
+        return f"Agent(name={self.name})"
 
 
 class MultiPersonaDialogueAgent:
@@ -42,6 +51,7 @@ class MultiPersonaDialogueAgent:
     def _setup_gemini(self):
         """Setup Gemini client with configuration."""
         import os
+        import google.generativeai as genai
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY environment variable is required")

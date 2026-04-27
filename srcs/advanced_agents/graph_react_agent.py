@@ -154,30 +154,30 @@ class GraphReActAgent(Agent):
     async def _action_initiate(self, query: str, session_id: str) -> str:
         self.logger.info(f"Initiating graph for session {session_id}")
         cypher = "CREATE (t:Thought {id: $id, session_id: $session_id, text: $text, status: 'new', is_initial: true, timestamp: datetime()})"
-        self.graph.execute_query(cypher, {"id": str(uuid.uuid4()), "session_id": session_id, "text": query})
+        await self.graph.query(cypher, {"id": str(uuid.uuid4()), "session_id": session_id, "text": query})
         return "Initiated graph with first thought."
 
     async def _action_expand(self, _, session_id: str) -> str:
         self.logger.info("Expanding thoughts.")
         find_cypher = "MATCH (t:Thought {session_id: $session_id, status: 'new'}) RETURN t LIMIT 1"
-        nodes_to_expand = self.graph.execute_query(find_cypher, {"session_id": session_id})
+        nodes_to_expand, _ = await self.graph.query(find_cypher, {"session_id": session_id})
         if not nodes_to_expand:
             return "No new thoughts to expand."
         thought = nodes_to_expand[0]['t']
-        self.graph.execute_query("MATCH (t:Thought {id: $id}) SET t.status = 'expanding'", {"id": thought['id']})
+        await self.graph.query("MATCH (t:Thought {id: $id}) SET t.status = 'expanding'", {"id": thought['id']})
         prompt = f"Given the thought: '{thought['text']}', generate two distinct follow-up thoughts. Phrase them as complete sentences."
         generated_text = await self.orchestrator.generate_str(message=prompt, request_params=RequestParams(model=self.model))
         new_thoughts = [t.strip() for t in generated_text.split('\n') if t.strip()]
         for new_text in new_thoughts:
             cypher = "MATCH (p:Thought {id: $p_id}) CREATE (c:Thought {id: $c_id, session_id: $s_id, text: $text, status: 'unevaluated', ts: datetime()})-[:DERIVES_FROM]->(p)"
-            self.graph.execute_query(cypher, {"p_id": thought['id'], "c_id": str(uuid.uuid4()), "s_id": session_id, "text": new_text})
-        self.graph.execute_query("MATCH (t:Thought {id: $id}) SET t.status = 'expanded'", {"id": thought['id']})
+            await self.graph.query(cypher, {"p_id": thought['id'], "c_id": str(uuid.uuid4()), "s_id": session_id, "text": new_text})
+        await self.graph.query("MATCH (t:Thought {id: $id}) SET t.status = 'expanded'", {"id": thought['id']})
         return f"Expanded thought {thought['id']} into {len(new_thoughts)} new thoughts."
 
     async def _action_evaluate(self, _, session_id: str) -> str:
         self.logger.info("Evaluating thoughts.")
         find_cypher = "MATCH (t:Thought {session_id: $session_id, status: 'unevaluated'}) RETURN t LIMIT 1"
-        nodes_to_evaluate = self.graph.execute_query(find_cypher, {"session_id": session_id})
+        nodes_to_evaluate, _ = await self.graph.query(find_cypher, {"session_id": session_id})
         if not nodes_to_evaluate:
             return "No unevaluated thoughts to evaluate."
         thought = nodes_to_evaluate[0]['t']
@@ -186,20 +186,20 @@ class GraphReActAgent(Agent):
         score_match = re.search(r"Score:\s*(\d\.?\d*)", evaluation_text)
         score = float(score_match.group(1)) if score_match else 0.0
         update_cypher = "MATCH (t:Thought {id: $id}) SET t.validity_score = $score, t.status = 'evaluated', t.rationale = $rationale"
-        self.graph.execute_query(update_cypher, {"id": thought['id'], "score": score, "rationale": evaluation_text})
+        await self.graph.query(update_cypher, {"id": thought['id'], "score": score, "rationale": evaluation_text})
         return f"Evaluated thought {thought['id']} with score {score}."
 
-    async def _action_prune(self, _, session_id: str, threshold=0.2) -> str:
+    async def _action_prune(self, _, session_id: str, threshold: float = 0.2) -> str:
         self.logger.info(f"Pruning thoughts with score below {threshold}.")
         cypher = "MATCH (t:Thought {session_id: $session_id, status: 'evaluated'}) WHERE t.validity_score < $threshold SET t.status = 'pruned' RETURN count(t) AS pruned_count"
-        result = self.graph.execute_query(cypher, {"session_id": session_id, "threshold": threshold})
+        result, _ = await self.graph.query(cypher, {"session_id": session_id, "threshold": threshold})
         pruned_count = result[0]['pruned_count'] if result else 0
         return f"Pruned {pruned_count} thoughts with a score below {threshold}."
 
     async def _action_synthesize(self, reason: str, session_id: str) -> str:
         self.logger.info(f"Synthesizing final answer. Reason: {reason}")
         cypher = "MATCH p=(r:Thought {session_id:$sid, is_initial:true})-[:DERIVES_FROM*..]->(l) WHERE NOT (l)-[:DERIVES_FROM]->() AND all(n IN nodes(p) WHERE n.status <> 'pruned') WITH p, reduce(s=0.0, n IN nodes(p) | s+coalesce(n.validity_score,0)) AS total ORDER BY total DESC LIMIT 1 RETURN [n IN nodes(p) | n.text] AS texts"
-        result = self.graph.execute_query(cypher, {"sid": session_id})
+        result, _ = await self.graph.query(cypher, {"sid": session_id})
         if not result or not result[0]['texts']:
             return "Could not find a valid path to synthesize a conclusion."
         path_texts = "\n- ".join(result[0]['texts'])
@@ -210,7 +210,7 @@ class GraphReActAgent(Agent):
     async def _action_check_status(self, _, session_id: str) -> str:
         self.logger.info("Checking graph status.")
         cypher = "MATCH (t:Thought {session_id: $session_id}) RETURN t.status AS status, count(t) AS count ORDER BY status"
-        result = self.graph.execute_query(cypher, {"session_id": session_id})
+        result, _ = await self.graph.query(cypher, {"session_id": session_id})
         if not result:
             return "The graph for this session is empty."
         status_summary = ", ".join([f"{row['status']}: {row['count']}" for row in result])
