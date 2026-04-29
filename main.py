@@ -44,10 +44,10 @@ for module_name, attr_name in config_modules:
 if len(sys.modules) > 200:  # Increased threshold for less aggressive cleanup
     importlib.invalidate_caches()
 
-# Cache for expensive operations
-@lru_cache(maxsize=64)
+# Cache for expensive operations - increased from 64 to 128 for 40+ agent pages
+@lru_cache(maxsize=128)
 def get_cached_page_content(page_name: str) -> str:
-    """Cache page content to improve performance with smaller cache size."""
+    """Cache page content to improve performance."""
     return f"Loading {page_name}..."
 
 # Import streamlit and styles with fallback

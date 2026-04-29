@@ -232,8 +232,8 @@ class ImprovedConnectionPool:
             # Force garbage collection for the connection object
             try:
                 del connection
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error during connection cleanup: {e}")
     
     def _add_weak_ref(self, connection: Any, pool_key: str) -> None:
         """
@@ -381,8 +381,8 @@ class ImprovedConnectionPool:
         try:
             if not hasattr(self, '_shutdown') or not self._shutdown:
                 self.shutdown()
-        except Exception:
-            pass  # Ignore errors during destruction
+        except Exception as e:
+            logger.debug(f"Error during pool destruction: {e}")
 
 
 # Factory function to replace the original ConnectionPool

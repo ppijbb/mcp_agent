@@ -7,7 +7,10 @@ Shared utility functions used across all agents for common operations.
 import os
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, date, time
+from decimal import Decimal
+from uuid import UUID
+from pathlib import Path
 
 # Defer imports to avoid circular dependencies
 
@@ -19,16 +22,16 @@ _cache_lock = threading.Lock()
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     """
-    Enhanced JSON encoder that handles datetime objects.
+    Enhanced JSON encoder that handles datetime, UUID, Decimal, and other common types.
 
-    Extends the standard JSONEncoder to convert datetime objects to ISO format strings,
-    enabling proper serialization of datetime values in JSON responses.
+    Extends the standard JSONEncoder to convert various Python objects to
+    JSON-serializable formats, enabling proper serialization across the application.
 
     Attributes:
         Inherits all attributes from json.JSONEncoder
 
     Methods:
-        default: Override to handle datetime serialization
+        default: Override to handle multiple object types
     """
 
     def default(self, o):
@@ -42,11 +45,24 @@ class EnhancedJSONEncoder(json.JSONEncoder):
             JSON-serializable representation of the object
 
         Notes:
-            - datetime objects are converted to ISO format strings
+            - datetime, date, time objects are converted to ISO format strings
+            - UUID objects are converted to strings
+            - Decimal objects are converted to floats
+            - Path objects are converted to strings
             - All other objects are handled by the parent class
         """
         if isinstance(o, datetime):
             return o.isoformat()
+        elif isinstance(o, date):
+            return o.isoformat()
+        elif isinstance(o, time):
+            return o.isoformat()
+        elif isinstance(o, UUID):
+            return str(o)
+        elif isinstance(o, Decimal):
+            return float(o)
+        elif isinstance(o, Path):
+            return str(o)
         return super().default(o)
 
 
