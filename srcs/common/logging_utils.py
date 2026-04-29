@@ -22,7 +22,7 @@ import logging
 import json
 import sys
 from typing import Dict, Any, Optional, Set, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import threading
 from contextlib import contextmanager
@@ -135,7 +135,7 @@ class StructuredFormatter(logging.Formatter):
             JSON-formatted log message
         """
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -250,11 +250,11 @@ class PerformanceLogger:
             operation: Operation description
             level: Log level for timing information
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         try:
             yield
         finally:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
             
             self.logger.log(
