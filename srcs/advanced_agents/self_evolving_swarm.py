@@ -13,13 +13,23 @@ Classes:
 import asyncio
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 # Real MCP Agent imports
 from mcp_agent.app import MCPApp
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm import RequestParams
+from mcp_agent.config import get_settings
+from mcp_agent.workflows.swarm.swarm_anthropic import AnthropicSwarm
 from srcs.common.utils import setup_agent_app
+
+
+class Task(TypedDict):
+    """Task history entry structure"""
+    task_description: str
+    result: Optional[str]
+    performance: Optional[Dict[str, float]]
+    timestamp: float
 
 
 class SelfEvolvingSwarm:

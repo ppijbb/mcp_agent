@@ -249,8 +249,15 @@ if __name__ == "__main__":
     print("\n최종 결과 요약:")
     print(f"  - 최종 손익 (PNL): ${final_state.get('daily_pnl', 0):.2f}")
     print("  - 실행된 거래 내역:")
-    for trade in final_state.get("trade_results", []):
-        print(f"    - {trade['action'].upper()}: {trade['ticker']} @ ${trade['price']} (수량: {trade['shares']})")
+    trade_results = final_state.get("trade_results") or []
+    for trade in trade_results:
+        if not trade:
+            continue
+        action = trade.get("action", "?")
+        ticker = trade.get("ticker", "?")
+        price = trade.get("price", 0)
+        shares = trade.get("shares", 0)
+        print(f"    - {action.upper()}: {ticker} @ ${price} (수량: {shares})")
     
     print("\n상세 로그:")
     for log_entry in final_state.get("log", []):
