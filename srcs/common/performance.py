@@ -69,7 +69,7 @@ class SimpleCache:
         Returns:
             Cached value if valid, None otherwise
         """
-        return self.get(key)
+        return await asyncio.to_thread(self.get, key)
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
@@ -103,7 +103,7 @@ class SimpleCache:
             value: Value to cache
             ttl: Custom TTL in seconds, uses default if not provided
         """
-        self.set(key, value, ttl)
+        await asyncio.to_thread(self.set, key, value, ttl)
 
     def clear(self) -> None:
         """Clear all cached items."""
@@ -112,7 +112,7 @@ class SimpleCache:
 
     async def aclear(self) -> None:
         """Async clear all cached items."""
-        self.clear()
+        await asyncio.to_thread(self.clear)
 
 
 def rate_limit(calls_per_second: float = 1.0):
