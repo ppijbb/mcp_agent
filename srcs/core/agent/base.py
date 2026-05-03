@@ -158,21 +158,18 @@ class BaseAgent(ABC):
         Legacy property for backward compatibility. Use get_session() in async contexts.
 
         Note:
-            This property raises an error in async contexts. Prefer get_session() method instead.
-
-        Raises:
-            RuntimeError: If used in async context. Use await get_session() instead.
+            This property is deprecated. Prefer get_session() method instead.
         """
         import warnings
         warnings.warn(
-            "session property is deprecated, use get_session() in async contexts",
+            "session property is deprecated, use await get_session() instead",
             DeprecationWarning,
             stacklevel=2
         )
-        raise RuntimeError(
-            "session property cannot be used in async context. "
-            "Use await get_session() instead."
-        )
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
 
     def _setup_app(self) -> MCPApp:
         """
