@@ -5,10 +5,8 @@ A Streamlit demo application that provides access to all AI agents
 from a single interface.
 """
 
-import importlib
 import sys
 from pathlib import Path
-from functools import lru_cache
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent
@@ -23,32 +21,6 @@ except ImportError:
 except Exception as e:
     # Log error but don't break startup
     print(f"Warning: Compatibility patches failed: {e}")
-
-# Force config reload for fresh imports - optimized with better error handling
-config_modules = [
-    ('mcp_agent.config', '_settings'),
-    ('srcs.core.config.loader', '_config')
-]
-
-for module_name, attr_name in config_modules:
-    try:
-        module = __import__(module_name, fromlist=[attr_name])
-        if hasattr(module, attr_name):
-            setattr(module, attr_name, None)
-    except ImportError:
-        continue  # Module not available, skip
-    except Exception as e:
-        print(f"Warning: Config reload failed for {module_name}: {e}")
-
-# Only invalidate caches if really needed (performance optimization)
-if len(sys.modules) > 200:  # Increased threshold for less aggressive cleanup
-    importlib.invalidate_caches()
-
-# Cache for expensive operations
-@lru_cache(maxsize=64)
-def get_cached_page_content(page_name: str) -> str:
-    """Cache page content to improve performance with smaller cache size."""
-    return f"Loading {page_name}..."
 
 # Import streamlit and styles with fallback
 try:

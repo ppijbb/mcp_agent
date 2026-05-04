@@ -8,7 +8,7 @@ Uses singleton pattern to cache configuration after first load.
 
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import yaml
 from srcs.core.config.schema import AppConfig
 from srcs.core.security.crypto import decrypt_file_content
@@ -155,5 +155,13 @@ def _load_secrets_from_env(config: AppConfig):
                     server_config.env[key] = env_value
 
 
-# Configuration object for use throughout the application
-settings = load_config()
+def get_settings() -> AppConfig:
+    """Lazy-load settings to avoid crashes at import time when config files are missing."""
+    return load_config()
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy-load 'settings' on first access to avoid crashes at import time."""
+    if name == "settings":
+        return load_config()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

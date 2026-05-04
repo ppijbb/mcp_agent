@@ -255,7 +255,7 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
         lock = threading.Lock()
         @wraps(func)
         def wrapper(*args, **kwargs):
-            key = str(args) + str(sorted(kwargs.items()))
+            key = (args, tuple(sorted(kwargs.items())))
 
             with lock:
                 if key in cache:
@@ -283,7 +283,7 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
 
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            key = str(args) + str(sorted(kwargs.items()))
+            key = (args, tuple(sorted(kwargs.items())))
 
             with lock:
                 if key in cache:
