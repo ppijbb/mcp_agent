@@ -100,7 +100,13 @@ class A2ALogHandler(logging.Handler):
                     ))
             except RuntimeError as e:
                 logger.debug(f"Event loop context unavailable: {e}")
-        except Exception:
+        except (ValueError, TypeError, AttributeError) as e:
+            # Log formatting or message construction errors
+            logger.error(f"Error formatting log message: {e}")
+            self.handleError(record)
+        except Exception as e:
+            # Catch-all for unexpected errors - log and handle
+            logger.error(f"Unexpected error in log handler: {e}")
             self.handleError(record)
 
 
@@ -212,9 +218,11 @@ class CommonAgentA2AWrapper(A2AAdapter):
             queue = self._ensure_queue()
             try:
                 queue.put_nowait(None)
-            except Exception:
+            except (asyncio.QueueFull, RuntimeError):
+                # Queue full or event loop issues - not critical during shutdown
                 pass
-        except Exception:
+        except (RuntimeError, AttributeError):
+            # Queue doesn't exist or event loop issues
             pass
 
         if self._message_processor_task:
@@ -233,13 +241,15 @@ class CommonAgentA2AWrapper(A2AAdapter):
             except (RuntimeError, AttributeError) as e:
                 if "Event loop is closed" not in str(e) and "cannot be called from a running event loop" not in str(e):
                     logger.debug(f"Error stopping listener task for agent {self.agent_id}: {e}")
-            except Exception as e:
-                logger.debug(f"Unexpected error stopping listener task: {e}")
+            except asyncio.CancelledError:
+                # Task was cancelled - expected during shutdown
+                pass
             finally:
                 try:
                     if self._message_processor_task and not self._message_processor_task.done():
                         self._message_processor_task.cancel()
-                except Exception:
+                except (RuntimeError, AttributeError):
+                    # Event loop or attribute issues during shutdown - not critical
                     pass
                 self._message_processor_task = None
 
@@ -273,6 +283,10 @@ class CommonAgentA2AWrapper(A2AAdapter):
                     try:
                         message = await asyncio.wait_for(queue.get(), timeout=1.0)
                     except asyncio.TimeoutError:
+                        continue
+                    except (RuntimeError, asyncio.CancelledError) as e:
+                        logger.debug(f"Queue operation interrupted for agent {self.agent_id}: {e}")
+                        await asyncio.sleep(0.1)
                         continue
                     except Exception as e:
                         logger.error(f"Error getting message from queue for agent {self.agent_id}: {e}", exc_info=True)

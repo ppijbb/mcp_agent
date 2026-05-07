@@ -6,6 +6,7 @@ loading and validation logic lives in ``srcs.core.config.loader``.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Union
 
@@ -39,7 +40,7 @@ def get_reports_path(agent_name: str) -> str:
         String path to the created/verified reports directory
         
     Raises:
-        ValueError: If agent_name is empty or None
+        ValueError: If agent_name is empty, None, or contains invalid characters
         OSError: If directory creation fails due to permissions
         
     Environment priority:
@@ -56,9 +57,18 @@ def get_reports_path(agent_name: str) -> str:
     
     agent_name = agent_name.strip()
     
+    # Validate agent_name contains only safe characters (alphanumeric, underscore, hyphen, dot)
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', agent_name):
+        raise ValueError(f"Invalid agent name format: '{agent_name}'. Only alphanumeric characters, underscores, hyphens, and dots are allowed.")
+    
     try:
-        base_dir: Path = Path(os.getenv("MCP_REPORTS_DIR", str(_DEFAULT_REPORTS_DIR)))
-        path: Path = base_dir / agent_name
+        base_dir: Path = Path(os.getenv("MCP_REPORTS_DIR", str(_DEFAULT_REPORTS_DIR))).resolve()
+        path: Path = (base_dir / agent_name).resolve()
+        
+        # Ensure the resolved path is within the base directory (prevent path traversal)
+        if not str(path).startswith(str(base_dir)):
+            raise ValueError(f"Invalid agent name: potential path traversal detected")
+        
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
     except OSError as e:
