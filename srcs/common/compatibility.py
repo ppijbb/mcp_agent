@@ -22,6 +22,10 @@ import types
 
 logger = logging.getLogger(__name__)
 
+# Guard flags to prevent double-patching
+_mcp_patched = False
+_genai_patched = False
+
 
 class SafetyFilterManager:
     """
@@ -100,12 +104,16 @@ def apply_mcp_compatibility_patches():
     This function patches known compatibility issues without bypassing
     security controls or introducing vulnerabilities.
     """
+    global _mcp_patched
+    if _mcp_patched:
+        return
     try:
         import mcp.types
         if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
             # Type compatibility fix for Python 3.10+
             mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
             logger.info("Applied MCP type compatibility patch")
+            _mcp_patched = True
     except ImportError:
         # MCP library not available - this is expected in some configurations
         logger.debug("MCP library not found, skipping compatibility patches")
@@ -120,6 +128,9 @@ def apply_genai_compatibility_patches():
     This function patches known compatibility issues while maintaining
     proper safety controls and logging.
     """
+    global _genai_patched
+    if _genai_patched:
+        return
     try:
         from google.genai import types as genai_types
         
@@ -138,7 +149,7 @@ def apply_genai_compatibility_patches():
                 original_config_init(self, *args, **kwargs)
             
             genai_types.GenerateContentConfig.__init__ = patched_config_init
-            logger.info("Applied GenAI GenerateContentConfig compatibility patch")
+            logger.debug("Applied GenAI GenerateContentConfig compatibility patch")
         
         # Patch SafetySetting
         if hasattr(genai_types, "SafetySetting"):
@@ -156,6 +167,8 @@ def apply_genai_compatibility_patches():
             
             genai_types.SafetySetting.__init__ = patched_setting_init
             logger.info("Applied GenAI SafetySetting compatibility patch")
+            
+        _genai_patched = True
             
     except ImportError:
         # Google GenAI library not available - this is expected in some configurations

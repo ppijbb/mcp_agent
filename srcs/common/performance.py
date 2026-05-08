@@ -90,7 +90,6 @@ class SimpleCache:
             ttl = ttl or self._default_ttl
             self._cache[key] = {
                 'value': value,
-                'created': time.time(),
                 'expires': time.time() + ttl
             }
 
