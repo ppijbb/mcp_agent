@@ -208,7 +208,7 @@ class ErrorHandler:
             "success": True,
             "data": data,
             "message": message,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(datetime.timezone.utc).isoformat(),
             "metadata": metadata or {}
         }
 
