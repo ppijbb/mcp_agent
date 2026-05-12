@@ -100,7 +100,12 @@ async def test_browser_manager():
     """BrowserManager를 사용하여 페이지를 확인합니다."""
     
     try:
-        from src.automation.browser_manager import BrowserManager
+        from src.automation.browser_manager import BrowserManager  # type: ignore[import-untyped]
+    except ImportError:
+        print("❌ BrowserManager를 가져올 수 없습니다 (src.automation.browser_manager 모듈이 없음)")
+        return {"success": False, "error": "BrowserManager module not available"}
+    
+    try:
         
         print("\n" + "=" * 80)
         print("🔧 BrowserManager 테스트")
