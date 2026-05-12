@@ -57,11 +57,6 @@ pydantic>=2.10.7
 pydantic-settings>=2.6.4
 email-validator>=2.2.2
 
-# Testing
-pytest
-pytest-asyncio
-pytest-cov
-
 # Circuit Breaker and Caching
 pybreaker
 cachetools
@@ -169,12 +164,6 @@ kubernetes
 # Documentation
 sphinx
 sphinx-rtd-theme
-
-# Development Tools
-black
-isort
-flake8
-mypy
 
 # Additional Utilities
 jinja2>=3.1.6

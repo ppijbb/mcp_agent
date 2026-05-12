@@ -2,6 +2,7 @@
 logs
 browser-state-*.json
 __pycache__
+*.log
 *_reports
 .env
 .venv
