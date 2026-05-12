@@ -118,19 +118,23 @@ def safe_execute(func: Callable, default: Any = None, error_type: type = MCPErro
 def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
     """
     Standardized error handler for data processing operations.
-    
+
+    Attempts a safe get-like access on *data_item* using *operation* as an
+    attribute name or key.  If that fails the *default_result* is returned.
+
     Args:
         data_item: The data item being processed
         operation: Description of the operation being performed
         default_result: Default result to return on error
-        
+
     Returns:
         Processing result or default_result if error occurs
     """
     try:
-        return data_item
+        if isinstance(data_item, dict):
+            return data_item.get(operation, default_result)
+        return getattr(data_item, operation, default_result)
     except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
         try:
             import structlog
             logger = structlog.get_logger()

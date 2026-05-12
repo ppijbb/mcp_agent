@@ -21,6 +21,7 @@ Example:
 import logging
 import traceback
 import functools
+import asyncio
 from typing import Dict, Any, Optional, Callable, TypeVar
 from enum import Enum
 import json
@@ -265,6 +266,38 @@ def handle_errors(
                 else:
                     return return_on_error
         
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                context = {
+                    "function": func.__name__,
+                    "module": func.__module__,
+                    "args": str(args)[:200],
+                    "kwargs": str(kwargs)[:200]
+                }
+                
+                if not isinstance(e, AgentError):
+                    agent_error = AgentError(
+                        message=str(e),
+                        severity=severity,
+                        category=category,
+                        details={"original_function": func.__name__},
+                        original_error=e
+                    )
+                else:
+                    agent_error = e
+                
+                default_error_handler.log_error(agent_error, context)
+                
+                if reraise:
+                    raise agent_error
+                else:
+                    return return_on_error
+        
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
         return wrapper
     return decorator
 
