@@ -115,26 +115,25 @@ def safe_execute(func: Callable, default: Any = None, error_type: type = MCPErro
         raise error_type(f"Failed to execute {func.__name__}: {str(e)}")
 
 
-def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
+def handle_data_processing_error(operation: Callable[[Any], Any], data_item: Any, default_result: Any = None) -> Any:
     """
     Standardized error handler for data processing operations.
     
     Args:
+        operation: Callable to apply to data_item
         data_item: The data item being processed
-        operation: Description of the operation being performed
         default_result: Default result to return on error
         
     Returns:
         Processing result or default_result if error occurs
     """
     try:
-        return data_item
+        return operation(data_item)
     except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
         try:
             import structlog
             logger = structlog.get_logger()
-            logger.warning("Data processing error", operation=operation, error=str(e))
+            logger.warning("Data processing error", operation=operation.__name__, error=str(e))
         except ImportError:
             pass
         return default_result
