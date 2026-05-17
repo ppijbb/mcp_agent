@@ -6,11 +6,14 @@
 
 import importlib
 import importlib.util
+import logging
+import types
 importlib.invalidate_caches()
+
+logger = logging.getLogger(__name__)
 
 # HACK: mcp-agent 0.1.0과 mcp 1.x 간의 타입 호환성 문제 해결
 import mcp.types
-import types
 if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequestParams, types.UnionType):
     mcp.types.ElicitRequestParams = mcp.types.ElicitRequestURLParams
 
@@ -19,8 +22,8 @@ if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequ
 try:
     import mcp_agent.config
     mcp_agent.config._settings = None
-except Exception:
-    pass  # Ignore if module structure differs
+except Exception as e:
+    logger.debug(f"Could not reset mcp-agent config cache: {e}")
 
 # COMPAT: Google GenAI Safety Settings - filter JAILBREAK category
 # Some prompts trigger safety filters unnecessarily; strip JAILBREAK category
@@ -36,11 +39,10 @@ try:
                 ]
             original_config_init(self, *args, **kwargs)
         genai_types.GenerateContentConfig.__init__ = patched_config_init
-except Exception:
-    pass  # Ignore if GenAI types structure differs
+except Exception as e:
+    logger.debug(f"Could not apply GenAI safety settings patch: {e}")
 
 import asyncio
-import logging
 import json
 import os
 import sys
@@ -69,8 +71,6 @@ if _sf_adapter.exists():
         SparkleForgeA2AWrapper = None
 else:
     SparkleForgeA2AWrapper = None
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_agent_type(agent_type: Any) -> str:

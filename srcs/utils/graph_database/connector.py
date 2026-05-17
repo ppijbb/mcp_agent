@@ -17,7 +17,7 @@ class Neo4jConnector:
     _driver = None
     _lock = asyncio.Lock()
 
-    def __init__(self, uri: str = "bolt://localhost:7687", user: str = "neo4j", password: str = "password"):
+    def __init__(self, uri: str = "bolt://localhost:7687", user: str = "neo4j", password: str = ""):
         """Initialize the Neo4j connector.
 
         Args:

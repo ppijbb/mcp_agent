@@ -21,9 +21,12 @@ Functions:
 
 import streamlit as st
 import sys
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from .styles import get_common_styles, get_page_header
+
+logger = logging.getLogger(__name__)
 
 
 def setup_page(title: str, icon: str, layout: str = "wide") -> None:
@@ -41,8 +44,8 @@ def setup_page(title: str, icon: str, layout: str = "wide") -> None:
             page_icon=icon,
             layout=layout
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not set page config: {e}")
 
 
 def add_project_root() -> None:
