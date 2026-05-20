@@ -11,7 +11,7 @@ from datetime import datetime
 from celery import Celery, Task
 from celery.result import AsyncResult
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

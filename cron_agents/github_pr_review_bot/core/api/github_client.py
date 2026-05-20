@@ -14,7 +14,7 @@ from github.PullRequest import PullRequest
 from github.Repository import Repository
 from github.GithubException import GithubException
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

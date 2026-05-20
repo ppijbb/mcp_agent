@@ -12,7 +12,7 @@ from datetime import datetime
 from collections import deque
 import threading
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class BatchProcessor:
             batch_size (int): 배치 크기
             max_wait_time (float): 최대 대기 시간 (초)
         """
-        self.batch_size = batch_size or config.cost_optimization.batch_size
+        self.batch_size = batch_size or config.optimization.batch_size
         self.max_wait_time = max_wait_time
         self.pending_requests = []
         self.processing = False

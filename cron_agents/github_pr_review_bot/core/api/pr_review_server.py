@@ -20,8 +20,8 @@ from mcp.types import (
 )
 
 from .github_client import GitHubClient
-from .review_generator import ReviewGenerator
-from .config import config
+from ..ai.review_generator import ReviewGenerator
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

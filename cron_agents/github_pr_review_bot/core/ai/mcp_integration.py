@@ -18,7 +18,7 @@ except ImportError:
     logging.error("LangChain MCP 어댑터가 설치되지 않았습니다. 'pip install langchain-mcp-adapters'를 실행하세요.")
     raise
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

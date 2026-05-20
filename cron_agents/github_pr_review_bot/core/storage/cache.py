@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 import redis
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

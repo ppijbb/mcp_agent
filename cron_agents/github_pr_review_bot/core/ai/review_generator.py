@@ -9,7 +9,7 @@ import logging
 import sys
 from typing import Dict, List, Any
 
-from .config import config
+from ..config import config
 from .mcp_integration import mcp_integration_manager
 
 logger = logging.getLogger(__name__)

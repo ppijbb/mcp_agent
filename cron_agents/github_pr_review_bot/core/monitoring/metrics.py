@@ -15,7 +15,7 @@ from prometheus_client import (
 )
 import psutil
 
-from .config import config
+from ..config import config
 
 logger = logging.getLogger(__name__)
 

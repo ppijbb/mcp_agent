@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import config
-from .cache import cache_manager
+from ..config import config
+from ..storage.cache import cache_manager
 
 logger = logging.getLogger(__name__)
 
