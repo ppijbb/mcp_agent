@@ -119,8 +119,12 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
     """
     Standardized error handler for data processing operations.
     
+    If *data_item* is callable, it is invoked inside the try/except block
+    so that exceptions are caught and logged.  Otherwise the value is
+    returned as-is.
+    
     Args:
-        data_item: The data item being processed
+        data_item: The data item being processed, or a callable that produces it
         operation: Description of the operation being performed
         default_result: Default result to return on error
         
@@ -128,7 +132,7 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
         Processing result or default_result if error occurs
     """
     try:
-        return data_item
+        return data_item() if callable(data_item) else data_item
     except (KeyError, ValueError, TypeError, AttributeError) as e:
         # Log error if logging is available
         try:

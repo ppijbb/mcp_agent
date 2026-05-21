@@ -17,37 +17,8 @@ _config_path_cache = None
 _cache_lock = threading.Lock()
 
 
-class EnhancedJSONEncoder(json.JSONEncoder):
-    """
-    Enhanced JSON encoder that handles datetime objects.
-
-    Extends the standard JSONEncoder to convert datetime objects to ISO format strings,
-    enabling proper serialization of datetime values in JSON responses.
-
-    Attributes:
-        Inherits all attributes from json.JSONEncoder
-
-    Methods:
-        default: Override to handle datetime serialization
-    """
-
-    def default(self, o):
-        """
-        Convert objects to JSON-serializable format.
-
-        Args:
-            o: Object to serialize
-
-        Returns:
-            JSON-serializable representation of the object
-
-        Notes:
-            - datetime objects are converted to ISO format strings
-            - All other objects are handled by the parent class
-        """
-        if isinstance(o, datetime):
-            return o.isoformat()
-        return super().default(o)
+# Re-export the canonical EnhancedJSONEncoder from core.utils
+from srcs.core.utils import EnhancedJSONEncoder
 
 
 def setup_agent_app(app_name: str):
