@@ -4,6 +4,7 @@ Business Data Scout Agent - Real MCPAgent Implementation
 Converted from fake BaseAgent to real MCPAgent using mcp_agent library.
 Collects and analyzes business data from multiple sources.
 """
+from __future__ import annotations
 
 import asyncio
 import os

@@ -172,8 +172,8 @@ def run_agent_via_a2a(
             # UI 업데이트 시도 (비동기에서는 제한적)
             try:
                 update_log_ui()
-            except Exception:
-                pass  # 비동기 컨텍스트에서는 실패할 수 있음
+            except Exception as e:
+                logger.warning("Failed to update log UI in async context: %s", e)
 
         try:
             # Streamlit UI agent 등록 및 메시지 수신 대기
@@ -191,8 +191,8 @@ def run_agent_via_a2a(
                 def update_status(text: str):
                     try:
                         status_placeholder.info(f"🔄 {text}")
-                    except Exception:
-                        pass  # 비동기 컨텍스트에서는 실패할 수 있음
+                    except Exception as e:
+                        logger.warning("Failed to update status in async context: %s", e)
 
                 def update_log(message: str, level: str = "info"):
                     log_a2a_message(message, level)

@@ -19,8 +19,8 @@ if hasattr(mcp.types, "ElicitRequestParams") and isinstance(mcp.types.ElicitRequ
 try:
     import mcp_agent.config
     mcp_agent.config._settings = None
-except Exception:
-    pass  # Ignore if module structure differs
+except Exception as e:
+    logger.warning("Failed to reset mcp-agent config cache: %s", e)
 
 # COMPAT: Google GenAI Safety Settings - filter JAILBREAK category
 # Some prompts trigger safety filters unnecessarily; strip JAILBREAK category
@@ -36,8 +36,8 @@ try:
                 ]
             original_config_init(self, *args, **kwargs)
         genai_types.GenerateContentConfig.__init__ = patched_config_init
-except Exception:
-    pass  # Ignore if GenAI types structure differs
+except Exception as e:
+    logger.warning("Failed to patch Google GenAI safety settings: %s", e)
 
 import asyncio
 import logging
@@ -111,8 +111,8 @@ def _normalize_agent_type(agent_type: Any) -> str:
                 value_end = agent_type_str.rfind("'")
                 if value_start > 0 and value_end > value_start:
                     return agent_type_str[value_start:value_end]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to parse agent_type string: %s", e)
         return str(agent_type)
 
 

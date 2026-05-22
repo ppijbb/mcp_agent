@@ -13,6 +13,8 @@ Functions:
     _cleanup_mcp_apps: Clean up all active MCPApp instances on process exit
     _register_cleanup: Register cleanup handler for MCPApp instances
 """
+from __future__ import annotations
+
 import asyncio
 import functools
 import atexit
