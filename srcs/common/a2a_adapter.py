@@ -389,7 +389,7 @@ class CommonAgentA2AWrapper(A2AAdapter):
             "agent_id": self.agent_id,
             "agent_metadata": self.agent_metadata,
             "is_listening": self.is_listening,
-            "message_queue_size": self._message_queue.qsize(),
+            "message_queue_size": self._message_queue.qsize() if self._message_queue is not None else 0,
         }
 
 

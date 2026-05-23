@@ -115,19 +115,22 @@ def safe_execute(func: Callable, default: Any = None, error_type: type = MCPErro
         raise error_type(f"Failed to execute {func.__name__}: {str(e)}")
 
 
-def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
+def handle_data_processing_error(data_item: Any, operation: str, processor: Optional[Callable[[Any], Any]] = None, default_result: Any = None) -> Any:
     """
     Standardized error handler for data processing operations.
     
     Args:
         data_item: The data item being processed
         operation: Description of the operation being performed
-        default_result: Default result to return on error
+        processor: Optional callable to process the data item
+        default_result: Default value to return on error
         
     Returns:
         Processing result or default_result if error occurs
     """
     try:
+        if processor:
+            return processor(data_item)
         return data_item
     except (KeyError, ValueError, TypeError, AttributeError) as e:
         # Log error if logging is available

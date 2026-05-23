@@ -118,7 +118,7 @@ def display_dashboard():
     2단 컬럼 레이아웃으로 최신 업데이트 정보와 사용 가이드를 제공합니다.
     """
     with st.container():
-        col1, col2 = st.columns([1., 1.])
+        col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown("""
             ### 🔥 최신 업데이트        
