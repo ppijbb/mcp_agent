@@ -128,6 +128,30 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
     return result
 
 
+def _resolve_env_vars(value: Any) -> Any:
+    """
+    Recursively resolve ${VAR_NAME} patterns in config values from environment.
+    
+    Args:
+        value: The config value (str, dict, list, or scalar) to resolve
+        
+    Returns:
+        Resolved value with all ${VAR_NAME} patterns replaced by env values
+    """
+    if isinstance(value, str):
+        if value.startswith("${") and value.endswith("}"):
+            env_var = value[2:-1]
+            env_value = os.getenv(env_var)
+            if env_value is not None:
+                return env_value
+        return value
+    elif isinstance(value, dict):
+        return {k: _resolve_env_vars(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_resolve_env_vars(v) for v in value]
+    return value
+
+
 def _load_secrets_from_env(config: AppConfig):
     """
     Load environment variable and update AppConfig object.
@@ -136,23 +160,17 @@ def _load_secrets_from_env(config: AppConfig):
         config: AppConfig object to update
         
     Note:
-        - ENCRYPTION_KEY environment variable sets config.security.encryption_key
+        - MCP_SECRET_KEY environment variable sets config.security.encryption_key
         - ${VAR_NAME} format in config values are replaced with env values
         - Example: GITHUB_TOKEN -> mcp_servers.github.env.GITHUB_TOKEN
-        - Example: GOOGLE_API_KEY -> mcp_servers.g-search.env.GOOGLE_API_KEY
     """
-    encryption_key = os.getenv("ENCRYPTION_KEY")
+    encryption_key = os.getenv("MCP_SECRET_KEY")
     if encryption_key:
         config.security.encryption_key = encryption_key
 
+    # Apply env var substitution to MCP server configs
     for server_name, server_config in config.mcp_servers.items():
-        for key, value in server_config.env.items():
-            # Replace ${VAR_NAME} format with environment variable values
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-                env_var = value[2:-1]
-                env_value = os.getenv(env_var)
-                if env_value is not None:
-                    server_config.env[key] = env_value
+        server_config.env = _resolve_env_vars(server_config.env)
 
 
 # Configuration object for use throughout the application

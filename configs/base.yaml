@@ -10,8 +10,8 @@ logging:
   retention: "7 days"
 
 security:
-  # ENCRYPTION_KEY 환경 변수에서 로드
-  encryption_key: "${ENCRYPTION_KEY}"
+  # MCP_SECRET_KEY 환경 변수에서 로드 (crypto.py에서 사용)
+  encryption_key: "${MCP_SECRET_KEY}"
   allowed_hosts:
     - "*"
 
