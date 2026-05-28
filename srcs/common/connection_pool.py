@@ -71,6 +71,7 @@ class ImprovedConnectionPool:
         self.last_cleanup = time.time()
         self.cleanup_interval = 60  # seconds
         self._shutdown = False
+        self._shutdown_event = threading.Event()
         
         # Background cleanup thread for periodic connection expiration
         self._cleanup_thread = threading.Thread(
@@ -305,7 +306,8 @@ class ImprovedConnectionPool:
         """Background thread for periodic cleanup."""
         while not self._shutdown:
             try:
-                time.sleep(self.cleanup_interval)
+                if self._shutdown_event.wait(timeout=self.cleanup_interval):
+                    break
                 if not self._shutdown:
                     self._cleanup_old_connections()
                     
@@ -350,6 +352,7 @@ class ImprovedConnectionPool:
         
         with self._lock:
             self._shutdown = True
+            self._shutdown_event.set()
             
             # Dispose all pooled connections
             for pool_key, connections in self._pools.items():
