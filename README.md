@@ -17,7 +17,6 @@ A comprehensive multi-agent system for enterprise automation and intelligence, f
 srcs/
 ├── common/                 # 🔧 Common modules and shared resources
 │   ├── __init__.py        # Unified module entry point
-│   ├── imports.py         # Standardized imports and dependencies
 │   ├── config.py          # Shared configurations and constants
 │   ├── utils.py           # Common utility functions
 │   └── templates.py       # Agent base templates and patterns
@@ -27,11 +26,9 @@ srcs/
 │   ├── swarm.py           # Multi-agent coordination
 │   ├── workflow_orchestration.py # Workflow management
 │   ├── researcher.py      # Research and information gathering
-│   ├── researcher_v2.py   # Enhanced research agent (using common modules)
 │   ├── parallel.py        # Parallel processing demonstration
 │   ├── streamlit_agent.py # Web interface agent
 │   ├── data_generator.py  # Data generation and synthesis
-│   ├── enhanced_data_generator.py # Advanced data generation
 │   └── rag_agent.py       # Retrieval-Augmented Generation
 ├── enterprise_agents/      # Sophisticated business automation
 │   ├── mental.py          # Mental model analysis
@@ -151,7 +148,7 @@ python run_agent.py --list
 
 # Run basic agents
 python run_agent.py --basic researcher
-python run_agent.py --basic researcher_v2    # Enhanced with common modules
+python run_agent.py --advanced researcher_v2       # Enhanced research agent
 python run_agent.py --basic data_generator
 python run_agent.py --basic rag
 
@@ -194,7 +191,7 @@ cd srcs
 
 # Basic agents
 python basic_agents/researcher.py
-python basic_agents/researcher_v2.py    # New enhanced version
+python advanced_agents/researcher_v2.py # Moved to advanced_agents
 python basic_agents/data_generator.py
 
 # Enterprise agents  
@@ -273,14 +270,14 @@ See `COMMON_MODULES.md` for comprehensive usage guide and examples.
 
 ### Basic Agents
 - **researcher** - Research and information gathering
-- **researcher_v2** - Enhanced research agent using common modules
+- **researcher_v2** - Enhanced research agent
 - **basic** - Basic functionality and testing
 - **parallel** - Parallel processing demonstration  
 - **swarm** - Multi-agent swarm coordination
 - **streamlit** - Web interface agent
 - **workflow** - Workflow orchestration and management
 - **data_generator** - Data generation and synthesis
-- **enhanced_data_generator** - Advanced data generation with ML
+- **enhanced_data_generator** - Advanced data generation
 - **rag** - Retrieval-Augmented Generation
 
 ### Enterprise Agents
@@ -425,7 +422,7 @@ python run_agent.py --dev common_demo
 python run_agent.py --dev template_basic
 
 # Test existing enhanced agent
-python run_agent.py --basic researcher_v2
+python run_agent.py --advanced researcher_v2
 
 # Create your own agent using the patterns
 ```

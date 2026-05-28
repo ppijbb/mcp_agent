@@ -377,12 +377,17 @@ class ImprovedConnectionPool:
             logger.info("Connection pool shutdown complete")
     
     def __del__(self):
-        """Destructor to ensure cleanup."""
+        """Destructor to ensure cleanup during garbage collection.
+
+        Only sets the shutdown flag and lets the daemon cleanup thread
+        terminate naturally. Avoids acquiring locks or joining threads,
+        which is unsafe during GC.
+        """
         try:
             if not hasattr(self, '_shutdown') or not self._shutdown:
-                self.shutdown()
+                self._shutdown = True
         except Exception:
-            pass  # Ignore errors during destruction
+            pass
 
 
 # Factory function to replace the original ConnectionPool
