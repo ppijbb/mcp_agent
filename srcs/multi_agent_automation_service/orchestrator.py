@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
+from srcs.common.config import DEFAULT_PRIMARY_MODEL
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -52,8 +53,7 @@ class MultiAgentOrchestrator:
 
         # 메인 Orchestrator Agent
         orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
-            primary_model="gemini-2.5-flash-lite",
-            logger_instance=logger
+            primary_model=DEFAULT_PRIMARY_MODEL,
         )
         self.orchestrator = Orchestrator(
             llm_factory=orchestrator_llm_factory,

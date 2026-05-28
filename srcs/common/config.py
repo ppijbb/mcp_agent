@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 # Default company configuration
 # DEFAULT_COMPANY_NAME = "TechCorp Inc." # This line is removed as per the edit hint.
 
+# Default primary LLM model used across all agents.
+DEFAULT_PRIMARY_MODEL = "gemini-2.5-flash-lite"
+
 # Default server list used by agents.
 # We are replacing 'filesystem' with 'gdrive' as part of the strategic shift
 # towards cloud-based, collaborative tools over local file operations.
@@ -106,7 +109,7 @@ Output Format:
 """
 
 __all__ = [
-    "DEFAULT_SERVERS", "COMPLIANCE_FRAMEWORKS", "REPORT_TIMESTAMP_FORMAT",
+    "DEFAULT_PRIMARY_MODEL", "DEFAULT_SERVERS", "COMPLIANCE_FRAMEWORKS", "REPORT_TIMESTAMP_FORMAT",
     "get_output_dir", "get_timestamp", "AGENT_INSTRUCTION_TEMPLATE",
     "COMMON_GUIDELINES", "OUTPUT_FORMAT_GUIDELINES",
     "DEFAULT_REQUEST_TIMEOUT", "MAX_RETRY_ATTEMPTS", "CONCURRENT_REQUEST_LIMIT",
