@@ -25,7 +25,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
 import asyncio
@@ -68,7 +68,7 @@ class A2AMessage:
         ttl: Time to live in seconds (default: 300)
     """
     message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + 'Z')
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     source_agent: str = ""
     target_agent: str = ""
     message_type: str = ""
@@ -109,7 +109,7 @@ class A2AMessage:
         """
         return cls(
             message_id=data.get("message_id", str(uuid.uuid4())),
-            timestamp=data.get("timestamp", datetime.utcnow().isoformat() + 'Z'),
+            timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
             source_agent=data.get("source_agent", ""),
             target_agent=data.get("target_agent", ""),
             message_type=data.get("message_type", ""),
@@ -285,7 +285,7 @@ class AgentRegistry:
                 "agent_type": agent_type,
                 "metadata": metadata,
                 "a2a_adapter": a2a_adapter,
-                "registered_at": datetime.utcnow().isoformat(),
+                "registered_at": datetime.now(timezone.utc).isoformat(),
                 "status": "active",
             }
             logger.info(f"Agent registered: {agent_id}")
@@ -382,7 +382,7 @@ class A2AMessageBroker:
 
         if message.ttl > 0:
             message_time = datetime.fromisoformat(message.timestamp.replace('Z', '+00:00'))
-            age = (datetime.utcnow() - message_time.replace(tzinfo=None)).total_seconds()
+            age = (datetime.now(timezone.utc) - message_time).total_seconds()
             if age > message.ttl:
                 logger.warning(f"Message {message.message_id} expired (age: {age}s, ttl: {message.ttl}s)")
                 return False

@@ -116,28 +116,13 @@ def safe_execute(func: Callable, default: Any = None, error_type: type = MCPErro
 
 
 def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
-    """
-    Standardized error handler for data processing operations.
-    
-    Args:
-        data_item: The data item being processed
-        operation: Description of the operation being performed
-        default_result: Default result to return on error
-        
-    Returns:
-        Processing result or default_result if error occurs
-    """
     try:
-        return data_item
-    except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
-        try:
-            import structlog
-            logger = structlog.get_logger()
-            logger.warning("Data processing error", operation=operation, error=str(e))
-        except ImportError:
-            pass
-        return default_result
+        import structlog
+        logger = structlog.get_logger()
+        logger.debug("Processing data", operation=operation)
+    except ImportError:
+        pass
+    return default_result
 
 
 def validate_input(value: Any, field_name: str, required: bool = True, 

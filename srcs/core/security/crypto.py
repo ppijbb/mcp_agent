@@ -60,9 +60,6 @@ def get_encryption_key() -> str:
     return key
 
 
-ENCRYPTION_KEY = None  # Will be loaded on demand
-
-
 def get_cipher_suite() -> Fernet:
     """
     Create Fernet encryption object using key from environment variables.
