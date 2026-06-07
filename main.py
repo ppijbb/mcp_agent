@@ -17,12 +17,13 @@ sys.path.insert(0, str(project_root))
 # Apply compatibility patches safely
 try:
     from srcs.common.compatibility import apply_all_compatibility_patches
-    apply_all_compatibility_patches()
 except ImportError:
-    pass  # Compatibility patches not available
-except Exception as e:
-    # Log error but don't break startup
-    print(f"Warning: Compatibility patches failed: {e}")
+    pass  # Compatibility patches module not available
+else:
+    try:
+        apply_all_compatibility_patches()
+    except Exception as e:
+        print(f"Warning: Compatibility patches failed: {e}")
 
 # Force config reload for fresh imports - optimized with better error handling
 config_modules = [

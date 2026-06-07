@@ -7,6 +7,7 @@ Shared utility functions used across all agents for common operations.
 import os
 import json
 import threading
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 
 # Defer imports to avoid circular dependencies
@@ -19,21 +20,20 @@ _cache_lock = threading.Lock()
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     """
-    Enhanced JSON encoder that handles datetime objects.
+    Enhanced JSON encoder that handles special types.
 
-    Extends the standard JSONEncoder to convert datetime objects to ISO format strings,
-    enabling proper serialization of datetime values in JSON responses.
+    Extends json.JSONEncoder to support:
+    - dataclasses (converted to dict)
+    - datetime objects (converted to ISO format strings)
+    - objects with a 'value' attribute
 
-    Attributes:
-        Inherits all attributes from json.JSONEncoder
-
-    Methods:
-        default: Override to handle datetime serialization
+    Usage:
+        json.dumps(data, cls=EnhancedJSONEncoder)
     """
 
     def default(self, o):
         """
-        Convert objects to JSON-serializable format.
+        Convert non-serializable objects to JSON-serializable format.
 
         Args:
             o: Object to serialize
@@ -41,12 +41,17 @@ class EnhancedJSONEncoder(json.JSONEncoder):
         Returns:
             JSON-serializable representation of the object
 
-        Notes:
-            - datetime objects are converted to ISO format strings
-            - All other objects are handled by the parent class
+        Handles:
+            - dataclasses: Converted to dictionary using asdict()
+            - datetime objects: Converted to ISO format strings
+            - objects with 'value' attribute: Uses the value attribute
         """
+        if is_dataclass(o) and not isinstance(o, type):
+            return asdict(o)
         if isinstance(o, datetime):
             return o.isoformat()
+        if hasattr(o, 'value') and not isinstance(o, type):
+            return o.value
         return super().default(o)
 
 

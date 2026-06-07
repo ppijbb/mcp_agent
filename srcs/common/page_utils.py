@@ -41,8 +41,11 @@ def setup_page(title: str, icon: str, layout: str = "wide") -> None:
             page_icon=icon,
             layout=layout
         )
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"set_page_config failed (page may already be configured): {e}"
+        )
 
 
 def add_project_root() -> None:
