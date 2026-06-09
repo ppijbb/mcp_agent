@@ -8,6 +8,7 @@ Gemini API 503 오류 시 자동으로 최고 성능 모델로 fallback하는 �
 import os
 import logging
 import httpx
+import threading
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timedelta
 
@@ -17,9 +18,10 @@ from mcp_agent.workflows.llm.augmented_llm import RequestParams
 
 logger = logging.getLogger(__name__)
 
-# 모델 목록 캐시 (1시간 유지)
+# 모델 목록 캐시 (1시간 유지) — thread-safe access via _cache_lock
 _model_list_cache: Dict[str, Dict[str, Any]] = {}
 _cache_timestamp: Dict[str, datetime] = {}
+_cache_lock = threading.Lock()
 CACHE_DURATION = timedelta(hours=1)
 
 
@@ -36,11 +38,12 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
     cache_key = "openrouter"
     now = datetime.now()
 
-    # 캐시 확인
-    if cache_key in _model_list_cache and cache_key in _cache_timestamp:
-        if now - _cache_timestamp[cache_key] < CACHE_DURATION:
-            logger.debug("OpenRouter 모델 목록 캐시 사용")
-            return _model_list_cache[cache_key].get("models", [])
+    # 캐시 확인 (thread-safe)
+    with _cache_lock:
+        if cache_key in _model_list_cache and cache_key in _cache_timestamp:
+            if now - _cache_timestamp[cache_key] < CACHE_DURATION:
+                logger.debug("OpenRouter 모델 목록 캐시 사용")
+                return _model_list_cache[cache_key].get("models", [])
 
     try:
         headers = {
@@ -127,8 +130,9 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
             model_scores.sort(key=lambda x: x[1], reverse=True)
             sorted_models = [model_id for model_id, _ in model_scores]
 
-            _model_list_cache[cache_key] = {"models": sorted_models}
-            _cache_timestamp[cache_key] = now
+            with _cache_lock:
+                _model_list_cache[cache_key] = {"models": sorted_models}
+                _cache_timestamp[cache_key] = now
             logger.info(f"OpenRouter에서 {len(sorted_models)}개 사용 가능한 모델 가져옴 (동적 점수 기준 정렬)")
             return sorted_models
         else:
@@ -152,11 +156,12 @@ def _fetch_groq_models(api_key: str) -> List[str]:
     cache_key = "groq"
     now = datetime.now()
 
-    # 캐시 확인
-    if cache_key in _model_list_cache and cache_key in _cache_timestamp:
-        if now - _cache_timestamp[cache_key] < CACHE_DURATION:
-            logger.debug("Groq 모델 목록 캐시 사용")
-            return _model_list_cache[cache_key].get("models", [])
+    # 캐시 확인 (thread-safe)
+    with _cache_lock:
+        if cache_key in _model_list_cache and cache_key in _cache_timestamp:
+            if now - _cache_timestamp[cache_key] < CACHE_DURATION:
+                logger.debug("Groq 모델 목록 캐시 사용")
+                return _model_list_cache[cache_key].get("models", [])
 
     try:
         headers = {
@@ -181,8 +186,9 @@ def _fetch_groq_models(api_key: str) -> List[str]:
             # 하지만 이것도 추측이므로 단순히 정렬만 수행
             sorted_models = sorted(available_models)
 
-            _model_list_cache[cache_key] = {"models": sorted_models}
-            _cache_timestamp[cache_key] = now
+            with _cache_lock:
+                _model_list_cache[cache_key] = {"models": sorted_models}
+                _cache_timestamp[cache_key] = now
             logger.info(f"Groq에서 {len(sorted_models)}개 사용 가능한 모델 가져옴 (동적 정렬)")
             return sorted_models
         else:

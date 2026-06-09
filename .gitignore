@@ -19,3 +19,4 @@ reports
 .mypy_cache
 */temp
 .ruff_cache
+chroma_db/
