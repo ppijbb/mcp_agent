@@ -18,10 +18,9 @@ sys.path.insert(0, str(project_root))
 try:
     from srcs.common.compatibility import apply_all_compatibility_patches
     apply_all_compatibility_patches()
-except ImportError:
-    pass  # Compatibility patches not available
+except ImportError as e:
+    print(f"Warning: Compatibility patches not available ({e})")
 except Exception as e:
-    # Log error but don't break startup
     print(f"Warning: Compatibility patches failed: {e}")
 
 # Force config reload for fresh imports - optimized with better error handling
@@ -35,8 +34,8 @@ for module_name, attr_name in config_modules:
         module = __import__(module_name, fromlist=[attr_name])
         if hasattr(module, attr_name):
             setattr(module, attr_name, None)
-    except ImportError:
-        continue  # Module not available, skip
+    except ImportError as e:
+        print(f"Warning: Config reload failed for {module_name} ({e})")
     except Exception as e:
         print(f"Warning: Config reload failed for {module_name}: {e}")
 
