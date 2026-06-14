@@ -1,5 +1,6 @@
 import asyncio
 import json
+import concurrent.futures
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typing import Dict, List, Any
@@ -69,9 +70,19 @@ async def _call_tools_concurrently_async(tool_name: str, tickers: List[str]) -> 
         print(f"❌ {error_msg}")
         raise RuntimeError(error_msg)
 
+def _run_async(coro):
+    """Safely run a coroutine from a sync context, even if an event loop is already running."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
 def _run_async_concurrent_calls(tool_name: str, tickers: List[str]) -> Dict[str, Any]:
     """동기 함수에서 비동기 병렬 MCP 호출을 실행하기 위한 래퍼"""
-    return asyncio.run(_call_tools_concurrently_async(tool_name, tickers))
+    return _run_async(_call_tools_concurrently_async(tool_name, tickers))
 
 
 
@@ -130,6 +141,6 @@ def call_ohlcv_data_tool(tickers: List[str], period: str = None) -> Dict:
                 print(f"❌ {error_msg}")
                 raise RuntimeError(error_msg)
         
-        return asyncio.run(_call_with_period())
+        return _run_async(_call_with_period())
     else:
         return _run_async_concurrent_calls("get_ohlcv_data", tickers) 

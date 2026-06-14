@@ -7,7 +7,7 @@ and generating comprehensive reports with "when", "what", "how much", and "why" 
 
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -604,14 +604,14 @@ class TradingReportAgent:
         """Convert Wei to ETH"""
         try:
             return wei_value / 10**18
-        except:
+        except (TypeError, ZeroDivisionError):
             return 0
 
     def _convert_wei_to_gwei(self, wei_value: int) -> float:
         """Convert Wei to Gwei"""
         try:
             return wei_value / 10**9
-        except:
+        except (TypeError, ZeroDivisionError):
             return 0
 
     async def send_report_email(self,
