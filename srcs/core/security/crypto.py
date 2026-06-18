@@ -14,9 +14,12 @@ Functions:
     generate_key: Generate a new encryption key
 """
 
+import logging
 import os
 from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 def validate_encryption_key(key: str) -> bool:
@@ -114,7 +117,7 @@ def encrypt_file(file_path: str, output_path: Optional[str] = None) -> str:
         with open(output_path, "wb") as f:
             f.write(encrypted_data)
 
-        print(f"Successfully encrypted file: {file_path} -> {output_path}")
+        logger.info("Successfully encrypted file: %s -> %s", file_path, output_path)
         return output_path
         
     except FileNotFoundError:
@@ -175,7 +178,7 @@ def decrypt_file(encrypted_path: str, output_path: str | None = None) -> None:
     with open(output_path, "wb") as f:
         f.write(decrypted_content)
 
-    print(f"Successfully decrypted file: {encrypted_path} -> {output_path}")
+    logger.info("Successfully decrypted file: %s -> %s", encrypted_path, output_path)
 
 
 def generate_key() -> str:
@@ -190,6 +193,6 @@ def generate_key() -> str:
     """
     key = Fernet.generate_key()
     key_str = key.decode()
-    print("New encryption key generated. Store this in MCP_SECRET_KEY environment variable:")
-    print(f"   {key_str}")
+    logger.info("New encryption key generated. Store this in MCP_SECRET_KEY environment variable:")
+    logger.info("   %s", key_str)
     return key_str

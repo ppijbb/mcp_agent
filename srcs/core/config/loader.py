@@ -6,12 +6,15 @@ and provides environment variable substitution for sensitive values.
 Uses singleton pattern to cache configuration after first load.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Dict, Any
 import yaml
 from srcs.core.config.schema import AppConfig
 from srcs.core.security.crypto import decrypt_file_content
+
+logger = logging.getLogger(__name__)
 
 _config: AppConfig | None = None
 _config_path = Path(os.getenv("MCP_CONFIG_PATH", "configs/"))
@@ -40,7 +43,7 @@ def load_config() -> AppConfig:
     env_config = _load_config_file(_config_path / f"{env}.yaml")
 
     if not base_config and not env_config:
-        print(f"Warning: Configuration files not found at path: {_config_path}")
+        logger.warning("Configuration files not found at path: %s", _config_path)
         base_config = {}
 
     merged_config = _deep_merge(base_config, env_config)
@@ -49,7 +52,7 @@ def load_config() -> AppConfig:
     try:
         _config = AppConfig(**merged_config)
     except Exception as e:
-        print(f"Error: Configuration validation failed: {e}")
+        logger.error("Configuration validation failed: %s", e)
         raise
 
     _load_secrets_from_env(_config)
@@ -88,7 +91,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
             result = yaml.safe_load(decrypted_content)
             return result if result is not None else {}
         except Exception as e:
-            print(f"Warning: Failed to decrypt encrypted config file ({encrypted_path}). Trying regular config file. Error: {e}")
+            logger.warning("Failed to decrypt encrypted config file (%s). Trying regular config file. Error: %s", encrypted_path, e)
             if not regular_exists:
                 return {}
 
@@ -98,7 +101,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
                 result = yaml.safe_load(f)
                 return result if result is not None else {}
         except Exception as e:
-            print(f"Warning: Failed to load config file ({regular_path}): {e}")
+            logger.warning("Failed to load config file (%s): %s", regular_path, e)
 
     return {}
 
