@@ -245,7 +245,7 @@ The new common modules system provides shared functionality for efficient agent 
 
 Create a new basic agent:
 ```python
-from common import BasicAgentTemplate
+from srcs.common import BasicAgentTemplate
 
 class MyAgent(BasicAgentTemplate):
     def __init__(self):
@@ -257,7 +257,7 @@ class MyAgent(BasicAgentTemplate):
 
 Create a new enterprise agent:
 ```python
-from common import EnterpriseAgentTemplate
+from srcs.common import EnterpriseAgentTemplate
 
 class MyEnterpriseAgent(EnterpriseAgentTemplate):
     def __init__(self):
@@ -412,7 +412,7 @@ Enterprise agents deliver measurable business value:
 The common modules system enables rapid agent development:
 
 1. **Choose Template**: Select `BasicAgentTemplate` or `EnterpriseAgentTemplate`
-2. **Import Common**: Use `from common import *` for all dependencies
+2. **Import Common**: Use `from srcs.common import BasicAgentTemplate` to get started
 3. **Implement Methods**: Override required methods for your specific logic
 4. **Run and Test**: Use the unified runner for execution and testing
 
@@ -433,135 +433,3 @@ python run_agent.py --basic researcher_v2
 ---
 
 *For detailed documentation on individual agents and their capabilities, refer to the agent-specific files and `COMMON_MODULES.md` for development guidelines.*
-
-
-# MCP Agent Hub - Agent UI
- 
-## Directory Structure
-
-```
-mcp_agent/
-├── main.py                    # Streamlit main app
-├── pages/                     # Streamlit pages
-│   ├── business_strategy.py
-│   ├── seo_doctor.py
-│   ├── finance_health.py
-│   ├── cybersecurity.py
-│   ├── data_generator.py
-│   ├── hr_recruitment.py
-│   ├── ai_architect.py
-│   ├── decision_agent.py
-│   ├── travel_scout.py
-│   ├── workflow.py
-│   ├── research.py
-│   └── rag_agent.py
-├── srcs/                      # source code
-│   ├── ...                    # agent code
-│   └── ...                    # ...
-└── configs/                   # configuration
-```
-
-## How to Run
-
-### Run the main app
-```bash
-streamlit run main.py
-```
-
-### Run specific agent pages
-```bash
-# Business strategy agent
-cd srcs/business_strategy_agents
-streamlit run streamlit_app.py
-
-# SEO Doctor
-cd srcs/seo_doctor  
-streamlit run seo_doctor_app.py
-```
-
-## Roadmap
-
-1. Mobile UI optimization (responsive design)
-2. Dark mode improvements
-3. Performance optimization (loading time)
-4. Full integration with production agents
-5. User authentication and personalization
-
-## Development Guidelines
-
-1. Prefer common modules for new features
-2. Maintain consistency with existing patterns and style guides
-3. Robust error handling; avoid fallbacks that mask failures
-4. Keep docs up-to-date with feature changes
-5. Test across environments
-
-
-## AI CLI Tools
-
-### 1. Gemini CLI
-
-Overview: Google’s AI development CLI to interact with Gemini models for code generation, debugging, and docs. Reference: [Gemini CLI](https://developers.google.com/gemini-code-assist/docs/gemini-cli)
-
-Install:
-
-```bash
-npx https://github.com/google-gemini/gemini-cli
-```
-
-Key features:
-
-- Code generation and debugging
-- File I/O
-- Web/search integration
-- System command execution
-
-Example:
-
-```bash
-gemini > Write Python code using turtle to draw a blue circle with radius 100.
-```
-
-### 2. Claude CLI
-
-Overview: Anthropic’s AI CLI for code generation/refactoring/testing via natural language.
-
-Install:
-
-```bash
-npm install -g @anthropic/claude-cli
-```
-
-Key features:
-
-- Natural language code generation/modification
-- Code quality and style checks
-- Test generation
-
-Example:
-
-```bash
-claude > Refactor the following JavaScript function to improve readability.
-```
-
-### 3. Cursor CLI
-
-Overview: Cursor editor’s CLI for code changes, review, and generation. Reference: [Cursor CLI](https://cursor.com/cli)
-
-Install:
-
-```bash
-curl https://cursor.com/install -fsS | bash
-```
-
-Key features:
-
-- Review/apply code changes
-- Real-time agent directives
-- Custom rule configuration
-
-Example:
-
-```bash
-cursor > Review agent edits
-```
-

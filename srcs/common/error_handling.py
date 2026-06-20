@@ -323,10 +323,13 @@ def validate_input(data: Any, required_fields: Optional[list] = None) -> Dict[st
     if data is None:
         errors.append("Data cannot be None")
     
-    if isinstance(data, dict) and required_fields:
-        for field in required_fields:
-            if field not in data:
-                errors.append(f"Missing required field: {field}")
+    if required_fields:
+        if not isinstance(data, dict):
+            errors.append(f"Expected a dict for field validation, got {type(data).__name__}")
+        else:
+            for field in required_fields:
+                if field not in data:
+                    errors.append(f"Missing required field: {field}")
     
     if errors:
         raise AgentError(
