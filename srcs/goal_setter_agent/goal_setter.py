@@ -157,11 +157,6 @@ class MCPGoalSetterAgent:
     async def _call_mcp_tool(self, session: ClientSession, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool and return the result"""
         try:
-            # List available tools first
-            tools_response = await session.call_tool("list_tools", {})
-            tools = tools_response.content[0].text if tools_response.content else "[]"
-
-            # Call the specific tool
             result = await session.call_tool(tool_name, arguments)
             return json.loads(result.content[0].text) if result.content else {}
         except Exception as e:

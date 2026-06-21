@@ -52,8 +52,9 @@ class OptimizedHTTPErrorFilter(logging.Filter):
     def __init__(self, mask_char: str = "*"):
         super().__init__()
         self.mask_char = mask_char
-        self._cache = {}  # Simple LRU cache for filtered messages
+        self._cache = {}
         self._cache_size = 1000
+        self._cache_lock = threading.Lock()
     
     def _filter_sensitive_data(self, message: str) -> str:
         """
@@ -65,26 +66,23 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         Returns:
             Filtered message with sensitive data masked
         """
-        # Check cache first - use message itself as key with size limit
         cache_key = message[:500] if len(message) > 500 else message
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        with self._cache_lock:
+            if cache_key in self._cache:
+                return self._cache[cache_key]
         
         filtered = message
         for pattern in SENSITIVE_PATTERNS:
-            # Replace sensitive values while preserving keys
             filtered = pattern.sub(
                 lambda m: f"{m.group(1)}{self.mask_char * len(m.group(2))}",
                 filtered
             )
         
-        # Update cache (simple size management)
-        if len(self._cache) >= self._cache_size:
-            # Remove oldest entry (simple FIFO)
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-        
-        self._cache[cache_key] = filtered
+        with self._cache_lock:
+            if len(self._cache) >= self._cache_size:
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+            self._cache[cache_key] = filtered
         return filtered
     
     def filter(self, record: logging.LogRecord) -> bool:

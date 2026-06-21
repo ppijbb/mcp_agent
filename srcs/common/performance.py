@@ -269,15 +269,16 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
             result = func(*args, **kwargs)
 
             with lock:
-                if len(cache) >= maxsize:
-                    oldest_key = keys_order.popleft()
-                    cache.pop(oldest_key, None)
+                if key not in cache:
+                    if len(cache) >= maxsize:
+                        oldest_key = keys_order.popleft()
+                        cache.pop(oldest_key, None)
 
-                cache[key] = {
-                    'result': result,
-                    'timestamp': time.time()
-                }
-                keys_order.append(key)
+                    cache[key] = {
+                        'result': result,
+                        'timestamp': time.time()
+                    }
+                    keys_order.append(key)
 
             return result
 
@@ -297,15 +298,16 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
             result = await func(*args, **kwargs)
 
             with lock:
-                if len(cache) >= maxsize:
-                    oldest_key = keys_order.popleft()
-                    cache.pop(oldest_key, None)
+                if key not in cache:
+                    if len(cache) >= maxsize:
+                        oldest_key = keys_order.popleft()
+                        cache.pop(oldest_key, None)
 
-                cache[key] = {
-                    'result': result,
-                    'timestamp': time.time()
-                }
-                keys_order.append(key)
+                    cache[key] = {
+                        'result': result,
+                        'timestamp': time.time()
+                    }
+                    keys_order.append(key)
 
             return result
 
