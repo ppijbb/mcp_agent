@@ -19,8 +19,6 @@ from datetime import datetime
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from configs.settings import get_reports_path
 from srcs.advanced_agents.decision_agent import (

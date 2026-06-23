@@ -41,7 +41,7 @@ def setup_page(title: str, icon: str, layout: str = "wide") -> None:
             page_icon=icon,
             layout=layout
         )
-    except Exception:
+    except st.errors.StreamlitAPIException:
         pass
 
 

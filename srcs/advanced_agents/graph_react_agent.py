@@ -216,7 +216,7 @@ class GraphReActAgent(Agent):
         status_summary = ", ".join([f"{row['status']}: {row['count']}" for row in result])
         return f"Current graph status: {status_summary}."
 
-    async def _action_g_search(self, entity: str) -> str:
+    async def _action_g_search(self, entity: str, session_id: str) -> str:
         """
         Tool: Searches for an entity in the graph database.
         """
