@@ -138,17 +138,18 @@ class ErrorHandler:
             error_info["traceback"] = traceback.format_exc()
         
         # Determine log level based on severity
+        error_json = json.dumps(error_info, default=str)
         if isinstance(error, AgentError):
             if error.severity == ErrorSeverity.CRITICAL:
-                self.logger.critical(json.dumps(error_info, default=str))
+                self.logger.critical(error_json)
             elif error.severity == ErrorSeverity.HIGH:
-                self.logger.error(json.dumps(error_info, default=str))
+                self.logger.error(error_json)
             elif error.severity == ErrorSeverity.MEDIUM:
-                self.logger.warning(json.dumps(error_info, default=str))
+                self.logger.warning(error_json)
             else:
-                self.logger.info(json.dumps(error_info, default=str))
+                self.logger.info(error_json)
         else:
-            self.logger.error(json.dumps(error_info, default=str))
+            self.logger.error(error_json)
     
     def handle_agent_error(
         self,
