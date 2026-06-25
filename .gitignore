@@ -3,6 +3,7 @@ logs
 browser-state-*.json
 __pycache__
 *_reports
+chroma_db/
 .env
 .venv
 node_modules

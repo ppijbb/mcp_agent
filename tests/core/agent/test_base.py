@@ -3,7 +3,7 @@ Test suite for BaseAgent core functionality.
 """
 import pytest
 from srcs.core.agent.base import BaseAgent
-from mcp_agent import MCPApp
+from mcp_agent.app import MCPApp
 
 
 class MockAgent(BaseAgent):

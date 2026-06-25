@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Union
 
 # ---------------------------------------------------------------------------
 # Public API – *ONLY* expose what the UI layer really needs
