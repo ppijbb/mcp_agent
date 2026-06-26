@@ -22,7 +22,7 @@ api-endpoint:
 # OpenAI Configuration (if using OpenAI)
 openai:
   api_key: "${OPENAI_API_KEY}"  # Set OPENAI_API_KEY environment variable
-  model: "gemini-2.5-flash-lite"
+  model: "gpt-4o"
 
 # Data Generation Settings
 generation:

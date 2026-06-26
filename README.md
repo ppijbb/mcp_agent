@@ -91,13 +91,15 @@ srcs/
    ```
 
 3. Configure API keys:
-   - Create `mcp_agent.secrets.yaml` file in the `srcs` directory
-   - Add your API keys for OpenAI and Google:
-     ```yaml
-     openai:
-       api_key: your-openai-api-key
-     google:
-       api_key: your-google-api-key
+   - Set environment variables for your API keys (these are substituted into `configs/base.yaml`):
+     ```bash
+     export OPENAI_API_KEY="your-openai-api-key"
+     export GOOGLE_API_KEY="your-google-api-key"
+     ```
+   - Alternatively, copy the secrets template and populate it:
+     ```bash
+     cp configs/mcp_agent_secrets_format.yaml configs/mcp_agent.secrets.yaml
+     # Then edit configs/mcp_agent.secrets.yaml with your keys
      ```
 
 4. Optional: Gemini (for financial_agent) and External MCP servers

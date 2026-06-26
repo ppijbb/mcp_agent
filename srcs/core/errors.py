@@ -16,7 +16,9 @@ Classes:
     SecurityError: Security-related errors
 """
 
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, TypeVar
+
+T = TypeVar('T')
 
 
 class MCPError(Exception):
@@ -115,22 +117,32 @@ def safe_execute(func: Callable, default: Any = None, error_type: type = MCPErro
         raise error_type(f"Failed to execute {func.__name__}: {str(e)}")
 
 
-def handle_data_processing_error(data_item: Any, operation: str, default_result: Any = None) -> Any:
+def handle_data_processing_error(
+    data_item: T,
+    operation: str,
+    default_result: T | None = None,
+    processing_func: Callable[[T], Any] | None = None,
+) -> T | Any:
     """
     Standardized error handler for data processing operations.
-    
+
     Args:
         data_item: The data item being processed
         operation: Description of the operation being performed
         default_result: Default result to return on error
-        
+        processing_func: Optional callable to process the data item.
+            If not provided, returns data_item unchanged (pass-through).
+
     Returns:
-        Processing result or default_result if error occurs
+        Processing result, data_item unchanged (if no processing_func),
+        or default_result if error occurs.
     """
-    try:
+    if processing_func is None:
         return data_item
+
+    try:
+        return processing_func(data_item)
     except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
         try:
             import structlog
             logger = structlog.get_logger()
