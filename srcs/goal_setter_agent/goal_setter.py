@@ -302,7 +302,7 @@ $research_context
 
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
         payload = {
-            "model": "gpt-5-mini-turbo",
+            "model": "gpt-4o-mini",
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,

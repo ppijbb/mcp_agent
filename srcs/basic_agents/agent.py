@@ -35,13 +35,15 @@ from srcs.common.utils import setup_agent_app
 class Agent:
     def __init__(
         self,
+        name=None,
         instruction="You are a helpful AI assistant.",
+        server_names=None,
     ):
         self.app = setup_agent_app("basic_agent")
         self.agent = MCP_Agent(
-            name="assistant",
+            name=name or "assistant",
             instruction=instruction,
-            server_names=["g-search", "fetch", "filesystem"],
+            server_names=server_names or ["g-search", "fetch", "filesystem"],
             llm_factory=lambda: OpenAIAugmentedLLM(
                 model="gpt-4o-mini",
             ),
