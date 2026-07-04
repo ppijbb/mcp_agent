@@ -96,60 +96,6 @@ async def test_playwright_browser(url: str = "https://www.google.com"):
         return {"success": False, "error": str(e)}
 
 
-async def test_browser_manager():
-    """BrowserManager를 사용하여 페이지를 확인합니다."""
-    
-    try:
-        from src.automation.browser_manager import BrowserManager
-        
-        print("\n" + "=" * 80)
-        print("🔧 BrowserManager 테스트")
-        print("=" * 80)
-        
-        browser_manager = BrowserManager()
-        
-        # 브라우저 초기화
-        print("🚀 브라우저 초기화 중...")
-        initialized = await browser_manager.initialize_browser()
-        
-        if not initialized:
-            print("❌ 브라우저 초기화 실패")
-            return {"success": False, "error": "Browser initialization failed"}
-        
-        print("✅ 브라우저 초기화 완료")
-        
-        # 페이지 탐색 및 콘텐츠 추출
-        url = "https://www.google.com"
-        print(f"\n📥 페이지 탐색 중: {url}")
-        
-        result = await browser_manager.navigate_and_extract(
-            url=url,
-            extraction_goal="extract_all_content"
-        )
-        
-        if result.get("success"):
-            print("✅ 콘텐츠 추출 완료")
-            print(f"📄 추출된 콘텐츠 길이: {len(result.get('content', ''))} characters")
-            print(f"\n📋 콘텐츠 미리보기 (처음 500자):")
-            print("-" * 80)
-            print(result.get('content', '')[:500])
-            print("-" * 80)
-        else:
-            print(f"❌ 콘텐츠 추출 실패: {result.get('error', 'Unknown error')}")
-        
-        # 정리
-        await browser_manager.cleanup()
-        print("\n✅ BrowserManager 정리 완료")
-        
-        return result
-        
-    except Exception as e:
-        print(f"❌ 오류 발생: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
-
-
 async def main():
     """메인 함수"""
     
@@ -160,20 +106,15 @@ async def main():
     # URL 인자 확인
     url = sys.argv[1] if len(sys.argv) > 1 else "https://www.google.com"
     
-    # 1. 직접 Playwright 테스트
+    # 직접 Playwright 테스트
     print("\n[테스트 1] 직접 Playwright 사용")
-    result1 = await test_playwright_browser(url)
-    
-    # 2. BrowserManager 테스트
-    print("\n[테스트 2] BrowserManager 사용")
-    result2 = await test_browser_manager()
+    result = await test_playwright_browser(url)
     
     # 결과 요약
     print("\n" + "=" * 80)
     print("📊 테스트 결과 요약")
     print("=" * 80)
-    print(f"테스트 1 (직접 Playwright): {'✅ 성공' if result1.get('success') else '❌ 실패'}")
-    print(f"테스트 2 (BrowserManager): {'✅ 성공' if result2.get('success') else '❌ 실패'}")
+    print(f"테스트 (직접 Playwright): {'✅ 성공' if result.get('success') else '❌ 실패'}")
     print("=" * 80)
 
 

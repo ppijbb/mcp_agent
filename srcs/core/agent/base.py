@@ -74,8 +74,9 @@ def _register_cleanup():
                 try:
                     atexit.register(_cleanup_mcp_apps)
                     _cleanup_registered = True
-                except (OSError, RuntimeError):
-                    pass
+                except (OSError, RuntimeError) as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to register cleanup handler: {e}")
 
 
 def async_memoize(func):

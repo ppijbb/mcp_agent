@@ -17,6 +17,7 @@ import argparse
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional
+from srcs.core.errors import APIError
 from string import Template
 from datetime import datetime
 from pathlib import Path
@@ -312,7 +313,7 @@ $research_context
             response = await client.post(OPENAI_API_URL, headers=headers, json=payload)
 
         if response.status_code != 200:
-            raise Exception(f"OpenAI API request failed: {response.text}")
+            raise APIError(f"OpenAI API request failed: {response.text}", status_code=response.status_code, response={"text": response.text})
 
         message_content = response.json()["choices"][0]["message"]["content"]
         try:
