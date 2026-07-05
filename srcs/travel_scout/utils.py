@@ -20,6 +20,16 @@ class TravelSearchError(Exception):
     """여행 검색 관련 커스텀 예외"""
 
 
+def load_destination_options() -> List[str]:
+    """Module-level convenience wrapper - delegates to TravelSearchUtils."""
+    return TravelSearchUtils.load_destination_options()
+
+
+def load_origin_options() -> List[str]:
+    """Module-level convenience wrapper - delegates to TravelSearchUtils."""
+    return TravelSearchUtils.load_origin_options()
+
+
 class TravelSearchUtils:
     """여행 검색 유틸리티 - 통합 및 현대화"""
 

@@ -4,6 +4,7 @@ AI Analyzer for Travel Scout
 Gemini 2.5 Flash를 활용한 여행 데이터 분석 및 추천 생성
 """
 
+import asyncio
 import logging
 from typing import Dict, List, Any
 import google.generativeai as genai
@@ -217,7 +218,7 @@ class TravelAIAnalyzer:
     async def _generate_analysis(self, prompt: str) -> str:
         """Gemini를 통한 분석 생성"""
         try:
-            response = self.model.generate_content(prompt)
+            response = await asyncio.to_thread(self.model.generate_content, prompt)
             return response.text
         except Exception as e:
             logger.error(f"Gemini 분석 생성 오류: {e}")
