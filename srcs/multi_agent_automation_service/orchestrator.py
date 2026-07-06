@@ -12,9 +12,6 @@ from dataclasses import dataclass
 
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from srcs.common.utils import setup_agent_app
 
 from agents.code_review_agent import CodeReviewAgent
@@ -47,10 +44,14 @@ class MultiAgentOrchestrator:
         self.documentation_agent = DocumentationAgent()
         self.performance_agent = PerformanceAgent()
         self.security_agent = SecurityAgent()
-        self.kubernetes_agent = KubernetesAgent()  # 🆕 K8s Agent 추가
+        self.kubernetes_agent = KubernetesAgent()
         self.gemini_executor = GeminiCLIExecutor()
+        self.orchestrator = None
+        self.orchestration_history: List[OrchestrationResult] = []
 
-        # 메인 Orchestrator Agent
+    def _ensure_orchestrator(self, logger):
+        if self.orchestrator is not None:
+            return self.orchestrator
         orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
@@ -58,9 +59,9 @@ class MultiAgentOrchestrator:
         self.orchestrator = Orchestrator(
             llm_factory=orchestrator_llm_factory,
             name="automation_orchestrator",
-            server_names=["filesystem", "playwright", "fetch", "kubernetes"],  # K8s 서버 추가
+            server_names=["filesystem", "playwright", "fetch", "kubernetes"],
         )
-        self.orchestration_history: List[OrchestrationResult] = []
+        return self.orchestrator
 
     async def run_full_automation(self, target_path: str = "srcs") -> OrchestrationResult:
         """전체 자동화 워크플로우 실행"""
