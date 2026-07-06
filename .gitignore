@@ -1,5 +1,6 @@
 *.secrets.yaml
 logs
+*.log
 browser-state-*.json
 __pycache__
 *_reports
@@ -19,3 +20,5 @@ reports
 .mypy_cache
 */temp
 .ruff_cache
+.coverage
+chroma_db/

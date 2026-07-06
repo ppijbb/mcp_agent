@@ -48,7 +48,13 @@ async def analyze_data(data: str) -> str:
         characters_no_spaces = len(data.replace(' ', ''))
         
         # Data patterns
-        numeric_count = sum(1 for word in words if word.replace('.', '').replace('-', '').isdigit())
+        def _is_numeric(word):
+            try:
+                float(word)
+                return True
+            except ValueError:
+                return False
+        numeric_count = sum(1 for word in words if _is_numeric(word))
         alpha_count = sum(1 for word in words if word.isalpha())
         alnum_count = sum(1 for word in words if word.isalnum())
         

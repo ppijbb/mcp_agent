@@ -56,11 +56,16 @@ class SafeCodeValidator(ast.NodeVisitor):
         ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
         ast.Pow, ast.LShift, ast.RShift, ast.BitAnd, ast.BitOr,
         ast.BitXor, ast.Invert, ast.UAdd, ast.USub, ast.List,
-        ast.Tuple, ast.Dict, ast.Set, ast.comprehension, ast.GeneratorExp,
+        ast.Tuple, ast.Dict, ast.Set, ast.GeneratorExp,
         ast.ListComp, ast.SetComp, ast.DictComp, ast.IfExp,
         ast.Subscript, ast.Slice, ast.For, ast.While,
         ast.If, ast.Break, ast.Continue, ast.Pass, ast.Return,
     }
+    
+    # ast.comprehension was added in Python 3.12 (PEP 46440).
+    # Conditionally include for compatibility with Python 3.8+.
+    if hasattr(ast, 'comprehension'):
+        ALLOWED_NODES.add(ast.comprehension)
     
     # Dangerous builtins and attributes that are explicitly forbidden
     FORBIDDEN_NAMES = {
