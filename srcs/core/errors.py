@@ -121,23 +121,24 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
     
     Args:
         data_item: The data item being processed
-        operation: Description of the operation being performed
+        operation: Description of the operation being performed or a callable to process the data
         default_result: Default result to return on error
         
     Returns:
         Processing result or default_result if error occurs
     """
-    try:
-        return data_item
-    except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
+    if callable(operation):
         try:
-            import structlog
-            logger = structlog.get_logger()
-            logger.warning("Data processing error", operation=operation, error=str(e))
-        except ImportError:
-            pass
-        return default_result
+            return operation(data_item)
+        except (KeyError, ValueError, TypeError, AttributeError) as e:
+            try:
+                import structlog
+                logger = structlog.get_logger()
+                logger.warning("Data processing error", operation=str(operation), error=str(e))
+            except ImportError:
+                pass
+            return default_result
+    return data_item
 
 
 def validate_input(value: Any, field_name: str, required: bool = True, 

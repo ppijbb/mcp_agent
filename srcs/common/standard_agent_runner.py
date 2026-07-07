@@ -56,6 +56,8 @@ from srcs.common.a2a_integration import get_global_registry, A2AMessage, Message
 from srcs.common.a2a_adapter import CommonAgentA2AWrapper
 from lang_graph.common.a2a_adapter import LangGraphAgentA2AWrapper
 from cron_agents.common.a2a_adapter import CronAgentA2AWrapper
+
+logger = logging.getLogger(__name__)
 _root = Path(__file__).resolve().parent.parent.parent
 _sf_adapter = _root / "primary" / "SparkleForge" / "common" / "a2a_adapter.py"
 if _sf_adapter.exists():
@@ -69,8 +71,6 @@ if _sf_adapter.exists():
         SparkleForgeA2AWrapper = None
 else:
     SparkleForgeA2AWrapper = None
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_agent_type(agent_type: Any) -> str:
