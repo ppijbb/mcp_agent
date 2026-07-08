@@ -293,11 +293,12 @@ class DirectHTTPLLM:
 
         url = f"{self.base_url}/chat/completions"
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            return data['choices'][0]['message']['content']
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=60.0)
+        response = await self._client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data['choices'][0]['message']['content']
 
 
 def _try_fallback_llm(primary_model: str, logger_instance: Optional[logging.Logger] = None) -> Optional[DirectHTTPLLM]:
