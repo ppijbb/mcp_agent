@@ -42,7 +42,8 @@ def list_agents():
         "customer_clv": "Customer lifetime value and experience optimization",
         "esg_carbon": "ESG and carbon neutrality management",
         "workplace": "Hybrid workplace optimization and management",
-        "innovation": "Product innovation acceleration and development"
+        "innovation": "Product innovation acceleration and development",
+        "personal_finance": "Personal finance health diagnosis & auto investment"
     }
 
     for agent, description in enterprise_agents.items():
@@ -94,11 +95,11 @@ def run_basic_agent(agent_name: str) -> bool:
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
-        "researcher_v2": "basic_agents.researcher_v2",
+        "researcher_v2": "advanced_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
-        "enhanced_data_generator": "basic_agents.enhanced_data_generator",
+        "enhanced_data_generator": "advanced_agents.enhanced_data_generator",
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }
@@ -164,7 +165,8 @@ def run_enterprise_agent(agent_name: str) -> bool:
         "customer_clv": "enterprise_agents.customer_lifetime_value_agent",
         "esg_carbon": "enterprise_agents.esg_carbon_neutral_agent",
         "workplace": "enterprise_agents.hybrid_workplace_optimizer_agent",
-        "innovation": "enterprise_agents.product_innovation_accelerator_agent"
+        "innovation": "enterprise_agents.product_innovation_accelerator_agent",
+        "personal_finance": "enterprise_agents.personal_finance_health_agent"
     }
 
     if agent_name not in agent_map:

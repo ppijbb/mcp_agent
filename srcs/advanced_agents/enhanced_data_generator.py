@@ -8,6 +8,7 @@ Synthetic Data Kit for high-quality synthetic dataset creation.
 import os
 import sys
 import json
+import asyncio
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -263,3 +264,15 @@ class SyntheticDataAgent:
             except Exception as e:
                 logger.error(f"An error occurred during the data generation workflow: {e}")
                 return f"Error: {e}"
+
+
+def main():
+    """Main entry point for the Enhanced Data Generator."""
+    asyncio.run(_async_main())
+
+
+async def _async_main():
+    """Async main execution."""
+    agent = SyntheticDataAgent(output_dir=OUTPUT_DIR)
+    result = await agent.run(DATA_TYPE, RECORD_COUNT)
+    print(result)

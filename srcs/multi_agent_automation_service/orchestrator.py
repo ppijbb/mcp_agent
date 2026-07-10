@@ -6,14 +6,13 @@ Multi-Agent Orchestrator
 
 import asyncio
 import os
+import sys
 from datetime import datetime
 from typing import Dict, List, Any
 from dataclasses import dataclass
 
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
-import sys
-import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from srcs.common.utils import setup_agent_app
 
