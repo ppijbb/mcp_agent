@@ -15,8 +15,11 @@ Functions:
 """
 
 import os
+import logging
 from cryptography.fernet import Fernet, InvalidToken
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 def validate_encryption_key(key: str) -> bool:
@@ -34,7 +37,8 @@ def validate_encryption_key(key: str) -> bool:
     try:
         Fernet(key.encode() if isinstance(key, str) else key)
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Encryption key validation failed: {e}")
         return False
 
 

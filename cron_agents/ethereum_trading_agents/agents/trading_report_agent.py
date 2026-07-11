@@ -604,14 +604,16 @@ class TradingReportAgent:
         """Convert Wei to ETH"""
         try:
             return wei_value / 10**18
-        except:
+        except (TypeError, ZeroDivisionError) as e:
+            logger.warning(f"Failed to convert Wei to ETH: {e}")
             return 0
 
     def _convert_wei_to_gwei(self, wei_value: int) -> float:
         """Convert Wei to Gwei"""
         try:
             return wei_value / 10**9
-        except:
+        except (TypeError, ZeroDivisionError) as e:
+            logger.warning(f"Failed to convert Wei to Gwei: {e}")
             return 0
 
     async def send_report_email(self,

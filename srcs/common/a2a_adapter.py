@@ -212,10 +212,10 @@ class CommonAgentA2AWrapper(A2AAdapter):
             queue = self._ensure_queue()
             try:
                 queue.put_nowait(None)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                logger.debug(f"Failed to enqueue stop signal for agent {self.agent_id}: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to access queue during listener stop for agent {self.agent_id}: {e}")
 
         if self._message_processor_task:
             try:
