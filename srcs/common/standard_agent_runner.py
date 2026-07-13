@@ -799,61 +799,61 @@ class StandardAgentRunner:
                     # 클래스 기반 호출
                     logger.info(f"Loading class-based agent: {module_path}.{class_name}.{method_name}")
 
-                # 모듈 import
-                module = importlib.import_module(module_path)
+                    # 모듈 import
+                    module = importlib.import_module(module_path)
 
-                # 클래스 가져오기
-                agent_class = getattr(module, class_name)
+                    # 클래스 가져오기
+                    agent_class = getattr(module, class_name)
 
-                # 인스턴스 생성 (필요한 경우)
-                # input_data에서 클래스 초기화에 필요한 인자 추출
-                init_kwargs = {}
-                if "init_kwargs" in input_data:
-                    init_kwargs = input_data["init_kwargs"]
+                    # 인스턴스 생성 (필요한 경우)
+                    # input_data에서 클래스 초기화에 필요한 인자 추출
+                    init_kwargs = {}
+                    if "init_kwargs" in input_data:
+                        init_kwargs = input_data["init_kwargs"]
 
-                # 인스턴스 생성
-                if init_kwargs:
-                    agent_instance = agent_class(**init_kwargs)
-                else:
-                    # 기본 생성자로 생성 시도
+                    # 인스턴스 생성
+                    if init_kwargs:
+                        agent_instance = agent_class(**init_kwargs)
+                    else:
+                        # 기본 생성자로 생성 시도
+                        try:
+                            agent_instance = agent_class()
+                        except TypeError:
+                            # 생성자가 필요한 인자를 요구하는 경우, init_kwargs에서 추출하여 생성
+                            if init_kwargs:
+                                agent_instance = agent_class(**init_kwargs)
+                            else:
+                                logger.error(f"Cannot instantiate {agent_class.__name__}: requires init arguments")
+                                raise
+
+                    # 메서드 호출
+                    method = getattr(agent_instance, method_name)
+
+                    # 메서드 시그니처 확인하여 필요한 인자만 추출
+                    import inspect
                     try:
-                        agent_instance = agent_class()
-                    except TypeError:
-                        # 생성자가 필요한 인자를 요구하는 경우, init_kwargs에서 추출하여 생성
-                        if init_kwargs:
-                            agent_instance = agent_class(**init_kwargs)
-                        else:
-                            logger.error(f"Cannot instantiate {agent_class.__name__}: requires init arguments")
-                            raise
+                        sig = inspect.signature(method)
+                        method_params = set(sig.parameters.keys())
 
-                # 메서드 호출
-                method = getattr(agent_instance, method_name)
+                        # 메서드가 실제로 받을 수 있는 인자만 필터링
+                        method_kwargs = {k: v for k, v in input_data.items()
+                                       if k in method_params and k not in ["module_path", "class_name", "method_name", "init_kwargs"]}
 
-                # 메서드 시그니처 확인하여 필요한 인자만 추출
-                import inspect
-                try:
-                    sig = inspect.signature(method)
-                    method_params = set(sig.parameters.keys())
+                        logger.debug(f"Method {method_name} accepts parameters: {method_params}")
+                        logger.debug(f"Passing arguments: {list(method_kwargs.keys())}")
+                    except Exception as e:
+                        logger.warning(f"Could not inspect method signature: {e}, using all input_data")
+                        # 시그니처 확인 실패 시 기본 제외 목록 사용
+                        exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs",
+                                      "result_json_path", "_execution_method", "_cli_args"]
+                        method_kwargs = {k: v for k, v in input_data.items()
+                                       if k not in exclude_keys}
 
-                    # 메서드가 실제로 받을 수 있는 인자만 필터링
-                    method_kwargs = {k: v for k, v in input_data.items()
-                                   if k in method_params and k not in ["module_path", "class_name", "method_name", "init_kwargs"]}
-
-                    logger.debug(f"Method {method_name} accepts parameters: {method_params}")
-                    logger.debug(f"Passing arguments: {list(method_kwargs.keys())}")
-                except Exception as e:
-                    logger.warning(f"Could not inspect method signature: {e}, using all input_data")
-                    # 시그니처 확인 실패 시 기본 제외 목록 사용
-                    exclude_keys = ["module_path", "class_name", "method_name", "init_kwargs",
-                                  "result_json_path", "_execution_method", "_cli_args"]
-                    method_kwargs = {k: v for k, v in input_data.items()
-                                   if k not in exclude_keys}
-
-                # 실행
-                if asyncio.iscoroutinefunction(method):
-                    result = await method(**method_kwargs)
-                else:
-                    result = method(**method_kwargs)
+                    # 실행
+                    if asyncio.iscoroutinefunction(method):
+                        result = await method(**method_kwargs)
+                    else:
+                        result = method(**method_kwargs)
 
             else:
                 # 단순 함수 호출 방식 또는 LangGraph 모듈

@@ -195,7 +195,7 @@ def test_openai_compatible_config():
             assert key in openai_config, f"Missing key: {key}"
         
         print(f"✓ OpenAI-compatible config keys: {list(openai_config.keys())}")
-        print(f"✓ API Key set: {'*' * (len(openai_config['api_key']) - 8) + openai_config['api_key'][-8:] if openai_config.get('api_key') else 'None'}")
+        print(f"✓ API Key set: {'Yes' if openai_config.get('api_key') else 'None'}")
         print(f"✓ Base URL: {openai_config.get('base_url', 'N/A')}")
         print(f"✓ Model: {openai_config.get('model', 'N/A')}")
     
