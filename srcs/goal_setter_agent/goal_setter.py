@@ -110,8 +110,8 @@ class MCPGoalSetterAgent:
                 env=server_config.get("env", {})
             )
 
-            context = stdio_client(server_params)
-            receive_stream, write_stream = await context.__aenter__()
+            self._filesystem_context = stdio_client(server_params)
+            receive_stream, write_stream = await self._filesystem_context.__aenter__()
             self.filesystem_session = ClientSession(receive_stream, write_stream)
 
             self.logger.info("✅ Connected to filesystem MCP server")
@@ -128,8 +128,8 @@ class MCPGoalSetterAgent:
                 env=server_config.get("env", {})
             )
 
-            context = stdio_client(server_params)
-            receive_stream, write_stream = await context.__aenter__()
+            self._search_context = stdio_client(server_params)
+            receive_stream, write_stream = await self._search_context.__aenter__()
             self.search_session = ClientSession(receive_stream, write_stream)
 
             self.logger.info("✅ Connected to search MCP server")
@@ -146,8 +146,8 @@ class MCPGoalSetterAgent:
                 env=server_config.get("env", {})
             )
 
-            context = stdio_client(server_params)
-            receive_stream, write_stream = await context.__aenter__()
+            self._browser_context = stdio_client(server_params)
+            receive_stream, write_stream = await self._browser_context.__aenter__()
             self.browser_session = ClientSession(receive_stream, write_stream)
 
             self.logger.info("✅ Connected to browser MCP server")
@@ -302,7 +302,7 @@ $research_context
 
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
         payload = {
-            "model": "gpt-5-mini-turbo",
+            "model": "gpt-4o-mini",
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
@@ -594,10 +594,16 @@ $research_context
         try:
             if self.filesystem_session:
                 await self.filesystem_session.close()
+            if hasattr(self, '_filesystem_context'):
+                await self._filesystem_context.__aexit__(None, None, None)
             if self.search_session:
                 await self.search_session.close()
+            if hasattr(self, '_search_context'):
+                await self._search_context.__aexit__(None, None, None)
             if self.browser_session:
                 await self.browser_session.close()
+            if hasattr(self, '_browser_context'):
+                await self._browser_context.__aexit__(None, None, None)
             self.logger.info("✅ MCP connections cleaned up")
         except Exception as e:
             self.logger.error(f"Failed to cleanup MCP connections: {e}")
