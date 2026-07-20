@@ -128,6 +128,8 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
         Processing result or default_result if error occurs
     """
     try:
+        if data_item is None:
+            raise ValueError(f"Data item is None for operation: {operation}")
         return data_item
     except (KeyError, ValueError, TypeError, AttributeError) as e:
         # Log error if logging is available

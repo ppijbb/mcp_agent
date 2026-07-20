@@ -142,7 +142,15 @@ def rate_limit(calls_per_second: float = 1.0):
             
             if elapsed < min_interval:
                 sleep_time = min_interval - elapsed
-                time.sleep(sleep_time)
+                try:
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    time.sleep(sleep_time)
+                else:
+                    raise RuntimeError(
+                        "Sync rate_limit wrapper cannot sleep inside a running event loop. "
+                        "Use the async version of the decorated function instead."
+                    )
             
             last_call_time[0] = time.time()
             return func(*args, **kwargs)
