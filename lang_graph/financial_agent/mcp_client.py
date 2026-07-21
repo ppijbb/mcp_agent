@@ -16,6 +16,8 @@ server_params = StdioServerParameters(
 async def _call_tool_async(session: ClientSession, tool_name: str, arguments: Dict) -> Any:
     """단일 MCP 도구를 비동기적으로 호출하는 내부 헬퍼 함수"""
     result = await session.call_tool(tool_name, arguments=arguments)
+    if not result.content:
+        return {"error": f"MCP tool '{tool_name}' returned empty content"}
     content = result.content[0].text
     try:
         return json.loads(content)
