@@ -9,6 +9,7 @@ import tempfile
 import os
 from typing import Dict, Any
 from datetime import datetime
+from urllib.parse import urlparse
 from .config_loader import seo_config
 
 
@@ -43,8 +44,8 @@ class PlaywrightLighthouseAnalyzer:
             # Node.js 스크립트로 Lighthouse 실행
             lighthouse_script = self._create_lighthouse_script(url, config, strategy)
 
-            # Node.js 스크립트 실행
-            result = await self._run_lighthouse_script(lighthouse_script)
+            # Node.js 스크립트 실행 (URL과 strategy를 CLI 인자로 전달)
+            result = await self._run_lighthouse_script(lighthouse_script, url, strategy)
 
             # 결과 파싱 및 정리
             analyzed_data = self._parse_lighthouse_result(result, url)
@@ -56,33 +57,44 @@ class PlaywrightLighthouseAnalyzer:
             raise Exception(error_msg)
 
     def _create_lighthouse_script(self, url: str, config: Dict, strategy: str) -> str:
-        """Node.js Lighthouse 스크립트 생성"""
+        """Node.js Lighthouse 스크립트 생성
 
-        script_content = f"""
+        URL은 커맨드라인 인자로 전달되어 JS 문자열 삽입을 방지합니다.
+        """
+
+        # Validate URL to prevent code injection
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            raise ValueError(f"Invalid URL for Lighthouse analysis: {url}")
+
+        if strategy not in ('mobile', 'desktop'):
+            raise ValueError(f"Invalid strategy: {strategy}")
+
+        script_content = """
 const lighthouse = require('lighthouse');
 const chromeLauncher = require('chrome-launcher');
 
-async function runLighthouse() {{
-    const chrome = await chromeLauncher.launch({{
+async function runLighthouse(targetUrl) {
+    const chrome = await chromeLauncher.launch({
         chromeFlags: ['--headless', '--no-sandbox', '--disable-dev-shm-usage']
-    }});
+    });
 
-    const options = {{
+    const options = {
         logLevel: 'info',
         output: 'json',
         port: chrome.port,
-        emulatedFormFactor: '{strategy}',
+        emulatedFormFactor: process.argv[3],
         onlyCategories: ['performance', 'seo', 'accessibility', 'best-practices']
-    }};
+    };
 
-    const runnerResult = await lighthouse('{url}', options);
+    const runnerResult = await lighthouse(targetUrl, options);
 
     await chrome.kill();
 
     console.log(JSON.stringify(runnerResult.lighthouseResult));
-}}
+}
 
-runLighthouse().catch(console.error);
+runLighthouse(process.argv[2]).catch(console.error);
 """
 
         # 임시 스크립트 파일 생성
@@ -92,13 +104,16 @@ runLighthouse().catch(console.error);
 
         return script_path
 
-    async def _run_lighthouse_script(self, script_path: str) -> Dict[str, Any]:
-        """Node.js 스크립트 실행"""
+    async def _run_lighthouse_script(self, script_path: str, url: str, strategy: str) -> Dict[str, Any]:
+        """Node.js 스크립트 실행
+
+        URL과 strategy는 커맨드라인 인자로 전달됩니다.
+        """
 
         try:
-            # Node.js로 스크립트 실행
+            # Node.js로 스크립트 실행 (URL과 strategy를 argv로 전달)
             process = await asyncio.create_subprocess_exec(
-                'node', script_path,
+                'node', script_path, url, strategy,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )

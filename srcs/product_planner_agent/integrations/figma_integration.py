@@ -31,12 +31,32 @@ class FigmaIntegration:
         self.access_token = os.getenv('FIGMA_ACCESS_TOKEN')
         self.file_key = os.getenv('FIGMA_FILE_KEY')
         self.base_url = "https://api.figma.com/v1"
+        self._session: Optional[aiohttp.ClientSession] = None
 
         # 환경변수가 없어도 스펙 전용 모드로 동작 (쓰기 호출은 수행되지 않음)
         if not self.access_token:
             print("⚠️ FIGMA_ACCESS_TOKEN 환경변수가 설정되지 않았습니다. 스펙 전용 모드로 동작합니다.")
         if not self.file_key:
             print("⚠️ FIGMA_FILE_KEY 환경변수가 설정되지 않았습니다. 스펙 전용 모드로 동작합니다.")
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Return a reusable aiohttp session, creating one if needed."""
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=30)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
+
+    async def close(self):
+        """Close the underlying HTTP session."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.close()
 
     async def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
         """Figma API 요청 공통 메서드"""
@@ -46,16 +66,11 @@ class FigmaIntegration:
         }
 
         url = f"{self.base_url}{endpoint}"
+        session = await self._get_session()
 
-        async with aiohttp.ClientSession() as session:
-            if method.upper() == "GET":
-                async with session.get(url, headers=headers) as response:
-                    return await response.json()
-            elif method.upper() == "POST":
-                async with session.post(url, headers=headers, json=data) as response:
-                    return await response.json()
-            else:
-                raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
+        async with session.request(method, url, headers=headers, json=data) as response:
+            response.raise_for_status()
+            return await response.json()
 
     async def get_file_info(self) -> Dict:
         """Figma 파일 정보 조회"""
@@ -311,7 +326,6 @@ class FigmaIntegration:
 
 async def create_rectangles_on_canvas(rectangles_data: List[Dict]) -> Dict:
     """사각형들을 캔버스에 생성 (기존 함수)"""
-    figma = FigmaIntegration()
     components = []
 
     for rect_data in rectangles_data:
@@ -325,12 +339,12 @@ async def create_rectangles_on_canvas(rectangles_data: List[Dict]) -> Dict:
         )
         components.append(component)
 
-    return await figma.create_layout(components)
+    async with FigmaIntegration() as figma:
+        return await figma.create_layout(components)
 
 
 async def create_ui_components(components_data: List[Dict]) -> Dict:
     """UI 컴포넌트들을 생성"""
-    figma = FigmaIntegration()
     components = []
 
     for comp_data in components_data:
@@ -346,4 +360,5 @@ async def create_ui_components(components_data: List[Dict]) -> Dict:
         )
         components.append(component)
 
-    return await figma.create_layout(components)
+    async with FigmaIntegration() as figma:
+        return await figma.create_layout(components)
