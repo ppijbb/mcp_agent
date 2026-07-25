@@ -4,6 +4,8 @@ Common Styles Module
 공통으로 사용되는 CSS 스타일들을 모아둔 모듈
 """
 
+from html import escape as html_escape
+
 # 공통 헤더 스타일
 HEADER_STYLES = {
     "main_style_block": """
@@ -267,9 +269,9 @@ def get_page_header(page_type, title, subtitle):
 
     return f"""
     <div class="page-header" style="{background}">
-        <h1>{title}</h1>
+        <h1>{html_escape(str(title))}</h1>
         <p style="font-size: 1.2rem; margin: 0;">
-            {subtitle}
+            {html_escape(str(subtitle))}
         </p>
     </div>
     """
