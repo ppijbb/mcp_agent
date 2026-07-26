@@ -134,29 +134,32 @@ def rate_limit(calls_per_second: float = 1.0):
     
     def decorator(func: Callable) -> Callable:
         last_call_time = [0.0]  # Use list to allow modification in closure
+        lock = threading.Lock()
         
         @wraps(func)
         def wrapper(*args, **kwargs):
-            current_time = time.time()
-            elapsed = current_time - last_call_time[0]
-            
-            if elapsed < min_interval:
-                sleep_time = min_interval - elapsed
-                time.sleep(sleep_time)
-            
-            last_call_time[0] = time.time()
+            with lock:
+                current_time = time.time()
+                elapsed = current_time - last_call_time[0]
+                
+                if elapsed < min_interval:
+                    sleep_time = min_interval - elapsed
+                    time.sleep(sleep_time)
+                
+                last_call_time[0] = time.time()
             return func(*args, **kwargs)
         
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            current_time = time.time()
-            elapsed = current_time - last_call_time[0]
-            
-            if elapsed < min_interval:
-                sleep_time = min_interval - elapsed
-                await asyncio.sleep(sleep_time)
-            
-            last_call_time[0] = time.time()
+            with lock:
+                current_time = time.time()
+                elapsed = current_time - last_call_time[0]
+                
+                if elapsed < min_interval:
+                    sleep_time = min_interval - elapsed
+                    await asyncio.sleep(sleep_time)
+                
+                last_call_time[0] = time.time()
             return await func(*args, **kwargs)
         
         # Return appropriate wrapper based on function type

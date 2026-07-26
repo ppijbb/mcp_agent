@@ -309,14 +309,15 @@ def validate_input(data: Any, required_fields: Optional[list] = None) -> Dict[st
         required_fields: List of required field names
         
     Returns:
-        Validation result dictionary with 'valid' boolean and 'data' key
-    
-    Raises:
-        AgentError: If validation fails with list of validation errors in details
+        Validation result dictionary with 'valid' boolean and 'data' key.
+        On failure, includes 'errors' list with validation error details.
     
     Example:
         >>> result = validate_input({"name": "test"}, required_fields=["name"])
         >>> assert result["valid"] is True
+        >>> result = validate_input(None)
+        >>> assert result["valid"] is False
+        >>> assert "Data cannot be None" in result["errors"]
     """
     errors = []
     
@@ -329,12 +330,7 @@ def validate_input(data: Any, required_fields: Optional[list] = None) -> Dict[st
                 errors.append(f"Missing required field: {field}")
     
     if errors:
-        raise AgentError(
-            message="Validation failed",
-            severity=ErrorSeverity.HIGH,
-            category=ErrorCategory.VALIDATION,
-            details={"validation_errors": errors}
-        )
+        return {"valid": False, "data": data, "errors": errors}
     
     return {"valid": True, "data": data}
 
