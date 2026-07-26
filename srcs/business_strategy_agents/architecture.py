@@ -560,6 +560,11 @@ async def connect_urban_hive_server(command: str, args: List[str], port: int = 8
 
         # 시작 실패 시 프로세스 종료
         process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
         return False
 
     except Exception as e:
