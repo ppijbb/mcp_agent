@@ -16,6 +16,8 @@ sys.path.insert(0, str(project_root))
 async def test_playwright_browser(url: str = "https://www.google.com"):
     """Playwright를 사용하여 브라우저를 열고 페이지를 확인합니다."""
     
+    headless = os.environ.get("PLAYWRIGHT_HEADLESS", "1") != "0"
+    
     try:
         from playwright.async_api import async_playwright
         
@@ -23,10 +25,10 @@ async def test_playwright_browser(url: str = "https://www.google.com"):
         print(f"📄 URL: {url}")
         
         async with async_playwright() as p:
-            # 브라우저 실행 (headless=False로 설정하여 브라우저 창 표시)
-            print("🚀 Chromium 브라우저 실행 중...")
+            mode = "headless" if headless else "visible"
+            print(f"🚀 Chromium 브라우저 실행 중 ({mode})...")
             browser = await p.chromium.launch(
-                headless=False,  # 브라우저 창 표시
+                headless=headless,
                 args=['--no-sandbox', '--disable-dev-shm-usage']
             )
             
@@ -66,10 +68,6 @@ async def test_playwright_browser(url: str = "https://www.google.com"):
             screenshot_path = project_root / "browser_screenshot.png"
             await page.screenshot(path=str(screenshot_path), full_page=False)
             print(f"\n📸 스크린샷 저장: {screenshot_path}")
-            
-            # 5초 대기 (사용자가 브라우저를 확인할 수 있도록)
-            print("\n⏳ 5초 후 브라우저를 닫습니다...")
-            await asyncio.sleep(5)
             
             # 브라우저 닫기
             await browser.close()

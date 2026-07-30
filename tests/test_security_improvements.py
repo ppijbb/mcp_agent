@@ -28,6 +28,15 @@ class TestSecurityImprovements(unittest.TestCase):
         """Set up test fixtures."""
         from cryptography.fernet import Fernet
         self.test_key = Fernet.generate_key().decode()
+        # Save original env var to restore in tearDown
+        self._original_secret_key = os.environ.get("MCP_SECRET_KEY")
+        
+    def tearDown(self):
+        """Clean up environment after each test."""
+        if self._original_secret_key is not None:
+            os.environ["MCP_SECRET_KEY"] = self._original_secret_key
+        else:
+            os.environ.pop("MCP_SECRET_KEY", None)
         
     def test_validate_encryption_key_valid(self):
         """Test valid key validation."""
@@ -60,9 +69,7 @@ class TestSecurityImprovements(unittest.TestCase):
             tmp_path = tmp.name
             
         # Remove key from environment
-        original_key = os.environ.get("MCP_SECRET_KEY")
-        if "MCP_SECRET_KEY" in os.environ:
-            del os.environ["MCP_SECRET_KEY"]
+        os.environ.pop("MCP_SECRET_KEY", None)
             
         try:
             with self.assertRaises(EncryptionError) as context:
@@ -71,9 +78,6 @@ class TestSecurityImprovements(unittest.TestCase):
             self.assertIn("Failed to encrypt file", str(context.exception))
             
         finally:
-            # Restore key
-            if original_key:
-                os.environ["MCP_SECRET_KEY"] = original_key
             os.unlink(tmp_path)
             
     def test_encrypt_decrypt_roundtrip(self):
