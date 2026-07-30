@@ -19,6 +19,7 @@ Functions:
     render_metrics_row: Render metrics row
 """
 
+import importlib
 import streamlit as st
 import sys
 from pathlib import Path
@@ -100,7 +101,7 @@ def safe_import_agent(module_path: str, fallback_name: str = "Agent") -> Tuple[b
         Tuple of (success, module, error_message)
     """
     try:
-        module = __import__(module_path, fromlist=[fallback_name])
+        module = importlib.import_module(module_path)
         return True, module, None
     except ImportError as e:
         return False, None, str(e)

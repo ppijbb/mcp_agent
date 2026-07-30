@@ -604,14 +604,14 @@ class TradingReportAgent:
         """Convert Wei to ETH"""
         try:
             return wei_value / 10**18
-        except:
+        except Exception:
             return 0
 
     def _convert_wei_to_gwei(self, wei_value: int) -> float:
         """Convert Wei to Gwei"""
         try:
             return wei_value / 10**9
-        except:
+        except Exception:
             return 0
 
     async def send_report_email(self,

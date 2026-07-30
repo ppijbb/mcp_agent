@@ -337,34 +337,32 @@ class ResourceMonitor:
         0.4
     """
     
-    def __init__(self):
-        """Initialize resource monitor."""
+    def __init__(self, max_history: int = 1000):
         self.start_time = time.time()
+        self._lock = threading.Lock()
         self.call_counts: Dict[str, int] = {}
-        self.execution_times: Dict[str, list] = {}
-    
+        self.execution_times: Dict[str, deque] = {}
+        self.max_history = max_history
+
     def record_call(self, func_name: str, execution_time: float):
-        """
-        Record a function call for monitoring.
-        
-        Args:
-            func_name: Name of the function
-            execution_time: Execution time in seconds
-        """
-        self.call_counts[func_name] = self.call_counts.get(func_name, 0) + 1
-        if func_name not in self.execution_times:
-            self.execution_times[func_name] = []
-        self.execution_times[func_name].append(execution_time)
-    
+        with self._lock:
+            self.call_counts[func_name] = self.call_counts.get(func_name, 0) + 1
+            if func_name not in self.execution_times:
+                self.execution_times[func_name] = deque(maxlen=self.max_history)
+            self.execution_times[func_name].append(execution_time)
+
     def get_stats(self) -> Dict[str, Any]:
-        """Get resource monitoring statistics."""
+        with self._lock:
+            call_counts = self.call_counts.copy()
+            execution_times = {k: list(v) for k, v in self.execution_times.items()}
+
         stats = {
             'uptime': time.time() - self.start_time,
-            'call_counts': self.call_counts.copy(),
+            'call_counts': call_counts,
             'performance': {}
         }
-        
-        for func_name, times in self.execution_times.items():
+
+        for func_name, times in execution_times.items():
             if times:
                 stats['performance'][func_name] = {
                     'avg_time': sum(times) / len(times),
@@ -372,7 +370,7 @@ class ResourceMonitor:
                     'max_time': max(times),
                     'total_calls': len(times)
                 }
-        
+
         return stats
 
 
