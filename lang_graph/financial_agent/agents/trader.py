@@ -56,6 +56,11 @@ def trader_node(state: AgentState) -> Dict:
             if price is not None:
                 # 최대 거래 금액을 고려하여 수량 계산
                 shares = min(default_shares, int(max_trade_amount / price)) if price > 0 else default_shares
+                if shares <= 0:
+                    error_message = f"{ticker} 주당 가격 ${price:.2f}이(가) 최대 거래 금액 ${max_trade_amount:.2f}을(를) 초과하여 매수 거래를 건너뜁니다."
+                    print(error_message)
+                    state["log"].append(error_message)
+                    continue
                 trade_amount = price * shares
                 
                 if trade_amount > max_trade_amount:
@@ -83,6 +88,11 @@ def trader_node(state: AgentState) -> Dict:
             if price is not None:
                 # 최대 거래 금액을 고려하여 수량 계산
                 shares = min(default_shares, int(max_trade_amount / price)) if price > 0 else default_shares
+                if shares <= 0:
+                    error_message = f"{ticker} 주당 가격 ${price:.2f}이(가) 최대 거래 금액 ${max_trade_amount:.2f}을(를) 초과하여 매도 거래를 건너뜁니다."
+                    print(error_message)
+                    state["log"].append(error_message)
+                    continue
                 trade_amount = price * shares
                 
                 if trade_amount > max_trade_amount:
