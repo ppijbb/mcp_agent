@@ -71,6 +71,7 @@ class ImprovedConnectionPool:
         self.last_cleanup = time.time()
         self.cleanup_interval = 60  # seconds
         self._shutdown = False
+        self._shutdown_event = threading.Event()
         
         # Background cleanup thread for periodic connection expiration
         self._cleanup_thread = threading.Thread(
@@ -118,6 +119,11 @@ class ImprovedConnectionPool:
                         # Connection is invalid, dispose properly
                         self._dispose_connection(conn_info["connection"], pool_key)
                         self.connection_stats[pool_key]["errors"] += 1
+                else:
+                    # Connection expired, dispose properly to prevent resource leaks
+                    self._dispose_connection(conn_info["connection"], pool_key)
+                    self.connection_stats[pool_key]["expired"] += 1
+                    logger.debug(f"Expired connection disposed for {pool_key}")
             
             # Create new connection
             try:
@@ -303,16 +309,14 @@ class ImprovedConnectionPool:
     
     def _background_cleanup(self) -> None:
         """Background thread for periodic cleanup."""
-        while not self._shutdown:
+        while not self._shutdown_event.wait(self.cleanup_interval):
             try:
-                time.sleep(self.cleanup_interval)
-                if not self._shutdown:
-                    self._cleanup_old_connections()
+                self._cleanup_old_connections()
+                
+                # Periodic garbage collection
+                if len(self._weak_refs) > 100:  # Threshold for forcing GC
+                    gc.collect()
                     
-                    # Periodic garbage collection
-                    if len(self._weak_refs) > 100:  # Threshold for forcing GC
-                        gc.collect()
-                        
             except Exception as e:
                 logger.error(f"Background cleanup error: {e}")
     
@@ -350,6 +354,7 @@ class ImprovedConnectionPool:
         
         with self._lock:
             self._shutdown = True
+            self._shutdown_event.set()
             
             # Dispose all pooled connections
             for pool_key, connections in self._pools.items():
@@ -366,15 +371,16 @@ class ImprovedConnectionPool:
             self._active_connections.clear()
             self.connection_stats.clear()
             self._weak_refs.clear()
+        
+        # Wait for cleanup thread to finish (outside the lock so the thread
+        # can make progress if it is blocked on the lock)
+        if self._cleanup_thread.is_alive():
+            self._cleanup_thread.join(timeout=5)
             
-            # Wait for cleanup thread to finish
-            if self._cleanup_thread.is_alive():
-                self._cleanup_thread.join(timeout=5)
-            
-            # Force garbage collection
-            gc.collect()
-            
-            logger.info("Connection pool shutdown complete")
+        # Force garbage collection
+        gc.collect()
+        
+        logger.info("Connection pool shutdown complete")
     
     def __del__(self):
         """Destructor to ensure cleanup."""

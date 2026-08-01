@@ -7,10 +7,25 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 """
 
 import argparse
+import asyncio
 import importlib
+import inspect
 import sys
 import os
 from typing import Optional, Dict, Any
+
+
+def _run_entrypoint(main_func) -> Any:
+    """
+    Execute an agent entrypoint, awaiting it when it is a coroutine function.
+
+    Most agents expose ``async def main()``. Invoking such a function without
+    awaiting silently discards the coroutine, so coroutine functions are
+    detected here and driven to completion with ``asyncio.run``.
+    """
+    if inspect.iscoroutinefunction(main_func):
+        return asyncio.run(main_func())
+    return main_func()
 
 
 def list_agents():
@@ -135,7 +150,7 @@ def run_basic_agent(agent_name: str) -> bool:
                 main_func = getattr(module, 'main')
                 if not callable(main_func):
                     raise TypeError(f"main in {module_name} is not callable")
-                main_func()
+                _run_entrypoint(main_func)
             except ImportError as e:
                 raise ImportError(f"Failed to import module {module_name}: {e}")
             except Exception as e:
@@ -183,7 +198,7 @@ def run_enterprise_agent(agent_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_entrypoint(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
@@ -227,7 +242,7 @@ def run_specialized_agent(agent_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_entrypoint(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
@@ -274,7 +289,7 @@ def run_utility(util_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_entrypoint(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
