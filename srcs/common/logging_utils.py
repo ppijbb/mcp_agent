@@ -108,6 +108,17 @@ class OptimizedHTTPErrorFilter(logging.Filter):
                 else:
                     new_args.append(arg)
             record.args = tuple(new_args)
+
+            # Filtering the message may have removed its %-style placeholders
+            # (e.g. "token=%s" -> "token=**"). Combining leftover args would
+            # raise TypeError in LogRecord.getMessage(), so resolve eagerly
+            # and clear args when resolution is not possible.
+            try:
+                record.msg = str(record.msg) % record.args
+            except (TypeError, ValueError):
+                record.args = ()
+            else:
+                record.args = ()
         
         return True
 

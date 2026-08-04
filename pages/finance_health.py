@@ -526,8 +526,9 @@ def render_real_finance_agent(save_to_file=False):
                     st.error(f"**오류**: {result.get('error', 'Unknown error')}")
                 
                 # 실행 후 상태 초기화
-                del st.session_state['finance_command']
-                del st.session_state['finance_result_json_path']
+                st.session_state.pop('finance_command', None)
+                st.session_state.pop('finance_result_json_path', None)
+                st.session_state.pop('finance_input_data', None)
             else:
                 st.markdown("""
                 #### 🤖 AI 재무 분석 기능

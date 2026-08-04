@@ -362,6 +362,9 @@ class HTTPErrorFilter(logging.Filter):
             for pattern in self.SENSITIVE_PATTERNS:
                 if pattern.lower() in msg.lower():
                     record.msg = "[FILTERED: Contains sensitive information]"
+                    # The replacement drops any %-style placeholders, so clear
+                    # args to avoid a TypeError in LogRecord.getMessage().
+                    record.args = ()
                     break
         return True
 
