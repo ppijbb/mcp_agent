@@ -168,7 +168,8 @@ DEFAULT_TICKERS=NVDA,AMD,QCOM,AAPL,MSFT
 ### 기본 실행
 
 ```bash
-python graph.py "NVDA,AMD,QCOM" aggressive
+# 프로젝트 루트에서 실행해야 합니다 (상대 import 사용)
+python -m lang_graph.financial_agent.graph "NVDA,AMD,QCOM" aggressive
 ```
 
 ### 매개변수
@@ -180,13 +181,13 @@ python graph.py "NVDA,AMD,QCOM" aggressive
 
 ```bash
 # 보수적 투자 전략
-python graph.py "AAPL,MSFT" conservative
+python -m lang_graph.financial_agent.graph "AAPL,MSFT" conservative
 
 # 공격적 투자 전략
-python graph.py "NVDA,AMD,QCOM,TSLA" aggressive
+python -m lang_graph.financial_agent.graph "NVDA,AMD,QCOM,TSLA" aggressive
 
 # 균형 투자 전략
-python graph.py "GOOGL,AMZN,META" moderate
+python -m lang_graph.financial_agent.graph "GOOGL,AMZN,META" moderate
 ```
 
 ## 출력 결과

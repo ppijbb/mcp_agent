@@ -174,8 +174,8 @@ if __name__ == "__main__":
 
     # 명령행 인자에서 설정값 읽기
     if len(sys.argv) < 3:
-        print("사용법: python graph.py <tickers> <risk_profile>")
-        print("예시: python graph.py 'NVDA,AMD,QCOM' aggressive")
+        print("사용법: python -m lang_graph.financial_agent.graph <tickers> <risk_profile>")
+        print("예시: python -m lang_graph.financial_agent.graph 'NVDA,AMD,QCOM' aggressive")
         sys.exit(1)
     
     target_tickers = [ticker.strip() for ticker in sys.argv[1].split(',')]

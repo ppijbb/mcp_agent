@@ -1,14 +1,19 @@
 import asyncio
 import json
+import sys
+from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typing import Dict, List, Any
 from .config import get_mcp_config
 
 # MCP 서버 실행을 위한 설정
+# 스크립트 경로를 __file__ 기준으로 결정하고 동일한 인터프리터를 사용해
+# 실행 위치(CWD)와 무관하게 서버를 안정적으로 실행할 수 있게 한다.
+_financial_server_script = Path(__file__).resolve().parent / "financial_mcp_server.py"
 server_params = StdioServerParameters(
-    command="python",
-    args=["lang_graph/financial_agent/financial_mcp_server.py"],
+    command=sys.executable,
+    args=[str(_financial_server_script)],
     env=None,
 )
 
@@ -16,7 +21,17 @@ server_params = StdioServerParameters(
 async def _call_tool_async(session: ClientSession, tool_name: str, arguments: Dict) -> Any:
     """단일 MCP 도구를 비동기적으로 호출하는 내부 헬퍼 함수"""
     result = await session.call_tool(tool_name, arguments=arguments)
-    content = result.content[0].text
+
+    # content가 비어 있거나 텍스트가 아닌 블록(예: 이미지)만 포함된 경우를 안전하게 처리
+    text_parts = [
+        block.text
+        for block in (result.content or [])
+        if hasattr(block, "text") and isinstance(block.text, str)
+    ]
+    if not text_parts:
+        raise RuntimeError(f"MCP tool '{tool_name}' returned no text content")
+
+    content = text_parts[0]
     try:
         return json.loads(content)
     except json.JSONDecodeError:

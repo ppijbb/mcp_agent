@@ -33,16 +33,32 @@ def trader_node(state: AgentState) -> Dict:
         return {"trade_results": [], "daily_pnl": 0.0}
     
     # 실제 시장 데이터에서 현재 가격 가져오기
-    try:
-        current_prices = call_technical_indicators_tool(trade_tickers)
-        log_message = f"거래 대상 {len(trade_tickers)}개 티커의 현재 가격을 조회했습니다."
+    # 성능 최적화: market data collector 노드에서 이미 수집한 기술적 분석 데이터를
+    # 우선 재사용해 별도의 MCP 서버 프로세스 기동(및 중복 네트워크 조회)을 피한다.
+    cached_analysis = state.get("technical_analysis") or {}
+    current_prices = {
+        ticker: cached_analysis[ticker]
+        for ticker in trade_tickers
+        if ticker in cached_analysis and cached_analysis[ticker].get("price") is not None
+    }
+    missing_tickers = [ticker for ticker in trade_tickers if ticker not in current_prices]
+
+    if missing_tickers:
+        try:
+            fetched_prices = call_technical_indicators_tool(missing_tickers)
+            current_prices.update(fetched_prices)
+            log_message = f"누락된 {len(missing_tickers)}개 티커의 현재 가격을 조회했습니다."
+            print(log_message)
+            state["log"].append(log_message)
+        except Exception as e:
+            error_message = f"현재 가격 조회 중 오류 발생: {e}"
+            print(error_message)
+            state["log"].append(error_message)
+            raise ValueError(error_message)
+    else:
+        log_message = f"이전 단계에서 수집한 데이터를 재사용해 {len(trade_tickers)}개 티커의 가격을 사용합니다."
         print(log_message)
         state["log"].append(log_message)
-    except Exception as e:
-        error_message = f"현재 가격 조회 중 오류 발생: {e}"
-        print(error_message)
-        state["log"].append(error_message)
-        raise ValueError(error_message)
     
     # 거래 설정 가져오기
     trading_config = get_trading_config()

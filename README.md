@@ -175,7 +175,7 @@ python run_agent.py --dev template_enterprise # Enterprise agent template
 
 ```bash
 # Run the LangGraph workflow (prints summary to stdout)
-python lang_graph/financial_agent/graph.py
+python -m lang_graph.financial_agent.graph
 
 # Start the financial MCP server (technical indicators & news via yfinance)
 python lang_graph/financial_agent/financial_mcp_server.py
