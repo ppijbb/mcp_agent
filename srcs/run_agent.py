@@ -7,10 +7,18 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 """
 
 import argparse
+import asyncio
 import importlib
 import sys
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
+
+
+def _run_main(main_func: Callable) -> Any:
+    """Execute an agent's main function, awaiting it if it is a coroutine."""
+    if asyncio.iscoroutinefunction(main_func):
+        return asyncio.run(main_func())
+    return main_func()
 
 
 def list_agents():
@@ -135,7 +143,7 @@ def run_basic_agent(agent_name: str) -> bool:
                 main_func = getattr(module, 'main')
                 if not callable(main_func):
                     raise TypeError(f"main in {module_name} is not callable")
-                main_func()
+                _run_main(main_func)
             except ImportError as e:
                 raise ImportError(f"Failed to import module {module_name}: {e}")
             except Exception as e:
