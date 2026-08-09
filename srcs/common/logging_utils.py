@@ -54,7 +54,19 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         self.mask_char = mask_char
         self._cache = {}  # Simple LRU cache for filtered messages
         self._cache_size = 1000
-    
+        self._cache_max_len = 500
+
+    def _apply_sensitive_patterns(self, message: str) -> str:
+        """Run the pre-compiled sensitive-data patterns against a message."""
+        filtered = message
+        for pattern in SENSITIVE_PATTERNS:
+            # Replace sensitive values while preserving keys
+            filtered = pattern.sub(
+                lambda m: f"{m.group(1)}{self.mask_char * len(m.group(2))}",
+                filtered
+            )
+        return filtered
+
     def _filter_sensitive_data(self, message: str) -> str:
         """
         Filter sensitive data from message using pre-compiled patterns.
@@ -65,26 +77,24 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         Returns:
             Filtered message with sensitive data masked
         """
-        # Check cache first - use message itself as key with size limit
-        cache_key = message[:500] if len(message) > 500 else message
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-        
-        filtered = message
-        for pattern in SENSITIVE_PATTERNS:
-            # Replace sensitive values while preserving keys
-            filtered = pattern.sub(
-                lambda m: f"{m.group(1)}{self.mask_char * len(m.group(2))}",
-                filtered
-            )
-        
+        # Cache only short messages, keyed on the full message, so that
+        # long messages sharing a common prefix cannot collide.
+        if len(message) > self._cache_max_len:
+            return self._apply_sensitive_patterns(message)
+
+        cached = self._cache.get(message)
+        if cached is not None:
+            return cached
+
+        filtered = self._apply_sensitive_patterns(message)
+
         # Update cache (simple size management)
         if len(self._cache) >= self._cache_size:
             # Remove oldest entry (simple FIFO)
             oldest_key = next(iter(self._cache))
             del self._cache[oldest_key]
-        
-        self._cache[cache_key] = filtered
+
+        self._cache[message] = filtered
         return filtered
     
     def filter(self, record: logging.LogRecord) -> bool:
@@ -101,13 +111,19 @@ class OptimizedHTTPErrorFilter(logging.Filter):
             record.msg = self._filter_sensitive_data(str(record.msg))
         
         if hasattr(record, 'args') and record.args:
-            new_args = []
-            for arg in record.args:
-                if isinstance(arg, str):
-                    new_args.append(self._filter_sensitive_data(arg))
-                else:
-                    new_args.append(arg)
-            record.args = tuple(new_args)
+            if isinstance(record.args, dict):
+                # dict-style lazy formatting (msg % {"key": value}); the keys
+                # are format placeholders, so filter only the values to keep
+                # the mapping format required by record.getMessage().
+                record.args = {
+                    k: self._filter_sensitive_data(v) if isinstance(v, str) else v
+                    for k, v in record.args.items()
+                }
+            else:
+                record.args = tuple(
+                    self._filter_sensitive_data(arg) if isinstance(arg, str) else arg
+                    for arg in record.args
+                )
         
         return True
 

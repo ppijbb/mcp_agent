@@ -8,16 +8,21 @@ configures them for use with the MCP agent system.
 import os
 import json
 import logging
+import shlex
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 def _parse_args(args_str: Optional[str]) -> List[str]:
-    """Parse space-separated argument string into list of tokens."""
+    """Parse shell-style argument string into a list of tokens.
+
+    Uses :func:`shlex.split` so quoted arguments containing spaces
+    (e.g. ``--root "/tmp/my dir"``) are preserved as a single token.
+    """
     if not args_str:
         return []
-    return [token for token in args_str.split(" ") if token]
+    return shlex.split(args_str, posix=True)
 
 
 def _maybe_json_env(env_str: Optional[str]) -> Dict[str, str]:
@@ -69,7 +74,7 @@ def load_external_server_config(server_name: str) -> Optional[Dict[str, Any]]:
     except ValueError:
         timeout = 30000
 
-    trust = trust_raw != "false"
+    trust = trust_raw not in {"false", "0", "no"}
 
     return {
         "command": cmd,
