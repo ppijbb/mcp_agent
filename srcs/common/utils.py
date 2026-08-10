@@ -9,6 +9,8 @@ import json
 import threading
 from datetime import datetime
 
+from srcs.common.config import REPORT_TIMESTAMP_FORMAT
+
 # Defer imports to avoid circular dependencies
 
 # Performance optimization: Cache for frequently accessed paths (thread-safe)
@@ -173,7 +175,8 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     """
 
     if not timestamp:
-        timestamp = get_now_formatted()
+        # Filesystem-safe timestamp (no ':' or spaces) for filenames
+        timestamp = datetime.now().strftime(REPORT_TIMESTAMP_FORMAT)
 
     try:
         from srcs.core.config.loader import settings
@@ -248,7 +251,8 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
     """
 
     if not timestamp:
-        timestamp = get_now_formatted()
+        # Filesystem-safe timestamp (no ':' or spaces) for filenames
+        timestamp = datetime.now().strftime(REPORT_TIMESTAMP_FORMAT)
 
     kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{timestamp}.json")
 

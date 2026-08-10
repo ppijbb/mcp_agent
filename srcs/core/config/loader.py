@@ -43,7 +43,8 @@ def load_config() -> AppConfig:
         print(f"Warning: Configuration files not found at path: {_config_path}")
         base_config = {}
 
-    merged_config = _deep_merge(base_config, env_config)
+    # Environment-specific config (development/production) takes priority over base
+    merged_config = _deep_merge(env_config, base_config)
     merged_config["environment"] = env
 
     try:
