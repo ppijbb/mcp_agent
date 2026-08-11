@@ -187,7 +187,9 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     if not title:
         title = f"{agent_name.title()} Executive Summary"
 
-    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{timestamp}.md")
+    # 파일명에 사용할 수 없는 문자(: 등)를 제거해 모든 OS에서 안전한 파일명을 만듭니다.
+    file_timestamp = timestamp.replace(":", "-")
+    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{file_timestamp}.md")
 
     overview_title = overview.get('title', 'Transformation Overview') if overview else 'Transformation Overview'
     overview_content = overview.get('content', 'Comprehensive analysis completed with actionable strategies.') if overview else 'Comprehensive analysis completed with actionable strategies.'
@@ -250,7 +252,8 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
     if not timestamp:
         timestamp = get_now_formatted()
 
-    kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{timestamp}.json")
+    # 파일명에 사용할 수 없는 문자(: 등)를 제거해 모든 OS에서 안전한 파일명을 만듭니다.
+    kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{timestamp.replace(':', '-')}.json")
 
     kpi_template = {
         **kpi_structure,
