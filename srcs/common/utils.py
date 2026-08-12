@@ -187,7 +187,7 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     if not title:
         title = f"{agent_name.title()} Executive Summary"
 
-    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{timestamp}.md")
+    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{get_filename_timestamp(timestamp)}.md")
 
     overview_title = overview.get('title', 'Transformation Overview') if overview else 'Transformation Overview'
     overview_content = overview.get('content', 'Comprehensive analysis completed with actionable strategies.') if overview else 'Comprehensive analysis completed with actionable strategies.'
@@ -250,7 +250,7 @@ def create_kpi_template(output_dir, agent_name, kpi_structure, timestamp=None):
     if not timestamp:
         timestamp = get_now_formatted()
 
-    kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{timestamp}.json")
+    kpi_path = os.path.join(output_dir, f"{agent_name}_kpi_template_{get_filename_timestamp(timestamp)}.json")
 
     kpi_template = {
         **kpi_structure,
@@ -489,6 +489,26 @@ def get_now_formatted() -> str:
         timestamp_format = "%Y-%m-%d %H:%M:%S"
     
     return datetime.now().strftime(timestamp_format)
+
+
+def get_filename_timestamp(timestamp: str | None = None) -> str:
+    """
+    Return a filesystem-safe timestamp for use in filenames.
+
+    The display timestamp format (``%Y-%m-%d %H:%M:%S``) contains spaces and
+    colons which are invalid filename characters on Windows and awkward to work
+    with elsewhere. Use this helper for report/kpi file names instead.
+
+    Args:
+        timestamp: Optional pre-formatted timestamp to sanitize ('' allowed).
+            When omitted, the current time formatted as ``%Y%m%d_%H%M%S`` is used.
+
+    Returns:
+        str: Filesystem-safe timestamp string.
+    """
+    if timestamp:
+        return timestamp.replace(":", "").replace(" ", "_")
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def generate_report_header(company_name: str | None = None) -> str:

@@ -42,7 +42,10 @@ def get_encryption_key() -> str:
     """
     Get and validate encryption key from environment.
     
-    Retrieves MCP_SECRET_KEY from environment variables and validates it.
+    Retrieves the encryption key from environment variables and validates it.
+    The key is read from MCP_SECRET_KEY (legacy name) or ENCRYPTION_KEY, which
+    is the variable the configuration loader resolves ``security.encryption_key``
+    from. MCP_SECRET_KEY takes precedence when both are set.
     
     Returns:
         str: Validated encryption key
@@ -50,17 +53,16 @@ def get_encryption_key() -> str:
     Raises:
         ValueError: If key is not set or invalid
     """
-    key = os.getenv("MCP_SECRET_KEY")
+    key = os.getenv("MCP_SECRET_KEY") or os.getenv("ENCRYPTION_KEY")
     if not key:
-        raise ValueError("MCP_SECRET_KEY environment variable is not set. Cannot use encryption.")
+        raise ValueError(
+            "MCP_SECRET_KEY/ENCRYPTION_KEY environment variable is not set. Cannot use encryption."
+        )
     
     if not validate_encryption_key(key):
-        raise ValueError("MCP_SECRET_KEY is invalid. Key must be a 32-byte base64-encoded string.")
+        raise ValueError("Encryption key is invalid. Key must be a 32-byte base64-encoded string.")
     
     return key
-
-
-ENCRYPTION_KEY = None  # Will be loaded on demand
 
 
 def get_cipher_suite() -> Fernet:
@@ -77,13 +79,13 @@ def get_cipher_suite() -> Fernet:
         key = get_encryption_key()
     except ValueError:
         raise ValueError(
-            "MCP_SECRET_KEY environment variable is not set. "
+            "MCP_SECRET_KEY/ENCRYPTION_KEY environment variable is not set. "
             "Set it to enable encryption functionality."
         )
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
     except (ValueError, TypeError) as e:
-        raise ValueError(f"MCP_SECRET_KEY is invalid: {e}")
+        raise ValueError(f"Encryption key is invalid: {e}")
 
 
 def encrypt_file(file_path: str, output_path: Optional[str] = None) -> str:
@@ -186,10 +188,10 @@ def generate_key() -> str:
         str: Newly generated Fernet key
         
     Note:
-        Store the generated key in MCP_SECRET_KEY environment variable
+        Store the generated key in MCP_SECRET_KEY or ENCRYPTION_KEY environment variable
     """
     key = Fernet.generate_key()
     key_str = key.decode()
-    print("New encryption key generated. Store this in MCP_SECRET_KEY environment variable:")
+    print("New encryption key generated. Store this in MCP_SECRET_KEY or ENCRYPTION_KEY environment variable:")
     print(f"   {key_str}")
     return key_str
