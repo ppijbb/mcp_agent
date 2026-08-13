@@ -118,6 +118,10 @@ class ImprovedConnectionPool:
                         # Connection is invalid, dispose properly
                         self._dispose_connection(conn_info["connection"], pool_key)
                         self.connection_stats[pool_key]["errors"] += 1
+                else:
+                    # Connection expired while idle, dispose properly
+                    self._dispose_connection(conn_info["connection"], pool_key)
+                    self.connection_stats[pool_key]["expired"] += 1
             
             # Create new connection
             try:
