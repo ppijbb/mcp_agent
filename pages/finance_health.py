@@ -70,6 +70,7 @@ def load_user_financial_defaults():
         "asset_step": int(os.getenv("FINANCE_ASSET_STEP", "100"))
     }
 
+@st.cache_data(ttl=300)
 def get_real_market_data() -> Dict[str, Any]:
     """실제 시장 데이터 조회"""
     try:
@@ -152,6 +153,7 @@ def get_real_economic_indicators() -> Dict[str, Any]:
         st.error(f"경제 지표 조회 중 오류: {e}")
         return {}
 
+@st.cache_data(ttl=300)
 def get_real_crypto_data() -> Dict[str, Any]:
     """실제 암호화폐 데이터 조회"""
     try:

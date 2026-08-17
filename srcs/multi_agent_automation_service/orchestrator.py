@@ -5,10 +5,13 @@ Multi-Agent Orchestrator
 """
 
 import asyncio
+import logging
 import os
 from datetime import datetime
 from typing import Dict, List, Any
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator
 from srcs.common.llm.fallback_llm import create_fallback_orchestrator_llm_factory
