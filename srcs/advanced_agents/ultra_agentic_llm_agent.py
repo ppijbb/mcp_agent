@@ -1,6 +1,9 @@
 import json
+import logging
 from srcs.common.templates import EnterpriseAgentTemplate
 from srcs.common.config import get_llm, get_memory, get_tool_manager, get_comm_manager
+
+logger = logging.getLogger(__name__)
 
 
 class UltraAgenticLLMAgent(EnterpriseAgentTemplate):
@@ -27,9 +30,13 @@ class UltraAgenticLLMAgent(EnterpriseAgentTemplate):
         llm_output = self.llm(prompt)
         plan, action, comms = self.parse_llm_output(llm_output)
         self.state["plan"] = plan
+        if action is None:
+            logger.warning("LLM returned no action; skipping execution")
         return action, comms
 
     def act(self, action):
+        if action is None:
+            return None
         result = self.tools.execute(action)
         self.memory.store_action(action, result)
         return result
@@ -60,7 +67,8 @@ You are an autonomous agent responsible for real-time anomaly detection and coll
         try:
             parsed = json.loads(output)
             return parsed.get("plan"), parsed.get("action"), parsed.get("comms", {})
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse LLM output: %s", e)
             return None, None, {}
 
     def build_reflection_prompt(self, feedback):

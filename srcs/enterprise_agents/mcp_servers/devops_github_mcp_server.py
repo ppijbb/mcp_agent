@@ -200,6 +200,18 @@ class GitHubMCPServer:
             self.session = aiohttp.ClientSession(headers=headers)
         return self.session
 
+    async def close(self):
+        """HTTP 세션 종료"""
+        if self.session is not None and not self.session.closed:
+            await self.session.close()
+            self.session = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
     async def _make_request(self, method: str, url: str, **kwargs) -> Dict[str, Any]:
         """GitHub API 요청"""
         session = await self._get_session()
@@ -311,6 +323,8 @@ def main():
         asyncio.run(server.run())
     except KeyboardInterrupt:
         print("Server stopped by user")
+    finally:
+        asyncio.run(server.close())
 
 
 if __name__ == "__main__":

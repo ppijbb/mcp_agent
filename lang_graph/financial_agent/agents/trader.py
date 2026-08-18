@@ -31,18 +31,22 @@ def trader_node(state: AgentState) -> Dict:
         print(log_message)
         state["log"].append(log_message)
         return {"trade_results": [], "daily_pnl": 0.0}
-    
-    # 실제 시장 데이터에서 현재 가격 가져오기
-    try:
-        current_prices = call_technical_indicators_tool(trade_tickers)
-        log_message = f"거래 대상 {len(trade_tickers)}개 티커의 현재 가격을 조회했습니다."
-        print(log_message)
-        state["log"].append(log_message)
-    except Exception as e:
-        error_message = f"현재 가격 조회 중 오류 발생: {e}"
-        print(error_message)
-        state["log"].append(error_message)
-        raise ValueError(error_message)
+
+    # 이미 수집된 기술 분석 데이터 재사용 (중복 MCP 호출 방지)
+    current_prices = state.get("technical_analysis", {})
+    missing_tickers = [t for t in trade_tickers if t not in current_prices]
+    if missing_tickers:
+        try:
+            fetched = call_technical_indicators_tool(missing_tickers)
+            current_prices.update(fetched)
+        except Exception as e:
+            error_message = f"현재 가격 조회 중 오류 발생: {e}"
+            print(error_message)
+            state["log"].append(error_message)
+            raise ValueError(error_message)
+    log_message = f"거래 대상 {len(trade_tickers)}개 티커의 현재 가격을 확인했습니다."
+    print(log_message)
+    state["log"].append(log_message)
     
     # 거래 설정 가져오기
     trading_config = get_trading_config()
