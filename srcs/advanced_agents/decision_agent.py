@@ -42,6 +42,7 @@ class InteractionType(Enum):
     FOOD_ORDER = "음식주문"
     SHOPPING = "쇼핑"
     APP_OPEN = "앱실행"
+    SOCIAL_MEDIA = "소셜미디어"
 
 
 @dataclass
@@ -53,6 +54,10 @@ class MobileInteraction:
     context: Dict[str, Any]
     duration: float = 0.0
     location: Optional[str] = None
+    user_location: Optional[tuple] = None
+    device_state: Optional[Dict[str, Any]] = None
+    urgency_score: float = 0.0
+    metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
