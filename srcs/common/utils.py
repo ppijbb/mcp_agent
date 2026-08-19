@@ -6,6 +6,7 @@ Shared utility functions used across all agents for common operations.
 
 import os
 import json
+import logging
 import threading
 from datetime import datetime
 
@@ -93,6 +94,11 @@ def setup_agent_app(app_name: str):
             human_input_callback=None
         )
     except ImportError:
+        return None
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"Failed to setup MCP app '{app_name}': {e}"
+        )
         return None
 
 

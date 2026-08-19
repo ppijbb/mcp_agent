@@ -337,23 +337,25 @@ class ResourceMonitor:
         0.4
     """
     
+    _MAX_HISTORY = 1000
+
     def __init__(self):
         """Initialize resource monitor."""
         self.start_time = time.time()
         self.call_counts: Dict[str, int] = {}
-        self.execution_times: Dict[str, list] = {}
-    
+        self.execution_times: Dict[str, deque] = {}
+
     def record_call(self, func_name: str, execution_time: float):
         """
         Record a function call for monitoring.
-        
+
         Args:
             func_name: Name of the function
             execution_time: Execution time in seconds
         """
         self.call_counts[func_name] = self.call_counts.get(func_name, 0) + 1
         if func_name not in self.execution_times:
-            self.execution_times[func_name] = []
+            self.execution_times[func_name] = deque(maxlen=self._MAX_HISTORY)
         self.execution_times[func_name].append(execution_time)
     
     def get_stats(self) -> Dict[str, Any]:
