@@ -59,7 +59,7 @@ class AgentState(TypedDict):
     investment_plan: Optional[InvestmentPlan]
     
     # 실행 및 감사 단계 결과
-    trade_results: Optional[List[Dict[str, any]]]
+    trade_results: Optional[List[Dict[str, Any]]]
     daily_pnl: Optional[float]
     
     # 구조적 상업성 요소

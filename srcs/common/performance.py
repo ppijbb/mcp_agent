@@ -9,7 +9,7 @@ import time
 import asyncio
 import threading
 from collections import OrderedDict, deque
-from functools import wraps, lru_cache
+from functools import wraps
 from typing import Dict, Any, Optional, Callable
 import logging
 
@@ -337,11 +337,13 @@ class ResourceMonitor:
         0.4
     """
     
+    MAX_HISTORY = 1000
+
     def __init__(self):
         """Initialize resource monitor."""
         self.start_time = time.time()
         self.call_counts: Dict[str, int] = {}
-        self.execution_times: Dict[str, list] = {}
+        self.execution_times: Dict[str, deque] = {}
     
     def record_call(self, func_name: str, execution_time: float):
         """
@@ -353,7 +355,7 @@ class ResourceMonitor:
         """
         self.call_counts[func_name] = self.call_counts.get(func_name, 0) + 1
         if func_name not in self.execution_times:
-            self.execution_times[func_name] = []
+            self.execution_times[func_name] = deque(maxlen=self.MAX_HISTORY)
         self.execution_times[func_name].append(execution_time)
     
     def get_stats(self) -> Dict[str, Any]:
