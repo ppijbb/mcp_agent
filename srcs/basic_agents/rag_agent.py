@@ -31,6 +31,13 @@ class RAGAgent(BaseAgent):
         self.qdrant_client = QdrantClient("http://localhost:6333")
         self.llm: Optional[OpenAIAugmentedLLM] = None
 
+    def close(self):
+        """Close the Qdrant client connection."""
+        try:
+            self.qdrant_client.close()
+        except Exception:
+            pass
+
     def _initialize_collection(self):
         """Creates and populates the Qdrant collection if it doesn't exist."""
         try:
@@ -99,8 +106,8 @@ class RAGAgent(BaseAgent):
 
 def get_qdrant_status() -> Dict[str, Any]:
     """Check Qdrant server status and return connection information."""
+    client = QdrantClient("http://localhost:6333")
     try:
-        client = QdrantClient("http://localhost:6333")
         collections = client.get_collections()
         return {
             "status": "connected",
@@ -111,3 +118,8 @@ def get_qdrant_status() -> Dict[str, Any]:
         }
     except Exception as e:
         raise APIError(f"Failed to connect to Qdrant server: {e}") from e
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass

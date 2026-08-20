@@ -3,6 +3,7 @@ JWT 토큰 처리 핸들러
 """
 
 import os
+import secrets
 import jwt
 import logging
 from typing import Dict, Any, Optional
@@ -23,11 +24,11 @@ class JWTHandler:
             secret_key: JWT 서명에 사용할 비밀 키 (없으면 환경변수에서 가져옴)
             algorithm: JWT 알고리즘 (기본값: HS256)
         """
-        self.secret_key = secret_key or os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+        self.secret_key = secret_key or os.getenv("JWT_SECRET_KEY") or secrets.token_hex(32)
         self.algorithm = algorithm
         
-        if self.secret_key == "your-secret-key-change-in-production":
-            logger.warning("Using default JWT secret key. Change JWT_SECRET_KEY in production!")
+        if not os.getenv("JWT_SECRET_KEY") and not secret_key:
+            logger.warning("JWT_SECRET_KEY env var not set. Using random key (tokens will not persist across restarts).")
     
     def generate_token(
         self,

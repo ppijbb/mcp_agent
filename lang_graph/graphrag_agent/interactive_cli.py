@@ -184,7 +184,7 @@ class InteractiveCLI:
                 print("계속하려면 Enter를 누르세요...")
                 try:
                     input()
-                except:
+                except (EOFError, KeyboardInterrupt):
                     break
 
 
