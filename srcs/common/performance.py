@@ -253,6 +253,8 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
         cache: Dict[str, Dict[str, Any]] = {}
         keys_order: deque = deque()
         lock = threading.Lock()
+        _pending: Dict[str, asyncio.Event] = {}
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             key = str(args) + str(sorted(kwargs.items()))
@@ -294,6 +296,18 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
                         cache.pop(key)
                         keys_order.remove(key)
 
+                if key in _pending:
+                    event = _pending[key]
+                    await event.wait()
+                    if key in cache:
+                        entry = cache[key]
+                        if ttl is None or (time.time() - entry['timestamp']) < ttl:
+                            return entry['result']
+                        cache.pop(key)
+                        keys_order.remove(key)
+                else:
+                    _pending[key] = asyncio.Event()
+
             result = await func(*args, **kwargs)
 
             with lock:
@@ -306,6 +320,10 @@ def memoize_strict(maxsize: int = 128, ttl: Optional[int] = None):
                     'timestamp': time.time()
                 }
                 keys_order.append(key)
+                event = _pending.pop(key, None)
+
+            if event:
+                event.set()
 
             return result
 
