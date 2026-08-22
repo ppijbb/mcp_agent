@@ -6,10 +6,19 @@ Demonstrates how to use the common modules for cleaner, more maintainable agent 
 """
 
 import os
+import sys
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any
 import json
+
+# 프로젝트 루트를 Python 경로에 추가 (srcs.* 임포트를 위해)
+_project_root = str(Path(__file__).resolve().parents[2])
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from srcs.common.utils import setup_agent_app
 
 # Define fallback constants first
 DEFAULT_SERVERS = ["filesystem", "fetch"]
@@ -203,28 +212,6 @@ def save_research_report(content: str, filename: str) -> str:
         raise Exception(f"연구 보고서 저장 실패: {str(e)}")
 
 
-# Import common modules
-try:
-    # Override with common module values if available
-    if 'DEFAULT_SERVERS' in globals():
-        pass  # Use the one from common
-    if 'DEFAULT_COMPANY_NAME' in globals():
-        pass  # Use the one from common
-except ImportError:
-    # Fallback direct imports
-    from mcp_agent.app import MCPApp  # noqa: F401
-    from mcp_agent.agents.agent import Agent  # noqa: F401
-    from mcp_agent.config import get_settings  # noqa: F401
-    from mcp_agent.workflows.orchestrator.orchestrator import Orchestrator  # noqa: F401
-    from mcp_agent.workflows.llm.augmented_llm import RequestParams  # noqa: F401
-    from mcp_agent.workflows.llm.augmented_llm_openai import OpenAIAugmentedLLM  # noqa: F401
-    from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (  # noqa: F401
-        EvaluatorOptimizerLLM,
-        QualityRating,
-    )
-    from srcs.common.utils import setup_agent_app  # noqa: F401
-
-
 class ResearcherAgent:
     """Research agent for comprehensive information gathering and analysis"""
 
@@ -301,6 +288,7 @@ class ResearcherAgent:
 
     def create_evaluator(self):
         """Create research quality evaluator"""
+        from mcp_agent.agents.agent import Agent
         return Agent(
             name="research_quality_evaluator",
             instruction="""Evaluate research quality and comprehensiveness.

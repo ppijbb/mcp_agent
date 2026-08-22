@@ -27,12 +27,14 @@ srcs/
 │   ├── swarm.py           # Multi-agent coordination
 │   ├── workflow_orchestration.py # Workflow management
 │   ├── researcher.py      # Research and information gathering
-│   ├── researcher_v2.py   # Enhanced research agent (using common modules)
 │   ├── parallel.py        # Parallel processing demonstration
 │   ├── streamlit_agent.py # Web interface agent
 │   ├── data_generator.py  # Data generation and synthesis
-│   ├── enhanced_data_generator.py # Advanced data generation
 │   └── rag_agent.py       # Retrieval-Augmented Generation
+├── advanced_agents/          # Enhanced/specialized agents
+│   ├── researcher_v2.py   # Enhanced research agent (using common modules)
+│   ├── enhanced_data_generator.py # Advanced data generation with ML
+│   └── decision_agent.py  # Mobile interaction-based automatic decision system
 ├── enterprise_agents/      # Sophisticated business automation
 │   ├── mental.py          # Mental model analysis
 │   ├── hr_recruitment_agent.py              # HR & Talent Acquisition
@@ -67,7 +69,6 @@ lang_graph/
     ├── graph.py                   # LangGraph workflow (includes entrypoint)
     ├── llm_client.py              # Gemini LLM client (NO FALLBACK)
     ├── mcp_client.py              # Parallel MCP tool invocation utilities
-    ├── external_mcp.py            # Note: Automation service uses its own external MCP registrar
     └── state.py                   # Type definitions and state schema
 
 srcs/
@@ -175,13 +176,13 @@ python run_agent.py --dev template_enterprise # Enterprise agent template
 
 ```bash
 # Run the LangGraph workflow (prints summary to stdout)
-python lang_graph/financial_agent/graph.py
+python -m lang_graph.financial_agent.graph 'NVDA,AMD,QCOM' aggressive
 
 # Start the financial MCP server (technical indicators & news via yfinance)
 python lang_graph/financial_agent/financial_mcp_server.py
 ```
 
-- Workflow nodes: market_data_collector → news_collector → sync → news_analyzer (LLM) → chief_strategist (LLM) → portfolio_manager (LLM) → trader → auditor
+- Workflow nodes: financial_analyzer → tax_optimizer → debt_manager → goal_tracker → {market_data_collector | news_collector | chart_analyzer} → sync_data → news_analyzer (LLM) → chief_strategist (LLM) → technical_synthesizer → exit_point_predictor → portfolio_manager (LLM) → trader → commission_calculator → auditor
 - Prompts are agentic, JSON-only where required; NO FALLBACK in LLM client (`llm_client.py`).
 - External sources can be added via environment-driven MCP servers (registered automatically in the automation service; financial graph uses its own `mcp_client`).
 
@@ -194,7 +195,7 @@ cd srcs
 
 # Basic agents
 python basic_agents/researcher.py
-python basic_agents/researcher_v2.py    # New enhanced version
+python advanced_agents/researcher_v2.py    # New enhanced version
 python basic_agents/data_generator.py
 
 # Enterprise agents  
@@ -372,9 +373,9 @@ The **Decision Agent** represents a breakthrough in personal AI assistance, offe
 ### 🔧 Technical Architecture
 ```python
 # Example Decision Agent Usage
-from srcs.advanced_agents.decision_agent import DecisionAgent
+from srcs.advanced_agents.decision_agent import DecisionAgentMCP
 
-agent = DecisionAgent(anthropic_api_key="your-key")
+agent = DecisionAgentMCP()
 await agent.start_monitoring("user_id")
 
 # Agent automatically intervenes when significant decisions are detected
@@ -390,7 +391,7 @@ await agent.start_monitoring("user_id")
 ### 🎮 Try It Now
 ```bash
 # Run interactive demo
-python srcs/advanced_agents/decision_agent_demo.py
+python srcs/advanced_agents/run_decision_agent.py
 
 # Or use the web interface
 streamlit run main.py
@@ -446,7 +447,7 @@ mcp_agent/
 │   ├── business_strategy.py
 │   ├── seo_doctor.py
 │   ├── finance_health.py
-│   ├── cybersecurity.py
+│   ├── cybersecurity_agent.py
 │   ├── data_generator.py
 │   ├── hr_recruitment.py
 │   ├── ai_architect.py

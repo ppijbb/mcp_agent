@@ -7,10 +7,32 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 """
 
 import argparse
+import asyncio
 import importlib
+import inspect
 import sys
 import os
 from typing import Optional, Dict, Any
+
+
+def _import_and_run_main(module_name: str):
+    """
+    Import *module_name*, validate its ``main`` entry point and execute it.
+
+    Supports both sync and async entry points: if ``main()`` returns an
+    awaitable it is executed to completion via asyncio.run().
+
+    Raises:
+        ImportError: If the module cannot be imported
+        AttributeError: If the module has no callable ``main``
+    """
+    module = importlib.import_module(module_name)
+    main_func = getattr(module, "main", None)
+    if not callable(main_func):
+        raise AttributeError(f"Module {module_name} missing callable main function")
+    result = main_func()
+    if inspect.isawaitable(result):
+        asyncio.run(result)
 
 
 def list_agents():
@@ -94,11 +116,11 @@ def run_basic_agent(agent_name: str) -> bool:
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
-        "researcher_v2": "basic_agents.researcher_v2",
+        "researcher_v2": "advanced_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
-        "enhanced_data_generator": "basic_agents.enhanced_data_generator",
+        "enhanced_data_generator": "advanced_agents.enhanced_data_generator",
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }
@@ -127,19 +149,7 @@ def run_basic_agent(agent_name: str) -> bool:
                 raise RuntimeError(f"Streamlit agent failed: {result.stderr}")
             print(result.stdout)
         else:
-            # Safe import and execution
-            try:
-                module = importlib.import_module(module_name)
-                if not hasattr(module, 'main'):
-                    raise AttributeError(f"Module {module_name} missing main function")
-                main_func = getattr(module, 'main')
-                if not callable(main_func):
-                    raise TypeError(f"main in {module_name} is not callable")
-                main_func()
-            except ImportError as e:
-                raise ImportError(f"Failed to import module {module_name}: {e}")
-            except Exception as e:
-                raise RuntimeError(f"Error executing {module_name}.main(): {e}")
+            _import_and_run_main(module_name)
         return True
     except Exception as e:
         print(f"❌ Error running basic agent {agent_name}: {str(e)}")
@@ -174,20 +184,7 @@ def run_enterprise_agent(agent_name: str) -> bool:
     try:
         print(f"🏢 Starting enterprise agent: {agent_name}")
         module_name = agent_map[agent_name]
-        
-        # Safe import and execution
-        try:
-            module = importlib.import_module(module_name)
-            if not hasattr(module, 'main'):
-                raise AttributeError(f"Module {module_name} missing main function")
-            main_func = getattr(module, 'main')
-            if not callable(main_func):
-                raise TypeError(f"main in {module_name} is not callable")
-            main_func()
-        except ImportError as e:
-            raise ImportError(f"Failed to import module {module_name}: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
+        _import_and_run_main(module_name)
         return True
     except Exception as e:
         print(f"❌ Error running enterprise agent {agent_name}: {str(e)}")
@@ -218,20 +215,7 @@ def run_specialized_agent(agent_name: str) -> bool:
     try:
         print(f"🧬 Starting specialized agent: {agent_name}")
         module_name = agent_map[agent_name]
-
-        # Safe import and execution
-        try:
-            module = importlib.import_module(module_name)
-            if not hasattr(module, 'main'):
-                raise AttributeError(f"Module {module_name} missing main function")
-            main_func = getattr(module, 'main')
-            if not callable(main_func):
-                raise TypeError(f"main in {module_name} is not callable")
-            main_func()
-        except ImportError as e:
-            raise ImportError(f"Failed to import module {module_name}: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
+        _import_and_run_main(module_name)
         return True
     except Exception as e:
         print(f"❌ Error running specialized agent {agent_name}: {str(e)}")
@@ -265,20 +249,7 @@ def run_utility(util_name: str) -> bool:
     try:
         print(f"🛠️  Starting utility: {util_name}")
         module_name = util_map[util_name]
-        
-        # Safe import and execution
-        try:
-            module = importlib.import_module(module_name)
-            if not hasattr(module, 'main'):
-                raise AttributeError(f"Module {module_name} missing main function")
-            main_func = getattr(module, 'main')
-            if not callable(main_func):
-                raise TypeError(f"main in {module_name} is not callable")
-            main_func()
-        except ImportError as e:
-            raise ImportError(f"Failed to import module {module_name}: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Error executing {module_name}.main(): {e}")
+        _import_and_run_main(module_name)
         return True
     except Exception as e:
         print(f"❌ Error running utility {util_name}: {str(e)}")
@@ -298,15 +269,14 @@ def run_development_example(example_name: str) -> bool:
     if example_name == "common_demo":
         print("🔧 Common Modules Demonstration")
         print("\nThe common modules provide shared functionality across all agents:")
-        print("📦 common/imports.py - Standardized imports")
-        print("⚙️  common/config.py - Shared configurations and constants")
+        print("📦 common/config.py - Shared configurations and constants")
         print("🛠️  common/utils.py - Common utility functions")
         print("📋 common/templates.py - Agent base templates")
         print("\nExample usage:")
         print("from common import *")
         print("class MyAgent(BasicAgentTemplate):")
         print("    # Your agent implementation...")
-        print("\nSee basic_agents/researcher_v2.py for a complete example!")
+        print("\nSee advanced_agents/researcher_v2.py for a complete example!")
         return True
 
     elif example_name == "template_basic":

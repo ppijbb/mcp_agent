@@ -360,7 +360,7 @@ class ErrorHandler:
     def clear_old_errors(self, days: int = 7) -> int:
         """오래된 에러 정리"""
         cutoff_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        cutoff_date = cutoff_date.replace(day=cutoff_date.day - days)
+        cutoff_date = cutoff_date - timedelta(days=days)
         
         old_errors = [r for r in self.error_records if r.timestamp < cutoff_date]
         self.error_records = [r for r in self.error_records if r.timestamp >= cutoff_date]
@@ -1264,8 +1264,9 @@ class ChessGameEngine(GameEngine):
     def _create_initial_board(self) -> Dict[str, Any]:
         board = {}
         for col in range(8):
-            board[f"a{col + 1}"] = {"piece": "pawn", "color": "white"}
-            board[f"a{col + 8}"] = {"piece": "pawn", "color": "black"}
+            file = chr(97 + col)
+            board[f"{file}2"] = {"piece": "pawn", "color": "white"}
+            board[f"{file}7"] = {"piece": "pawn", "color": "black"}
         pieces = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
         for i, piece in enumerate(pieces):
             board[f"{chr(97 + i)}1"] = {"piece": piece, "color": "white"}

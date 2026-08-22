@@ -18,6 +18,7 @@ Example:
     ...     return "success"
 """
 
+import asyncio
 import logging
 import traceback
 import functools
@@ -25,7 +26,7 @@ from typing import Dict, Any, Optional, Callable, TypeVar
 from enum import Enum
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Type variables for decorators
 F = TypeVar('F', bound=Callable[..., Any])
@@ -208,7 +209,7 @@ class ErrorHandler:
             "success": True,
             "data": data,
             "message": message,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": metadata or {}
         }
 
@@ -226,6 +227,9 @@ def handle_errors(
     """
     Decorator for standardized error handling in functions.
     
+    Supports both sync and async functions; the appropriate wrapper
+    variant is selected automatically.
+
     Args:
         severity: Error severity level
         category: Error category
@@ -233,6 +237,26 @@ def handle_errors(
         return_on_error: Value to return on error (if not reraising)
     """
     def decorator(func: F) -> F:
+        def _handle_exception(e: Exception, context: Dict[str, Any]) -> Optional[T]:
+            # Create AgentError if not already
+            if not isinstance(e, AgentError):
+                agent_error = AgentError(
+                    message=str(e),
+                    severity=severity,
+                    category=category,
+                    details={"original_function": func.__name__},
+                    original_error=e
+                )
+            else:
+                agent_error = e
+            
+            # Log the error
+            default_error_handler.log_error(agent_error, context)
+            
+            if reraise:
+                raise agent_error
+            return return_on_error
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
@@ -244,27 +268,23 @@ def handle_errors(
                     "args": str(args)[:200],  # Limit length
                     "kwargs": str(kwargs)[:200]  # Limit length
                 }
-                
-                # Create AgentError if not already
-                if not isinstance(e, AgentError):
-                    agent_error = AgentError(
-                        message=str(e),
-                        severity=severity,
-                        category=category,
-                        details={"original_function": func.__name__},
-                        original_error=e
-                    )
-                else:
-                    agent_error = e
-                
-                # Log the error
-                default_error_handler.log_error(agent_error, context)
-                
-                if reraise:
-                    raise agent_error
-                else:
-                    return return_on_error
+                return _handle_exception(e, context)
         
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                context = {
+                    "function": func.__name__,
+                    "module": func.__module__,
+                    "args": str(args)[:200],  # Limit length
+                    "kwargs": str(kwargs)[:200]  # Limit length
+                }
+                return _handle_exception(e, context)
+        
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper  # type: ignore[return-value]
         return wrapper
     return decorator
 
