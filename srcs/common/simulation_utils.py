@@ -28,9 +28,9 @@ class TimeSeriesGenerator:
 
     def __init__(self, seed: Optional[int] = None):
         """Initialize the time series generator"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         import numpy as np
-        self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
+        self.np_rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
 
     def generate(
         self,
@@ -141,9 +141,9 @@ class NoiseGenerator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         import numpy as np
-        self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
+        self.np_rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
 
     def add_gaussian_noise(
         self,
@@ -197,9 +197,9 @@ class ProbabilityDistributions:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         import numpy as np
-        self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
+        self.np_rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
 
     def sample(
         self,
@@ -266,7 +266,7 @@ class StateMachine:
         """
         self.current_state = initial_state
         self.states = states
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.history: List[Tuple[datetime, str, str]] = []  # (timestamp, from_state, to_state)
 
         # 초기 상태 진입
@@ -326,9 +326,9 @@ class PatternGenerator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         import numpy as np
-        self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
+        self.np_rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
 
     def generate_burst_pattern(
         self,

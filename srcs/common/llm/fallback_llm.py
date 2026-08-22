@@ -68,19 +68,23 @@ def _fetch_openrouter_models(api_key: str) -> List[str]:
                 score = 0.0
 
                 # 1. 최신성 점수 (created 날짜가 최신일수록 높은 점수)
-                created_str = model.get("created", "")
-                if created_str:
+                created = model.get("created")
+                if created:
                     try:
-                        # ISO 형식 날짜 파싱
-                        created_date = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
-                        if created_date.tzinfo:
-                            created_date = created_date.replace(tzinfo=None)
+                        if isinstance(created, (int, float)):
+                            # OpenRouter API는 Unix 타임스탬프(초)로 반환
+                            created_date = datetime.fromtimestamp(created)
+                        else:
+                            # ISO 형식 날짜 파싱
+                            created_date = datetime.fromisoformat(str(created).replace('Z', '+00:00'))
+                            if created_date.tzinfo:
+                                created_date = created_date.replace(tzinfo=None)
                         # 최근 1년 기준으로 점수 계산 (최신일수록 높은 점수)
                         days_old = (current_time - created_date).days
                         if days_old >= 0:
                             recency_score = max(0, 1.0 - (days_old / 365.0))  # 1년 이상이면 0점
                             score += recency_score * 0.4  # 최신성이 가장 중요
-                    except (ValueError, AttributeError):
+                    except (ValueError, OSError, TypeError):
                         pass  # 날짜 파싱 실패 시 무시
 
                 # 2. 컨텍스트 길이 (긴 것이 좋음)

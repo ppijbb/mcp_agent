@@ -21,7 +21,7 @@ class GitHubSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.prob_dist = ProbabilityDistributions(seed)
 
     def get_repositories(self, username: str = "organization") -> List[Dict[str, Any]]:
@@ -163,7 +163,7 @@ class AWSSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.prob_dist = ProbabilityDistributions(seed)
 
     def get_ec2_instances(self) -> List[Dict[str, Any]]:
@@ -281,7 +281,7 @@ class KubernetesSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.prob_dist = ProbabilityDistributions(seed)
 
     def get_pods(self, namespace: str = "default") -> List[Dict[str, Any]]:
@@ -445,7 +445,7 @@ class CICDPipelineSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.prob_dist = ProbabilityDistributions(seed)
 
     def simulate_pipeline_run(

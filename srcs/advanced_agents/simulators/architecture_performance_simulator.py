@@ -20,8 +20,8 @@ class ArchitecturePerformanceSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
-        self.np_rng = np.random.RandomState(seed) if seed else np.random.RandomState()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
+        self.np_rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
         self.time_series_gen = TimeSeriesGenerator(seed)
         self.prob_dist = ProbabilityDistributions(seed)
         self.pattern_gen = PatternGenerator(seed)

@@ -20,7 +20,7 @@ class SecurityEventsSimulator:
 
     def __init__(self, seed: Optional[int] = None):
         """초기화"""
-        self.rng = random.Random(seed) if seed else random.Random()
+        self.rng = random.Random(seed) if seed is not None else random.Random()
         self.prob_dist = ProbabilityDistributions(seed)
         self.pattern_gen = PatternGenerator(seed)
         self.time_series_gen = TimeSeriesGenerator(seed)
