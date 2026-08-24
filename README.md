@@ -17,7 +17,6 @@ A comprehensive multi-agent system for enterprise automation and intelligence, f
 srcs/
 ├── common/                 # 🔧 Common modules and shared resources
 │   ├── __init__.py        # Unified module entry point
-│   ├── imports.py         # Standardized imports and dependencies
 │   ├── config.py          # Shared configurations and constants
 │   ├── utils.py           # Common utility functions
 │   └── templates.py       # Agent base templates and patterns
@@ -91,13 +90,17 @@ srcs/
    ```
 
 3. Configure API keys:
-   - Create `mcp_agent.secrets.yaml` file in the `srcs` directory
-   - Add your API keys for OpenAI and Google:
-     ```yaml
-     openai:
-       api_key: your-openai-api-key
-     google:
-       api_key: your-google-api-key
+   - Set environment variables for the keys you need (referenced as `${VAR_NAME}` in `configs/*.yaml`):
+     ```bash
+     export OPENAI_API_KEY="your-openai-api-key"
+     export GOOGLE_SEARCH_API_KEY="your-google-search-api-key"
+     export GOOGLE_SEARCH_ENGINE_ID="your-google-search-engine-id"
+     ```
+   - Alternatively, add keys directly to `configs/development.yaml` (or `configs/base.yaml`), following `configs/mcp_agent_screts_format.yaml`.
+   - For production, encrypt config files with `scripts/manage_secrets.py` (requires `ENCRYPTION_KEY`):
+     ```bash
+     python scripts/manage_secrets.py generate-key
+     python scripts/manage_secrets.py encrypt --file configs/development.yaml
      ```
 
 4. Optional: Gemini (for financial_agent) and External MCP servers
@@ -390,7 +393,7 @@ await agent.start_monitoring("user_id")
 ### 🎮 Try It Now
 ```bash
 # Run interactive demo
-python srcs/advanced_agents/decision_agent_demo.py
+python srcs/advanced_agents/run_decision_agent.py
 
 # Or use the web interface
 streamlit run main.py
@@ -446,7 +449,7 @@ mcp_agent/
 │   ├── business_strategy.py
 │   ├── seo_doctor.py
 │   ├── finance_health.py
-│   ├── cybersecurity.py
+│   ├── cybersecurity_agent.py
 │   ├── data_generator.py
 │   ├── hr_recruitment.py
 │   ├── ai_architect.py
