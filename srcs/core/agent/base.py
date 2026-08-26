@@ -59,7 +59,15 @@ def _cleanup_mcp_apps():
     for app in _active_mcp_apps[:]:
         try:
             if hasattr(app, 'cleanup'):
-                if not asyncio.iscoroutinefunction(app.cleanup):
+                if asyncio.iscoroutinefunction(app.cleanup):
+                    try:
+                        asyncio.run(app.cleanup())
+                    except RuntimeError:
+                        logger.warning(
+                            f"Could not run async cleanup for MCPApp {app.name}: "
+                            "no running event loop available"
+                        )
+                else:
                     app.cleanup()
         except Exception as e:
             logger.warning(f"Error cleaning up MCPApp: {e}")

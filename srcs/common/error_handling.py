@@ -18,6 +18,7 @@ Example:
     ...     return "success"
 """
 
+import asyncio
 import logging
 import traceback
 import functools
@@ -224,7 +225,10 @@ def handle_errors(
     return_on_error: Optional[T] = None
 ) -> Callable[[F], F]:
     """
-    Decorator for standardized error handling in functions.
+    Decorator for standardized error handling in functions and async functions.
+    
+    Automatically detects whether the wrapped function is async and creates
+    an appropriate wrapper that properly awaits and catches exceptions.
     
     Args:
         severity: Error severity level
@@ -233,39 +237,70 @@ def handle_errors(
         return_on_error: Value to return on error (if not reraising)
     """
     def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                context = {
-                    "function": func.__name__,
-                    "module": func.__module__,
-                    "args": str(args)[:200],  # Limit length
-                    "kwargs": str(kwargs)[:200]  # Limit length
-                }
-                
-                # Create AgentError if not already
-                if not isinstance(e, AgentError):
-                    agent_error = AgentError(
-                        message=str(e),
-                        severity=severity,
-                        category=category,
-                        details={"original_function": func.__name__},
-                        original_error=e
-                    )
-                else:
-                    agent_error = e
-                
-                # Log the error
-                default_error_handler.log_error(agent_error, context)
-                
-                if reraise:
-                    raise agent_error
-                else:
-                    return return_on_error
-        
-        return wrapper
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    context = {
+                        "function": func.__name__,
+                        "module": func.__module__,
+                        "args": str(args)[:200],
+                        "kwargs": str(kwargs)[:200]
+                    }
+
+                    if not isinstance(e, AgentError):
+                        agent_error = AgentError(
+                            message=str(e),
+                            severity=severity,
+                            category=category,
+                            details={"original_function": func.__name__},
+                            original_error=e
+                        )
+                    else:
+                        agent_error = e
+
+                    default_error_handler.log_error(agent_error, context)
+
+                    if reraise:
+                        raise agent_error
+                    else:
+                        return return_on_error
+
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    context = {
+                        "function": func.__name__,
+                        "module": func.__module__,
+                        "args": str(args)[:200],
+                        "kwargs": str(kwargs)[:200]
+                    }
+
+                    if not isinstance(e, AgentError):
+                        agent_error = AgentError(
+                            message=str(e),
+                            severity=severity,
+                            category=category,
+                            details={"original_function": func.__name__},
+                            original_error=e
+                        )
+                    else:
+                        agent_error = e
+
+                    default_error_handler.log_error(agent_error, context)
+
+                    if reraise:
+                        raise agent_error
+                    else:
+                        return return_on_error
+
+            return sync_wrapper
     return decorator
 
 
