@@ -22,16 +22,17 @@ async def _call_tool_async(session: ClientSession, tool_name: str, arguments: Di
     except json.JSONDecodeError:
         return content
 
-async def _call_tools_concurrently_async(tool_name: str, tickers: List[str]) -> Dict[str, Any]:
+async def _call_tools_concurrently_async(tool_name: str, tickers: List[str], extra_args: Dict | None = None) -> Dict[str, Any]:
     """여러 티커에 대해 단일 MCP 도구를 병렬로 호출하는 헬퍼 함수"""
     config = get_mcp_config()
-    
+    extra_args = extra_args or {}
+
     try:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tasks = [
-                    _call_tool_async(session, tool_name, {"ticker": ticker})
+                    _call_tool_async(session, tool_name, {"ticker": ticker, **extra_args})
                     for ticker in tickers
                 ]
                 

@@ -187,7 +187,13 @@ def create_executive_summary(output_dir, agent_name, company_name=None,
     if not title:
         title = f"{agent_name.title()} Executive Summary"
 
-    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{timestamp}.md")
+    # Filename-safe timestamp (no spaces/colons - the human-readable timestamp is
+    # used only in the report header). Fall back to a safe format when not supplied.
+    if not timestamp or any(ch in timestamp for ch in " :"):
+        fs_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    else:
+        fs_timestamp = timestamp
+    dashboard_path = os.path.join(output_dir, f"{agent_name}_executive_summary_{fs_timestamp}.md")
 
     overview_title = overview.get('title', 'Transformation Overview') if overview else 'Transformation Overview'
     overview_content = overview.get('content', 'Comprehensive analysis completed with actionable strategies.') if overview else 'Comprehensive analysis completed with actionable strategies.'
