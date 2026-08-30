@@ -1,5 +1,7 @@
 import asyncio
 import json
+import sys
+from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typing import Dict, List, Any
@@ -7,8 +9,8 @@ from .config import get_mcp_config
 
 # MCP 서버 실행을 위한 설정
 server_params = StdioServerParameters(
-    command="python",
-    args=["lang_graph/financial_agent/financial_mcp_server.py"],
+    command=sys.executable,
+    args=[str(Path(__file__).parent / "financial_mcp_server.py")],
     env=None,
 )
 
