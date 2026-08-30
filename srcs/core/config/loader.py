@@ -128,19 +128,43 @@ def _deep_merge(source: Dict, destination: Dict) -> Dict:
     return result
 
 
+def _resolve_env_placeholder(value: Any) -> Any:
+    """
+    Resolve a single ``${VAR_NAME}`` placeholder to its environment value.
+
+    Args:
+        value: Config value, possibly containing a single ``${VAR_NAME}`` placeholder.
+
+    Returns:
+        The resolved environment variable value, or ``value`` unchanged if it is
+        not a placeholder. Returns ``None`` when the referenced variable is unset
+        so that optional config fields do not retain literal placeholder strings
+        (which would otherwise appear as wrongly-truthy or unusable values).
+    """
+    if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        return os.getenv(value[2:-1])
+    return value
+
+
 def _load_secrets_from_env(config: AppConfig):
     """
     Load environment variable and update AppConfig object.
     
     Args:
         config: AppConfig object to update
-        
+    
     Note:
         - ENCRYPTION_KEY environment variable sets config.security.encryption_key
         - ${VAR_NAME} format in config values are replaced with env values
         - Example: GITHUB_TOKEN -> mcp_servers.github.env.GITHUB_TOKEN
         - Example: GOOGLE_API_KEY -> mcp_servers.g-search.env.GOOGLE_API_KEY
     """
+    # Resolve top-level optional placeholder fields (security / cache). Without
+    # this, an unset variable leaves a literal "${ENCRYPTION_KEY}" / "${REDIS_URL}"
+    # string in the config instead of None.
+    config.security.encryption_key = _resolve_env_placeholder(config.security.encryption_key)
+    config.cache.redis_url = _resolve_env_placeholder(config.cache.redis_url)
+
     encryption_key = os.getenv("ENCRYPTION_KEY")
     if encryption_key:
         config.security.encryption_key = encryption_key
@@ -148,11 +172,12 @@ def _load_secrets_from_env(config: AppConfig):
     for server_name, server_config in config.mcp_servers.items():
         for key, value in server_config.env.items():
             # Replace ${VAR_NAME} format with environment variable values
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-                env_var = value[2:-1]
-                env_value = os.getenv(env_var)
-                if env_value is not None:
-                    server_config.env[key] = env_value
+            resolved = _resolve_env_placeholder(value)
+            # env dictionaries are typed Dict[str, str], so only assign when the
+            # variable is actually set (skip unset variables rather than storing
+            # None, which would fail schema validation).
+            if resolved is not None:
+                server_config.env[key] = resolved
 
 
 # Configuration object for use throughout the application
