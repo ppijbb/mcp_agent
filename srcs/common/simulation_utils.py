@@ -388,17 +388,18 @@ class PatternGenerator:
         pattern = []
         start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
+        def _load_at(hour: int) -> float:
+            """Return the unsmoothed load level for a given hour-of-day."""
+            return peak_load if hour in peak_hours else base_load
+
         for hour in range(duration_hours):
             current_hour = hour % 24
-            if current_hour in peak_hours:
-                load = peak_load
-            else:
-                load = base_load
-
-            # 시간대별 부드러운 전환
-            if current_hour in peak_hours or (current_hour - 1) % 24 in peak_hours:
-                transition_factor = 0.5 + 0.5 * math.sin(math.pi * (current_hour % 1))
-                load = base_load + (peak_load - base_load) * transition_factor
+            # Smoothly transition into/out of peak hours by averaging the load
+            # at the start and end of the current hour. Adjacent same-level hours
+            # resolve back to their base/peak value, while boundary hours ramp.
+            start_load = _load_at(current_hour)
+            end_load = _load_at((current_hour + 1) % 24)
+            load = (start_load + end_load) / 2.0
 
             # 노이즈 추가
             load += self.np_rng.normal(0, load * 0.05)

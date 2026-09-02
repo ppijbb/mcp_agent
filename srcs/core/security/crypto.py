@@ -144,8 +144,11 @@ def decrypt_file_content(encrypted_path: str) -> bytes:
     """
     cipher = get_cipher_suite()
 
-    with open(encrypted_path, "rb") as f:
-        encrypted_data = f.read()
+    try:
+        with open(encrypted_path, "rb") as f:
+            encrypted_data = f.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Encrypted file not found: {encrypted_path}")
 
     try:
         decrypted_data = cipher.decrypt(encrypted_data)

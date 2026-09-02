@@ -7,7 +7,11 @@ Shared utility functions used across all agents for common operations.
 import os
 import json
 import threading
-from datetime import datetime
+import uuid
+import decimal
+import enum
+from pathlib import Path
+from datetime import datetime, date
 
 # Defer imports to avoid circular dependencies
 
@@ -19,16 +23,17 @@ _cache_lock = threading.Lock()
 
 class EnhancedJSONEncoder(json.JSONEncoder):
     """
-    Enhanced JSON encoder that handles datetime objects.
+    EnhancedJSONEncoder that handles common agent data types.
 
-    Extends the standard JSONEncoder to convert datetime objects to ISO format strings,
-    enabling proper serialization of datetime values in JSON responses.
+    Extends the standard JSONEncoder to convert datetime, date, Path, UUID,
+    Decimal, Enum and set objects to JSON-serializable representations,
+    enabling proper serialization of agent report/KPI/deliverable data.
 
     Attributes:
         Inherits all attributes from json.JSONEncoder
 
     Methods:
-        default: Override to handle datetime serialization
+        default: Override to handle common non-primitive types
     """
 
     def default(self, o):
@@ -42,11 +47,30 @@ class EnhancedJSONEncoder(json.JSONEncoder):
             JSON-serializable representation of the object
 
         Notes:
-            - datetime objects are converted to ISO format strings
+            - datetime and date objects are converted to ISO format strings
+            - Path objects are converted to their string path
+            - UUID objects are converted to their string form
+            - Decimal objects are converted to floats (or strings if NaN)
+            - Enum objects are converted to their value
+            - set objects are converted to sorted lists
             - All other objects are handled by the parent class
         """
         if isinstance(o, datetime):
             return o.isoformat()
+        if isinstance(o, date):
+            return o.isoformat()
+        if isinstance(o, Path):
+            return str(o)
+        if isinstance(o, uuid.UUID):
+            return str(o)
+        if isinstance(o, decimal.Decimal):
+            if o.is_nan() or o.is_infinite():
+                return str(o)
+            return float(o)
+        if isinstance(o, enum.Enum):
+            return o.value
+        if isinstance(o, (set, frozenset)):
+            return sorted(o, key=str)
         return super().default(o)
 
 
