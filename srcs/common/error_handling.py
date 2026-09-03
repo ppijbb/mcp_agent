@@ -25,7 +25,7 @@ from typing import Dict, Any, Optional, Callable, TypeVar
 from enum import Enum
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Type variables for decorators
 F = TypeVar('F', bound=Callable[..., Any])
@@ -208,7 +208,7 @@ class ErrorHandler:
             "success": True,
             "data": data,
             "message": message,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": metadata or {}
         }
 
