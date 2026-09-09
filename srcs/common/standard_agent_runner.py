@@ -48,6 +48,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 from srcs.common.agent_interface import (
     AgentType,
     AgentExecutionResult,
@@ -69,8 +71,6 @@ if _sf_adapter.exists():
         SparkleForgeA2AWrapper = None
 else:
     SparkleForgeA2AWrapper = None
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_agent_type(agent_type: Any) -> str:

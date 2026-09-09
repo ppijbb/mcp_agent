@@ -94,11 +94,11 @@ def run_basic_agent(agent_name: str) -> bool:
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
-        "researcher_v2": "basic_agents.researcher_v2",
+        "researcher_v2": "advanced_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
-        "enhanced_data_generator": "basic_agents.enhanced_data_generator",
+        "enhanced_data_generator": "advanced_agents.enhanced_data_generator",
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }

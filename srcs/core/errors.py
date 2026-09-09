@@ -119,24 +119,25 @@ def handle_data_processing_error(data_item: Any, operation: str, default_result:
     """
     Standardized error handler for data processing operations.
     
+    Wraps the given data_item through the operation, catching common
+    data-related exceptions and returning a default_result on failure.
+    
     Args:
         data_item: The data item being processed
-        operation: Description of the operation being performed
+        operation: Description of the operation being performed (for logging)
         default_result: Default result to return on error
         
     Returns:
         Processing result or default_result if error occurs
     """
+    import logging
+    logger = logging.getLogger(__name__)
     try:
+        if callable(operation):
+            return operation(data_item)
         return data_item
     except (KeyError, ValueError, TypeError, AttributeError) as e:
-        # Log error if logging is available
-        try:
-            import structlog
-            logger = structlog.get_logger()
-            logger.warning("Data processing error", operation=operation, error=str(e))
-        except ImportError:
-            pass
+        logger.warning("Data processing error: %s - %s", operation, str(e))
         return default_result
 
 
