@@ -536,9 +536,9 @@ class ToolRegistry:
                     return {"error": "Missing 'command'"}
                 cwd = parameters.get("working_dir") or os.getcwd()
                 completed = subprocess.run(
-                    command,
+                    shlex.split(command),
                     cwd=cwd,
-                    shell=True,
+                    shell=False,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
