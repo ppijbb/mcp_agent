@@ -194,7 +194,7 @@ cd srcs
 
 # Basic agents
 python basic_agents/researcher.py
-python basic_agents/researcher_v2.py    # New enhanced version
+python advanced_agents/researcher_v2.py    # New enhanced version
 python basic_agents/data_generator.py
 
 # Enterprise agents  
