@@ -90,15 +90,31 @@ srcs/
    pip install -r requirements.txt
    ```
 
-3. Configure API keys:
-   - Create `mcp_agent.secrets.yaml` file in the `srcs` directory
-   - Add your API keys for OpenAI and Google:
-     ```yaml
-     openai:
-       api_key: your-openai-api-key
-     google:
-       api_key: your-google-api-key
-     ```
+3. Configure API keys via environment variables (recommended):
+
+   The root `mcp_agent.config.yaml` and `configs/base.yaml` reference keys as
+   `${VAR}` placeholders, which are substituted at load time. Export the keys
+   you need before running an agent:
+
+   ```bash
+   export GOOGLE_API_KEY="your-google-api-key"
+   export GOOGLE_SEARCH_ENGINE_ID="your-search-engine-id"   # g-search MCP
+   export OPENAI_API_KEY="your-openai-api-key"              # OpenAI-based components
+   export GITHUB_TOKEN="your-github-token"                  # optional GitHub MCP
+   export ENCRYPTION_KEY="your-fernet-key"                  # config encryption
+   export MCP_SECRET_KEY="your-fernet-key"                  # file encrypt/decrypt
+   ```
+
+   Alternatively, create `mcp_agent.secrets.yaml` next to `mcp_agent.config.yaml`
+   (repository root) using the layout shown in
+   `configs/mcp_agent_screts_format.yaml`:
+
+   ```yaml
+   openai:
+     api_key: your-openai-api-key
+   google:
+     api_key: your-google-api-key
+   ```
 
 4. Optional: Gemini (for financial_agent) and External MCP servers
 
