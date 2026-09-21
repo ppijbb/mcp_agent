@@ -12,6 +12,7 @@ Revenue Operations Intelligence Agent (RevOps)
 """
 
 import asyncio
+import logging
 import os
 from datetime import datetime
 from typing import Dict, Any
@@ -27,6 +28,8 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
 from srcs.common.utils import setup_agent_app
 from srcs.core.config.loader import settings
 from srcs.core.errors import WorkflowError, APIError
+
+logger = logging.getLogger(__name__)
 
 
 class RevenueOperationsIntelligenceAgent:
@@ -268,11 +271,11 @@ class RevenueOperationsIntelligenceAgent:
         )
 
         # 7. Quality Controller (EvaluatorOptimizerLLM)
-        agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
-        EvaluatorOptimizerLLM(
+        agents['quality_controller'] = EvaluatorOptimizerLLM(
             optimizer=agents['pipeline_analyzer'],
             evaluator=agents['quality_evaluator'],
             llm_factory=evaluator_llm_factory,

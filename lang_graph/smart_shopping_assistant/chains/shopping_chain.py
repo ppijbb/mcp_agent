@@ -5,7 +5,7 @@ LangGraph StateGraph 기반 스마트 쇼핑 어시스턴트 워크플로우
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END

@@ -12,6 +12,7 @@ Customer White Hacking Agent
 """
 
 import asyncio
+import logging
 import os
 from datetime import datetime
 from typing import Dict, Any
@@ -27,6 +28,8 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
 from srcs.common.utils import setup_agent_app
 from srcs.core.config.loader import settings
 from srcs.core.errors import WorkflowError, APIError
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerWhiteHackingAgent:
@@ -139,7 +142,7 @@ class CustomerWhiteHackingAgent:
                 logger.info("Filesystem server configured")
 
             # Create all white hacking agents
-            agents = self._create_white_hacking_agents(validated_product)
+            agents = self._create_white_hacking_agents(product_info)
 
             # Create orchestrator
             orchestrator_llm_factory = create_fallback_orchestrator_llm_factory(
@@ -153,7 +156,7 @@ class CustomerWhiteHackingAgent:
             )
 
             # Create task
-            task = self._create_task(validated_product, timestamp, save_to_file)
+            task = self._create_task(product_info, timestamp, save_to_file)
 
             # Execute workflow
             logger.info("Starting customer white hacking workflow")
@@ -186,7 +189,7 @@ class CustomerWhiteHackingAgent:
                 logger.info(f"All deliverables saved in {self.output_dir}/")
 
             return {
-                'product_info': validated_product,
+                'product_info': product_info,
                 'analysis': result,
                 'timestamp': timestamp
             }
@@ -261,11 +264,11 @@ class CustomerWhiteHackingAgent:
         )
 
         # 6. Quality Controller (EvaluatorOptimizerLLM)
-        agents['quality_controller'] =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
-        EvaluatorOptimizerLLM(
+        agents['quality_controller'] = EvaluatorOptimizerLLM(
             optimizer=agents['persona_generator'],
             evaluator=agents['quality_evaluator'],
             llm_factory=evaluator_llm_factory,
