@@ -301,11 +301,17 @@ class ImprovedConnectionPool:
             # Clean up dead weak references
             self._weak_refs = [ref for ref in self._weak_refs if ref() is not None]
     
+    def _interruptible_sleep(self) -> None:
+        """Sleep in small slices so shutdown() can interrupt promptly."""
+        deadline = time.time() + self.cleanup_interval
+        while not self._shutdown and time.time() < deadline:
+            time.sleep(0.2)
+
     def _background_cleanup(self) -> None:
         """Background thread for periodic cleanup."""
         while not self._shutdown:
             try:
-                time.sleep(self.cleanup_interval)
+                self._interruptible_sleep()
                 if not self._shutdown:
                     self._cleanup_old_connections()
                     
@@ -366,15 +372,16 @@ class ImprovedConnectionPool:
             self._active_connections.clear()
             self.connection_stats.clear()
             self._weak_refs.clear()
-            
-            # Wait for cleanup thread to finish
-            if self._cleanup_thread.is_alive():
-                self._cleanup_thread.join(timeout=5)
-            
-            # Force garbage collection
-            gc.collect()
-            
-            logger.info("Connection pool shutdown complete")
+        
+        # Wait for cleanup thread to finish outside the lock, otherwise the
+        # background thread blocks on the lock and shutdown stalls until timeout.
+        if self._cleanup_thread.is_alive():
+            self._cleanup_thread.join(timeout=5)
+        
+        # Force garbage collection
+        gc.collect()
+        
+        logger.info("Connection pool shutdown complete")
     
     def __del__(self):
         """Destructor to ensure cleanup."""

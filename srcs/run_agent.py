@@ -7,10 +7,19 @@ Allows users to easily run basic agents, enterprise agents, or utility scripts.
 """
 
 import argparse
+import asyncio
 import importlib
+import inspect
 import sys
 import os
 from typing import Optional, Dict, Any
+
+
+def _run_main(main_func) -> None:
+    """Execute an agent's `main()` entry point, awaiting it when async."""
+    result = main_func()
+    if inspect.isawaitable(result):
+        asyncio.run(result)
 
 
 def list_agents():
@@ -94,11 +103,11 @@ def run_basic_agent(agent_name: str) -> bool:
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
-        "researcher_v2": "basic_agents.researcher_v2",
+        "researcher_v2": "advanced_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
-        "enhanced_data_generator": "basic_agents.enhanced_data_generator",
+        "enhanced_data_generator": "advanced_agents.enhanced_data_generator",
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }
@@ -135,7 +144,7 @@ def run_basic_agent(agent_name: str) -> bool:
                 main_func = getattr(module, 'main')
                 if not callable(main_func):
                     raise TypeError(f"main in {module_name} is not callable")
-                main_func()
+                _run_main(main_func)
             except ImportError as e:
                 raise ImportError(f"Failed to import module {module_name}: {e}")
             except Exception as e:
@@ -183,7 +192,7 @@ def run_enterprise_agent(agent_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_main(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
@@ -227,7 +236,7 @@ def run_specialized_agent(agent_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_main(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
@@ -274,7 +283,7 @@ def run_utility(util_name: str) -> bool:
             main_func = getattr(module, 'main')
             if not callable(main_func):
                 raise TypeError(f"main in {module_name} is not callable")
-            main_func()
+            _run_main(main_func)
         except ImportError as e:
             raise ImportError(f"Failed to import module {module_name}: {e}")
         except Exception as e:
