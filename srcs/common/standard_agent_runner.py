@@ -45,6 +45,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -69,8 +71,6 @@ if _sf_adapter.exists():
         SparkleForgeA2AWrapper = None
 else:
     SparkleForgeA2AWrapper = None
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_agent_type(agent_type: Any) -> str:
