@@ -29,6 +29,8 @@ def load_config() -> AppConfig:
         - Uses singleton pattern for performance optimization
         - Returns cached config after first load
         - Includes environment variable substitution
+        - Precedence (highest first): ``{MCP_ENV}.yaml`` overrides ``base.yaml``,
+          which overrides the schema defaults in :class:`AppConfig`.
     """
     global _config
     if _config:
@@ -43,7 +45,10 @@ def load_config() -> AppConfig:
         print(f"Warning: Configuration files not found at path: {_config_path}")
         base_config = {}
 
-    merged_config = _deep_merge(base_config, env_config)
+    # Environment-specific values are overrides: they must win over base.yaml.
+    # _deep_merge(source, destination) gives `source` higher priority, so the
+    # env config is passed first and base.yaml acts as the lower-priority layer.
+    merged_config = _deep_merge(env_config, base_config)
     merged_config["environment"] = env
 
     try:
