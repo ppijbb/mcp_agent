@@ -5,8 +5,11 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+import logging
 
 from srcs.core.errors import MCPError, APIError
+
+logger = logging.getLogger(__name__)
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).parent.parent.parent
@@ -46,7 +49,7 @@ class TravelScoutRunner:
         Returns:
             Dict containing search results
         """
-        print(f"🏨 Starting hotel search in {destination}...")
+        logger.info(f"Starting hotel search in {destination}...")
 
         # Output directory 설정
         if result_json_path:
@@ -66,15 +69,15 @@ class TravelScoutRunner:
         final_result = {"success": False, "data": None, "screenshots": [], "error": None}
 
         try:
-            print("🔌 Connecting to MCP Server...")
+            logger.info("Connecting to MCP Server...")
             if not await client.connect_to_mcp_server():
                 raise Exception("Failed to connect to MCP Server.")
-            print("✅ MCP Server Connected.")
+            logger.info("MCP Server Connected.")
 
-            print(f"🏨 Searching hotels in {destination}...")
+            logger.info(f"Searching hotels in {destination}...")
             data = await agent.search_hotels(destination, check_in, check_out, guests)
 
-            print("✅ Hotel search completed.")
+            logger.info("Hotel search completed.")
 
             final_result["success"] = True
             final_result["data"] = data
@@ -83,11 +86,11 @@ class TravelScoutRunner:
             final_result["timestamp"] = datetime.now().isoformat()
 
         except Exception as e:
-            print(f"❌ An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             final_result["error"] = str(e)
 
         finally:
-            print("🧹 Cleaning up browser instance...")
+            logger.info("Cleaning up browser instance...")
             await agent.cleanup()
 
             # 결과 저장
@@ -96,10 +99,10 @@ class TravelScoutRunner:
             else:
                 result_path = output_dir / "results.json"
 
-            print("💾 Saving final results...")
+            logger.info("Saving final results...")
             with open(result_path, 'w', encoding='utf-8') as f:
                 json.dump(final_result, f, indent=2, ensure_ascii=False)
-            print(f"🎉 Results saved to {result_path}")
+            logger.info(f"Results saved to {result_path}")
 
         return final_result
 
@@ -124,7 +127,7 @@ class TravelScoutRunner:
         Returns:
             Dict containing search results
         """
-        print(f"✈️ Starting flight search from {origin} to {destination}...")
+        logger.info(f"Starting flight search from {origin} to {destination}...")
 
         # Output directory 설정
         if result_json_path:
@@ -144,15 +147,15 @@ class TravelScoutRunner:
         final_result = {"success": False, "data": None, "screenshots": [], "error": None}
 
         try:
-            print("🔌 Connecting to MCP Server...")
+            logger.info("Connecting to MCP Server...")
             if not await client.connect_to_mcp_server():
                 raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
-            print("✅ MCP Server Connected.")
+            logger.info("MCP Server Connected.")
 
-            print(f"✈️ Searching flights from {origin} to {destination}...")
+            logger.info(f"Searching flights from {origin} to {destination}...")
             data = await agent.search_flights(origin, destination, departure_date, return_date)
 
-            print("✅ Flight search completed.")
+            logger.info("Flight search completed.")
 
             final_result["success"] = True
             final_result["data"] = data
@@ -161,14 +164,14 @@ class TravelScoutRunner:
             final_result["timestamp"] = datetime.now().isoformat()
 
         except (MCPError, APIError, ConnectionError, ValueError) as e:
-            print(f"❌ An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             final_result["error"] = str(e)
         except Exception as e:
-            print(f"❌ Unexpected error occurred: {e}")
+            logger.error(f"Unexpected error occurred: {e}")
             final_result["error"] = f"Unexpected error: {str(e)}"
 
         finally:
-            print("🧹 Cleaning up browser instance...")
+            logger.info("Cleaning up browser instance...")
             await agent.cleanup()
 
             # 결과 저장
@@ -177,10 +180,10 @@ class TravelScoutRunner:
             else:
                 result_path = output_dir / "results.json"
 
-            print("💾 Saving final results...")
+            logger.info("Saving final results...")
             with open(result_path, 'w', encoding='utf-8') as f:
                 json.dump(final_result, f, indent=2, ensure_ascii=False)
-            print(f"🎉 Results saved to {result_path}")
+            logger.info(f"Results saved to {result_path}")
 
         return final_result
 
@@ -207,7 +210,7 @@ class TravelScoutRunner:
         Returns:
             Dict containing search results
         """
-        print(f"🧳 Starting complete travel search from {origin} to {destination}...")
+        logger.info(f"Starting complete travel search from {origin} to {destination}...")
 
         # Output directory 설정
         if result_json_path:
@@ -227,15 +230,15 @@ class TravelScoutRunner:
         final_result = {"success": False, "data": None, "screenshots": [], "error": None}
 
         try:
-            print("🔌 Connecting to MCP Server...")
+            logger.info("Connecting to MCP Server...")
             if not await client.connect_to_mcp_server():
                 raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
-            print("✅ MCP Server Connected.")
+            logger.info("MCP Server Connected.")
 
-            print(f"🧳 Searching complete travel package from {origin} to {destination}...")
+            logger.info(f"Searching complete travel package from {origin} to {destination}...")
             data = await agent.search_complete_travel(origin, destination, check_in, check_out, guests)
 
-            print("✅ Complete travel search completed.")
+            logger.info("Complete travel search completed.")
 
             final_result["success"] = True
             final_result["data"] = data
@@ -244,14 +247,14 @@ class TravelScoutRunner:
             final_result["timestamp"] = datetime.now().isoformat()
 
         except (MCPError, APIError, ConnectionError, ValueError) as e:
-            print(f"❌ An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             final_result["error"] = str(e)
         except Exception as e:
-            print(f"❌ Unexpected error occurred: {e}")
+            logger.error(f"Unexpected error occurred: {e}")
             final_result["error"] = f"Unexpected error: {str(e)}"
 
         finally:
-            print("🧹 Cleaning up browser instance...")
+            logger.info("Cleaning up browser instance...")
             await agent.cleanup()
 
             # 결과 저장
@@ -260,10 +263,10 @@ class TravelScoutRunner:
             else:
                 result_path = output_dir / "results.json"
 
-            print("💾 Saving final results...")
+            logger.info("Saving final results...")
             with open(result_path, 'w', encoding='utf-8') as f:
                 json.dump(final_result, f, indent=2, ensure_ascii=False)
-            print(f"🎉 Results saved to {result_path}")
+            logger.info(f"Results saved to {result_path}")
 
         return final_result
 
@@ -274,8 +277,8 @@ async def run_agent(args):
     output_dir = result_json_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"✈️ Starting Travel Scout Agent for task: {args.task}")
-    print("-" * 30)
+    logger.info(f"Starting Travel Scout Agent for task: {args.task}")
+    logger.info("-" * 30)
 
     client = MCPBrowserClient(headless=True, disable_gpu=True, screenshot_dir=str(output_dir))
     agent = TravelScoutAgent(browser_client=client)
@@ -283,50 +286,50 @@ async def run_agent(args):
     final_result = {"success": False, "data": None, "screenshots": [], "error": None}
 
     try:
-        print("🔌 Connecting to MCP Server...")
+        logger.info("Connecting to MCP Server...")
         if not await client.connect_to_mcp_server():
             raise MCPError("Failed to connect to MCP Server.", error_code="MCP_CONNECTION_FAILED")
-        print("✅ MCP Server Connected.")
+        logger.info("MCP Server Connected.")
 
         data = None
         if args.task == 'search_hotels':
             if not all([args.destination, args.check_in, args.check_out, args.guests]):
                 raise ValueError("Missing required arguments for hotel search.")
-            print(f"🏨 Searching hotels in {args.destination}...")
+            logger.info(f"Searching hotels in {args.destination}...")
             data = await agent.search_hotels(args.destination, args.check_in, args.check_out, args.guests)
 
         elif args.task == 'search_flights':
             if not all([args.origin, args.destination, args.departure_date, args.return_date]):
                 raise ValueError("Missing required arguments for flight search.")
-            print(f"✈️ Searching flights from {args.origin} to {args.destination}...")
+            logger.info(f"Searching flights from {args.origin} to {args.destination}...")
             data = await agent.search_flights(args.origin, args.destination, args.departure_date, args.return_date)
 
         elif args.task == 'search_complete_travel':
             if not all([args.origin, args.destination, args.check_in, args.check_out, args.guests]):
                 raise ValueError("Missing required arguments for complete travel search.")
-            print(f"🧳 Searching complete travel package from {args.origin} to {args.destination}...")
+            logger.info(f"Searching complete travel package from {args.origin} to {args.destination}...")
             data = await agent.search_complete_travel(args.origin, args.destination, args.check_in, args.check_out, args.guests)
 
-        print("✅ Task completed.")
+        logger.info("Task completed.")
 
         final_result["success"] = True
         final_result["data"] = data
         final_result["screenshots"] = client.screenshots
 
     except (MCPError, APIError, ConnectionError, ValueError) as e:
-        print(f"❌ An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         final_result["error"] = str(e)
     except Exception as e:
-        print(f"❌ Unexpected error occurred: {e}")
+        logger.error(f"Unexpected error occurred: {e}")
         final_result["error"] = f"Unexpected error: {str(e)}"
 
     finally:
-        print("🧹 Cleaning up browser instance...")
+        logger.info("Cleaning up browser instance...")
         await agent.cleanup()
-        print("💾 Saving final results...")
+        logger.info("Saving final results...")
         with open(result_json_path, 'w', encoding='utf-8') as f:
             json.dump(final_result, f, indent=2, ensure_ascii=False)
-        print(f"🎉 Results saved to {result_json_path}")
+        logger.info(f"Results saved to {result_json_path}")
         if not final_result["success"]:
             sys.exit(1)
 

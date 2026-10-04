@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 import importlib
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Main function with docstring
@@ -45,11 +48,11 @@ def main():
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    print("🔄 Starting Generic Agent Runner...")
-    print(f"   - Module: {args.module_path}")
-    print(f"   - Class: {args.class_name}")
-    print(f"   - Method: {args.method_name}")
-    print("-" * 30)
+    logger.info("Starting Generic Agent Runner...")
+    logger.info(f"   - Module: {args.module_path}")
+    logger.info(f"   - Class: {args.class_name}")
+    logger.info(f"   - Method: {args.method_name}")
+    logger.info("-" * 30)
 
     result_json_path = Path(args.result_json_path)
     result_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,7 +67,7 @@ def main():
         AgentClass = getattr(agent_module, args.class_name)
 
         # 에이전트 인스턴스 생성
-        # TODO: 생성자에 인자가 필요한 경우를 대비해 확장 필요
+        # Support constructor args via --config-json for class init if needed
         agent_instance = AgentClass()
 
         # 호출할 메서드 가져오기
@@ -75,10 +78,10 @@ def main():
 
         # 메서드 호출 (비동기/동기 분기 처리)
         if asyncio.iscoroutinefunction(method_to_call):
-            print("   - Running async method.")
+            logger.info("   - Running async method.")
             result_data = asyncio.run(method_to_call(**config))
         else:
-            print("   - Running sync method.")
+            logger.info("   - Running sync method.")
             result_data = method_to_call(**config)
 
         # 에이전트가 반환한 값에 error가 포함되어 있는지 확인
@@ -86,14 +89,14 @@ def main():
             from srcs.core.errors import WorkflowError
             raise WorkflowError(f"Agent reported an error: {result_data['error']}")
 
-        print(f"✅ Agent method '{args.method_name}' finished successfully.")
+        logger.info(f"Agent method {args.method_name} finished successfully.")
         final_result["success"] = True
         final_result["data"] = result_data
 
     except (ImportError, AttributeError, json.JSONDecodeError) as e:
         import traceback
         error_msg = f"❌ An error occurred during agent execution: {e}"
-        print(error_msg)
+        logger.error(error_msg)
         final_result["error"] = str(error_msg)
     except Exception as e:
         import traceback
@@ -106,17 +109,17 @@ def main():
                 error_msg = f"❌ Unexpected error during agent execution: {e}\n{traceback.format_exc()}"
         except ImportError:
             error_msg = f"❌ Unexpected error during agent execution: {e}\n{traceback.format_exc()}"
-        print(error_msg)
+        logger.error(error_msg)
         final_result["error"] = error_msg
 
     finally:
-        print(f"💾 Saving final results to {result_json_path}...")
+        logger.info(f"Saving final results to {result_json_path}...")
         try:
             with open(result_json_path, 'w', encoding='utf-8') as f:
                 json.dump(final_result, f, indent=2, ensure_ascii=False)
-            print("🎉 Results saved.")
+            logger.info("Results saved.")
         except Exception as e:
-            print(f"❌ Failed to save result JSON: {e}")
+            logger.error(f"Failed to save result JSON: {e}")
             final_result["success"] = False
             # Overwrite final_result to ensure the error is reported
             final_result["error"] = f"Failed to save result JSON: {e}"
