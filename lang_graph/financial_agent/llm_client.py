@@ -86,7 +86,9 @@ def call_llm(prompt: str) -> str:
         ]
         response = llm.invoke(messages)
         content = response.content
-        return content if isinstance(content, str) else "Error: Empty or invalid response from LLM."
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("LLM이 유효하지 않거나 빈 응답을 반환했습니다. (NO FALLBACK)")
+        return content
     except Exception as e:
         error_msg = f"LLM 호출 중 에러 발생: {e}"
         print(f"❌ {error_msg}")

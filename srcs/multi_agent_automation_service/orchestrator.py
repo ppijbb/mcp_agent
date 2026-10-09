@@ -6,6 +6,7 @@ Multi-Agent Orchestrator
 
 import asyncio
 import os
+import logging
 from datetime import datetime
 from typing import Dict, List, Any
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from agents.security_agent import SecurityAgent
 from agents.kubernetes_agent import KubernetesAgent
 from .external_mcp import configure_external_servers
 from gemini_executor import GeminiCLIExecutor
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -247,9 +247,13 @@ if __name__ == "__main__":
     print("-" * 30)
     print("🏁 금융 에이전트 워크플로우 종료")
     print("\n최종 결과 요약:")
-    print(f"  - 최종 손익 (PNL): ${final_state.get('daily_pnl', 0):.2f}")
+    daily_pnl = final_state.get("daily_pnl")
+    if isinstance(daily_pnl, (int, float)):
+        print(f"  - 최종 손익 (PNL): ${daily_pnl:.2f}")
+    else:
+        print("  - 최종 손익 (PNL): N/A")
     print("  - 실행된 거래 내역:")
-    for trade in final_state.get("trade_results", []):
+    for trade in final_state.get("trade_results") or []:
         print(f"    - {trade['action'].upper()}: {trade['ticker']} @ ${trade['price']} (수량: {trade['shares']})")
     
     print("\n상세 로그:")
