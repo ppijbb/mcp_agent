@@ -147,6 +147,7 @@ class BaseAgent(ABC):
 
     def get_status(self) -> AgentStatus:
         """Return current agent status."""
+        return self.status
 
     def get_metadata(self) -> AgentMetadata:
         """Return agent metadata."""

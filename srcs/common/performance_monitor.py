@@ -62,7 +62,9 @@ class PerformanceMonitor:
     
     def get_all_stats(self) -> Dict[str, Any]:
         """Get performance statistics for all tracked functions."""
-        return {name: self.get_stats(name) for name in self._timings.keys()}
+        with self._lock:
+            names = list(self._timings.keys())
+        return {name: self.get_stats(name) for name in names}
     
     def clear_stats(self, func_name: Optional[str] = None) -> None:
         """Clear statistics for a function or all functions."""
