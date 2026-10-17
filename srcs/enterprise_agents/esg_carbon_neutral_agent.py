@@ -414,11 +414,11 @@ async def main():
         )
 
         # Create quality controller for ESG optimization
-        esg_quality_controller =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
-        EvaluatorOptimizerLLM(
+        esg_quality_controller = EvaluatorOptimizerLLM(
             optimizer=carbon_footprint_agent,
             evaluator=esg_evaluator,
             llm_factory=evaluator_llm_factory,

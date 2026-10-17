@@ -414,11 +414,11 @@ async def main():
         )
 
         # Create quality controller for workplace optimization
-        workplace_quality_controller =         evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
+        evaluator_llm_factory = create_fallback_orchestrator_llm_factory(
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
-        EvaluatorOptimizerLLM(
+        workplace_quality_controller = EvaluatorOptimizerLLM(
             optimizer=space_optimization_agent,
             evaluator=workplace_evaluator,
             llm_factory=evaluator_llm_factory,

@@ -10,6 +10,10 @@ from pathlib import Path
 import os
 from datetime import datetime
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 # 프로젝트 루트를 Python 경로에 추가

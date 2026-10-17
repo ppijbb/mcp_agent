@@ -11,6 +11,7 @@ Enterprise-grade HR recruitment automation system that handles:
 """
 
 import asyncio
+import logging
 import os
 from datetime import datetime
 
@@ -24,6 +25,8 @@ from mcp_agent.workflows.evaluator_optimizer.evaluator_optimizer import (
     QualityRating,
 )
 from srcs.common.utils import setup_agent_app
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 OUTPUT_DIR = "hr_recruitment_reports"
@@ -377,7 +380,7 @@ class HRRecruitmentAgent:
             primary_model="gemini-2.5-flash-lite",
             logger_instance=logger
         )
-        EvaluatorOptimizerLLM(
+        agents['quality_controller'] = EvaluatorOptimizerLLM(
             optimizer=agents['job_creator'],
             evaluator=agents['hr_evaluator'],
             llm_factory=evaluator_llm_factory,
