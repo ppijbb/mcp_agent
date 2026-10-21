@@ -334,6 +334,14 @@ The enterprise agents provide comprehensive business automation with:
 - External MCP (automation service auto-registers)
   - `<NAME>_MCP_CMD`, `<NAME>_MCP_ARGS` required
   - Optional: `<NAME>_MCP_TIMEOUT_MS`, `<NAME>_MCP_TRUST`, `<NAME>_MCP_ENV_JSON`
+- Application config (`srcs/core/config/loader.py`)
+  - `MCP_CONFIG_PATH` — directory holding the YAML config (default: `configs/`)
+  - `MCP_ENV` — environment name to load (default: `development`)
+  - Layering: `configs/base.yaml` is merged with `configs/<MCP_ENV>.yaml`.
+    The environment file **overrides** the base file, so
+    `MCP_ENV=production` applies the tightened `security.allowed_hosts`,
+    `logging.level` and `cache.type` from `configs/production.yaml`.
+  - Values of the form `${VAR_NAME}` are substituted from the environment.
 
 ## 🔧 Requirements
 

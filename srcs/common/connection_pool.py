@@ -71,6 +71,10 @@ class ImprovedConnectionPool:
         self.last_cleanup = time.time()
         self.cleanup_interval = 60  # seconds
         self._shutdown = False
+        # Signals the background thread to stop sleeping. Using an Event instead
+        # of a plain flag keeps the wait interruptible, so shutdown() does not
+        # have to block for the full cleanup interval.
+        self._shutdown_event = threading.Event()
         
         # Background cleanup thread for periodic connection expiration
         self._cleanup_thread = threading.Thread(
@@ -305,7 +309,10 @@ class ImprovedConnectionPool:
         """Background thread for periodic cleanup."""
         while not self._shutdown:
             try:
-                time.sleep(self.cleanup_interval)
+                # Interruptible sleep: returns as soon as shutdown() is requested
+                # instead of blocking for the whole cleanup interval.
+                if self._shutdown_event.wait(self.cleanup_interval):
+                    break
                 if not self._shutdown:
                     self._cleanup_old_connections()
                     
@@ -347,10 +354,20 @@ class ImprovedConnectionPool:
     def shutdown(self) -> None:
         """Shutdown connection pool and clean up all resources."""
         logger.info("Shutting down connection pool...")
-        
+
+        # Signal the background thread first so it stops touching the pools.
+        # The join happens *outside* the lock: the cleanup thread needs the same
+        # lock, so joining while holding it would stall until the join timeout.
+        self._shutdown = True
+        self._shutdown_event.set()
+
+        if (
+            self._cleanup_thread.is_alive()
+            and self._cleanup_thread is not threading.current_thread()
+        ):
+            self._cleanup_thread.join(timeout=5)
+
         with self._lock:
-            self._shutdown = True
-            
             # Dispose all pooled connections
             for pool_key, connections in self._pools.items():
                 for conn_info in connections:
@@ -366,11 +383,7 @@ class ImprovedConnectionPool:
             self._active_connections.clear()
             self.connection_stats.clear()
             self._weak_refs.clear()
-            
-            # Wait for cleanup thread to finish
-            if self._cleanup_thread.is_alive():
-                self._cleanup_thread.join(timeout=5)
-            
+
             # Force garbage collection
             gc.collect()
             

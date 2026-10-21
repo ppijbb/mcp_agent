@@ -43,7 +43,9 @@ def load_config() -> AppConfig:
         print(f"Warning: Configuration files not found at path: {_config_path}")
         base_config = {}
 
-    merged_config = _deep_merge(base_config, env_config)
+    # The environment-specific file overrides the shared base file, so the
+    # environment config must be the "source" (higher priority) argument.
+    merged_config = _deep_merge(env_config, base_config)
     merged_config["environment"] = env
 
     try:
@@ -103,24 +105,24 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def _deep_merge(source: Dict, destination: Dict) -> Dict:
+def _deep_merge(overrides: Dict, base: Dict) -> Dict:
     """
     Recursively merge two dictionaries.
-    
+
     Args:
-        source: Source dictionary (higher priority, overwrites destination)
-        destination: Destination dictionary (lower priority, merged into)
-        
+        overrides: Higher priority dictionary; its values win on conflict
+        base: Lower priority dictionary; provides the fallback values
+
     Returns:
-        Dict: Merged destination dictionary
-        
+        Dict: Merged dictionary, with *overrides* taking precedence
+
     Note:
-        - Source values are merged into destination
+        - Keys missing from *overrides* are inherited from *base*
         - If both dicts have a key that is a dict type, recursively merge
-        - Otherwise source value overwrites destination value
+        - Otherwise the *overrides* value wins
     """
-    result = destination.copy()
-    for key, value in source.items():
+    result = base.copy()
+    for key, value in overrides.items():
         if isinstance(value, dict) and key in result and isinstance(result[key], dict):
             result[key] = _deep_merge(value, result[key])
         else:

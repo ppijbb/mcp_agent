@@ -65,8 +65,9 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         Returns:
             Filtered message with sensitive data masked
         """
-        # Check cache first - use message itself as key with size limit
-        cache_key = message[:500] if len(message) > 500 else message
+        # Check cache first - use the full message as key so that two long
+        # messages sharing a prefix never collide with each other.
+        cache_key = message
         if cache_key in self._cache:
             return self._cache[cache_key]
         
@@ -91,24 +92,31 @@ class OptimizedHTTPErrorFilter(logging.Filter):
         """
         Filter sensitive information from log record.
         
+        The *interpolated* message is sanitized, not the raw template. Masking
+        the template would corrupt ``%s``/``%(key)s`` placeholders and leave the
+        real secret in ``record.args`` untouched. Once a message has been
+        rewritten it replaces the template entirely, so ``record.args`` is
+        cleared to avoid double interpolation.
+        
         Args:
             record: Log record to filter
             
         Returns:
             True if record should be processed
         """
-        if hasattr(record, 'msg'):
-            record.msg = self._filter_sensitive_data(str(record.msg))
-        
-        if hasattr(record, 'args') and record.args:
-            new_args = []
-            for arg in record.args:
-                if isinstance(arg, str):
-                    new_args.append(self._filter_sensitive_data(arg))
-                else:
-                    new_args.append(arg)
-            record.args = tuple(new_args)
-        
+        try:
+            message = record.getMessage()
+        except (TypeError, ValueError):
+            # Malformed format string/args: fall back to the raw template so
+            # the original logging error is not masked by this filter.
+            message = str(getattr(record, "msg", ""))
+
+        filtered = self._filter_sensitive_data(message)
+
+        if filtered != message:
+            record.msg = filtered
+            record.args = None
+
         return True
 
 
