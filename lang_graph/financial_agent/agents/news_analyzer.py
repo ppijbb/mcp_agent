@@ -23,11 +23,17 @@ def news_analyzer_node(state: AgentState) -> Dict:
 
     analyzed_results = {}
     for ticker, news_items in news_data.items():
-        if not news_items or (len(news_items) == 1 and "No recent news found" in news_items[0]['title']):
+        headline_items = [
+            item.get('title') if isinstance(item, dict) else None
+            for item in (news_items or [])
+        ]
+        headlines_list = [title for title in headline_items if title]
+
+        if not headlines_list or (len(headlines_list) == 1 and "No recent news found" in headlines_list[0]):
             analyzed_results[ticker] = {"sentiment": "neutral", "summary": "뉴스 없음"}
             continue
 
-        headlines = "- " + "\n- ".join([item['title'] for item in news_items if item.get('title')])
+        headlines = "- " + "\n- ".join(headlines_list)
         
         prompt = f"""
 역할: 뉴스 분석가. 아래 티커('{ticker}')의 최신 헤드라인을 평가하라.

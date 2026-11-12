@@ -16,6 +16,7 @@ Functions:
 import asyncio
 import functools
 import atexit
+import inspect
 import threading
 from abc import ABC, abstractmethod
 from typing import Any, List
@@ -58,9 +59,13 @@ def _cleanup_mcp_apps():
     logger = logging.getLogger(__name__)
     for app in _active_mcp_apps[:]:
         try:
-            if hasattr(app, 'cleanup'):
-                if not asyncio.iscoroutinefunction(app.cleanup):
-                    app.cleanup()
+            cleanup = getattr(app, 'cleanup', None)
+            if cleanup is None:
+                continue
+
+            result = cleanup()
+            if inspect.isawaitable(result):
+                asyncio.run(result)
         except Exception as e:
             logger.warning(f"Error cleaning up MCPApp: {e}")
 
