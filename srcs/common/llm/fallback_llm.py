@@ -550,15 +550,15 @@ async def try_fallback_orchestrator_execution(
 
                     log.info(f"{config['provider']} 모델로 fallback 시도: {config['model']}")
 
-                    def create_fallback_llm(**kwargs):
+                    def create_fallback_llm(_config=config, _api_key=api_key, **kwargs):
                         # 모델 ID는 API에서 가져온 그대로 사용 (이미 올바른 형식)
-                        model_id = config["model"]
+                        model_id = _config["model"]
                         # DirectHTTPLLM 사용 (OpenAI 클라이언트 사용 안 함)
                         llm = DirectHTTPLLM(
                             model=model_id,
-                            base_url=config["base_url"],
-                            api_key=api_key,
-                            provider=config["provider"]
+                            base_url=_config["base_url"],
+                            api_key=_api_key,
+                            provider=_config["provider"]
                         )
                         return llm
 

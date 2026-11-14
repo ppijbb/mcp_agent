@@ -139,59 +139,6 @@ with col2:
             help="관련 이미지들을 결과에 포함합니다."
         )
 
-# 결과 표시 영역
-result_placeholder = st.empty()
-
-# 실행 로직
-if execute_button and research_topic.strip():
-    with st.spinner("🔍 SparkleForge가 연구를 시작합니다..."):
-        try:
-            # 입력 데이터 구성
-            input_params = {
-                "request": research_topic.strip(),
-                "streaming": streaming_mode,
-                "depth": research_depth,
-                "format": output_format,
-                "max_sources": max_sources,
-                "include_images": include_images,
-                "save_results": save_results
-            }
-
-            # 결과 파일 경로 설정
-            result_json_path = None
-            if save_results:
-                reports_path = Path(get_reports_path('sparkleforge'))
-                reports_path.mkdir(parents=True, exist_ok=True)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                result_json_path = reports_path / f"research_{timestamp}.json"
-
-            # A2A를 통해 SparkleForge 실행
-            result = execute_standard_agent_via_a2a(
-                placeholder=result_placeholder,
-                agent_id="sparkleforge_agent",
-                agent_name="SparkleForge Multi-Agent Research System",
-                entry_point="sparkleforge.common.sparkleforge_entry_point.run_sparkleforge_agent",
-                agent_type=AgentType.MCP_AGENT,
-                capabilities=[
-                    "research",
-                    "multi_agent_collaboration",
-                    "source_validation",
-                    "creative_synthesis",
-                    "domain_exploration"
-                ],
-                description="혁신적인 다중 에이전트 연구 시스템",
-                input_params=input_params,
-                result_json_path=result_json_path,
-                use_a2a=True
-            )
-
-            # 결과 표시
-            display_results(result)
-
-        except Exception as e:
-            st.error(f"연구 실행 중 오류가 발생했습니다: {str(e)}")
-            logger.error(f"SparkleForge execution error: {e}", exc_info=True)
-
 def display_results(result: Dict[str, Any]):
     """
     연구 결과를 표시하는 함수
@@ -278,6 +225,59 @@ def display_results(result: Dict[str, Any]):
         # 상세 오류 정보 (개발자용)
         if st.checkbox("개발자용 상세 오류 정보"):
             st.code(str(result), language="json")
+
+# 결과 표시 영역
+result_placeholder = st.empty()
+
+# 실행 로직
+if execute_button and research_topic.strip():
+    with st.spinner("🔍 SparkleForge가 연구를 시작합니다..."):
+        try:
+            # 입력 데이터 구성
+            input_params = {
+                "request": research_topic.strip(),
+                "streaming": streaming_mode,
+                "depth": research_depth,
+                "format": output_format,
+                "max_sources": max_sources,
+                "include_images": include_images,
+                "save_results": save_results
+            }
+
+            # 결과 파일 경로 설정
+            result_json_path = None
+            if save_results:
+                reports_path = Path(get_reports_path('sparkleforge'))
+                reports_path.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                result_json_path = reports_path / f"research_{timestamp}.json"
+
+            # A2A를 통해 SparkleForge 실행
+            result = execute_standard_agent_via_a2a(
+                placeholder=result_placeholder,
+                agent_id="sparkleforge_agent",
+                agent_name="SparkleForge Multi-Agent Research System",
+                entry_point="sparkleforge.common.sparkleforge_entry_point.run_sparkleforge_agent",
+                agent_type=AgentType.MCP_AGENT,
+                capabilities=[
+                    "research",
+                    "multi_agent_collaboration",
+                    "source_validation",
+                    "creative_synthesis",
+                    "domain_exploration"
+                ],
+                description="혁신적인 다중 에이전트 연구 시스템",
+                input_params=input_params,
+                result_json_path=result_json_path,
+                use_a2a=True
+            )
+
+            # 결과 표시
+            display_results(result)
+
+        except Exception as e:
+            st.error(f"연구 실행 중 오류가 발생했습니다: {str(e)}")
+            logger.error(f"SparkleForge execution error: {e}", exc_info=True)
 
 # 푸터
 st.markdown("---")
