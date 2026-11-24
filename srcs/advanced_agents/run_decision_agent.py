@@ -16,7 +16,7 @@ async def main():
     """Decision Agent 실행 스크립트"""
     parser = argparse.ArgumentParser(description="Run the Decision Agent with simplified inputs.")
     parser.add_argument("--user-id", required=True, help="The user ID for the analysis.")
-    parser.add_argument("--interaction-type", required=True, help="The type of interaction (e.g., 'PURCHASE').")
+    parser.add_argument("--interaction-type", required=True, help="The type of interaction (e.g., '구매').")
     parser.add_argument("--context-json", required=True, help="The interaction context as a JSON string.")
     parser.add_argument("--result-json-path", required=True, help="Path to save the JSON result file.")
 

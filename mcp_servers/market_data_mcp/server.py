@@ -155,8 +155,10 @@ class MarketDataMCP:
                         if avg_loss != 0:
                             rs = avg_gain / avg_loss
                             rsi = 100 - (100 / (1 + rs))
-                        else:
+                        elif avg_gain > 0:
                             rsi = 100
+                        else:
+                            rsi = 50
                         
                         current_price = prices[-1]
                         

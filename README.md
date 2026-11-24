@@ -389,8 +389,12 @@ await agent.start_monitoring("user_id")
 
 ### 🎮 Try It Now
 ```bash
-# Run interactive demo
-python srcs/advanced_agents/decision_agent_demo.py
+# Run the CLI demo (writes results to tmp/decision_result.json)
+python srcs/advanced_agents/run_decision_agent.py \
+  --user-id demo-user \
+  --interaction-type 구매 \
+  --context-json '{"product":"demo","price":42}' \
+  --result-json-path tmp/decision_result.json
 
 # Or use the web interface
 streamlit run main.py
