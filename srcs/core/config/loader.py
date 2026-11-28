@@ -14,7 +14,8 @@ from srcs.core.config.schema import AppConfig
 from srcs.core.security.crypto import decrypt_file_content
 
 _config: AppConfig | None = None
-_config_path = Path(os.getenv("MCP_CONFIG_PATH", "configs/"))
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_config_path = Path(os.getenv("MCP_CONFIG_PATH", str(_PROJECT_ROOT / "configs")))
 
 
 def load_config() -> AppConfig:
@@ -43,7 +44,7 @@ def load_config() -> AppConfig:
         print(f"Warning: Configuration files not found at path: {_config_path}")
         base_config = {}
 
-    merged_config = _deep_merge(base_config, env_config)
+    merged_config = _deep_merge(env_config, base_config)
     merged_config["environment"] = env
 
     try:
