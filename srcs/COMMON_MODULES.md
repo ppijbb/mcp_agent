@@ -7,7 +7,6 @@
 ```
 common/
 ├── __init__.py          # 통합 모듈 진입점
-├── imports.py           # 표준화된 imports 
 ├── config.py           # 공통 설정과 상수
 ├── utils.py            # 공통 유틸리티 함수
 └── templates.py        # Agent 베이스 템플릿
@@ -79,23 +78,6 @@ class MyEnterpriseAgent(EnterpriseAgentTemplate):
 ```
 
 ## 📦 모듈별 상세 설명
-
-### `common/imports.py` - 표준화된 Imports
-
-모든 agent에서 공통으로 사용하는 imports를 한 곳에서 관리:
-
-```python
-from common.imports import (
-    asyncio, os, json, datetime, 
-    MCPApp, Agent, Orchestrator, 
-    RequestParams, OpenAIAugmentedLLM
-)
-```
-
-**장점:**
-- Import 일관성 보장
-- 중복 코드 제거
-- 버전 관리 용이
 
 ### `common/config.py` - 공통 설정
 
@@ -348,7 +330,7 @@ python run_agent.py --dev template_basic
 python run_agent.py --dev template_enterprise
 
 # 실제 예시 실행
-python run_agent.py --basic researcher_v2
+python advanced_agents/researcher_v2.py
 ```
 
 ### 새 Agent 개발 체크리스트

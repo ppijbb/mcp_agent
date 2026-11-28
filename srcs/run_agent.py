@@ -21,11 +21,9 @@ def list_agents():
     basic_agents = {
         "basic": "Basic functionality and testing agent",
         "researcher": "Research and information gathering agent",
-        "researcher_v2": "Enhanced research agent using common modules",
         "parallel": "Parallel processing demonstration agent",
         "streamlit": "Streamlit web interface agent",
         "data_generator": "Data generation and synthesis agent",
-        "enhanced_data_generator": "Advanced data generation with ML",
         "rag": "Retrieval-Augmented Generation agent",
         "travel_scout": "Incognito mode travel search agent for best deals"
     }
@@ -94,11 +92,9 @@ def run_basic_agent(agent_name: str) -> bool:
     agent_map = {
         "basic": "basic_agents.basic",
         "researcher": "basic_agents.researcher",
-        "researcher_v2": "basic_agents.researcher_v2",
         "parallel": "basic_agents.parallel",
         "streamlit": "basic_agents.streamlit_agent",
         "data_generator": "basic_agents.data_generator",
-        "enhanced_data_generator": "basic_agents.enhanced_data_generator",
         "rag": "basic_agents.rag_agent",
         "travel_scout": "travel_scout.travel_scout_agent"
     }
@@ -298,7 +294,6 @@ def run_development_example(example_name: str) -> bool:
     if example_name == "common_demo":
         print("🔧 Common Modules Demonstration")
         print("\nThe common modules provide shared functionality across all agents:")
-        print("📦 common/imports.py - Standardized imports")
         print("⚙️  common/config.py - Shared configurations and constants")
         print("🛠️  common/utils.py - Common utility functions")
         print("📋 common/templates.py - Agent base templates")
@@ -306,7 +301,7 @@ def run_development_example(example_name: str) -> bool:
         print("from common import *")
         print("class MyAgent(BasicAgentTemplate):")
         print("    # Your agent implementation...")
-        print("\nSee basic_agents/researcher_v2.py for a complete example!")
+        print("\nSee advanced_agents/researcher_v2.py for a complete example!")
         return True
 
     elif example_name == "template_basic":
@@ -373,7 +368,6 @@ def main():
 Examples:
   python run_agent.py --list                    # List all available agents
   python run_agent.py --basic researcher        # Run research agent
-  python run_agent.py --basic researcher_v2     # Run enhanced research agent
   python run_agent.py --enterprise supply_chain # Run supply chain agent
   python run_agent.py --utility mental          # Run mental model utility
   python run_agent.py --specialized genome     # Run genome analysis agent

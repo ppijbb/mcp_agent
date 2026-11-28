@@ -17,7 +17,6 @@ A comprehensive multi-agent system for enterprise automation and intelligence, f
 srcs/
 ├── common/                 # 🔧 Common modules and shared resources
 │   ├── __init__.py        # Unified module entry point
-│   ├── imports.py         # Standardized imports and dependencies
 │   ├── config.py          # Shared configurations and constants
 │   ├── utils.py           # Common utility functions
 │   └── templates.py       # Agent base templates and patterns
@@ -27,12 +26,13 @@ srcs/
 │   ├── swarm.py           # Multi-agent coordination
 │   ├── workflow_orchestration.py # Workflow management
 │   ├── researcher.py      # Research and information gathering
-│   ├── researcher_v2.py   # Enhanced research agent (using common modules)
 │   ├── parallel.py        # Parallel processing demonstration
 │   ├── streamlit_agent.py # Web interface agent
 │   ├── data_generator.py  # Data generation and synthesis
-│   ├── enhanced_data_generator.py # Advanced data generation
 │   └── rag_agent.py       # Retrieval-Augmented Generation
+├── advanced_agents/        # Specialized agents using common modules
+│   ├── researcher_v2.py   # Enhanced research agent
+│   └── enhanced_data_generator.py # Advanced data generation
 ├── enterprise_agents/      # Sophisticated business automation
 │   ├── mental.py          # Mental model analysis
 │   ├── hr_recruitment_agent.py              # HR & Talent Acquisition
@@ -151,7 +151,6 @@ python run_agent.py --list
 
 # Run basic agents
 python run_agent.py --basic researcher
-python run_agent.py --basic researcher_v2    # Enhanced with common modules
 python run_agent.py --basic data_generator
 python run_agent.py --basic rag
 
@@ -159,7 +158,6 @@ python run_agent.py --basic rag
 python run_agent.py --enterprise supply_chain
 python run_agent.py --enterprise customer_clv
 python run_agent.py --enterprise workplace
-python run_agent.py --enterprise personal_finance
 
 # Run utilities
 python run_agent.py --utility mental
@@ -175,7 +173,7 @@ python run_agent.py --dev template_enterprise # Enterprise agent template
 
 ```bash
 # Run the LangGraph workflow (prints summary to stdout)
-python lang_graph/financial_agent/graph.py
+python lang_graph/financial_agent/graph.py "NVDA,AMD,QCOM" aggressive
 
 # Start the financial MCP server (technical indicators & news via yfinance)
 python lang_graph/financial_agent/financial_mcp_server.py
@@ -194,7 +192,7 @@ cd srcs
 
 # Basic agents
 python basic_agents/researcher.py
-python basic_agents/researcher_v2.py    # New enhanced version
+python advanced_agents/researcher_v2.py  # Enhanced version
 python basic_agents/data_generator.py
 
 # Enterprise agents  
@@ -273,14 +271,12 @@ See `COMMON_MODULES.md` for comprehensive usage guide and examples.
 
 ### Basic Agents
 - **researcher** - Research and information gathering
-- **researcher_v2** - Enhanced research agent using common modules
 - **basic** - Basic functionality and testing
 - **parallel** - Parallel processing demonstration  
 - **swarm** - Multi-agent swarm coordination
 - **streamlit** - Web interface agent
 - **workflow** - Workflow orchestration and management
 - **data_generator** - Data generation and synthesis
-- **enhanced_data_generator** - Advanced data generation with ML
 - **rag** - Retrieval-Augmented Generation
 
 ### Enterprise Agents
@@ -293,12 +289,14 @@ See `COMMON_MODULES.md` for comprehensive usage guide and examples.
 - **esg_carbon** - ESG and carbon neutrality management
 - **workplace** - Hybrid workplace optimization and management
 - **innovation** - Product innovation acceleration and development
-- **personal_finance** - Personal finance health diagnosis & auto investment (Korean market)
+- **personal_finance** - Personal finance health diagnosis (run via `srcs/enterprise_agents/run_finance_health_agent.py`)
 
 ### Utilities
 - **mental_viz** - Mental model interactive visualization
 
 ### Advanced Agents
+- **researcher_v2** - Enhanced research agent using common modules
+- **enhanced_data_generator** - Advanced data generation with ML
 - **decision_agent** - 🤖 Mobile interaction-based automatic decision system
 - **architect** - AI architecture design and optimization
 
@@ -389,8 +387,8 @@ await agent.start_monitoring("user_id")
 
 ### 🎮 Try It Now
 ```bash
-# Run interactive demo
-python srcs/advanced_agents/decision_agent_demo.py
+# Run the CLI (requires explicit arguments)
+python srcs/advanced_agents/run_decision_agent.py --user-id user1 --interaction-type PURCHASE --context-json '{"item": "camera"}' --result-json-path results/decision.json
 
 # Or use the web interface
 streamlit run main.py
@@ -424,8 +422,8 @@ python run_agent.py --dev common_demo
 # See template examples
 python run_agent.py --dev template_basic
 
-# Test existing enhanced agent
-python run_agent.py --basic researcher_v2
+# Run the existing enhanced research agent directly
+python advanced_agents/researcher_v2.py
 
 # Create your own agent using the patterns
 ```

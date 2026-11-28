@@ -795,6 +795,11 @@ class StandardAgentRunner:
                         result = await func(**func_kwargs)
                     else:
                         result = func(**func_kwargs)
+
+                    return AgentExecutionResult(
+                        success=True,
+                        data=result if isinstance(result, dict) else {"result": result}
+                    )
                 else:
                     # 클래스 기반 호출
                     logger.info(f"Loading class-based agent: {module_path}.{class_name}.{method_name}")
